@@ -294,12 +294,23 @@ def effect_preflight(db_path: Path, workspace: Path, fixtures: Path) -> dict:
     """Run full bounded pre-effect verification; partial coverage blocks writes."""
     result=inspect_conformance(db_path,workspace,fixtures,enforce=True,
                                max_cases=MAX_SCAN)
+    # Confirmed but fully quarantined *non-critical* bad records need not
+    # starve unrelated legitimate tasks. Uncontained faults, emergency stop,
+    # and integrity-circuit trips are never admitted.
+    all_contradictions_contained=all(
+        finding.get("disposition")!="CONFIRMED_INCONSISTENCY" or
+        finding.get("enforcement")=="QUARANTINED"
+        for finding in result.get("findings",[]))
     safe=(result.get("exhaustive") is True and
           result["status"] in ("NO_RUNTIME_EVIDENCE",
                                "MECHANICAL_EVIDENCE_OBSERVED",
-                               "EVIDENCE_INSUFFICIENT") and
+                               "EVIDENCE_INSUFFICIENT",
+                               "CONFORMANCE_VIOLATIONS") and
+          all_contradictions_contained and
+          not result.get("emergency_stops") and
           not result.get("capability_circuit_open",True))
     return {"admitted":bool(safe),
+            "contained_noncritical_violations":bool(result.get("quarantined")),
             "reason":"PREFLIGHT_ACCEPTED" if safe else "PREFLIGHT_NOT_SATISFIED",
             "checked":result.get("checked",0),
             "eligible":result.get("eligible"),
