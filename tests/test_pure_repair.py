@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from cognition_agent_os.ledger import connect,create_task,initialize,alter_authority
 from cognition_agent_os.runner import run_once
@@ -217,6 +218,70 @@ class PureRepairTests(unittest.TestCase):
         tick=run_tick(self.db,self.ws,self.fx)
         self.assertEqual(tick["repair_lab_reviews"],[])
         self.assertEqual(self.row(tid)["state"],"NEEDS_REVIEW")
+
+    def test_planner_never_reads_sealed_holdout(self):
+        tid,spec=self.example_compare()
+        from cognition_agent_os import repair_search as proposer
+        real=proposer.safe_fixture
+        observed=[]
+        def deny_hidden(root,name):
+            observed.append(name)
+            if name==spec["holdout"]:raise AssertionError("Leaked holdout to proposer")
+            return real(root,name)
+        with patch.object(proposer,"safe_fixture",side_effect=deny_hidden):
+            result=run_once(self.db,self.ws,self.fx)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        self.assertEqual(set(observed),{spec["source"],spec["visible"]})
+
+    def test_child_process_crash_after_lab_effect_recovers_immutable_file(self):
+        tid,_=self.example_compare()
+        run_once(self.db,self.ws,self.fx)
+        code=("from pathlib import Path;from cognition_agent_os.repair_oracle import review_patch;"
+              "review_patch(Path(%r),Path(%r),Path(%r),%r,fault_after_effect=True)" %
+              (str(self.db),str(self.ws),str(self.fx),tid))
+        env=os.environ.copy();env["PYTHONPATH"]=str(ROOT/"src")
+        killed=subprocess.run([sys.executable,"-c",code],
+                              env=env,capture_output=True,text=True,timeout=20)
+        self.assertEqual(killed.returncode,82,killed.stderr)
+        out=self.ws/"repair_lab"/(tid+".py")
+        previous=out.read_bytes()
+        self.assertEqual(self.row(tid)["state"],"NEEDS_REVIEW")
+        resumed=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertEqual(resumed["status"],"REPAIR_LAB_VERIFIED")
+        self.assertEqual(out.read_bytes(),previous)
+        self.assertEqual(len(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED")),1)
+
+    def test_lab_receipt_or_file_tamper_disables_further_repair_effects(self):
+        from cognition_agent_os.conformance import capability_disabled,REPAIR_LAB_CAPABILITY
+        tid,_=self.example_compare()
+        run_once(self.db,self.ws,self.fx)
+        self.assertEqual(review_patch(self.db,self.ws,self.fx,tid)["status"],
+                         "REPAIR_LAB_VERIFIED")
+        (self.ws/"repair_lab"/(tid+".py")).write_text("def condition(x): return -100\n")
+        event=inspect_conformance(self.db,self.ws,self.fx,enforce=True)
+        self.assertEqual(event["status"],"CONFORMANCE_VIOLATIONS")
+        self.assertTrue(capability_disabled(self.db,REPAIR_LAB_CAPABILITY))
+        second,_=self.example_compare()
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        self.assertEqual(review_patch(self.db,self.ws,self.fx,second)["status"],
+                         "CAPABILITY_DISABLED")
+        self.assertFalse((self.ws/"repair_lab"/(second+".py")).exists())
+        self.assertFalse(event["production_mutation_authorized"])
+
+    def test_unavailable_holdout_has_finite_retry_budget(self):
+        tid,_=self.example_compare()
+        run_once(self.db,self.ws,self.fx)
+        self.fx.joinpath("hidden.json").write_bytes(b"tampered")
+        for i in (1,2):
+            output=review_patch(self.db,self.ws,self.fx,tid)
+            self.assertEqual(output["status"],"HOLDOUT_UNVERIFIABLE")
+            self.assertEqual(output["attempts"],i)
+        third=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertEqual(third["status"],"HOLDOUT_RETRY_EXHAUSTED")
+        self.assertEqual(self.row(tid)["state"],"UNKNOWN")
+        self.assertEqual(len(self.receipt(tid,"REPAIR_HOLDOUT_UNAVAILABLE")),3)
+        self.assertEqual(review_due_repairs(self.db,self.ws,self.fx),[])
+        self.assertFalse((self.ws/"repair_lab").exists())
 
     def test_cli_seed_worker_and_holdout_review(self):
         tid,spec=self.example_compare()
