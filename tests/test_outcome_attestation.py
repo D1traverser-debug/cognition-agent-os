@@ -247,6 +247,155 @@ class NativeSignedOutcomeTests(unittest.TestCase):
         self.assertFalse(self.sig.exists())
         self.assertEqual(self.task(),before)
 
+    def test_signed_rejection_persists_and_blocks_repeated_method(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        first=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,self.allowed,self.pinned,
+              expected_principal=self.principal)
+        self.assertEqual(first["status"],"SIGNED_FEEDBACK_RECORDED",first)
+        self.assertTrue(first["repeated_method_blocked"])
+        self.assertFalse(first["production_write_authorized"])
+        self.assertEqual(self.task()["state"],"REPAIR_LAB_VERIFIED")
+        db=connect(self.dbpath)
+        repeated=create_task(db,self.spec)
+        db.close()
+        result=run_once(self.dbpath,self.work,self.fx)
+        self.assertEqual(result["task_id"],repeated)
+        self.assertEqual(result["reason"],"SIGNED_REVIEW_PREVIOUSLY_REJECTED")
+        self.assertFalse((self.work/"artifacts"/(repeated+".json")).exists())
+        second=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,self.allowed,self.pinned,
+              expected_principal=self.principal)
+        self.assertEqual(second["status"],"SIGNED_FEEDBACK_ALREADY_RECORDED")
+        db=connect(self.dbpath)
+        self.assertEqual(db.execute(
+            "SELECT COUNT(*) FROM signed_outcome_feedback").fetchone()[0],1)
+        self.assertEqual(db.execute(
+            "SELECT COUNT(*) FROM events WHERE kind='EXTERNAL_SIGNED_OUTCOME_RECORDED'"
+        ).fetchone()[0],1)
+        db.close()
+
+    def test_signed_acceptance_does_not_block_or_auto_deploy(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        self.sign(self.statement(outcome="DOMAIN_ACCEPTED"))
+        output=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,self.allowed,self.pinned,
+              expected_principal=self.principal)
+        self.assertEqual(output["status"],"SIGNED_FEEDBACK_RECORDED")
+        self.assertFalse(output["repeated_method_blocked"])
+        self.assertFalse(output["production_write_authorized"])
+        db=connect(self.dbpath)
+        new=create_task(db,self.spec)
+        db.close()
+        retry=run_once(self.dbpath,self.work,self.fx)
+        self.assertEqual(retry["task_id"],new)
+        self.assertEqual(retry["status"],"NEEDS_REVIEW")
+        self.assertEqual(self.task()["state"],"REPAIR_LAB_VERIFIED")
+        self.assertFalse((self.work/"repair_lab"/(new+".py")).exists())
+
+    def test_conflicting_signed_verdict_cannot_replace_persisted_review(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        params=[self.dbpath,self.work,self.fx,self.statement_file,
+                self.sig,self.allowed,self.pinned]
+        self.assertEqual(record_signed_feedback(*params,
+            expected_principal=self.principal)["status"],"SIGNED_FEEDBACK_RECORDED")
+        self.sign(self.statement(outcome="DOMAIN_ACCEPTED"))
+        self.assertEqual(record_signed_feedback(*params,
+            expected_principal=self.principal)["status"],"SIGNED_FEEDBACK_CONFLICT")
+        db=connect(self.dbpath)
+        row=db.execute("SELECT verdict FROM signed_outcome_feedback").fetchone()
+        self.assertEqual(row[0],"DOMAIN_REJECTED")
+        db.close()
+
+    def test_forged_unsigned_event_never_blocks_a_new_method(self):
+        from cognition_agent_os.ledger import event
+        db=connect(self.dbpath)
+        event(db,self.tid,"EXTERNAL_SIGNED_OUTCOME_RECORDED",{
+            "verdict":"DOMAIN_REJECTED","statement_sha256":"0"*64,
+            "production_write_authorized":False})
+        new=create_task(db,self.spec)
+        db.close()
+        result=run_once(self.dbpath,self.work,self.fx)
+        self.assertEqual(result["task_id"],new)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        self.assertNotEqual(result.get("reason"),"SIGNED_REVIEW_PREVIOUSLY_REJECTED")
+
+    def test_invalid_signature_and_replaced_trust_root_leave_no_feedback(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        wrong=json.loads(self.statement_file.read_text())
+        wrong["outcome"]="DOMAIN_ACCEPTED"
+        self.statement_file.write_text(json.dumps(wrong))
+        output=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,self.allowed,self.pinned,
+              expected_principal=self.principal)
+        self.assertEqual(output["status"],"SIGNED_OUTCOME_REFUSED")
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        output=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,self.allowed,"f"*64,
+              expected_principal=self.principal)
+        self.assertEqual(output["status"],"SIGNED_OUTCOME_REFUSED")
+        db=connect(self.dbpath)
+        exists=db.execute("SELECT 1 FROM sqlite_master WHERE name='signed_outcome_feedback'").fetchone()
+        self.assertIsNone(exists)
+        db.close()
+
+    def test_revoke_authority_blocks_signed_feedback_import(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        from cognition_agent_os.ledger import alter_authority
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        db=connect(self.dbpath)
+        alter_authority(db,revoke=True)
+        db.close()
+        outcome=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,self.allowed,self.pinned,
+              expected_principal=self.principal)
+        self.assertEqual(outcome["status"],"SIGNED_FEEDBACK_AUTHORITY_BLOCKED")
+        self.assertFalse(outcome["production_write_authorized"])
+
+    def test_signed_rejection_exact_scope_allows_changed_public_evidence(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        self.assertEqual(record_signed_feedback(
+            self.dbpath,self.work,self.fx,self.statement_file,self.sig,
+            self.allowed,self.pinned,expected_principal=self.principal)["status"],
+            "SIGNED_FEEDBACK_RECORDED")
+        public=json.loads((self.fx/"public.json").read_text())
+        public.append({"args":[10,10],"expected":True})
+        (self.fx/"public.json").write_text(json.dumps(public))
+        db=connect(self.dbpath)
+        new=create_task(db,self.spec)
+        db.close()
+        result=run_once(self.dbpath,self.work,self.fx)
+        self.assertEqual(result["task_id"],new)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        self.assertEqual(result["mechanism"],"Gt->GtE")
+
+    def test_attestation_record_cli_reuses_existing_ledger(self):
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        env=os.environ.copy();env["PYTHONPATH"]=str(ROOT/"src")
+        cmd=[sys.executable,"-m","cognition_agent_os.cli",
+            "--db",str(self.dbpath),"--workspace",str(self.work),
+            "--fixtures",str(self.fx),"attestation-record",
+            "--statement",str(self.statement_file),
+            "--signature",str(self.sig),
+            "--allowed-signers",str(self.allowed),
+            "--expected-allowed-sha256",self.pinned,
+            "--principal",self.principal]
+        first=subprocess.run(cmd,env=env,text=True,capture_output=True,timeout=20)
+        self.assertEqual(first.returncode,0,first.stderr)
+        self.assertEqual(json.loads(first.stdout)["status"],"SIGNED_FEEDBACK_RECORDED")
+        duplicate=subprocess.run(cmd,env=env,text=True,capture_output=True,timeout=20)
+        self.assertEqual(duplicate.returncode,0,duplicate.stderr)
+        self.assertEqual(json.loads(duplicate.stdout)["status"],
+                         "SIGNED_FEEDBACK_ALREADY_RECORDED")
+        changed=list(cmd)
+        changed[changed.index("--expected-allowed-sha256")+1]="0"*64
+        bad=subprocess.run(changed,env=env,text=True,capture_output=True,timeout=20)
+        self.assertEqual(bad.returncode,4,bad.stderr)
+
     def test_cli_is_read_only_and_never_seeds_new_authority(self):
         self.sign()
         env=os.environ.copy();env["PYTHONPATH"]=str(ROOT/"src")
