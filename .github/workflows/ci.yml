@@ -27,3 +27,7 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
+      - name: Real immutable public GitHub source plus negative control (no API key)
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_public_source.py
