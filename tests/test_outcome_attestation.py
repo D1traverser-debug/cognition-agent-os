@@ -298,8 +298,7 @@ class NativeSignedOutcomeTests(unittest.TestCase):
         outcome=bind_owner_review_trust(
             missing,self.work,self.fx,self.allowed,self.pinned,
             expected_principal=self.principal)
-        self.assertEqual(outcome["status"],"OWNER_TRUST_UNAVAILABLE" if
-            outcome["status"]=="OWNER_TRUST_UNAVAILABLE" else "AUTHORITY_NOT_INITIALIZED")
+        self.assertEqual(outcome["status"],"AUTHORITY_NOT_INITIALIZED")
         self.assertEqual(missing.stat().st_size,0)
 
     def test_signed_rejection_persists_and_blocks_repeated_method(self):
