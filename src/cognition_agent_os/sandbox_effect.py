@@ -134,9 +134,12 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
         try:
             effect_sha=_atomic_stage(workspace,task_id,candidate)
         except (OSError,ValueError):
-            event(db,task_id,"SANDBOX_EFFECT_UNCERTAIN",{"reason":"WRITE_OR_READBACK_UNCERTAIN"})
+            attempts=db.execute("SELECT COUNT(*) FROM events WHERE task_id=? AND kind=?", (task_id,"SANDBOX_EFFECT_UNCERTAIN")).fetchone()[0]+1
+            event(db,task_id,"SANDBOX_EFFECT_UNCERTAIN",{"reason":"WRITE_OR_READBACK_UNCERTAIN","attempt":attempts})
+            if attempts>=3:
+                db.execute("UPDATE tasks SET state=?,error_code=?,state_version=state_version+1 WHERE task_id=?", ("UNKNOWN","SANDBOX_EFFECT_RETRY_EXHAUSTED",task_id))
             db.commit()
-            return _result(task_id,"EFFECT_UNKNOWN",reason="WRITE_OR_READBACK_UNCERTAIN")
+            return _result(task_id,"EFFECT_RETRY_EXHAUSTED" if attempts>=3 else "EFFECT_UNKNOWN",reason="WRITE_OR_READBACK_UNCERTAIN",attempt=attempts)
         if fault_after_effect:
             os._exit(81)
         # Still inside exclusive ledger transaction, but fixture is NOT locked:
