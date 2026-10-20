@@ -15,6 +15,7 @@ import time
 
 from .ledger import connect, create_task, event
 from .goal_audit import audit_goal, _constraints
+from .diagnostics import record_audit_failure, reject_review_if_untrusted
 from .goal_loop import validate_goal
 from .source import safe_fixture
 
@@ -93,7 +94,11 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
     observed=audit_goal(db_path,workspace,fixtures,task_id)
     if observed["status"] not in ("CANDIDATE_MECHANICALLY_VALID",
                                   "SOURCE_CHANGED_SINCE_PROPOSAL"):
-        return _result(task_id,"NOT_ADMITTED",reason=observed["status"])
+        response=reject_review_if_untrusted(db_path,workspace,fixtures,task_id)
+        return _result(task_id,response["status"],
+                       reason=response.get("reason"),
+                       next_action=response.get("next_action"),
+                       diagnosis=response.get("diagnosis"))
     db=connect(db_path)
     try:
         db.execute("BEGIN IMMEDIATE")
@@ -114,6 +119,17 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
             db.commit()
             return result
         if audit["status"]!="CANDIDATE_MECHANICALLY_VALID":
+            if audit["status"] in {
+                "STALE_AUTHORITY","ARTIFACT_UNAVAILABLE","ARTIFACT_HASH_MISMATCH",
+                "ARTIFACT_IDENTITY_MISMATCH","INVALID_PROPOSAL",
+                "CANDIDATE_HASH_MISMATCH","CANDIDATE_CONSTRAINTS_FAILED",
+                "AUDIT_UNVERIFIABLE","NOT_GOAL_CASE","UNSAFE_WORKSPACE"
+            }:
+                diagnosed=record_audit_failure(db,task,audit["status"])
+                db.commit()
+                return _result(task_id,"NOT_ADMITTED",reason=audit["status"],
+                               diagnosis=diagnosed["diagnosis"],
+                               next_action=diagnosed["next_action"])
             event(db,task_id,"SANDBOX_REFUSED",{"reason":audit["status"]})
             db.commit()
             return _result(task_id,"NOT_ADMITTED",reason=audit["status"])
@@ -138,6 +154,9 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
             event(db,task_id,"SANDBOX_EFFECT_UNCERTAIN",{"reason":"WRITE_OR_READBACK_UNCERTAIN","attempt":attempts})
             if attempts>=3:
                 db.execute("UPDATE tasks SET state=?,error_code=?,state_version=state_version+1 WHERE task_id=?", ("UNKNOWN","SANDBOX_EFFECT_RETRY_EXHAUSTED",task_id))
+            else:
+                db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
+                           (time.time()+60*attempts,task_id))
             db.commit()
             return _result(task_id,"EFFECT_RETRY_EXHAUSTED" if attempts>=3 else "EFFECT_UNKNOWN",reason="WRITE_OR_READBACK_UNCERTAIN",attempt=attempts)
         if fault_after_effect:
@@ -176,9 +195,12 @@ def advance_due_reviews(db_path: Path, workspace: Path, fixtures: Path,
     if not 1<=max_reviews<=16:raise ValueError("Review batch outside bound")
     db=connect(db_path)
     try:
-        rows=db.execute("""SELECT task_id FROM tasks WHERE state='NEEDS_REVIEW'
-           AND source_spec LIKE '%"goal_case"%' ORDER BY created_at LIMIT ?""",
-           (max_reviews,)).fetchall()
+        rows=db.execute("""SELECT task_id FROM tasks
+           WHERE state='NEEDS_REVIEW' AND due_at<=?
+             AND CASE WHEN json_valid(source_spec)
+                      THEN json_extract(source_spec,'$.kind') ELSE NULL END='goal_case'
+           ORDER BY due_at,created_at,task_id LIMIT ?""",
+           (time.time(),max_reviews)).fetchall()
         ids=[row["task_id"] for row in rows]
     finally:
         db.close()
