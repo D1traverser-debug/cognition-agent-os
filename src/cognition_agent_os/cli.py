@@ -14,6 +14,7 @@ from .evaluation import EvaluationError, public_inputs, evaluate
 from .reference_model import propose_reference_local
 from .local_model import LocalModelUnavailable
 from .goal_loop import validate_goal
+from .goal_audit import audit_goal
 
 
 def main(argv=None) -> int:
@@ -39,6 +40,8 @@ def main(argv=None) -> int:
     watch.add_argument("--interval-seconds", type=int, default=1800)
     goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
     goal.add_argument("--spec", type=Path, required=True)
+    audit = sub.add_parser("goal-audit", help="Read-only, second-checker audit of a P5 goal artifact")
+    audit.add_argument("--task-id", required=True)
     run = sub.add_parser("worker-once")
     run.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     run.add_argument("--local-model", default=None)
@@ -62,6 +65,10 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "goal-audit":
+        result=audit_goal(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["mechanical_audit"] else 4
     if args.command == "worker-once":
         result = run_once(args.db, args.workspace, args.fixtures, fail_at=args.fail_at,
                           planner_mode=args.planner_mode, local_model=args.local_model)
