@@ -209,6 +209,17 @@ def record_signed_feedback(db_path:Path,workspace:Path,fixtures:Path,
                 mechanism
             )
             db.execute(TABLE)
+            # Candidate users may have a P10.8 ledger whose historic
+            # feedback rows had only hashes, not the original signed bytes.
+            # Add nullable columns; legacy rows never become trusted from
+            # hashes alone, and only an independently revalidated signature
+            # may populate their missing proof.
+            columns={r["name"] for r in db.execute(
+                "PRAGMA table_info('signed_outcome_feedback')")}
+            if "signed_statement" not in columns:
+                db.execute("ALTER TABLE signed_outcome_feedback ADD COLUMN signed_statement BLOB")
+            if "signed_signature" not in columns:
+                db.execute("ALTER TABLE signed_outcome_feedback ADD COLUMN signed_signature BLOB")
             previous=db.execute("""SELECT task_id,verdict,statement_sha256,
                 signature_sha256,trusted_signers_sha256,reviewer_principal,
                 original_source_sha256,public_cases_sha256,holdout_sha256,
@@ -219,6 +230,25 @@ def record_signed_feedback(db_path:Path,workspace:Path,fixtures:Path,
                 if tuple(previous)!=receipt:
                     db.commit()
                     return _no("SIGNED_FEEDBACK_CONFLICT")
+                stored=db.execute("""SELECT signed_statement,signed_signature
+                    FROM signed_outcome_feedback WHERE task_id=?""",
+                    (statement["task_id"],)).fetchone()
+                if stored["signed_statement"] is None and stored["signed_signature"] is None:
+                    db.execute("""UPDATE signed_outcome_feedback SET
+                         signed_statement=?,signed_signature=? WHERE task_id=?""",
+                         (source,signature,statement["task_id"]))
+                    event(db,statement["task_id"],"SIGNED_FEEDBACK_CRYPTO_BACKFILLED",{
+                        "statement_sha256":receipt[2],
+                        "signature_sha256":receipt[3],
+                        "original_signature_reverified":True,
+                        "production_write_authorized":False})
+                    db.commit()
+                    return _no("SIGNED_FEEDBACK_EVIDENCE_UPGRADED",
+                               task_id=statement["task_id"])
+                if (stored["signed_statement"]!=source or
+                    stored["signed_signature"]!=signature):
+                    db.commit()
+                    return _no("SIGNED_FEEDBACK_CRYPTO_CONFLICT")
                 db.commit()
                 return _no("SIGNED_FEEDBACK_ALREADY_RECORDED",
                            task_id=statement["task_id"],signed_outcome=statement["outcome"])
