@@ -9,6 +9,7 @@ that a reviewer's business judgement was correct.
 from __future__ import annotations
 
 import hashlib
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -73,6 +74,19 @@ def bind_owner_review_trust(db_path:Path,workspace:Path,fixtures:Path,
         raw=_read(allowed_signers,MAX_SIGNERS)
         if hashlib.sha256(raw).hexdigest()!=expected_allowed_sha256:
             return _no("TRUSTED_PUBLIC_KEY_MISMATCH")
+        # Never call connect() (which initializes WAL metadata) merely to
+        # discover whether the authority exists. The read-only preflight
+        # must not change even an empty, corrupt, or wrong SQLite file.
+        try:
+            uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
+            with closing(sqlite3.connect(uri,uri=True,timeout=5)) as check:
+                check.execute("SELECT task_id FROM tasks LIMIT 1").fetchall()
+                prebound=check.execute(
+                    "SELECT write_allowed FROM authority WHERE singleton=1").fetchone()
+                if prebound is None:
+                    return _no("AUTHORITY_NOT_INITIALIZED")
+        except sqlite3.Error:
+            return _no("AUTHORITY_NOT_INITIALIZED")
         db=connect(db_path)
         try:
             db.execute("BEGIN IMMEDIATE")
