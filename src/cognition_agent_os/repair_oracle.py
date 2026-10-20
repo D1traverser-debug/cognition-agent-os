@@ -213,11 +213,17 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
             return {"task_id":task_id,"status":"AUTHORITY_BLOCKED"}
         decision=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=True)
         if decision["status"]=="HOLDOUT_REFUTED":
+            frozen=json.loads((workspace/"artifacts"/(task_id+".json")).read_bytes())
+            frozen_spec=json.loads(row["source_spec"])
             db.execute("""UPDATE tasks SET state='UNKNOWN',error_code='REPAIR_HOLDOUT_REFUTED',
                 lease_until=NULL,claim_token=NULL,state_version=state_version+1 WHERE task_id=?""",
                 (task_id,))
             event(db,task_id,"REPAIR_HOLDOUT_REJECTED",{
                 "candidate_sha256":decision["candidate_sha256"],
+                "source_sha256":frozen["source_sha256"],
+                "visible_sha256":frozen["visible_sha256"],
+                "holdout_sha256":frozen_spec["holdout_sha256"],
+                "mechanism":frozen["selected"]["mechanism"],
                 "visible_only_selection":"REJECTED_BY_INDEPENDENT_HOLDOUT",
                 "holdout_passes":decision["holdout_passes"],
                 "holdout_total":decision["holdout_total"],
