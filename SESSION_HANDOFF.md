@@ -1,5 +1,81 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P10.8 — external signed outcomes change future methods (2026-10-20)
+
+This is the CURRENT candidate checkpoint, superseding P10.7 and all
+historical sections below. Preserve the actual outcome: genuinely
+self-directed cognition, goal execution with explicit authority,
+independently observed outcome evidence, systemic repair and durable
+cross-task method revision. Hard budget: no paid remote model tokens,
+no expiring/free-credit AI pool, and no unrequested model installation.
+
+**Owner candidate:** `D1traverser-debug/cognition-agent-os`.
+**Branch:** `feat/p10-runtime-conformance-20261020`.
+**Integration Draft PR #12 to main:**
+https://github.com/D1traverser-debug/cognition-agent-os/pull/12 .
+All remain unmerged; no owner Windows 11 computer access or release.
+
+**New connected code:**
+- `src/cognition_agent_os/signed_feedback.py`: explicit write-once
+  `owner_outcome_trust` policy in original SQLite ledger, binds a
+  reviewer principal, out-of-band SHA256 of public SSH allowed_signers
+  and its file path. The policy can only be enrolled via explicit
+  `attestation-bind-trust` command, never by run_tick. Read-only
+  preflight refuses missing/empty authority without changing the file.
+  No silent replacement or self-restoration is permitted.
+- `attestation-record`: real external signature and original P10.4
+  source/holdout/lab result are rechecked both before and after acquiring
+  existing SQLite write lock. Root SHA and signer must match previously
+  bound policy, authority grant/goal must still permit writes.
+  A `signed_outcome_feedback` row and provenance event commit in same
+  task ledger; repeated identical record idempotent, conflict rejected.
+  **DOMAIN_ACCEPTED does not grant production write rights or apply code**.
+- In `src/cognition_agent_os/repair_search.py`: DOMAIN_REJECTED
+  feedback now changes future action. A new repair that chooses
+  identical original SHA, visible SHA, holdout SHA, candidate SHA and
+  operator mechanism is rejected before new immutable proposal with
+  `SIGNED_REVIEW_PREVIOUSLY_REJECTED`, and checked again inside the
+  finalization write lock for races. Changed public input is eligible
+  for new evidence-driven hypothesis; model-generated/fake JSON event
+  cannot impersonate a signed record.
+- Tests extend `tests/test_outcome_attestation.py` using real
+  ephemeral Ed25519 signing on Linux/Windows for accepted/rejected
+  input, immutable conflicting verdict, exact-scope feedback, forged
+  events, unbound/changed root, grant revocation and actual CLI path.
+- `docs/20-SIGNED-FEEDBACK-TO-METHOD-REVISION.md` records exact
+  command protocol and explicit trust limitations.
+
+**Evidence history (do not hide failed runs):**
+- First 222-test CI `39457977932` had two failures from duplicate
+  `reason` parameter when formatting a structured refusal.
+  Corrected `_no(status,**kw)`.
+- The follow-up 225-test CI `39458516905` found that the common
+  writable SQLite connection mutated an empty file *before* returning
+  an uninitialized trust-root refusal. Corrected by read-only URI
+  schema check before writable connect; tightened negative regression.
+- Final branch docs and handoff commits need an independently checked
+  latest-head CI. Do not claim all checks green until observed.
+- No paid/cloud/finite credit LLM use. Real public GitHub source job
+  is SKIPPED in normal CI unless explicitly opted in.
+
+**Irreducible trust limits:** the binding API is user-intended but
+the local code cannot know if a real human invoked it; a process with
+full SQLite write control or the owner's OS identity can still
+substitute authority and feedback. No owner filesystem ACL separation
+or real, independently signed business verdict has been provided.
+A cryptographically valid CI test signature is not real domain gold.
+The ledger is the intended local governance authority, not a
+tamper-resistant external evidence service. There is still no
+general agent-generated multi-file code repair, owner Windows
+deployment, true third-party business outcome or main release.
+
+**Next highest-value direction:** true owner-isolated external trust
+policy and actual independently defined real-world acceptance, then
+end-to-end unfamiliar task → agent proposal/execution → outside
+signed outcome → iterative methods across tasks. Do not create
+more fixed adapters or fake a signed business success. Remain in
+one Draft integration PR #12 and never merge without explicit consent.
+
 ## LATEST P10.7 — externally signed independent outcome boundary (2026-10-20)
 
 This is the newest continuation point; prior P10.6 and older headings
