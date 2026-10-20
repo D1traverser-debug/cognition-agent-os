@@ -18,6 +18,8 @@ from .goal_audit import audit_goal
 from .sandbox_effect import stage_one
 from .reconciliation import validate_reconciliation
 from .reconciliation_oracle import audit_stored_report
+from .intent_planner import compile_intent
+from .intent_runtime import audit_intent_plan
 
 
 def main(argv=None) -> int:
@@ -48,6 +50,10 @@ def main(argv=None) -> int:
     report = sub.add_parser("reconciliation-audit",
                             help="Read-only independent SQL check of a proposed diff report")
     report.add_argument("--task-id",required=True)
+    intent = sub.add_parser("seed-intent",help="Register constrained typed outcome for capability planning")
+    intent.add_argument("--spec",type=Path,required=True)
+    plan_audit = sub.add_parser("intent-audit",help="Read-only check of durable goal decomposition")
+    plan_audit.add_argument("--task-id",required=True)
     goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
     goal.add_argument("--spec", type=Path, required=True)
     audit = sub.add_parser("goal-audit", help="Read-only, second-checker audit of a P5 goal artifact")
@@ -80,6 +86,10 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "intent-audit":
+        result=audit_intent_plan(args.db,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="PLAN_MECHANICALLY_VALID" else 4
     if args.command == "reconciliation-audit":
         result=audit_stored_report(args.db,args.workspace,args.fixtures,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
@@ -129,6 +139,16 @@ def main(argv=None) -> int:
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
             task_id = create_task(db, spec, interval_seconds=args.interval_seconds)
             result = {"task_id": task_id, "state": "PENDING"}
+        elif args.command == "seed-intent":
+            if args.spec.is_symlink() or not args.spec.is_file() or args.spec.stat().st_size>16384:
+                raise ValueError("Intent file not a small regular file")
+            spec=json.loads(args.spec.read_text(encoding="utf-8"))
+            plan=compile_intent(spec)
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner["write_allowed"]:
+                raise PermissionError("New intent refused after write revocation")
+            result={"task_id":create_task(db,spec),"state":"PENDING",
+                    "planned_capability":plan["capability"],"plan_sha256":plan["plan_sha256"]}
         elif args.command == "seed-reconciliation":
             spec=validate_reconciliation({"kind":"record_reconciliation",
                       "reference":args.reference,"observed":args.observed,
