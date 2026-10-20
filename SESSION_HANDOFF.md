@@ -1,5 +1,31 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## 2026-10-20 P4 reference-evaluation increment — CURRENT TOP CHECKPOINT
+
+The main objective remains a general self-directed cognition/execution system, **not** an accumulation of watchers or test count. Current candidate work is in `D1traverser-debug/cognition-agent-os`, pending Draft PR #6 (stacked on #5):
+https://github.com/D1traverser-debug/cognition-agent-os/pull/6
+
+**Code and evidence (check current PR head before trusting historical identifiers):**
+- P4 evaluation module: `src/cognition_agent_os/evaluation.py`.
+- Read-only CLI: `reference-export` (model-visible evidence without gold) and `reference-evaluate` (strict pinned reference-agreement checker). Neither initializes task DB or authorizes writes.
+- Six curated demonstration reference cases in `evaluation/curated_demo_reference.json`, covering BOTH protocol impact and incident triage with SUPPORTED / REFUTED / INSUFFICIENT classes.
+- Adversarial, no-network/no-database and two-family controls: `tests/test_evaluation.py`.
+- Design limitations and honest trust boundaries: `docs/09-PINNED-REFERENCE-EVALUATION.md`.
+- Work after P3 included strict unexpected-JSON checks and one tests-only CLI-argument correction. The first P4 CI run failed one malformed test invocation; subsequent run showed **56/56 local cases OK** but then failed on a real public GitHub `SOURCE_UNAVAILABLE` smoke. Exact HTTP cause not established, so not described as proven rate limit.
+- Corrected CI semantics: on PRs always run **offline local regression**; separately preserve an explicit `workflow_dispatch` **live_public_source** job so transient public API outages cannot be portrayed as code regressions or green external checks.
+- Verified commit immediately before this checkpoint: `0eeadadfd018e13232fe63ecf9422bc5fb442c64`; Actions run `39418479792`: offline_regression SUCCESS, 56 tests; live_public_source SKIPPED (NOT VERIFIED in that run). Prior P3 live GitHub smoke was positively observed in run `39415344574`.
+- Zero remote model tokens/credits, paid APIs, and cloud services used; `main` untouched.
+
+**What P4 does NOT establish:**
+The gold labels were developed within the same code change and checked into the PUBLIC repo. This is a reliable *mechanical reference checker* plus regressions, **not** a blind, third-party, or independent semantic evaluator. No local Ollama model predictions or genuine unseen task results have been measured. A `REFERENCE_MATCH` is not user-goal verification or production mutation admission. Native Windows Task Scheduler unattended wake-up is still unobserved.
+
+**Next meaningful actions:**
+1. Current P4 PR #6 CI and main baseline reread; keep in Draft until independent acceptance.
+2. Obtain/model a genuinely **external and objective acceptance oracle** or verified reviewer-labeled sealed cases, with clear source/label provenance and realistic holdout. Avoid confusing synthetic fixture success with transfer.
+3. Connect P4 evaluator to a real bounded proposal for a second task family (not just static sample QA), feed genuine local-model predictions only if an already-installed model and host exist; never auto-pull or spend remote tokens.
+4. Continue toward self-initiated goal decomposition, causal hypotheses/contradiction testing, systemic repair, held-out transfer and post-action verification. Distinguish `code tested`, `host observed`, `semantic outcome proven`. User need not repeatedly remind Agent of this objective.
+5. Explicit user's Windows installation/permissions and independent qualified semantic review are true external constraints on physical claims; continue any other authorized software validation when these are unavailable.
+
 ## 2026-10-20 P3 verified extension — current resume point
 
 This section supersedes the previous "Next priorities" when the two differ;
