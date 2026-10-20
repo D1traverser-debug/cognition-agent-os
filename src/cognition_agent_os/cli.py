@@ -11,6 +11,8 @@ from .host import HostNotConfigured, run_tick
 from .runner import run_once
 from .watch import create_watch
 from .evaluation import EvaluationError, public_inputs, evaluate
+from .reference_model import propose_reference_local
+from .local_model import LocalModelUnavailable
 
 
 def main(argv=None) -> int:
@@ -45,6 +47,10 @@ def main(argv=None) -> int:
     export = sub.add_parser("reference-export", help="Export model-visible cases without reference gold")
     export.add_argument("--pack", type=Path, required=True)
     export.add_argument("--expected-pack-sha256", required=True)
+    proposer = sub.add_parser("reference-propose-local", help="Opt-in local installed model candidate; no gold or self-grading")
+    proposer.add_argument("--pack", type=Path, required=True)
+    proposer.add_argument("--expected-pack-sha256", required=True)
+    proposer.add_argument("--model", required=True)
     review = sub.add_parser("reference-evaluate", help="Read-only two-family evidence/reference gate")
     review.add_argument("--pack", type=Path, required=True)
     review.add_argument("--expected-pack-sha256", required=True)
@@ -67,16 +73,20 @@ def main(argv=None) -> int:
             return 2
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
-    if args.command in ("reference-export", "reference-evaluate"):
+    if args.command in ("reference-export", "reference-evaluate", "reference-propose-local"):
         try:
-            result = (public_inputs(args.pack, args.expected_pack_sha256)
-                      if args.command == "reference-export" else
-                      evaluate(args.pack, args.expected_pack_sha256, args.candidate))
-        except (EvaluationError, OSError) as exc:
+            if args.command == "reference-export":
+                result = public_inputs(args.pack, args.expected_pack_sha256)
+            elif args.command == "reference-propose-local":
+                result = propose_reference_local(
+                    public_inputs(args.pack, args.expected_pack_sha256), model=args.model)
+            else:
+                result = evaluate(args.pack, args.expected_pack_sha256, args.candidate)
+        except (EvaluationError, LocalModelUnavailable, OSError) as exc:
             print(json.dumps({"status":"UNVERIFIABLE", "reason":str(exc)}, sort_keys=True))
             return 3
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-        return 0 if args.command == "reference-export" or result["status"] == "REFERENCE_MATCH" else 4
+        return 0 if args.command != "reference-evaluate" or result["status"] == "REFERENCE_MATCH" else 4
     db = connect(args.db)
     try:
         initialize(db)
