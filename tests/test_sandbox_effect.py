@@ -98,16 +98,17 @@ class SandboxEffectTests(unittest.TestCase):
         self.assertEqual(self.task(parent)["error_code"],"REPLAN_BUDGET_EXHAUSTED")
         self.assertEqual(run_once(self.db,self.out,self.fx)["status"],"IDLE")
 
-    def test_goal_revision_or_grant_revocation_refuse_effect(self):
-        for method in ("revoke","goal"):
-            with self.subTest(method=method):
-                tid,name,_=self.make()
-                db=connect(self.db)
-                alter_authority(db,revoke=method=="revoke",goal_change=method=="goal")
-                db.close()
-                r=stage_one(self.db,self.out,self.fx,tid)
-                self.assertEqual(r["status"],"NOT_ADMITTED")
-                self.assertFalse((self.out/"sandbox"/(tid+".candidate")).exists())
+    def test_grant_revocation_refuses_sandbox_effect(self):
+        tid,name,_=self.make()
+        db=connect(self.db);alter_authority(db,revoke=True);db.close()
+        self.assertEqual(stage_one(self.db,self.out,self.fx,tid)["status"],"NOT_ADMITTED")
+        self.assertFalse((self.out/"sandbox"/(tid+".candidate")).exists())
+
+    def test_goal_revision_refuses_sandbox_effect(self):
+        tid,name,_=self.make()
+        db=connect(self.db);alter_authority(db,goal_change=True);db.close()
+        self.assertEqual(stage_one(self.db,self.out,self.fx,tid)["status"],"NOT_ADMITTED")
+        self.assertFalse((self.out/"sandbox"/(tid+".candidate")).exists())
 
     def test_existing_unexpected_stage_file_refused(self):
         tid,_,_=self.make()
