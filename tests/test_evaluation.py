@@ -149,9 +149,9 @@ class P4ReferenceTests(unittest.TestCase):
         self.assertFalse(missing_db.exists())
         self.assertFalse(missing_workspace.exists())
 
-        bad = subprocess.run(cmd[:-3]+["--expected-pack-sha256","0"*64,
-                                  "--candidate",str(candidate)],env=env,
-                             text=True,capture_output=True,timeout=10)
+        bad_cmd = list(cmd)
+        bad_cmd[bad_cmd.index("--expected-pack-sha256") + 1] = "0" * 64
+        bad = subprocess.run(bad_cmd,env=env,text=True,capture_output=True,timeout=10)
         self.assertEqual(bad.returncode,3,bad.stderr)
         self.assertEqual(json.loads(bad.stdout)["status"],"UNVERIFIABLE")
 
