@@ -97,6 +97,60 @@ def _failure(reason:str,**fields)->dict:
             "key_holder_identity_authenticated":False,**fields}
 
 
+def prepare_unsigned_outcome(db_path:Path, workspace:Path, fixtures:Path,
+                             task_id:str, *, reviewer_principal:str)->dict:
+    """Export a reviewable statement template, NEVER sign or choose verdict.
+
+    All fingerprints are rederived from the single authoritative ledger and
+    actual lab output. The draft contains no gold examples or private keys.
+    """
+    if (not isinstance(task_id,str) or not TASK_ID.fullmatch(task_id)
+        or not isinstance(reviewer_principal,str)
+        or not PRINCIPAL.fullmatch(reviewer_principal)):
+        return _failure("INVALID_REVIEW_SUBJECT")
+    if not db_path.is_file() or db_path.is_symlink():
+        return _failure("LOCAL_AUTHORITY_UNAVAILABLE")
+    current=audit_patch(db_path,workspace,fixtures,task_id,
+                        reveal_holdout=True,require_staged=True)
+    if current.get("status")!="HOLDOUT_ACCEPTED":
+        return _failure("LAB_EVIDENCE_NOT_INDEPENDENTLY_RECHECKED")
+    try:
+        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
+        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
+            db.row_factory=sqlite3.Row
+            task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
+            if task is None or task["state"]!="REPAIR_LAB_VERIFIED":
+                return _failure("SIGNED_SUBJECT_NOT_VERIFIED")
+            spec=json.loads(task["source_spec"])
+            if (spec.get("kind")!="pure_code_repair" or
+                spec.get("holdout_sha256") is None):
+                return _failure("LAB_SOURCE_SCOPE_INVALID")
+            now=int(time.time())
+            subject={
+                "schema_version":1,"purpose":"repair_lab_outcome",
+                "reviewer_principal":reviewer_principal,
+                "task_id":task_id,
+                "goal_rev":task["goal_rev"],"grant_rev":task["grant_rev"],
+                "source_spec_sha256":hashlib.sha256(
+                    task["source_spec"].encode()).hexdigest(),
+                "proposal_sha256":task["artifact_hash"],
+                "candidate_sha256":current["candidate_sha256"],
+                "holdout_sha256":spec["holdout_sha256"],
+                "outcome":"REVIEW_REQUIRED",
+                "rationale":"Independent reviewer must supply a separate real-world outcome.",
+                "issued_at":now,"expires_at":now+7*86400
+            }
+            return {
+                "status":"UNSIGNED_REVIEW_SUBJECT",
+                "statement":subject,
+                "gold_answers_exported":False,
+                "private_key_used":False,
+                "production_write_authorized":False
+            }
+    except (OSError,sqlite3.Error,ValueError,TypeError,KeyError):
+        return _failure("REVIEW_SUBJECT_UNAVAILABLE")
+
+
 def verify_signed_outcome(db_path:Path, workspace:Path, fixtures:Path,
                           statement_file:Path, signature_file:Path,
                           allowed_signers:Path, expected_allowed_sha256:str,
