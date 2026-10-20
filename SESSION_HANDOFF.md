@@ -1,5 +1,96 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P10.4 — isolated source patch experiment + held-out method correction (2026-10-20)
+
+This is the currently authoritative continuation for candidate project
+`D1traverser-debug/cognition-agent-os`. Previous P10.3 and earlier headings
+below are historical. All work was committed to existing cumulative
+**Draft PR #12** https://github.com/D1traverser-debug/cognition-agent-os/pull/12
+on `feat/p10-runtime-conformance-20261020`, whose base is `main`;
+the PR remains open, unmerged. Earlier drafts #1–#11 are also unmerged.
+No owner Windows deployment, local model installation, production release,
+or paid/limited-credit cloud inference occurred.
+
+**Goal:** genuine autonomous cognition, hypothesis formation, permitted
+execution, independent evidence of outcomes, systemic repair and durable
+method revision. Prior graph experiments were bounded, not general code
+repair. Hard cost boundary remains zero paid tokens/AI trial credits.
+
+**New connected engineering:**
+- `src/cognition_agent_os/repair_search.py`: existing runner accepts
+  `pure_code_repair` tasks from same SQLite ledger/permissions. For one
+  strictly pure Python 1–3 argument function with one comparator or arithmetic
+  operator, AST parser rejects calls, imports, decorators, loops, globals,
+  arbitrary expressions. A safe expression interpreter compares ALL
+  alternative one-operator mutations using **public failing examples only**.
+  Failure not reproduced or >1 viable candidate -> UNKNOWN/ABSTAIN.
+  Immutable candidate is stored under existing artifact writer.
+  Proposer cannot read the sealed holdout by its code path; monkeypatched
+  test rejects any attempt to fetch it.
+- `src/cognition_agent_os/repair_oracle.py`: a separate AST/operator-based
+  evaluator rechecks source, immutable candidate, minimally changed AST,
+  public cases and an externally SHA256-pinned **withheld** case suite.
+  Hidden refutation -> UNKNOWN, no patched source file. Hidden acceptance
+  -> create-once `workspace/repair_lab/<taskid>.py`, read back bytes and
+  atomically record `REPAIR_LAB_VERIFIED` /
+  `REPAIR_HOLDOUT_ACCEPTED` in original events. Crash between staging and
+  DB commit is idempotently reconciled by a second process.
+  All original fixtures, repository code and production data unchanged.
+  Absence of hidden evidence is not counted as failed gold: 3-attempt
+  budget, due-time cooldown and eventual UNKNOWN.
+- `src/cognition_agent_os/conformance.py` independently revalidates both
+  pending proposal and accepted lab states each tick; confirmed lab artifact
+  integrity mismatch trips persistent `pure_code_repair_lab` capability
+  circuit rather than repeatedly continuing a compromised execution method.
+  Global write authority and P10 complete pre-effect conformance remain
+  necessary; no repair-lab alternative bypass for a sandbox circuit.
+- `src/cognition_agent_os/host.py` opt-in
+  `host-tick --auto-stage-goals` includes bounded lab holdout reviews;
+  default no automatic lab action.
+  CLI: `seed-code-repair`, `repair-audit` (read-only) and
+  `repair-review` (reviewed isolated effect).
+- **Durable method correction**: when holdout refutes an operator
+  substitution, its exact source SHA/public-suite SHA/holdout SHA/method
+  are recorded in ledger. A future task with identical evidence refuses
+  to repeat the known-failed same hypothesis; changing the public evidence
+  allows a new experiment. No holdout *test contents* are given to proposer.
+  This is narrowly scoped negative learning, not universal method evolution.
+- `tests/test_pure_repair.py`: bounded comparison vs arithmetic rules,
+  heldout counterexample to public-probe overfit, hidden read trap,
+  unsafe executable syntax refusal, conflict, grant revocation, file tamper,
+  proven lab circuit, missing holdout budget, real independent subprocess
+  killed after stage effect and recovered, host and CLI paths.
+  Documentation: `docs/16-ISOLATED-SOURCE-REPAIR.md`.
+
+**Hard CI evidence:**
+First CI `39441626410` failed 9 cases from mistaken AST function-vs-module
+comparison and inadequate visible distinguishing cases; fixed.
+Next CI `39441833965` had 1 test assertion for idempotent second review;
+fixed.
+Functional CI `39442272966` SUCCESS **199/199**.
+Most recent functional commit
+`e6de1efa42427a556fe2b267236c2b816f755edd`,
+CI `39442609504` SUCCESS **200/200 Python tests**,
+live public-source smoke SKIPPED. Documentation and handoff-only follow-up
+commits must have final head CI checked before marking current head tested.
+
+**Critical limitations:** pure AST evaluation is NOT an isolated OS process
+sandbox for arbitrary code; holdout is software-separated and byte-pinned,
+NOT authenticated by independently trusted reviewer keys or permission-enforced
+secrecy. The task cannot produce arbitrary patches, choose new APIs,
+interact with user apps or validate real-world semantic outcomes.
+Accepted patch file is an isolated experiment only, never production
+promotion or `main` merge. Real unattended Windows host, local Ollama
+model execution, human domain trust and external outcomes remain unobserved.
+
+**Next highest-value actual work, not new monitoring:** broaden autonomy by
+a *real* separate outcome oracle and practical unseen task across unfamiliar
+code/records, with independent trusted gold unavailable to proposer.
+Introduce separate legitimate signing/access controls and physical host
+acceptance before self-modifying real agent code. Do not invent credits,
+merge any Draft or claim deployment without owner authorization. Keep all
+new modifications in cumulative Draft PR #12 and verify true CI.
+
 ## CURRENT P10.3 — measured causal mechanisms and independent class repair (2026-10-20)
 
 This is the exact latest continuation; it supersedes P10.2 and historical
