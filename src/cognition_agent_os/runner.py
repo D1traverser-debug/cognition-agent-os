@@ -88,6 +88,9 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         if not isinstance(source_spec,dict):
             finalize(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
             return {"task_id":task_id,"status":"UNKNOWN","reason":"INVALID_TASK_SPEC"}
+        if source_spec.get("kind")=="goal_intent":
+            from .intent_runtime import run_intent
+            return run_intent(db,task)
         if source_spec.get("kind")=="record_reconciliation":
             if planner_mode!="deterministic":
                 finalize(db,task,"UNKNOWN",error_code="RECONCILIATION_PLANNER_NOT_AVAILABLE")
