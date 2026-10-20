@@ -161,8 +161,13 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             proof="UNSUPPORTED_EVIDENCE_STATE"
     except (ValueError,TypeError,KeyError,OSError,sqlite3.Error):
         proof="EVIDENCE_RECHECK_UNAVAILABLE"
+    unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
+              "EVIDENCE_RECHECK_UNAVAILABLE"}
     return {"task_id":tid,"state_at_observation":row["state"],
-            "proof":proof,"mechanical_conformance":proof=="MECHANICALLY_VALID"}
+            "proof":proof,"mechanical_conformance":proof=="MECHANICALLY_VALID",
+            "disposition":("PASS" if proof=="MECHANICALLY_VALID" else
+                           "INSUFFICIENT_EVIDENCE" if proof in unproven else
+                           "CONFIRMED_INCONSISTENCY")}
 
 
 def _descendants(db, task_id: str) -> list[str]:
@@ -255,9 +260,20 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
         findings=[]
         quarantined=[]
         for row in selected:
+            # A previously assessed parent may have quarantined this child in
+            # the same transaction. Never act on a stale snapshot of its state.
+            current=db.execute("SELECT state FROM tasks WHERE task_id=?",
+                               (row["task_id"],)).fetchone()
+            if not current or current[0]!=row["state"]:
+                findings.append({"task_id":row["task_id"],
+                                 "state_at_observation":row["state"],
+                                 "proof":"ALREADY_TRANSITIONED",
+                                 "mechanical_conformance":False,
+                                 "disposition":"SKIPPED_DUE_TO_PRIOR_REMEDIATION"})
+                continue
             finding=_check_one(db,row,db_path,workspace,fixtures)
             findings.append(finding)
-            if enforce and not finding["mechanical_conformance"]:
+            if enforce and finding["disposition"]=="CONFIRMED_INCONSISTENCY":
                 try:
                     descendants=_quarantine(db,row,finding["proof"])
                 except ValueError:
@@ -274,7 +290,10 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             db.execute("UPDATE conformance_scan SET last_task_id=? WHERE singleton=1",
                        (next_cursor,))
             db.commit()
-        status=("CONFORMANCE_VIOLATIONS" if any(not row["mechanical_conformance"] for row in findings)
+        status=("CONFORMANCE_VIOLATIONS" if any(
+                    f.get("disposition")=="CONFIRMED_INCONSISTENCY" for f in findings)
+                else "EVIDENCE_INSUFFICIENT" if any(
+                    not f["mechanical_conformance"] for f in findings)
                 else "PARTIAL_EVIDENCE" if total>len(selected)
                 else "MECHANICAL_EVIDENCE_OBSERVED" if total else "NO_RUNTIME_EVIDENCE")
         # An unobserved host or third-party semantic result is never upgraded
