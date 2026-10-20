@@ -23,7 +23,7 @@ from .runner import verify_artifact
 from .ledger import event, connect
 
 TASK_ID=re.compile(r"[0-9a-f]{32}\Z")
-EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","SANDBOX_VERIFIED","VERIFIED")
+EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED")
 MAX_SCAN=512
 MAX_DEPENDENCIES=256
 
@@ -177,12 +177,24 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
         state=row["state"]
         if state=="SANDBOX_VERIFIED":
             proof=_verify_staged(db,row,workspace,fixtures)
+        elif state=="REPAIR_LAB_VERIFIED":
+            from .repair_oracle import audit_patch
+            report=audit_patch(db_path,workspace,fixtures,tid,
+                               reveal_holdout=True,require_staged=True)
+            proof=("MECHANICALLY_VALID" if report["status"]=="HOLDOUT_ACCEPTED"
+                   else report.get("reason",report["status"]))
         elif state=="DECOMPOSED":
             result=audit_intent_plan(db_path,tid)
             proof=("MECHANICALLY_VALID" if result["status"]=="PLAN_MECHANICALLY_VALID"
                    else result.get("reason","PLAN_AUDIT_FAILED"))
         elif state=="NEEDS_REVIEW":
-            if kind=="goal_case":
+            if kind=="pure_code_repair":
+                from .repair_oracle import audit_patch
+                report=audit_patch(db_path,workspace,fixtures,tid)
+                proof=("MECHANICALLY_VALID" if
+                       report["status"]=="VISIBLE_PATCH_MECHANICALLY_VALID"
+                       else report.get("reason",report["status"]))
+            elif kind=="goal_case":
                 r=audit_goal(db_path,workspace,fixtures,tid)
                 proof=("MECHANICALLY_VALID" if r["mechanical_audit"]
                        else r["status"])
@@ -202,6 +214,7 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
     except (ValueError,TypeError,KeyError,OSError,sqlite3.Error):
         proof="EVIDENCE_RECHECK_UNAVAILABLE"
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
+              "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
               "SOURCE_CHANGED_SINCE_PROPOSAL","SOURCE_HAS_CHANGED"}
     return {"task_id":tid,"state_at_observation":row["state"],
@@ -357,13 +370,13 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
         else:
             last=""
         total=db.execute("""SELECT COUNT(*) FROM tasks
-                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED')""").fetchone()[0]
+                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')""").fetchone()[0]
         selected=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')
                    AND task_id>? ORDER BY task_id LIMIT ?""",(last,max_cases)).fetchall()
         if enforce and len(selected)<max_cases and last:
             selected+=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')
                    AND task_id<=? ORDER BY task_id LIMIT ?""",
                  (last,max_cases-len(selected))).fetchall()
         findings=[]
