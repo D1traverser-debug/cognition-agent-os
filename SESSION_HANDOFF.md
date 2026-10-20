@@ -1,5 +1,73 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P10.6 — OS-triggered Windows host plus fail-closed registration (2026-10-20)
+
+This section is the exact CURRENT checkpoint, superseding P10.5 below.
+
+**Goal and budget:** Genuine autonomous cognition, authorized action,
+independent evidence, systemic correction and durable learning; no paid
+cloud model tokens or finite AI-credit/trial dependency. Tests of fixed
+capabilities do not establish general AI autonomy.
+
+**Single repo and candidate authority:**
+`D1traverser-debug/cognition-agent-os`, branch
+`feat/p10-runtime-conformance-20261020`, cumulative integration
+**Draft PR #12** https://github.com/D1traverser-debug/cognition-agent-os/pull/12,
+base `main`, still open and UNMERGED. P0–P10.6 remain candidate code.
+No user Windows PC deployment, no production action, no PR merge.
+
+**New engineering implementation and observed tests:**
+- Located and modified EXISTING `scripts/register_windows_host.ps1`
+  (did NOT create a parallel registration authority). Keeps explicit
+  owner opt-in. Adds absolute parameterized Python/DB/workspace/fixtures,
+  future start, bounded recurring trigger duration; current interactive
+  user `-LogonType Interactive -RunLevel Limited`, no admin credential,
+  no silent `AutoStageGoals`, no overwrite of existing task.
+  Long-running default repetition duration preserved as 3650 days.
+- `scripts/verify_host_registration.py`: invokes read-only existing
+  `host._admit_existing_ledger` so bogus/uninitialized SQLite cannot
+  register a scheduler or mint a new write grant.
+- `scripts/verify_windows_scheduler_probe.py`: seeds two different
+  source-evidence tasks with distinct due times into one isolated SQLite;
+  independent read-only verification of host_ticks (ticks>=2, processed
+  total exactly 2), source immutability, two actual `NEEDS_REVIEW`
+  results, hashes of durable artifacts and unchanged authority revision.
+- `scripts/verify_windows_scheduler.ps1`: registers an ephemeral *real*
+  user-scoped Windows Task Scheduler task, allows actual 1-minute recurring
+  Windows triggers to launch `scripts/host_tick.py` as separate processes,
+  checks Task Scheduler return code AND the SQLite/file readback, then
+  unregisters task in finally. Also tests empty SQLite registration fails
+  without leaving a task behind. No direct run_tick calls in witness loop.
+- GitHub Actions adds mandatory `windows_native_scheduler` job alongside
+  Linux and Windows full regression (both previously 203/203 PASS).
+  Public source live integration remains optional/SKIPPED.
+- Initial scheduler CI `39447708137` FAILED due real PowerShell enum
+  `LeastPrivilege` not accepted for `-RunLevel`; corrected to `Limited`.
+- Windows native follow-up `39447960517` SUCCESS with authenticated
+  OS task info, **ticks=2, processed_total=2, completed_tasks=2** and
+  immutable artifact readback.
+- Strengthened negative integration `39448896882` SUCCESS, logs prove
+  `UNSEEDED_AUTHORITY_REGISTRATION: BLOCKED`, two native scheduler
+  wakeups with two completed tasks, and
+  `TEMPORARY_SCHEDULER_TASK_REMOVED`. Linux and Windows suites PASS.
+- Design: `docs/18-WINDOWS-NATIVE-SCHEDULER-ACCEPTANCE.md`.
+  Latest docs/handoff-only commits require head CI reread before
+  calling the final head independently verified.
+
+**Not proven:** owner Windows 11 Scheduler installation, actual reboot
+recovery, execution before login without current user interactive session,
+independent reviewer/domain outcome, general reasoning/inference or local
+LLM model quality. A hosted GitHub Windows OS is an external test host,
+NOT the user's PC. No production release and no owner authority grant.
+
+**Next meaningful engineering/workflow:** close trusted independent
+business/reference-result oracle in owner-controlled source and complete
+real user-host Windows scheduled/reboot test when legitimate access exists.
+Do not fabricate evidence for inaccessible owner host; keep Draft #12
+unmerged unless an authorized release decision is given. Continue
+enhancing autonomous methods via real unseen goals and independent
+accepted results, not another governance/monitoring clone.
+
 ## LATEST P10.5 — post-effect acceptance barrier + native Windows CI (2026-10-20)
 
 This section supersedes prior P10.4 and all historical checkpoints below.
