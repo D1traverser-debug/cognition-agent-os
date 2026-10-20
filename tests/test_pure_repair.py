@@ -115,10 +115,13 @@ class PureRepairTests(unittest.TestCase):
 
     def test_heldout_counterexample_refutes_unique_visible_patch(self):
         source="def condition(x, y):\n    return x < y\n"
+        # Public probes single out '>' but cannot rule out a hidden upper
+        # bound in the real requested behavior. Held-out 100 refutes it.
         visible=[{"args":[1,2],"expected":False},
+                 {"args":[2,2],"expected":False},
                  {"args":[3,2],"expected":True},
                  {"args":[4,2],"expected":True}]
-        hidden=[{"args":[2,2],"expected":True},
+        hidden=[{"args":[100,2],"expected":False},
                 {"args":[5,2],"expected":True},
                 {"args":[-2,2],"expected":False}]
         tid,_=self.seed(source,visible,hidden)
