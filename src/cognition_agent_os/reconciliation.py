@@ -86,8 +86,14 @@ def propose_reconciliation(spec: dict, a: bytes, b: bytes) -> dict:
     ha,ra=parse_table(a)
     hb,rb=parse_table(b)
     hypotheses=hypothesis_keys(ha,ra,hb,rb)
+    named=[item for item in hypotheses if item["key_name_prior"]]
+    # Invalid explicit-looking identities cannot be silently replaced with
+    # unrelated unique amounts/statuses. Request stronger linkage evidence.
+    identity_invalid=bool(named) and any(item["score"]<0 for item in named)
     plausible=[item for item in hypotheses if item["score"]>=0]
-    if not plausible or (len(plausible)>1 and plausible[0]["score"]==plausible[1]["score"]):
+    if named:
+        plausible=[item for item in plausible if item["key_name_prior"]]
+    if identity_invalid or not plausible or (len(plausible)>1 and plausible[0]["score"]==plausible[1]["score"]):
         return {"status":"INSUFFICIENT_KEY_EVIDENCE",
                 "hypotheses":hypotheses,"selected_key":None,"discrepancies":None,
                 "warning":"Cannot infer an unambiguous relationship; no invented join key"}
