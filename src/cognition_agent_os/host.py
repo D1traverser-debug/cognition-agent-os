@@ -11,7 +11,7 @@ from .runner import run_once
 from .watch import poll_due_watches
 from .sandbox_effect import advance_due_reviews
 from .diagnostics import recover_due_unknowns
-from .conformance import inspect_conformance
+from .conformance import inspect_conformance, effect_preflight
 
 
 class HostNotConfigured(RuntimeError):
@@ -71,6 +71,10 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     if planner_mode not in ("deterministic", "ollama-local"):
         raise ValueError("Unsupported planner mode")
     _admit_existing_ledger(db_path)
+    # Prior-success evidence is assessed before an opted-in sandbox write.
+    # A partial/broken sweep blocks new effects, not ordinary read-only work.
+    preflight = (effect_preflight(db_path,workspace,fixture_root)
+                 if auto_stage_goals else None)
     # Capture source head before draining newly issued immutable evidence tasks.
     watches = poll_due_watches(db_path)
     results = []
@@ -83,7 +87,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     # Optional sandbox-only follow-up: requires an explicit host flag.
     # At most max_jobs reviews in this tick; no external source mutation.
     reviews = (advance_due_reviews(db_path,workspace,fixture_root,max_reviews=min(max_jobs,8))
-               if auto_stage_goals else [])
+               if auto_stage_goals and preflight["admitted"] else [])
     # Already-UNKNOWN evidence tasks can be reconsidered only after a fresh
     # local source is available. New children remain in the same ledger and
     # are intentionally processed by a subsequent tick, not a recursive loop.
@@ -100,6 +104,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             "sandbox_reviews": reviews,
             "diagnostic_followups": recoveries,
             "conformance": conformance,
+            "preflight": preflight,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
             "tasks": results, "semantic_outcome_verified": False,
             "note": "Local tick observed; OS scheduling and semantic outcomes not thereby proved"}
