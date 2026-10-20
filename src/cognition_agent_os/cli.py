@@ -1,16 +1,18 @@
-"""Explicit, non-daemon CLI. A user/host must invoke each iteration."""
+"""Explicit commands; only an external host can schedule host-tick."""
 from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from pathlib import Path
 
 from .ledger import alter_authority, connect, create_task, initialize
+from .host import HostNotConfigured, run_tick
 from .runner import run_once
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="cognition-os", description="Bounded P0/P1 evidence workflow, not autonomous host")
+    p = argparse.ArgumentParser(prog="cognition-os", description="Bounded P0/P1 evidence workflow; scheduling is external")
     p.add_argument("--db", type=Path, required=True)
     p.add_argument("--workspace", type=Path, required=True)
     p.add_argument("--fixtures", type=Path, default=Path("fixtures"))
@@ -29,6 +31,10 @@ def main(argv=None) -> int:
     run.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     run.add_argument("--local-model", default=None)
     run.add_argument("--fail-at", choices=["after_claim", "after_artifact_before_commit"])
+    host = sub.add_parser("host-tick", help="Run due jobs once; for OS-scheduled invocation")
+    host.add_argument("--max-jobs", type=int, default=16)
+    host.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
+    host.add_argument("--local-model", default=None)
     sub.add_parser("revoke-write")
     sub.add_parser("bump-goal")
     sub.add_parser("status")
@@ -37,6 +43,15 @@ def main(argv=None) -> int:
         result = run_once(args.db, args.workspace, args.fixtures, fail_at=args.fail_at,
                           planner_mode=args.planner_mode, local_model=args.local_model)
         print(json.dumps(result, sort_keys=True))
+        return 0
+    if args.command == "host-tick":
+        try:
+            result = run_tick(args.db, args.workspace, args.fixtures, max_jobs=args.max_jobs,
+                              planner_mode=args.planner_mode, local_model=args.local_model)
+        except HostNotConfigured as exc:
+            print(json.dumps({"status":"HOST_NOT_CONFIGURED", "error":str(exc)}))
+            return 2
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
     db = connect(args.db)
     try:
@@ -56,6 +71,12 @@ def main(argv=None) -> int:
             result = {"authority": dict(db.execute("SELECT * FROM authority").fetchone()),
                       "tasks": [dict(r) for r in db.execute("SELECT * FROM tasks ORDER BY created_at")],
                       "events": [dict(r) for r in db.execute("SELECT * FROM events ORDER BY event_id")]}
+            if args.command == "status":
+                try:
+                    r = db.execute("SELECT * FROM host_ticks WHERE singleton=1").fetchone()
+                except sqlite3.OperationalError:  # Before the first host invocation this table is absent.
+                    r = None
+                result["host_observation"] = dict(r) if r else None
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
     finally:
