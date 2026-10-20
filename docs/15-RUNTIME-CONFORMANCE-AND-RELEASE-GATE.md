@@ -135,3 +135,57 @@ false-positive circuit trip.
 with **169/169 Python unittest cases**, from the cumulative PR to `main`.
 `live_public_source` was SKIPPED. Code correctness does not prove Windows
 Task Scheduler activation, human-domain approval or production readiness.
+
+## P10.2 — two fail-open paths corrected at the system boundary
+
+During continued review of the cumulative integration candidate, two
+substantive governance defects were identified in the previous P10 code:
+
+1. **Unknown dependent-task blast radius.** The earlier `_descendants`
+   checker raises when an ancestry graph is cyclic or exceeds the 256-task
+   budget. The caller previously returned `DEPENDENCY_BUDGET_BLOCKED`,
+   leaving the false success claim active and later writes permissible.
+   Now this failure triggers `CONFORMANCE_EMERGENCY_STOP` in the same
+   authoritative SQLite transaction: revoke the ledger-wide write grant,
+   move the root claim to UNKNOWN, and persistently disable sandbox staging.
+   It does **not** falsely claim to have examined or quarantined every
+   descendant. Future authorized effects remain blocked pending separate
+   diagnosis and acceptance. Fanout-vs-cycle remains a hypothesis, not a
+   proven root cause.
+2. **Check after the next effect.** The earlier host verified previous
+   `SANDBOX_VERIFIED` receipts only *after* admitting new work, so a forged
+   previous receipt could coexist with a new sandbox action. A new
+   `effect_preflight` performs a bounded complete conformance inspection
+   before an opted-in host stages effects; direct manual staging also
+   requires the same preflight. If eligible claims exceed the finite
+   512-item scan budget, new effects are blocked rather than pretending
+   coverage is complete. A confirmed, fully contained *non-critical* bad
+   review is quarantined and does not starve unrelated good tasks.
+   Any still-uncontained discrepancy, an emergency stop or capability
+   circuit trip prohibits effects.
+
+Source data changing normally between proposal and review is
+`INSUFFICIENT_EVIDENCE` and eligible for the existing P6/P7 bounded
+source-drift replanning path; it is not presented as a forged outcome.
+
+### Stronger acceptance
+
+`tests/test_governance_failclosed.py` exercises a 259-child dependency
+fanout, a forged cyclic dependency, direct and host-initiated new actions
+after a previously verified artifact/receipt is tampered with, over-budget
+512+ status claims, contained noncritical review errors followed by a valid
+action, and safe source drift leading to legitimate replanning.
+
+The first extended run `39435548093` had **174/175 passing** because an
+overly strict preflight stalled safe work even after unrelated malformed
+reviews were quarantined. The admission condition was corrected to allow
+**only fully contained non-critical** contradictions; no circuit or
+unbounded dependency case is admitted. The subsequent cumulative CI
+`39435827296` passed **176/176 Python tests** with no paid AI tokens.
+Live external public-source smoke was SKIPPED, not a verified upstream check.
+
+These engineering repairs do not automatically determine the actual
+cause of a corrupted task graph, repair source code, attest an external
+reviewer, establish semantic business outcomes or prove physical
+unattended Windows operation. No breaker-reset, hidden permission
+restoration, or production merge is authorized.
