@@ -89,3 +89,20 @@ Security and quality limitations:
   unknown problem discovery, self-governance, systemic code patching,
   production effects and unattended Windows execution remain open.
 - No paid model tokens, credit-trial services or automatic model downloads.
+
+## P8 key-substitution defect found and fixed in CI
+
+The first P8 CI ran 131 cases and found an unsafe inference: a duplicate
+explicit identifier (e.g., `invoice_id`) could cause the planner to fall back
+to a coincidentally unique value such as `amount`, manufacturing a plausible
+join. Both independently coded paths were modified: **if any explicitly
+identity-named shared column is invalid or non-overlapping, refuse all
+weaker fallback keys**. Candidate planner and independent SQL oracle must
+both agree on `INSUFFICIENT_KEY_EVIDENCE` in that case. Regression
+`test_duplicate_stable_id_never_falls_back_to_unique_amount` now exercises
+the failure directly. A later GitHub Actions run `39427596976` passed
+**132 Python tests**.
+
+This still does not prove the correctness of ID-like name inference for
+unknown schemas; where the evidence is semantically unclear, abstention or
+owner-supplied independent relationship semantics are required.
