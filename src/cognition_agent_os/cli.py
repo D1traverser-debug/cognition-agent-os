@@ -16,6 +16,8 @@ from .local_model import LocalModelUnavailable
 from .goal_loop import validate_goal
 from .goal_audit import audit_goal
 from .sandbox_effect import stage_one
+from .reconciliation import validate_reconciliation
+from .reconciliation_oracle import audit_stored_report
 
 
 def main(argv=None) -> int:
@@ -39,6 +41,13 @@ def main(argv=None) -> int:
     watch.add_argument("--path", required=True)
     watch.add_argument("--branch", default="main")
     watch.add_argument("--interval-seconds", type=int, default=1800)
+    reconcile = sub.add_parser("seed-reconciliation",
+                              help="Identify discrepancies between two small CSV sources")
+    reconcile.add_argument("--reference",required=True)
+    reconcile.add_argument("--observed",required=True)
+    report = sub.add_parser("reconciliation-audit",
+                            help="Read-only independent SQL check of a proposed diff report")
+    report.add_argument("--task-id",required=True)
     goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
     goal.add_argument("--spec", type=Path, required=True)
     audit = sub.add_parser("goal-audit", help="Read-only, second-checker audit of a P5 goal artifact")
@@ -71,6 +80,10 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "reconciliation-audit":
+        result=audit_stored_report(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="REPORT_MECHANICALLY_VERIFIED" else 4
     if args.command == "goal-stage-sandbox":
         result=stage_one(args.db,args.workspace,args.fixtures,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
@@ -116,6 +129,15 @@ def main(argv=None) -> int:
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
             task_id = create_task(db, spec, interval_seconds=args.interval_seconds)
             result = {"task_id": task_id, "state": "PENDING"}
+        elif args.command == "seed-reconciliation":
+            spec=validate_reconciliation({"kind":"record_reconciliation",
+                      "reference":args.reference,"observed":args.observed,
+                      "objective":"identify_discrepancies"})
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner["write_allowed"]:
+                raise PermissionError("New reconciliation task rejected after revocation")
+            result={"task_id":create_task(db,spec),"state":"PENDING",
+                    "objective":spec["objective"]}
         elif args.command == "seed-goal":
             if args.spec.is_symlink() or args.spec.stat().st_size > 16384:
                 raise ValueError("Goal spec file must be bounded and regular")
