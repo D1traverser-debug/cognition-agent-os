@@ -20,6 +20,7 @@ from .reconciliation import validate_reconciliation
 from .reconciliation_oracle import audit_stored_report
 from .intent_planner import compile_intent
 from .intent_runtime import audit_intent_plan
+from .semantic_contract import load_pinned_relationship
 
 
 def main(argv=None) -> int:
@@ -47,6 +48,8 @@ def main(argv=None) -> int:
                               help="Identify discrepancies between two small CSV sources")
     reconcile.add_argument("--reference",required=True)
     reconcile.add_argument("--observed",required=True)
+    reconcile.add_argument("--relationship-contract",default=None)
+    reconcile.add_argument("--expected-contract-sha256",default=None)
     report = sub.add_parser("reconciliation-audit",
                             help="Read-only independent SQL check of a proposed diff report")
     report.add_argument("--task-id",required=True)
@@ -150,9 +153,19 @@ def main(argv=None) -> int:
             result={"task_id":create_task(db,spec),"state":"PENDING",
                     "planned_capability":plan["capability"],"plan_sha256":plan["plan_sha256"]}
         elif args.command == "seed-reconciliation":
-            spec=validate_reconciliation({"kind":"record_reconciliation",
+            if (args.relationship_contract is None)!=(args.expected_contract_sha256 is None):
+                raise ValueError("Both relationship manifest and independently pinned SHA256 required")
+            raw_spec={"kind":"record_reconciliation",
                       "reference":args.reference,"observed":args.observed,
-                      "objective":"identify_discrepancies"})
+                      "objective":"identify_discrepancies"}
+            if args.relationship_contract is not None:
+                raw_spec["relationship_contract"]={
+                    "path":args.relationship_contract,
+                    "expected_sha256":args.expected_contract_sha256}
+            spec=validate_reconciliation(raw_spec)
+            # Intake validates the actual externally-pinned manifest but does
+            # not infer or bless any reviewer identity from file contents.
+            load_pinned_relationship(spec,args.fixtures)
             owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             if not owner["write_allowed"]:
                 raise PermissionError("New reconciliation task rejected after revocation")
