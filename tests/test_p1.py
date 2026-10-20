@@ -25,9 +25,12 @@ class P1Test(unittest.TestCase):
         self.home = Path(self.tmp.name)
         self.fx = self.home / "fixtures"
         self.fx.mkdir()
-        (self.fx / "same.txt").write_text("same data\n")
-        (self.fx / "old.txt").write_text("source v1\n")
-        (self.fx / "new.txt").write_text("source v2\n")
+        # SHA256 and Git blob checks are over immutable bytes. Windows
+        # write_text() translates LF to CRLF and previously falsified this
+        # cross-platform evidence identity test.
+        (self.fx / "same.txt").write_bytes(b"same data\n")
+        (self.fx / "old.txt").write_bytes(b"source v1\n")
+        (self.fx / "new.txt").write_bytes(b"source v2\n")
         self.dbpath = self.home / "state.sqlite"
         self.out = self.home / "out"
         db = connect(self.dbpath)
