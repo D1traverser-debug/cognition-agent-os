@@ -1,21 +1,22 @@
-name: P0-P3 public safety and source tests (free runner)
+name: P0-P4 offline regression and opt-in public source smoke
 
 on:
   pull_request:
   push:
     branches:
       - 'feat/free-local-inference-20261020'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: p0-p1-${{ github.ref }}
+  group: p0-p4-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  tests:
-    # No hosted-minute / credit dependence if the repo is made private.
+  offline_regression:
+    # Public runner: no trial minutes or paid provider required.
     if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -23,15 +24,26 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Python stdlib tests (no package/API downloads)
+      - name: Python standard library offline regressions (no remote APIs)
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
+
+  live_public_source:
+    # Explicit opt-in: third-party public API quota is separate from local correctness.
+    # GitHub workflow_dispatch UI becomes usable when the workflow is on the default branch.
+    if: ${{ github.event.repository.private == false && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
       - name: Real mutable public HEAD to immutable baseline (no API key)
         env:
           PYTHONPATH: src
         run: python scripts/verify_live_watch.py
-      - name: Real immutable public GitHub source plus negative control (no API key)
+      - name: Real immutable public GitHub source and negative control (no API key)
         env:
           PYTHONPATH: src
         run: python scripts/verify_public_source.py
