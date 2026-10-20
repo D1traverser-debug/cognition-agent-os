@@ -232,5 +232,28 @@ class WatchTests(unittest.TestCase):
         self.assertEqual(poll_due_watches(self.db_path), [])
 
 
+    def test_malformed_public_json_cannot_crash_observer(self):
+        from cognition_agent_os import source
+        from unittest.mock import MagicMock
+
+        def response(raw):
+            ctx = MagicMock()
+            ctx.__enter__.return_value.read.return_value = raw
+            return ctx
+
+        with patch.object(source, "urlopen", return_value=response(b"[]")):
+            with self.assertRaises(SourceUnavailable):
+                source.github_public_branch_head("owner/repo", "main")
+            with self.assertRaises(SourceUnavailable):
+                source.github_public_snapshot("owner/repo", "README.md", SHA_A)
+        self.due()
+        with patch("cognition_agent_os.watch.github_public_branch_head", return_value=SHA_A), \
+             patch("cognition_agent_os.watch.github_public_snapshot",
+                   side_effect=SourceUnavailable("bad metadata")):
+            outcome = observe_one(self.db_path, self.watch_id)
+        self.assertEqual(outcome["status"], "SOURCE_UNAVAILABLE")
+        self.assertIsNone(self.db_state()[0]["baseline_ref"])
+        self.assertEqual(self.db_state()[1], [])
+
 if __name__ == "__main__":
     unittest.main()
