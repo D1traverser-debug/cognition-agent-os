@@ -258,6 +258,41 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
             return {"task_id":task_id,"status":"LAB_EFFECT_UNKNOWN"}
         if fault_after_effect:
             os._exit(82)
+        # The approval was obtained *before* writing the lab file. Fixture
+        # bytes, hidden cases, or an artifact can change concurrently even
+        # while SQLite serializes task claims. Re-evaluate the entire source
+        # and held-out contract AFTER the effect; don't turn a stale approval
+        # into a durable trusted receipt.
+        post=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=True)
+        staged_file=workspace/"repair_lab"/(task_id+".py")
+        try:
+            staged_consistent=(not staged_file.is_symlink() and
+                               staged_file.is_file() and
+                               staged_file.stat().st_size<=4096 and
+                               hashlib.sha256(staged_file.read_bytes()).hexdigest()==patch_sha)
+        except OSError:
+            staged_consistent=False
+        if (post["status"]!="HOLDOUT_ACCEPTED"
+            or post.get("candidate_sha256")!=patch_sha
+            or post.get("holdout_passes")!=decision.get("holdout_passes")
+            or post.get("holdout_total")!=decision.get("holdout_total")
+            or not staged_consistent):
+            db.execute("""UPDATE tasks SET state='UNKNOWN',
+                error_code='REPAIR_POST_EFFECT_EVIDENCE_CHANGED',
+                lease_until=NULL,claim_token=NULL,
+                state_version=state_version+1 WHERE task_id=?""",(task_id,))
+            event(db,task_id,"REPAIR_POST_EFFECT_REJECTED",{
+                "status_after_write":post["status"],
+                "reason":post.get("reason"),
+                "candidate_sha256_before":decision.get("candidate_sha256"),
+                "candidate_sha256_after":post.get("candidate_sha256"),
+                "staged_bytes_consistent":staged_consistent,
+                "orphaned_lab_file_unapproved":True,
+                "external_outcome_verified":False})
+            db.commit()
+            return {"task_id":task_id,"status":"POST_EFFECT_REJECTED",
+                    "reason":"REPAIR_POST_EFFECT_EVIDENCE_CHANGED",
+                    "authorizes_source_mutation":False}
         db.execute("""UPDATE tasks SET state='REPAIR_LAB_VERIFIED',
             decision='ISOLATED_OPERATOR_PATCH_HOLDOUT_PASS',
             lease_until=NULL,claim_token=NULL,error_code=NULL,
