@@ -1,5 +1,67 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P10.5 — post-effect acceptance barrier + native Windows CI (2026-10-20)
+
+This section supersedes prior P10.4 and all historical checkpoints below.
+User's actual objective remains autonomous cognition, authorized execution,
+independent outcomes and systemic self-correction, with no paid LLM API tokens
+or finite AI-credit/trial dependencies. Do not confuse 203 passing offline
+regressions with general autonomy.
+
+**Current repository and write scope:**
+`D1traverser-debug/cognition-agent-os`, cumulative integration candidate
+branch `feat/p10-runtime-conformance-20261020`, open Draft PR #12
+https://github.com/D1traverser-debug/cognition-agent-os/pull/12
+against `main`; NO merges/deployments or modifications to the user's
+Windows PC. All P0–P10.5 changes are present only in the Draft candidate.
+
+**Two concrete risk reductions in P10.5:**
+1. Found an actual P10.4 local repair TOCTOU acceptance gap.
+   `repair_oracle.review_patch` previously evaluated hidden cases and then
+   staged files and persisted success without **new independent post-effect
+   input+staged-byte readback**. Now its same-ledger write transaction
+   re-runs `audit_patch` after the stage and checks actual staged file
+   SHA, size and non-symlink status before writing `REPAIR_HOLDOUT_ACCEPTED`.
+   Changed original source, changed pinned holdout or modified staged file
+   triggers `UNKNOWN / REPAIR_POST_EFFECT_EVIDENCE_CHANGED`,
+   `REPAIR_POST_EFFECT_REJECTED`; unapproved orphaned lab bytes do NOT
+   authorize source changes. Three injected between-review/effect file races
+   proved this behavior. This doesn't prevent an OS-level attacker from
+   modifying unprotected files after the final read; protected trust roots
+   and physical access boundaries are not available.
+2. **First real GitHub-hosted Windows compatibility execution:** newly
+   added `windows_offline_regression` CI job executes native
+   `scripts/host_tick.py` and full unittest suite on Windows.
+   First run `39445124518`: Linux 203 PASS but Windows **32 errors + 1
+   failure**. Cause: `with sqlite3.connect(...)` doesn't close a
+   connection, and Windows forbids deleting open SQLite files; immutable
+   Git source fixture `write_text` translated LF to CRLF. Repaired
+   read-only connection lifecycle in
+   `intent_runtime.audit_intent_plan`,
+   `reconciliation_oracle.audit_stored_report`,
+   `repair_oracle.audit_patch` using `contextlib.closing`. Tests that
+   assert blob hashes now build exact bytes with `write_bytes`.
+   Corrected GitHub Actions run `39445509712`: **Linux 203/203 PASS,
+   Windows hosted-runner 203/203 PASS**; `live_public_source` SKIPPED.
+- Latest design/proof: `docs/17-REPAIR-COMMIT-BARRIER-AND-WINDOWS.md`.
+- Latest functional code commit with dual OS PASS:
+  `f57e24dd5e6e797e78809314c7f34ebd07773de8`.
+  Later documentation/handoff-only commits need another head CI check.
+
+**Still unproven / prohibited:** the user's actual Windows Task Scheduler
+unattended run, OS reboot recovery in owner host, independently authenticated
+holdout reviewer authority, local installed Ollama quality, unbounded
+goal-based code synthesis, external business outcomes, production writes,
+or a completed release; PR #12 remains DRAFT and no `main` merge occurred.
+An internal SHA pin does not establish an independent reviewer identity.
+No paid model API or finite AI credits were used.
+
+**Next highest-value follow-through:** accept real owner-host unattended
+tick evidence with an independently controlled acceptance suite; then test
+an unfamiliar multi-module task via isolated review and holdout before
+any owner-approved release. Keep existing single task/grant DB and cumulative
+integration PR; do not spawn parallel governors or pad with monitors.
+
 ## LATEST P10.4 — isolated source patch experiment + held-out method correction (2026-10-20)
 
 This is the currently authoritative continuation for candidate project
