@@ -285,6 +285,60 @@ class PureRepairTests(unittest.TestCase):
         self.assertEqual(out.read_bytes(),previous)
         self.assertEqual(len(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED")),1)
 
+    def test_post_effect_holdout_substitution_refuses_false_success(self):
+        tid,_=self.example_compare()
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        from cognition_agent_os import repair_oracle as oracle
+        effect=oracle._stage_patch
+        def stage_then_swap_hidden(workspace,task_id,candidate):
+            actual=effect(workspace,task_id,candidate)
+            # Reproduces a separate process replacing hidden gold AFTER the
+            # initial approval, but BEFORE the SQLite acceptance receipt.
+            self.fx.joinpath("hidden.json").write_bytes(b"[]")
+            return actual
+        with patch.object(oracle,"_stage_patch",side_effect=stage_then_swap_hidden):
+            result=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"POST_EFFECT_REJECTED",result)
+        self.assertEqual(self.row(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.row(tid)["error_code"],"REPAIR_POST_EFFECT_EVIDENCE_CHANGED")
+        self.assertTrue((self.ws/"repair_lab"/(tid+".py")).exists())
+        self.assertEqual(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED"),[])
+        self.assertEqual(len(self.receipt(tid,"REPAIR_POST_EFFECT_REJECTED")),1)
+
+    def test_post_effect_original_source_change_refuses_success(self):
+        tid,_=self.example_compare()
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        from cognition_agent_os import repair_oracle as oracle
+        effect=oracle._stage_patch
+        def stage_then_swap_source(workspace,task_id,candidate):
+            actual=effect(workspace,task_id,candidate)
+            self.fx.joinpath("function.py").write_text(
+                "def condition(x, threshold):\\n    return x == threshold\\n")
+            return actual
+        with patch.object(oracle,"_stage_patch",side_effect=stage_then_swap_source):
+            result=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"POST_EFFECT_REJECTED",result)
+        self.assertEqual(self.row(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED"),[])
+        self.assertEqual(len(self.receipt(tid,"REPAIR_POST_EFFECT_REJECTED")),1)
+
+    def test_post_effect_lab_bytes_tamper_refuses_acceptance(self):
+        tid,_=self.example_compare()
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        from cognition_agent_os import repair_oracle as oracle
+        effect=oracle._stage_patch
+        def stage_then_tamper(workspace,task_id,candidate):
+            digest=effect(workspace,task_id,candidate)
+            (workspace/"repair_lab"/(task_id+".py")).write_bytes(b"not a patch")
+            return digest
+        with patch.object(oracle,"_stage_patch",side_effect=stage_then_tamper):
+            result=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"POST_EFFECT_REJECTED",result)
+        self.assertEqual(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED"),[])
+        record=self.receipt(tid,"REPAIR_POST_EFFECT_REJECTED")[0]
+        self.assertFalse(record["staged_bytes_consistent"])
+        self.assertEqual(self.row(tid)["state"],"UNKNOWN")
+
     def test_lab_receipt_or_file_tamper_disables_further_repair_effects(self):
         from cognition_agent_os.conformance import capability_disabled,REPAIR_LAB_CAPABILITY
         tid,_=self.example_compare()
