@@ -32,12 +32,18 @@ def _read_rows(data: bytes):
 
 def _derive_sql_key(db, headers_a, a, headers_b, b):
     candidates=[]
-    for field in sorted(set(headers_a)&set(headers_b)):
+    common=sorted(set(headers_a)&set(headers_b))
+    identity_columns=[field for field in common if
+                      field.lower()=="id" or field.lower().endswith("_id")
+                      or field.lower().endswith("_key")]
+    for field in common:
         av=[row[field] for row in a]
         bv=[row[field] for row in b]
         if (not av or not bv or
             any(not item.strip() for item in av+bv)
             or len(set(av))!=len(av) or len(set(bv))!=len(bv)):
+            if field in identity_columns:
+                return None
             continue
         db.execute("DELETE FROM ids_a")
         db.execute("DELETE FROM ids_b")
@@ -45,11 +51,14 @@ def _derive_sql_key(db, headers_a, a, headers_b, b):
         db.executemany("INSERT INTO ids_b(k) VALUES(?)",[(v,) for v in bv])
         overlap=db.execute("SELECT COUNT(*) FROM ids_a INNER JOIN ids_b USING (k)").fetchone()[0]
         if overlap<1:
+            if field in identity_columns:
+                return None
             continue
         id_prior=(field.lower()=="id" or field.lower().endswith("_id")
                   or field.lower().endswith("_key"))
         score=(100 if id_prior else 0)+int(100*overlap/max(len(a),len(b)))
-        candidates.append((score,field))
+        if not identity_columns or field in identity_columns:
+            candidates.append((score,field))
     candidates.sort(key=lambda x:(-x[0],x[1]))
     if not candidates or (len(candidates)>1 and candidates[0][0]==candidates[1][0]):
         return None
