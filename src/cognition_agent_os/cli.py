@@ -147,6 +147,10 @@ def main(argv=None) -> int:
                 raise ValueError("Intent file not a small regular file")
             spec=json.loads(args.spec.read_text(encoding="utf-8"))
             plan=compile_intent(spec)
+            if "relationship_contract" in plan["child_source_spec"]:
+                # Prevent staging a claimed semantic approval without the
+                # reviewed manifest bytes actually matching at intake.
+                load_pinned_relationship(plan["child_source_spec"],args.fixtures)
             owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             if not owner["write_allowed"]:
                 raise PermissionError("New intent refused after write revocation")
