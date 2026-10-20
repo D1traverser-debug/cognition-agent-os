@@ -119,6 +119,19 @@ class SandboxEffectTests(unittest.TestCase):
         self.assertEqual(self.task(tid)["state"],"NEEDS_REVIEW")
         self.assertEqual((dest/(tid+".candidate")).read_text(),"TAMPER")
 
+    def test_repeated_sandbox_failure_has_finite_retry_budget(self):
+        tid,_,_=self.make()
+        folder=self.out/"sandbox"
+        folder.mkdir()
+        (folder/(tid+".candidate")).write_text("MISMATCH")
+        results=[stage_one(self.db,self.out,self.fx,tid) for _ in range(3)]
+        self.assertEqual([v["status"] for v in results],
+                         ["EFFECT_UNKNOWN","EFFECT_UNKNOWN","EFFECT_RETRY_EXHAUSTED"])
+        self.assertEqual(self.task(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.task(tid)["error_code"],"SANDBOX_EFFECT_RETRY_EXHAUSTED")
+        self.assertEqual(stage_one(self.db,self.out,self.fx,tid)["status"],"NOT_ADMITTED")
+        self.assertEqual((folder/(tid+".candidate")).read_text(),"MISMATCH")
+
     def test_compromised_candidate_hash_or_source_rejected(self):
         tid,name,_=self.make()
         path=self.out/"artifacts"/(tid+".json")
