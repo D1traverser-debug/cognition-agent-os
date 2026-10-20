@@ -138,6 +138,46 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(r["findings"][0]["proof"],"FALSE_EFFECT_RECEIPT")
         self.assertEqual(self.task(tid)["state"],"UNKNOWN")
 
+    def test_confirmed_receipt_forgery_trips_system_wide_capability_guard(self):
+        from cognition_agent_os.conformance import capability_disabled
+        from cognition_agent_os.sandbox_effect import advance_due_reviews
+        first=self.create_staged()
+        db=connect(self.dbpath)
+        db.execute("UPDATE events SET details=? WHERE task_id=? AND kind=?",
+                   ('{"effect_sha256":"forged","scope":"isolated_workspace_only"}',
+                    first,"SANDBOX_EFFECT_VERIFIED"))
+        db.commit();db.close()
+        self.assertFalse(capability_disabled(self.dbpath))
+        r=self.check(enforce=True)
+        self.assertEqual(r["status"],"CONFORMANCE_VIOLATIONS")
+        self.assertTrue(r["capability_circuit_open"])
+        self.assertTrue(capability_disabled(self.dbpath))
+        self.assertEqual(self.task(first)["state"],"UNKNOWN")
+        self.assertEqual(len(self.events(first,"CONFORMANCE_CAPABILITY_DISABLED")),1)
+
+        self.fx.joinpath("other.json").write_text("{}")
+        second=self.seed(name="other.json")
+        self.assertEqual(run_once(self.dbpath,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        self.assertEqual(stage_one(self.dbpath,self.ws,self.fx,second)["status"],
+                         "CAPABILITY_DISABLED")
+        self.assertEqual(self.task(second)["state"],"NEEDS_REVIEW")
+        self.assertFalse((self.ws/"sandbox"/(second+".candidate")).exists())
+        self.assertEqual(advance_due_reviews(self.dbpath,self.ws,self.fx),[])
+        self.assertEqual(self.check(enforce=True)["quarantined"],[])
+        self.assertTrue(capability_disabled(self.dbpath))
+
+    def test_single_insufficient_legacy_proof_does_not_trip_global_circuit(self):
+        from cognition_agent_os.conformance import capability_disabled
+        db=connect(self.dbpath)
+        tid=create_task(db,{"kind":"fixture","old":"a","new":"b"})
+        db.execute("UPDATE tasks SET state='VERIFIED',decision='NO_CHANGE' WHERE task_id=?",
+                   (tid,))
+        db.commit();db.close()
+        result=self.check(enforce=True)
+        self.assertEqual(result["status"],"EVIDENCE_INSUFFICIENT")
+        self.assertFalse(result["capability_circuit_open"])
+        self.assertFalse(capability_disabled(self.dbpath))
+
     def test_corrupted_pending_report_is_quarantined_before_stage(self):
         self.fx.joinpath("config.json").write_text("{}")
         tid=self.seed()
