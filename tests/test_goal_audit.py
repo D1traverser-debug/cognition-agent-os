@@ -85,6 +85,23 @@ class GoalAuditTests(unittest.TestCase):
         self.assertEqual(r["status"],"NEEDS_REVIEW")
         self.assertEqual(self.audit(tid)["status"],"CANDIDATE_CONSTRAINTS_FAILED")
 
+    def test_extra_unrequested_field_rejected_by_both_checkers(self):
+        from cognition_agent_os.goal_loop import _check_candidate
+        original={"critical":"keep"}
+        desired={"owner":"ops"}
+        injected=b'{"critical":"keep","owner":"ops","unexpected":"admin"}'
+        self.assertFalse(_check_candidate("json_keys",original,desired,injected))
+        src=self.fx/"config.json";src.write_text('{"critical":"keep"}')
+        tid=self.seed("json_keys","config.json",desired)
+        import cognition_agent_os.goal_loop as gl
+        def dishonest(kind,parsed,desired):
+            return [("NO_OP",None),("ADD_MISSING_JSON_KEYS",injected)]
+        with patch.object(gl,"_candidates",side_effect=dishonest), \\
+             patch.object(gl,"_check_candidate",side_effect=lambda k,p,d,data: data==injected):
+            output=run_once(self.db,self.out,self.fx)
+        self.assertEqual(output["status"],"NEEDS_REVIEW")
+        self.assertEqual(self.audit(tid)["status"],"CANDIDATE_CONSTRAINTS_FAILED")
+
     def test_bad_task_id_and_uninitialized_db_never_create_file(self):
         bad_db=self.home/"missing.sqlite"
         self.assertEqual(audit_goal(bad_db,self.out,self.fx,"a"*32)["status"],"TASK_NOT_FOUND")
