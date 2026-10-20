@@ -85,6 +85,9 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         except (ValueError, TypeError):
             finalize(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
             return {"task_id":task_id,"status":"UNKNOWN","reason":"INVALID_TASK_SPEC"}
+        if not isinstance(source_spec,dict):
+            finalize(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
+            return {"task_id":task_id,"status":"UNKNOWN","reason":"INVALID_TASK_SPEC"}
         if source_spec.get("kind")=="goal_case":
             if planner_mode!="deterministic":
                 finalize(db,task,"UNKNOWN",error_code="GOAL_PLANNER_NOT_AVAILABLE")
