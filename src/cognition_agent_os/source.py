@@ -74,3 +74,28 @@ def get_pair(spec: dict, fixture_root: Path) -> tuple[bytes, bytes, dict]:
         raise ValueError("Unsupported source kind")
     return old, new, {**identity, "old_blob": git_blob_sha(old), "new_blob": git_blob_sha(new),
                       "old_sha256": hashlib.sha256(old).hexdigest(), "new_sha256": hashlib.sha256(new).hexdigest()}
+
+
+def github_public_branch_head(repo: str, branch: str) -> str:
+    """Resolve a public GitHub single-segment branch to immutable full commit SHA.
+
+    This is a mutable *observation*, not a stable evidence ref. Only the full
+    SHA returned here may be put into worker jobs.
+    """
+    if not _REPO_RE.fullmatch(repo) or not _BRANCH_RE.fullmatch(branch) or ".." in branch or branch.endswith(".lock"):
+        raise ValueError("Invalid public repository or branch")
+    url = f"https://api.github.com/repos/{repo}/branches/{quote(branch, safe='')}"
+    request = Request(url, headers={"Accept": "application/vnd.github+json",
+                                   "User-Agent": "cognition-agent-os-p3/0.0.1"})
+    try:
+        with urlopen(request, timeout=12) as response:
+            raw = response.read(32769)
+        if len(raw) > 32768:
+            raise SourceUnavailable("Branch metadata exceeds limit")
+        obj = json.loads(raw)
+        sha = obj.get("commit", {}).get("sha")
+        if obj.get("name") != branch or not isinstance(sha, str) or not _SHA_RE.fullmatch(sha):
+            raise SourceUnavailable("Branch metadata identity mismatch")
+        return sha
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError, KeyError) as exc:
+        raise SourceUnavailable("Public branch head unavailable or invalid") from exc
