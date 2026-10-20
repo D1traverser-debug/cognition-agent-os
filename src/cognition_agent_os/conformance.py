@@ -231,10 +231,12 @@ def _descendants(db, task_id: str) -> list[str]:
     return others
 
 
-def _quarantine(db, row: sqlite3.Row, reason: str) -> list[str]:
-    """No effect on original source; revoke only *derived state claims*."""
+def _quarantine(db, row: sqlite3.Row, reason: str,
+                *, independently_proven_descendants: list[str] | None=None) -> list[str]:
+    """Revoke derived claims; expanded closures require two agreeing oracles."""
     tid=row["task_id"]
-    descendants=_descendants(db,tid)
+    descendants=(_descendants(db,tid) if independently_proven_descendants is None
+                 else independently_proven_descendants)
     for dependent_id in descendants:
         dep=db.execute("SELECT state FROM tasks WHERE task_id=?",(dependent_id,)).fetchone()
         if dep and dep[0] not in ("UNKNOWN","BLOCKED"):
@@ -385,12 +387,31 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                 try:
                     descendants=_quarantine(db,row,finding["proof"])
                 except ValueError:
-                    # The previous implementation only reported this error,
-                    # allowing further effects despite unknown blast radius.
-                    # Escalate to a same-transaction global grant revocation.
-                    _emergency_dependency_stop(db,row,finding["proof"])
-                    emergency_stops.append(row["task_id"])
-                    findings[-1]["enforcement"]="EMERGENCY_STOP"
+                    # Two competing structural causes were previously collapsed
+                    # into an unconditional global stop. Rerun an independently
+                    # implemented, bounded causal experiment under the SAME
+                    # SQLite write lock, before deciding the remediation scope.
+                    from .graph_experiment import investigate_dependency_graph
+                    proof=investigate_dependency_graph(db,row["task_id"])
+                    evidence={k:v for k,v in proof.items() if k!="descendants"}
+                    event(db,row["task_id"],"CONFORMANCE_GRAPH_EXPERIMENT",evidence)
+                    if proof["action"]=="COMPLETE_LOCAL_QUARANTINE":
+                        descendants=_quarantine(
+                            db,row,finding["proof"],
+                            independently_proven_descendants=proof["descendants"])
+                        quarantined.append({
+                            "task_id":row["task_id"],"reason":finding["proof"],
+                            "descendants":len(descendants),
+                            "repair_strategy":"INDEPENDENTLY_PROVEN_FULL_CLOSURE"})
+                        findings[-1]["enforcement"]="QUARANTINED"
+                        findings[-1]["causal_experiment"]="ACYCLIC_HIGH_FANOUT_PROVEN"
+                    else:
+                        # Real cycles, over-budget graphs and any disagreement
+                        # retain the strict emergency safety response.
+                        _emergency_dependency_stop(db,row,finding["proof"])
+                        emergency_stops.append(row["task_id"])
+                        findings[-1]["enforcement"]="EMERGENCY_STOP"
+                        findings[-1]["causal_experiment"]=proof["status"]
                 else:
                     quarantined.append({"task_id":row["task_id"],
                                         "reason":finding["proof"],
