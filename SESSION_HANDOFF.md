@@ -1,5 +1,73 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## P6 LATEST checkpoint — 2026-10-20 (current exact resume)
+
+This checkpoint supersedes P5 and earlier below; those remain historical.
+
+**Owner/repository:** D1traverser-debug/cognition-agent-os.
+**Candidate branch:** `feat/p6-sandbox-outcome-loop-20261020`.
+**Draft PR #8:** https://github.com/D1traverser-debug/cognition-agent-os/pull/8
+(stacked on P5; all previous PRs remain draft; main not changed).
+
+**Governing goal:** an independently useful, self-directed cognition/execution
+agent; not a pile of monitors, templates, test scores or semantic claims without
+independent outcome evidence. Hard budget: no paid LLM API, remote inference
+tokens, limited free AI credits or trial allocation; only opt-in already
+installed local Ollama is permissible and unproven on a physical host.
+
+**P6 implemented code:**
+- `src/cognition_agent_os/sandbox_effect.py`: independently audit P5's
+  immutable local proposal, recheck goal/grant and task state under the existing
+  SQLite `BEGIN IMMEDIATE`, create-once file in
+  `workspace/sandbox/<taskid>.candidate`, independent SHA/readback, original
+  source intact, durable event `SANDBOX_EFFECT_VERIFIED` and distinct task
+  state `SANDBOX_VERIFIED`. No remote effect, no source modification and NO
+  domain/business VERIFIED claim.
+- On original source drift: same SQLite ledger transitions parent to
+  `NEEDS_REPLAN` and issues one new `goal_case` child atomically;
+  max **two** parent-child replans then UNKNOWN.
+- On repeated sandbox write/readback uncertainty: max **three** persisted
+  attempts then `UNKNOWN / SANDBOX_EFFECT_RETRY_EXHAUSTED`; do not overwrite
+  an unknown/conflicting existing file or produce false success.
+- `goal-stage-sandbox --task-id ...` CLI, opt-in host
+  `host-tick --auto-stage-goals` and optional Windows registration
+  switch `-AutoStageGoals` (no OS installation observed).
+- `tests/test_sandbox_effect.py`: two families, real subprocess killed after
+  file creation and before SQLite commit, second process reconciliation,
+  two independent staging processes, revoked/stale authority, mismatched
+  sandbox effect, source drift replan and budget, symlink refusal, host opt-in,
+  repeated failed effect attempts; existing P0-P5 tests preserved.
+- Operational limits: `docs/11-SANDBOX-OUTCOME-AND-REPLAN.md`.
+
+**Current hard evidence:** code functional commit
+`6d9c854f02761f4f3386e0dc240006c8f8d7426c`,
+GitHub Actions run `39422945419`, public-repository
+`offline_regression` SUCCESS, **100 Python tests OK**,
+`live_public_source` SKIPPED by design. Prior successful P3
+immutable/mutable public GitHub checks live in separate earlier runs;
+no new live GitHub remote checks demonstrated by this run.
+Subsequent documentation and PowerShell registration switch changes
+must be reread and their latest CI checked before calling head tested.
+No actual Windows Task Scheduler registration or real installed local
+model observation took place.
+
+**Unproven and remaining:** semantic quality/independent ground truth;
+open-ended goal decomposition, unknown problem identification and true
+causal competition, autonomous solution choice and verified post-action
+domain value; applying real provider actions/receipts; durable learned
+methods and systematic defect-class repair; fairness if a permanently
+unadmitted review consumes the first review slots repeatedly; actual
+unattended physical host. Do not mark full Agent as finished.
+
+**Next P7 priority:** close the feedback loop in the existing task
+authority by turning independently observed failed/unknown dispositions
+into durable diagnosis and bounded next-action transitions, with
+fair admission of other legal work, not merely replaying failed reviews.
+Prove task-family transfer, real meaningful outcomes and no user
+supervisor dependency. Preserve strict authorization and cost bounds.
+Additional owner Windows access/real independent semantic labels are
+external evidence blockers but unrelated authorized engineering can continue.
+
 ## P5 LATEST — verified bounded goal-driven action candidate loop (2026-10-20)
 
 This is the **current exact continuation** and takes precedence over historical
