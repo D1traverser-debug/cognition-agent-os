@@ -48,6 +48,20 @@ jobs:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
 
+  windows_native_scheduler:
+    # Real hosted Windows OS scheduler wakeups, not a mocked timer.
+    # Does NOT prove the owner's Windows machine can run before login.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Register temporary user-scoped Windows Scheduled Task; witness two ticks
+        shell: pwsh
+        run: ./scripts/verify_windows_scheduler.ps1 -TimeoutSeconds 180
+
   live_public_source:
     # Explicit opt-in: third-party public API quota is separate from local correctness.
     # GitHub workflow_dispatch UI becomes usable when the workflow is on the default branch.
