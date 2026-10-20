@@ -26,13 +26,16 @@ def main(argv=None) -> int:
     gh.add_argument("--new-ref", required=True)
     gh.add_argument("--interval-seconds", type=int, default=0)
     run = sub.add_parser("worker-once")
+    run.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
+    run.add_argument("--local-model", default=None)
     run.add_argument("--fail-at", choices=["after_claim", "after_artifact_before_commit"])
     sub.add_parser("revoke-write")
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
     if args.command == "worker-once":
-        result = run_once(args.db, args.workspace, args.fixtures, fail_at=args.fail_at)
+        result = run_once(args.db, args.workspace, args.fixtures, fail_at=args.fail_at,
+                          planner_mode=args.planner_mode, local_model=args.local_model)
         print(json.dumps(result, sort_keys=True))
         return 0
     db = connect(args.db)
