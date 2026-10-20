@@ -15,6 +15,7 @@ from .reference_model import propose_reference_local
 from .local_model import LocalModelUnavailable
 from .goal_loop import validate_goal
 from .goal_audit import audit_goal
+from .sandbox_effect import stage_one
 
 
 def main(argv=None) -> int:
@@ -42,12 +43,17 @@ def main(argv=None) -> int:
     goal.add_argument("--spec", type=Path, required=True)
     audit = sub.add_parser("goal-audit", help="Read-only, second-checker audit of a P5 goal artifact")
     audit.add_argument("--task-id", required=True)
+    sandbox = sub.add_parser("goal-stage-sandbox",
+                         help="Apply audited P5 proposal to isolated sandbox only, then read back")
+    sandbox.add_argument("--task-id", required=True)
     run = sub.add_parser("worker-once")
     run.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     run.add_argument("--local-model", default=None)
     run.add_argument("--fail-at", choices=["after_claim", "after_artifact_before_commit"])
     host = sub.add_parser("host-tick", help="Run due jobs once; for OS-scheduled invocation")
     host.add_argument("--max-jobs", type=int, default=16)
+    host.add_argument("--auto-stage-goals", action="store_true",
+                      help="Explicitly opt in to local sandbox-only follow-up")
     host.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     host.add_argument("--local-model", default=None)
     export = sub.add_parser("reference-export", help="Export model-visible cases without reference gold")
@@ -65,6 +71,10 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "goal-stage-sandbox":
+        result=stage_one(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="SANDBOX_VERIFIED" else 4
     if args.command == "goal-audit":
         result=audit_goal(args.db,args.workspace,args.fixtures,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
@@ -77,7 +87,8 @@ def main(argv=None) -> int:
     if args.command == "host-tick":
         try:
             result = run_tick(args.db, args.workspace, args.fixtures, max_jobs=args.max_jobs,
-                              planner_mode=args.planner_mode, local_model=args.local_model)
+                              planner_mode=args.planner_mode, local_model=args.local_model,
+                              auto_stage_goals=args.auto_stage_goals)
         except HostNotConfigured as exc:
             print(json.dumps({"status":"HOST_NOT_CONFIGURED", "error":str(exc)}))
             return 2
