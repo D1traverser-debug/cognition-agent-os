@@ -80,3 +80,36 @@ prove Windows background execution. Real held-out goals and external semantic
 judges are still needed. Expansion of the goal contract must preserve the same
 authorization + readback constraints rather than invoking a shell or overwriting
 sources.
+
+## Separate audit and falsification (P5.1)
+
+After a goal candidate enters `NEEDS_REVIEW`, invoke the read-only post-action
+auditor using the task ID emitted by the worker:
+
+```powershell
+python .\scripts\host_tick.py --db .\runtime\state.sqlite --workspace .\runtime\workspace --fixtures .\fixtures goal-audit --task-id THE_32_CHARACTER_TASK_ID
+```
+
+The auditor reads the actual authoritative SQLite task, current goal/grant
+revision, original source, stored artifact hash and candidate bytes. It has a
+separate implementation of JSON/CSV preservation and acceptance constraints
+from the candidate planner. It rejects: tampered artifacts, changed sources,
+revoked/stale authority, damaged/missing state, an arbitrary destructive
+field replacement, and a subtle extra **unrequested** JSON field.
+
+A positive audit response is `CANDIDATE_MECHANICALLY_VALID` with
+`semantic_goal_achieved=false` and
+`authorizes_source_mutation=false`. The original task remains
+`NEEDS_REVIEW`. This command does NOT auto-approve the candidate,
+apply it to the source or replan other unknown business tasks. A negative
+audit is reported to the caller and never converted to business VERIFIED.
+
+Negative-control tests deliberately corrupt the candidate-producing planner
+so it may emit a convincing destructive or excess-field output; the separate
+auditor detects the violation. This is software-engineering independence
+between two checking paths, **not** a completely independent external semantic
+oracle or a security boundary against malicious modification of both paths.
+
+A future closed-loop increment should bind that audit disposition to durable
+follow-up/replanning, source-specific external acceptance and self-initiated
+evidence acquisition before autonomous goal closure can be claimed.
