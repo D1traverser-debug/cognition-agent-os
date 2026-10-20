@@ -15,7 +15,10 @@ import sqlite3
 import time
 
 from .ledger import connect,event
-from .outcome_attestation import verify_signed_outcome,_strict_json,_read,MAX_STATEMENT,MAX_SIGNATURE
+from .outcome_attestation import (
+    verify_signed_outcome,_strict_json,_read,MAX_STATEMENT,MAX_SIGNATURE,
+    MAX_SIGNERS,SHA,PRINCIPAL
+)
 
 TABLE="""CREATE TABLE IF NOT EXISTS signed_outcome_feedback(
     task_id TEXT PRIMARY KEY,
@@ -35,6 +38,81 @@ TABLE="""CREATE TABLE IF NOT EXISTS signed_outcome_feedback(
 def _no(status:str,**kw):
     return {"status":status,"production_write_authorized":False,
             "external_business_truth_proven":False,**kw}
+
+
+TRUST_TABLE="""CREATE TABLE IF NOT EXISTS owner_outcome_trust(
+  singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+  reviewer_principal TEXT NOT NULL,
+  trusted_signers_sha256 TEXT NOT NULL,
+  allowed_signers_path TEXT NOT NULL,
+  bound_goal_rev INTEGER NOT NULL,
+  bound_grant_rev INTEGER NOT NULL
+)"""
+
+
+def bind_owner_review_trust(db_path:Path,workspace:Path,fixtures:Path,
+                            allowed_signers:Path,expected_allowed_sha256:str,
+                            *,expected_principal:str)->dict:
+    """Separate, explicit operator enrollment. Never called by worker/host.
+
+    This is a write-once *ledger policy*, not a proof the caller is human.
+    Actual operator/Agent separation requires owner OS ACL enforcement.
+    """
+    if (not isinstance(expected_allowed_sha256,str)
+        or not SHA.fullmatch(expected_allowed_sha256)
+        or not isinstance(expected_principal,str)
+        or not PRINCIPAL.fullmatch(expected_principal)
+        or not db_path.is_file() or db_path.is_symlink()):
+        return _no("OWNER_TRUST_UNVERIFIABLE")
+    try:
+        p=allowed_signers.resolve(strict=True)
+        if (allowed_signers.is_symlink() or
+            any(p.is_relative_to(k.resolve(strict=True))
+                for k in (workspace,fixtures))):
+            return _no("TRUST_ROOT_INSIDE_AGENT_CONTROL")
+        raw=_read(allowed_signers,MAX_SIGNERS)
+        if hashlib.sha256(raw).hexdigest()!=expected_allowed_sha256:
+            return _no("TRUSTED_PUBLIC_KEY_MISMATCH")
+        db=connect(db_path)
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            # Do not initialize incomplete ledgers; explicit owner setup
+            # is not an excuse to mint a new Agent authority.
+            exists=db.execute("""SELECT name FROM sqlite_master
+                       WHERE type='table' AND name='authority'""").fetchone()
+            if not exists:
+                db.commit();return _no("AUTHORITY_NOT_INITIALIZED")
+            authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not authority or not authority["write_allowed"]:
+                db.commit();return _no("OWNER_TRUST_BINDING_NOT_AUTHORIZED")
+            db.execute(TRUST_TABLE)
+            current=db.execute("""SELECT * FROM owner_outcome_trust
+                                 WHERE singleton=1""").fetchone()
+            if current:
+                db.commit()
+                return _no("OWNER_TRUST_ALREADY_BOUND" if (
+                    current["reviewer_principal"]==expected_principal and
+                    current["trusted_signers_sha256"]==expected_allowed_sha256 and
+                    current["allowed_signers_path"]==str(p)) else
+                    "OWNER_TRUST_IMMUTABLE_CONFLICT")
+            db.execute("""INSERT INTO owner_outcome_trust
+                VALUES(1,?,?,?,?,?)""",
+                (expected_principal,expected_allowed_sha256,str(p),
+                 authority["goal_rev"],authority["grant_rev"]))
+            event(db,"owner_outcome_trust","OWNER_OUTCOME_TRUST_BOUND",{
+                "trusted_signers_sha256":expected_allowed_sha256,
+                "principal":expected_principal,
+                "root_location":str(p),
+                "os_identity_isolation_proven":False,
+                "production_write_authorized":False})
+            db.commit()
+            return _no("OWNER_TRUST_BOUND",expected_principal=expected_principal,
+                       reviewer_root_sha256=expected_allowed_sha256)
+        except BaseException:
+            db.rollback();raise
+        finally:db.close()
+    except (OSError,sqlite3.Error,ValueError,TypeError,KeyError):
+        return _no("OWNER_TRUST_UNAVAILABLE")
 
 
 def record_signed_feedback(db_path:Path,workspace:Path,fixtures:Path,
@@ -65,6 +143,17 @@ def record_signed_feedback(db_path:Path,workspace:Path,fixtures:Path,
                 or authority["goal_rev"]!=row["goal_rev"]):
                 db.commit()
                 return _no("SIGNED_FEEDBACK_AUTHORITY_BLOCKED")
+            installed=db.execute("""SELECT 1 FROM sqlite_master
+               WHERE type='table' AND name='owner_outcome_trust'""").fetchone()
+            anchor=(db.execute("SELECT * FROM owner_outcome_trust WHERE singleton=1").fetchone()
+                    if installed else None)
+            # Caller-supplied digest by itself never creates a trusted root.
+            # It must match the pre-bound, write-once operator policy.
+            if (not anchor or anchor["reviewer_principal"]!=expected_principal
+                or anchor["trusted_signers_sha256"]!=expected_allowed_sha256
+                or anchor["allowed_signers_path"]!=str(allowed_signers.resolve(strict=True))):
+                db.commit()
+                return _no("SIGNED_FEEDBACK_UNBOUND_TRUST_ROOT")
             # Verify the signature and original bytes AGAIN while this DB
             # transaction fences task/authority changes. Filesystem change
             # after this check is still possible without OS-level isolation.
