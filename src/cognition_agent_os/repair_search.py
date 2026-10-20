@@ -191,6 +191,22 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
                 "hypotheses":plan["hypotheses"]}
     sh=hashlib.sha256(original).hexdigest()
     vh=hashlib.sha256(cases).hexdigest()
+    # This is conservative *method feedback*, not leakage of withheld labels:
+    # never replay the exact same previously falsified operator hypothesis
+    # against identical public evidence and same independently pinned oracle.
+    earlier=db.execute("""SELECT 1 FROM events
+        WHERE kind='REPAIR_HOLDOUT_REJECTED'
+          AND json_extract(details,'$.source_sha256')=?
+          AND json_extract(details,'$.visible_sha256')=?
+          AND json_extract(details,'$.holdout_sha256')=?
+          AND json_extract(details,'$.mechanism')=? LIMIT 1""",
+        (sh,vh,spec["holdout_sha256"],plan["selected"]["mechanism"])).fetchone()
+    if earlier:
+        finalize(db,task,"UNKNOWN",error_code="IDENTICAL_REPAIR_PREVIOUSLY_REFUTED")
+        return {"task_id":tid,"status":"UNKNOWN",
+                "reason":"IDENTICAL_REPAIR_PREVIOUSLY_REFUTED",
+                "method_action":"DO_NOT_REPLAY_FAILED_HYPOTHESIS",
+                "external_business_outcome_verified":False}
     artifact={"task_id":tid,"goal_rev":task["goal_rev"],"source_spec":spec,
               "source_sha256":sh,"visible_sha256":vh,
               "selected":plan["selected"],"hypotheses":plan["hypotheses"],
