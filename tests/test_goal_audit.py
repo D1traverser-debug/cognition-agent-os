@@ -96,7 +96,7 @@ class GoalAuditTests(unittest.TestCase):
         import cognition_agent_os.goal_loop as gl
         def dishonest(kind,parsed,desired):
             return [("NO_OP",None),("ADD_MISSING_JSON_KEYS",injected)]
-        with patch.object(gl,"_candidates",side_effect=dishonest), \\
+        with patch.object(gl,"_candidates",side_effect=dishonest), \
              patch.object(gl,"_check_candidate",side_effect=lambda k,p,d,data: data==injected):
             output=run_once(self.db,self.out,self.fx)
         self.assertEqual(output["status"],"NEEDS_REVIEW")
