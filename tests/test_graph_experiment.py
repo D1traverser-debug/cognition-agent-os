@@ -100,6 +100,51 @@ class GraphExperimentTests(unittest.TestCase):
         self.assertTrue(capability_disabled(self.db_path))
         db.close()
 
+    def test_partial_execution_detected_by_independent_post_action_readback(self):
+        from cognition_agent_os import conformance as controller
+        db=connect(self.db_path)
+        root=self._root(db)
+        for i in range(259):
+            create_task(db,self._spec(),parent=root,commit=False)
+        db.commit();db.close()
+        real=controller._quarantine
+        def partial(db,row,reason,*,independently_proven_descendants=None):
+            if independently_proven_descendants:
+                return real(db,row,reason,independently_proven_descendants=
+                            independently_proven_descendants[:-1])
+            return real(db,row,reason)
+        with patch.object(controller,"_quarantine",side_effect=partial):
+            result=inspect_conformance(self.db_path,self.ws,self.fx,
+                                       enforce=True,max_cases=1)
+        self.assertEqual(result["emergency_stops"],[root])
+        self.assertEqual(result["quarantined"],[])
+        self.assertEqual(result["findings"][0]["causal_experiment"],"POST_EFFECT_REJECTION")
+        self.assertTrue(capability_disabled(self.db_path))
+        db=connect(self.db_path)
+        self.assertEqual(db.execute("SELECT write_allowed FROM authority WHERE singleton=1").fetchone()[0],0)
+        self.assertEqual(db.execute("""SELECT COUNT(*) FROM events
+            WHERE task_id=? AND kind='CONFORMANCE_REPAIR_REJECTED'""",
+            (root,)).fetchone()[0],1)
+        self.assertEqual(db.execute("""SELECT COUNT(*) FROM events
+            WHERE task_id=? AND kind='CONFORMANCE_REPAIR_ACCEPTED'""",
+            (root,)).fetchone()[0],0)
+        db.close()
+
+    def test_independent_oracle_exception_triggers_global_stop(self):
+        from cognition_agent_os import graph_experiment as oracle
+        import sqlite3
+        db=connect(self.db_path)
+        root=self._root(db)
+        for i in range(259):
+            create_task(db,self._spec(),parent=root,commit=False)
+        db.commit();db.close()
+        with patch.object(oracle,"_sql_closure",side_effect=sqlite3.DatabaseError("injected")):
+            report=inspect_conformance(self.db_path,self.ws,self.fx,
+                                       enforce=True,max_cases=1)
+        self.assertEqual(report["emergency_stops"],[root])
+        self.assertEqual(report["findings"][0]["causal_experiment"],"UNVERIFIABLE")
+        self.assertTrue(capability_disabled(self.db_path))
+
     def test_more_than_hard_experiment_budget_blocks_release(self):
         from cognition_agent_os.graph_experiment import MAX_GRAPH_EXPERIMENT_NODES
         db=connect(self.db_path)
