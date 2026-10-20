@@ -96,3 +96,42 @@ regressions remain required.
 P10 is a **system-level safety and truthfulness increment**, not evidence
 of autonomous causal method learning, open-world goal discovery,
 external production action or a functioning Windows background agent.
+
+## P10.1 systemic blast-radius response: persistent capability circuit breaker
+
+Merely quarantining one forged task is insufficient if the same implementation
+continues to act on new work. When an enforced readback catches a serious
+**confirmed integrity contradiction** in a previously `SANDBOX_VERIFIED`
+goal (e.g., changed sandbox bytes, false/missing effect receipt, mismatched
+artifact or falsified candidate constraints), P10 also opens a durable
+`goal_sandbox_stage` circuit in the SAME SQLite database:
+
+- Exactly one initial `CONFORMANCE_CAPABILITY_DISABLED` event records the
+  triggering task, integrity reason and non-self-resetting policy.
+- Manual `goal-stage-sandbox` and the existing host's automatic
+  `advance_due_reviews` both consult this guard. A second check inside the
+  execution write lock fences a concurrent circuit trip, not just the
+  caller-side precheck.
+- Pending work stays pending or `NEEDS_REVIEW`, but further sandbox effects
+  are **blocked**, not silently rerouted to an unchecked alternate path.
+- The breaker is NOT tripped for `INSUFFICIENT_EVIDENCE` or unrelated
+  unsupported historical success reports; absence of semantic proof and
+  confirmed integrity violation are separate signals.
+- The system contains no model-authorized automatic re-enable. Recovery
+  requires a separately authorized and evidenced remediation protocol before
+  a breaker-reset interface could safely be introduced.
+
+This is a system-level safe stop rather than a guessed code patch. It avoids
+another partial repair by protecting **all future tasks using the same
+capability**, in addition to quarantining the already-affected task lineage.
+The actual systemic root cause remains unknown until falsified/confirmed.
+
+The dedicated negative test for a forged effect receipt proves the circuit
+trips once, persists, prevents a second sandbox write and does not recur on
+later sweeps. The evidence-insufficiency negative control proves no
+false-positive circuit trip.
+
+**Integration CI proof:** GitHub Actions run `39433023953` succeeded
+with **169/169 Python unittest cases**, from the cumulative PR to `main`.
+`live_public_source` was SKIPPED. Code correctness does not prove Windows
+Task Scheduler activation, human-domain approval or production readiness.
