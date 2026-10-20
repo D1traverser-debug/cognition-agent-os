@@ -41,7 +41,9 @@ class GraphExperimentTests(unittest.TestCase):
     def test_independent_graph_oracles_support_multiple_acyclic_shapes(self):
         for n,shape in ((263,"fanout"),(264,"chain"),(275,"branching")):
             with self.subTest(n=n,shape=shape):
-                db=connect(self.db_path)
+                isolated=self.root/(shape+".sqlite")
+                db=connect(isolated)
+                initialize(db)
                 root=self._root(db)
                 ids=[root]
                 for i in range(n):
@@ -58,10 +60,10 @@ class GraphExperimentTests(unittest.TestCase):
                 self.assertEqual(len(p["snapshot_sha256"]),64)
                 self.assertTrue(p["hypotheses"][1]["falsified"])
                 db.close()
-                r=inspect_conformance(self.db_path,self.ws,self.fx,enforce=True,max_cases=16)
+                r=inspect_conformance(isolated,self.ws,self.fx,enforce=True,max_cases=16)
                 self.assertTrue(any(e["task_id"]==root and e["descendants"]==n
                                     for e in r["quarantined"]))
-                self.assertFalse(capability_disabled(self.db_path))
+                self.assertFalse(capability_disabled(isolated))
 
     def test_cycle_distinguished_from_valid_fanout(self):
         db=connect(self.db_path)
