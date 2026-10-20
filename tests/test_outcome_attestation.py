@@ -72,6 +72,11 @@ class NativeSignedOutcomeTests(unittest.TestCase):
                          "REPAIR_LAB_VERIFIED")
         self.statement_file=self.trust/"outcome.json"
         self.sig=self.trust/"outcome.json.sig"
+        from cognition_agent_os.signed_feedback import bind_owner_review_trust
+        bound=bind_owner_review_trust(
+            self.dbpath,self.work,self.fx,self.allowed,self.pinned,
+            expected_principal=self.principal)
+        self.assertEqual(bound["status"],"OWNER_TRUST_BOUND",bound)
 
     def task(self):
         db=connect(self.dbpath)
@@ -246,6 +251,56 @@ class NativeSignedOutcomeTests(unittest.TestCase):
         self.assertEqual(result["statement"]["task_id"],self.tid)
         self.assertFalse(self.sig.exists())
         self.assertEqual(self.task(),before)
+
+    def test_signed_feedback_requires_prebound_operator_trust_root(self):
+        from cognition_agent_os.signed_feedback import (
+            record_signed_feedback,bind_owner_review_trust)
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        db=connect(self.dbpath)
+        db.execute("DELETE FROM owner_outcome_trust")
+        db.commit();db.close()
+        outcome=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,self.allowed,self.pinned,
+              expected_principal=self.principal)
+        self.assertEqual(outcome["status"],"SIGNED_FEEDBACK_UNBOUND_TRUST_ROOT")
+        db=connect(self.dbpath)
+        self.assertIsNone(db.execute("SELECT 1 FROM sqlite_master WHERE name='signed_outcome_feedback'").fetchone())
+        db.close()
+        bound=bind_owner_review_trust(
+            self.dbpath,self.work,self.fx,self.allowed,self.pinned,
+            expected_principal=self.principal)
+        self.assertEqual(bound["status"],"OWNER_TRUST_BOUND")
+
+    def test_owner_trust_cannot_be_replaced_by_other_signed_self_claim(self):
+        from cognition_agent_os.signed_feedback import (
+            record_signed_feedback,bind_owner_review_trust)
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        other=self.trust/"new_allowed"
+        other.write_bytes(self.allowed.read_bytes()+b"# extra signer\n")
+        replacement=hashlib.sha256(other.read_bytes()).hexdigest()
+        changed=bind_owner_review_trust(
+            self.dbpath,self.work,self.fx,other,replacement,
+            expected_principal=self.principal)
+        self.assertEqual(changed["status"],"OWNER_TRUST_IMMUTABLE_CONFLICT")
+        impostor=record_signed_feedback(self.dbpath,self.work,self.fx,
+              self.statement_file,self.sig,other,replacement,
+              expected_principal=self.principal)
+        self.assertEqual(impostor["status"],"SIGNED_FEEDBACK_UNBOUND_TRUST_ROOT")
+        db=connect(self.dbpath)
+        first=db.execute("SELECT trusted_signers_sha256 FROM owner_outcome_trust").fetchone()
+        self.assertEqual(first[0],self.pinned)
+        db.close()
+
+    def test_owner_trust_binding_refuses_missing_uninitialized_authority(self):
+        from cognition_agent_os.signed_feedback import bind_owner_review_trust
+        missing=self.base/"unseeded.sqlite"
+        missing.write_bytes(b"")
+        outcome=bind_owner_review_trust(
+            missing,self.work,self.fx,self.allowed,self.pinned,
+            expected_principal=self.principal)
+        self.assertEqual(outcome["status"],"OWNER_TRUST_UNAVAILABLE" if
+            outcome["status"]=="OWNER_TRUST_UNAVAILABLE" else "AUTHORITY_NOT_INITIALIZED")
+        self.assertEqual(missing.stat().st_size,0)
 
     def test_signed_rejection_persists_and_blocks_repeated_method(self):
         from cognition_agent_os.signed_feedback import record_signed_feedback
