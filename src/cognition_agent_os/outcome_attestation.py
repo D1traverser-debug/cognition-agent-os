@@ -19,6 +19,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import time
 
 from .repair_oracle import audit_patch
 
@@ -32,7 +33,8 @@ NAMESPACE="cognition-agent-os-outcome-v1"
 KEYS=frozenset((
     "schema_version","purpose","reviewer_principal","task_id",
     "goal_rev","grant_rev","source_spec_sha256","proposal_sha256",
-    "candidate_sha256","holdout_sha256","outcome","rationale"
+    "candidate_sha256","holdout_sha256","outcome","rationale",
+    "issued_at","expires_at"
 ))
 
 
@@ -72,8 +74,15 @@ def _strict_json(data: bytes)->dict:
         or type(obj["grant_rev"]) is not int or obj["grant_rev"]<1
         or obj["outcome"] not in ("DOMAIN_ACCEPTED","DOMAIN_REJECTED")
         or type(obj["rationale"]) is not str
-        or not 15<=len(obj["rationale"])<=500):
+        or not 15<=len(obj["rationale"])<=500
+        or type(obj["issued_at"]) is not int
+        or type(obj["expires_at"]) is not int
+        or not 0<obj["expires_at"]-obj["issued_at"]<=30*86400):
+
         raise AttestationError("Invalid signed review statement values")
+    now=int(time.time())
+    if obj["issued_at"]>now+300 or obj["expires_at"]<=now:
+        raise AttestationError("Signed outcome expired or issued in the future")
     for name in ("source_spec_sha256","proposal_sha256",
                  "candidate_sha256","holdout_sha256"):
         if type(obj[name]) is not str or not SHA.fullmatch(obj[name]):
@@ -102,6 +111,12 @@ def verify_signed_outcome(db_path:Path, workspace:Path, fixtures:Path,
     if not db_path.is_file() or db_path.is_symlink() or workspace.is_symlink():
         return _failure("LOCAL_AUTHORITY_UNAVAILABLE")
     try:
+        # The trust anchor must not live inside writable Agent inputs or
+        # outputs; permissions still require independent OS enforcement.
+        public_path=allowed_signers.resolve(strict=True)
+        if any(public_path.is_relative_to(p.resolve(strict=True))
+               for p in (workspace,fixtures)):
+            return _failure("TRUST_ANCHOR_INSIDE_AGENT_CONTROL")
         body=_read(statement_file,MAX_STATEMENT)
         sig=_read(signature_file,MAX_SIGNATURE)
         allowed=_read(allowed_signers,MAX_SIGNERS)
