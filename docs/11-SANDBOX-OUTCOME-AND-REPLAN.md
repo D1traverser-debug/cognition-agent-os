@@ -68,3 +68,18 @@ unknown-problem discovery, unrestricted goal decomposition, causal explanation,
 external user outcome, or deployed Windows background autonomy. Outside
 sandbox effects require separate explicit approval and real provider readback.
 No model credits or remote LLM APIs are used.
+
+## Persistent effect-failure budget
+
+An already-existing conflicting sandbox file or repeated inability to write
+or read back a sandbox effect remains `EFFECT_UNKNOWN` initially. After
+**three recorded** `SANDBOX_EFFECT_UNCERTAIN` events for the same task,
+P6 stops automatic attempts by moving the task to
+`UNKNOWN / SANDBOX_EFFECT_RETRY_EXHAUSTED`, preserving the existing
+sandbox file byte-for-byte. A separately authorized diagnosis may later
+resolve the situation; no automatic overwrite, retry-limit reset or
+false `SANDBOX_VERIFIED` is allowed.
+
+This cap is distinct from the **two source-drift replans**. The regression
+test `test_repeated_sandbox_failure_has_finite_retry_budget` proves the
+same task cannot spin indefinitely through the host after three such failures.
