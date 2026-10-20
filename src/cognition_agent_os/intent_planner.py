@@ -82,12 +82,16 @@ def compile_intent(intent: dict) -> dict:
         capability="json_structural_conformance_v1"
         expected="JSON_REQUIRED_FIELDS_PRESERVED"
     else:
-        if set(intent)!={"kind","objective","resources"}:
+        if set(intent) not in ({"kind","objective","resources"},
+                               {"kind","objective","resources","relationship_contract"}):
             raise IntentError("Unknown relationship or contract extension")
+        record_spec={
+            "kind":"record_reconciliation","reference":source["reference"],
+            "observed":source["observed"],"objective":"identify_discrepancies"}
+        if "relationship_contract" in intent:
+            record_spec["relationship_contract"]=intent["relationship_contract"]
         try:
-            spec=validate_reconciliation({
-                "kind":"record_reconciliation","reference":source["reference"],
-                "observed":source["observed"],"objective":"identify_discrepancies"})
+            spec=validate_reconciliation(record_spec)
         except (ReconciliationError,TypeError,ValueError) as exc:
             raise IntentError("Comparison objective scope invalid") from exc
         capability="csv_evidence_reconciliation_v1"
