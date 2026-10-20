@@ -2,7 +2,8 @@
 # Run from PowerShell: powershell -ExecutionPolicy Bypass -File .\scripts\register_windows_host.ps1
 param(
     [ValidateRange(1, 1440)][int]$IntervalMinutes = 5,
-    [string]$TaskName = "CognitionAgentOS-Local"
+    [string]$TaskName = "CognitionAgentOS-Local",
+    [switch]$AutoStageGoals
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -18,9 +19,12 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     throw "Task already exists; refusing to overwrite: $TaskName"
 }
 $arguments = ('"{0}" --db "{1}" --workspace "{2}" --fixtures "{3}" host-tick --max-jobs 16' -f $runner, $db, $workspace, $fixtures)
+if ($AutoStageGoals) {
+    $arguments += ' --auto-stage-goals'
+}
 $action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $root
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -StartWhenAvailable
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Description 'Local cognition evidence tick (no cloud model API)' | Out-Null
-Write-Output "Registered $TaskName. Verify with: Get-ScheduledTaskInfo -TaskName '$TaskName'"
+Write-Output "Registered $TaskName (sandbox auto-stage enabled: $($AutoStageGoals.IsPresent)). Verify with: Get-ScheduledTaskInfo -TaskName '$TaskName'"
 Write-Output "To disable: Disable-ScheduledTask -TaskName '$TaskName'; to remove: Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false"
