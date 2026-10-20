@@ -1,5 +1,20 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## P4 LATEST verified continuation, 2026-10-20 (supersedes P4 checkpoint below)
+
+- Current project candidate: Draft PR #6, `feat/p4-evidence-oracle-20261020` against `feat/p3-live-source-cursor-20261020`.
+- Evaluator: pinned-reference strict JSON/quote/source-SHA checks across TWO task families; **mechanical reference comparison**, not independently accepted semantic oracle.
+- Added `src/cognition_agent_os/reference_model.py` and CLI `reference-propose-local`: only explicitly installed local Ollama model on fixed loopback, no auto-download, no cloud provider, model output is untrusted candidate JSON. Reference pack's gold never sent by this API.
+- Tests `tests/test_reference_model.py` include simulated loopback contract, model missing, cloud names refused, malformed/self-graded answers, no database creation. **No real Ollama weights have been run**.
+- Latest tested functional commit before this handoff: `8bc8f865bfdcc72deb91059396163b9a10f062eb`.
+- GitHub Actions run `39419105254`: offline_regression SUCCESS, **61 Python tests**; live_public_source SKIPPED BY DESIGN. An earlier P3 run `39415344574` has real GitHub-source PASS but must not be promoted to proof of this turn's live validation.
+- CI architecture now correctly isolates offline safety regressions from opt-in external public GitHub API tests. Earlier P4 runs: one testing-command bug (fixed), one transient SOURCE_UNAVAILABLE after 56 tests passed. Exact upstream HTTP cause unknown.
+- Zero remote AI API/token-credit spend, zero paid tools. `main` untouched. Do not merge stacked Draft PRs before acceptance.
+
+**Evidence needed to exit current P4**: independently curated and truly withheld cases with professional ground truth / executable domain oracle; separately secured reference not viewable by the model; real installed local model predictions; heldout positive/negative/unknown impact acceptance; source and business outcome checks. Missing external reviewer and physical user Windows host are real external constraints; they are NOT grounds to falsely claim all other future autonomous engineering work is done.
+
+**Next capability for main objective**: bounded autonomous goal-decomposition → evidence acquisition → competing causal hypothesis/solution → controlled action → independently observed outcome → knowledge revision/generalization, across at least two genuinely executed business families, with safety and resource limits. Test against adversarial and unfamiliar cases; no more monitoring-only substitution.
+
 ## 2026-10-20 P4 reference-evaluation increment — CURRENT TOP CHECKPOINT
 
 The main objective remains a general self-directed cognition/execution system, **not** an accumulation of watchers or test count. Current candidate work is in `D1traverser-debug/cognition-agent-os`, pending Draft PR #6 (stacked on #5):
