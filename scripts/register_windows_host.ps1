@@ -56,7 +56,7 @@ $arguments=('"{0}" --db "{1}" --workspace "{2}" --fixtures "{3}" host-tick --max
 if ($AutoStageGoals) { $arguments+=' --auto-stage-goals' }
 $action=New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $root
 $trigger=New-ScheduledTaskTrigger -Once -At $FirstRunAt -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days $DurationDays)
-$principal=New-ScheduledTaskPrincipal -UserId ("{0}\{1}" -f $env:USERDOMAIN,$env:USERNAME) -LogonType Interactive -RunLevel LeastPrivilege
+$principal=New-ScheduledTaskPrincipal -UserId ("{0}\{1}" -f $env:USERDOMAIN,$env:USERNAME) -LogonType Interactive -RunLevel Limited
 $settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 3) -StartWhenAvailable
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Opt-in local evidence tick, user-interactive, bounded' -ErrorAction Stop | Out-Null
 [pscustomobject]@{
