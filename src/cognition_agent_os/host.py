@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .ledger import connect
 from .runner import run_once
+from .watch import poll_due_watches
 
 
 class HostNotConfigured(RuntimeError):
@@ -66,6 +67,8 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     if planner_mode not in ("deterministic", "ollama-local"):
         raise ValueError("Unsupported planner mode")
     _admit_existing_ledger(db_path)
+    # Capture source head before draining newly issued immutable evidence tasks.
+    watches = poll_due_watches(db_path)
     results = []
     for _ in range(max_jobs):
         result = run_once(db_path, workspace, fixture_root,
@@ -74,7 +77,8 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             break
         results.append(result)
     _record_tick(db_path, processed=len(results), finished_at=time.time())
-    return {"status": "PROCESSED" if results else "IDLE",
+    return {"status": "PROCESSED" if results or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+            "watch_observations": watches,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
             "tasks": results, "semantic_outcome_verified": False,
             "note": "Local tick observed; OS scheduling and semantic outcomes not thereby proved"}
