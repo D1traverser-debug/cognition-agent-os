@@ -14,11 +14,14 @@ import json
 from pathlib import Path
 import sqlite3
 import time
+import shutil
+import subprocess
+import tempfile
 
 from .ledger import connect,event
 from .outcome_attestation import (
     verify_signed_outcome,_strict_json,_read,MAX_STATEMENT,MAX_SIGNATURE,
-    MAX_SIGNERS,SHA,PRINCIPAL
+    MAX_SIGNERS,SHA,PRINCIPAL,NAMESPACE
 )
 
 TABLE="""CREATE TABLE IF NOT EXISTS signed_outcome_feedback(
@@ -33,6 +36,8 @@ TABLE="""CREATE TABLE IF NOT EXISTS signed_outcome_feedback(
     holdout_sha256 TEXT NOT NULL,
     candidate_sha256 TEXT NOT NULL,
     operator_mechanism TEXT NOT NULL,
+    signed_statement BLOB NOT NULL,
+    signed_signature BLOB NOT NULL,
     observed_at REAL NOT NULL
 )"""
 
@@ -221,8 +226,8 @@ def record_signed_feedback(db_path:Path,workspace:Path,fixtures:Path,
                 task_id,verdict,statement_sha256,signature_sha256,
                 trusted_signers_sha256,reviewer_principal,original_source_sha256,
                 public_cases_sha256,holdout_sha256,candidate_sha256,
-                operator_mechanism,observed_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(*receipt,time.time()))
+                operator_mechanism,signed_statement,signed_signature,observed_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(*receipt,source,signature,time.time()))
             event(db,statement["task_id"],"EXTERNAL_SIGNED_OUTCOME_RECORDED",{
                 "verdict":statement["outcome"],
                 "statement_sha256":receipt[2],"signature_sha256":receipt[3],
@@ -245,22 +250,122 @@ def record_signed_feedback(db_path:Path,workspace:Path,fixtures:Path,
         return _no("SIGNED_FEEDBACK_UNAVAILABLE")
 
 
+class HistoricalFeedbackUnverifiable(RuntimeError):
+    """Candidate matches a historical rejection with missing or forged proof."""
+
+
+def _historical_negative_is_authentic(db:sqlite3.Connection,feedback,
+                                      source_hash:str,public_hash:str,
+                                      holdout_hash:str,candidate_hash:str,
+                                      method:str)->bool:
+    """Verify cryptographic historical provenance, NEVER load withheld labels.
+
+    The original signed statement and detached signature are retained in the
+    same SQLite row solely for subsequent independent re-verification.
+    A forged DB row cannot synthesize an external reviewer key signature.
+    An unavailable proof blocks a dependent planning decision, not an
+    unrelated user task.
+    """
+    fields=("signed_statement","signed_signature","statement_sha256",
+            "signature_sha256","trusted_signers_sha256","reviewer_principal",
+            "task_id","verdict","original_source_sha256","public_cases_sha256",
+            "holdout_sha256","candidate_sha256","operator_mechanism")
+    if any(x not in feedback.keys() for x in fields):
+        raise HistoricalFeedbackUnverifiable("LEGACY_UNSIGNED_MEMORY")
+    statement=feedback["signed_statement"]
+    signature=feedback["signed_signature"]
+    if (not isinstance(statement,bytes) or not 1<=len(statement)<=MAX_STATEMENT
+        or not isinstance(signature,bytes) or not 1<=len(signature)<=MAX_SIGNATURE
+        or hashlib.sha256(statement).hexdigest()!=feedback["statement_sha256"]
+        or hashlib.sha256(signature).hexdigest()!=feedback["signature_sha256"]):
+        raise HistoricalFeedbackUnverifiable("SIGNED_BYTES_MISSING_OR_CHANGED")
+    try:
+        parsed=_strict_json(statement)
+    except (ValueError,TypeError):
+        raise HistoricalFeedbackUnverifiable("SIGNED_STATEMENT_EXPIRED_OR_INVALID")
+    if (parsed["outcome"]!="DOMAIN_REJECTED"
+        or parsed["task_id"]!=feedback["task_id"]
+        or parsed["reviewer_principal"]!=feedback["reviewer_principal"]
+        or parsed["candidate_sha256"]!=candidate_hash
+        or parsed["holdout_sha256"]!=holdout_hash
+        or feedback["verdict"]!="DOMAIN_REJECTED"
+        or feedback["original_source_sha256"]!=source_hash
+        or feedback["public_cases_sha256"]!=public_hash
+        or feedback["holdout_sha256"]!=holdout_hash
+        or feedback["candidate_sha256"]!=candidate_hash
+        or feedback["operator_mechanism"]!=method):
+        raise HistoricalFeedbackUnverifiable("SIGNED_SCOPE_DISAGREEMENT")
+
+    row=db.execute("SELECT * FROM owner_outcome_trust WHERE singleton=1").fetchone()
+    if (not row or row["trusted_signers_sha256"]!=feedback["trusted_signers_sha256"]
+        or row["reviewer_principal"]!=parsed["reviewer_principal"]):
+        raise HistoricalFeedbackUnverifiable("UNBOUND_REVIEWER_ROOT")
+    root=Path(row["allowed_signers_path"])
+    try:
+        actual=root.resolve(strict=True)
+        if root.is_symlink() or not actual.is_file():
+            raise HistoricalFeedbackUnverifiable("ROOT_FILE_NOT_REGULAR")
+        allowed=_read(actual,MAX_SIGNERS)
+    except (OSError,ValueError):
+        raise HistoricalFeedbackUnverifiable("ROOT_UNAVAILABLE")
+    if hashlib.sha256(allowed).hexdigest()!=row["trusted_signers_sha256"]:
+        raise HistoricalFeedbackUnverifiable("ROOT_BYTES_CHANGED")
+
+    original=db.execute("SELECT * FROM tasks WHERE task_id=?",(parsed["task_id"],)).fetchone()
+    if (not original or original["goal_rev"]!=parsed["goal_rev"]
+        or original["grant_rev"]!=parsed["grant_rev"]
+        or hashlib.sha256(original["source_spec"].encode()).hexdigest()!=parsed["source_spec_sha256"]
+        or original["artifact_hash"]!=parsed["proposal_sha256"]):
+        raise HistoricalFeedbackUnverifiable("SIGNED_SOURCE_TASK_CHANGED")
+    try:
+        original_spec=json.loads(original["source_spec"])
+    except (TypeError,ValueError):
+        raise HistoricalFeedbackUnverifiable("INVALID_SOURCE_TASK_SPEC")
+    if original_spec.get("holdout_sha256")!=parsed["holdout_sha256"]:
+        raise HistoricalFeedbackUnverifiable("SIGNED_HOLDOUT_SCOPE_CHANGED")
+    binary=shutil.which("ssh-keygen")
+    if not binary:
+        raise HistoricalFeedbackUnverifiable("SSH_SIGNATURE_VERIFIER_UNAVAILABLE")
+    try:
+        with tempfile.TemporaryDirectory(prefix="cognition-signed-proof-") as td:
+            sig_path=Path(td)/"signed.sig"
+            sig_path.write_bytes(signature)
+            run=subprocess.run(
+                [binary,"-Y","verify","-f",str(actual),
+                 "-I",parsed["reviewer_principal"],"-n",NAMESPACE,
+                 "-s",str(sig_path)],
+                input=statement,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                timeout=8,check=False)
+        if run.returncode!=0:
+            raise HistoricalFeedbackUnverifiable("HISTORICAL_SIGNATURE_INVALID")
+    except (OSError,subprocess.TimeoutExpired):
+        raise HistoricalFeedbackUnverifiable("HISTORICAL_CRYPTO_UNAVAILABLE")
+    return True
+
+
 def previously_signed_rejected(db:sqlite3.Connection,*,original_sha256:str,
                                 visible_sha256:str,holdout_sha256:str,
                                 candidate_sha256:str,mechanism:str)->bool:
-    """Historical signed negative experience, not the reviewer's gold labels.
+    """Never use an unverified SQLite row as a durable reviewer decision.
 
-    The table is created only by explicit signature import. If table is
-    absent, ordinary code-repair path is unaffected. This does not allow
-    unsigned or synthetic JSON event entries to masquerade as review.
+    Historical proof is reverified against the external signer root whenever
+    consulted. This path consumes NO hidden test cases or gold labels.
+    Integrity uncertainty triggers abstention via caller, not false rejection.
     """
     table=db.execute("""SELECT 1 FROM sqlite_master
                         WHERE type='table' AND name='signed_outcome_feedback'""").fetchone()
     if not table:return False
-    return db.execute("""SELECT 1 FROM signed_outcome_feedback
+    rows=db.execute("""SELECT * FROM signed_outcome_feedback
         WHERE verdict='DOMAIN_REJECTED'
           AND original_source_sha256=? AND public_cases_sha256=?
           AND holdout_sha256=? AND candidate_sha256=?
-          AND operator_mechanism=? LIMIT 1""",
+          AND operator_mechanism=? LIMIT 5""",
         (original_sha256,visible_sha256,holdout_sha256,candidate_sha256,
-         mechanism)).fetchone() is not None
+         mechanism)).fetchall()
+    if len(rows)>4:
+        raise HistoricalFeedbackUnverifiable("AMBIGUOUS_MANY_REVIEW_CLAIMS")
+    for record in rows:
+        _historical_negative_is_authentic(
+            db,record,original_sha256,visible_sha256,
+            holdout_sha256,candidate_sha256,mechanism)
+    return bool(rows)
