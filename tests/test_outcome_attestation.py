@@ -376,6 +376,44 @@ class NativeSignedOutcomeTests(unittest.TestCase):
         self.assertEqual(result["reason"],"SIGNED_REVIEW_PREVIOUSLY_REJECTED")
         self.assertEqual(set(seen),{"rule.py","public.json"})
 
+    def test_preupgrade_hash_only_memory_is_not_trusted_until_signed_reimport(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        task=self.task()
+        proposal=json.loads((self.work/"artifacts"/(self.tid+".json")).read_text())
+        signed=self.statement_file.read_bytes()
+        sig=self.sig.read_bytes()
+        db=connect(self.dbpath)
+        db.execute("""CREATE TABLE signed_outcome_feedback(
+          task_id TEXT PRIMARY KEY, verdict TEXT,
+          statement_sha256 TEXT,signature_sha256 TEXT,
+          trusted_signers_sha256 TEXT,reviewer_principal TEXT,
+          original_source_sha256 TEXT,public_cases_sha256 TEXT,
+          holdout_sha256 TEXT,candidate_sha256 TEXT,
+          operator_mechanism TEXT,observed_at REAL)""")
+        db.execute("""INSERT INTO signed_outcome_feedback VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(
+            self.tid,"DOMAIN_REJECTED",hashlib.sha256(signed).hexdigest(),
+            hashlib.sha256(sig).hexdigest(),self.pinned,self.principal,
+            proposal["source_sha256"],proposal["visible_sha256"],
+            self.spec["holdout_sha256"],
+            proposal["selected"]["candidate_sha256"],
+            proposal["selected"]["mechanism"],time.time()))
+        db.commit();db.close()
+        _,blocked=self._repeat_exact_task()
+        self.assertEqual(blocked["reason"],"SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
+        outcome=record_signed_feedback(self.dbpath,self.work,self.fx,
+             self.statement_file,self.sig,self.allowed,self.pinned,
+             expected_principal=self.principal)
+        self.assertEqual(outcome["status"],"SIGNED_FEEDBACK_EVIDENCE_UPGRADED")
+        _,after=self._repeat_exact_task()
+        self.assertEqual(after["reason"],"SIGNED_REVIEW_PREVIOUSLY_REJECTED")
+        db=connect(self.dbpath)
+        r=db.execute("""SELECT signed_statement,signed_signature
+            FROM signed_outcome_feedback WHERE task_id=?""",(self.tid,)).fetchone()
+        self.assertEqual(r["signed_statement"],signed)
+        self.assertEqual(r["signed_signature"],sig)
+        db.close()
+
     def test_signed_rejection_persists_and_blocks_repeated_method(self):
         from cognition_agent_os.signed_feedback import record_signed_feedback
         self.sign(self.statement(outcome="DOMAIN_REJECTED"))
