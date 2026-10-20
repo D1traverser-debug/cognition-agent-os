@@ -1,4 +1,4 @@
-name: P0-P4 offline regression and opt-in public source smoke
+name: Cumulative offline integration - Linux and Windows
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: p0-p4-${{ github.ref }}
+  group: cognition-os-integration-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,6 +25,25 @@ jobs:
         with:
           persist-credentials: false
       - name: Python standard library offline regressions (no remote APIs)
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+  windows_offline_regression:
+    # Public-repository hosted Windows runner; tests host compatibility,
+    # NOT the user's computer or an actual unattended scheduled task.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Native Windows entrypoint smoke (no installation)
+        shell: pwsh
+        run: python scripts/host_tick.py --help
+      - name: Full Windows standard-library regression (no paid model API)
+        shell: pwsh
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
