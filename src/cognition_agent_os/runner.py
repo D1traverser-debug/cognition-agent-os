@@ -9,6 +9,7 @@ import time
 
 from .ledger import claim_one, connect, current_guard, event, finalize, initialize
 from .planner import propose
+from .local_model import LocalModelUnavailable, propose_local
 from .source import SourceUnavailable, get_pair
 
 
@@ -62,7 +63,8 @@ def verify_artifact(workspace: Path, task: dict) -> bool:
 
 
 def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str | None = None,
-             force_lease_expire: bool = False) -> dict:
+             force_lease_expire: bool = False, planner_mode: str = "deterministic",
+             local_model: str | None = None) -> dict:
     db = connect(db_path)
     try:
         initialize(db)
@@ -82,7 +84,15 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
             old_confirm, new_confirm, evidence_confirm = get_pair(json.loads(task["source_spec"]), fixture_root)
             if old != old_confirm or new != new_confirm or evidence != evidence_confirm:
                 raise SourceUnavailable("Source changed during verification")
-            proposal = propose(old, new, evidence)
+            if planner_mode == "deterministic":
+                proposal = propose(old, new, evidence)
+            elif planner_mode == "ollama-local":
+                proposal = propose_local(old, new, evidence, model=local_model or "")
+            else:
+                raise ValueError("Unsupported planner mode")
+        except LocalModelUnavailable as exc:
+            finalize(db, task, "UNKNOWN", error_code="LOCAL_MODEL_UNAVAILABLE")
+            return {"task_id": task_id, "status": "UNKNOWN", "reason": "LOCAL_MODEL_UNAVAILABLE", "diagnostic": type(exc).__name__}
         except (SourceUnavailable, FileNotFoundError, KeyError, ValueError, OSError) as exc:
             finalize(db, task, "UNKNOWN", error_code="SOURCE_UNAVAILABLE")
             return {"task_id": task_id, "status": "UNKNOWN", "reason": "SOURCE_UNAVAILABLE", "diagnostic": type(exc).__name__}
