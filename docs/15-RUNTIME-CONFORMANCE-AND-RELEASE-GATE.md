@@ -189,3 +189,62 @@ cause of a corrupted task graph, repair source code, attest an external
 reviewer, establish semantic business outcomes or prove physical
 unattended Windows operation. No breaker-reset, hidden permission
 restoration, or production merge is authorized.
+
+## P10.3 — competing structural hypotheses, class-wide repair, independent outcome
+
+P10.2 correctly **stopped** the ledger when the 256-dependency bound was
+exceeded or a graph was cyclic, but it could not tell the two causes apart.
+Legitimate deep or wide DAGs therefore suffered unnecessary global shutdown.
+This was a genuine causal-policy error, not an invitation to disable limits.
+
+`src/cognition_agent_os/graph_experiment.py` now distinguishes two
+testable, competing explanations UNDER the existing `BEGIN IMMEDIATE` lock:
+
+- **ACYCLIC_HIGH_FANOUT**: Python breadth-first traversal finds a finite
+  dependency closure and the separate SQLite recursive CTE produces exactly
+  the same nodes, with an independent ancestor-chain cycle exclusion.
+- **DEPENDENCY_CYCLE**: a repeated graph node and ancestor traversal both
+  establish an actual cycle. Neither a guessed edge removal nor a broad
+  silent repair is permitted.
+
+The hard experimental budget is **4096 graph nodes**, including the root.
+Oracle disagreement, CTE failure, missing lineage evidence or exceeding
+the cap is an **UNVERIFIABLE** outcome that maintains global fail-closed
+protection.
+
+For an independently proven **acyclic** graph that exceeded the previous
+256-child soft limit, the original root and **all actual descendants**
+are quarantined atomically, rather than revoking the ledger-wide grant.
+The reasoned choice, competing falsified/not-falsified hypotheses, scope
+hash and outcome are persisted in `CONFORMANCE_GRAPH_EXPERIMENT` events.
+
+Crucially, executing the repair is NOT its success evidence:
+`verify_local_quarantine` independently recomputes the full closure
+using SQL and checks the *actual SQLite states* of every descendant.
+Only a complete match writes a `CONFORMANCE_REPAIR_ACCEPTED` event.
+An incomplete effect instead records `CONFORMANCE_REPAIR_REJECTED`
+and escalates to the same global emergency revoke/circuit as P10.2.
+There is no automatic reset, production write, self-issued semantic
+approval or unauthorized graph surgery.
+
+### Acceptance and falsification
+
+`tests/test_graph_experiment.py` runs previously unseen graph shapes
+(wide fanout, deep chain, multilevel branching), a real cyclic graph,
+two independent oracles disagreeing, independent SQL failure, a graph
+exceeding the experiment cap, and an intentionally **partially executed
+repair** whose post-action audit rejects it. The earlier 259-dependent
+regression now asserts full local containment and that unrelated writes
+remain authorized. The cyclic regression still requires global stop.
+The existing P0–P10 regression suite is not replaced.
+
+Cumulative integration CI
+`39437997734`: **182/182 Python tests PASS**.
+The live public-source job was SKIPPED, not freshly verified.
+
+**Boundary of the claim:** these are independently cross-checked
+*structural* hypotheses for an existing task ledger, not validated causes
+of the user's real-world goals, independent business semantics, general
+code synthesis or an approved production repair. Durable history records
+a verified **method choice**, not machine-learned open-world strategies.
+Release/Windows-host/third-party review gates remain BLOCKED.
