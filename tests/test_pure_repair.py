@@ -96,7 +96,7 @@ class PureRepairTests(unittest.TestCase):
         self.assertEqual(audit_patch(self.db,self.ws,self.fx,tid,
                          reveal_holdout=True,require_staged=True)["status"],"HOLDOUT_ACCEPTED")
         self.assertEqual(len(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED")),1)
-        self.assertEqual(review_patch(self.db,self.ws,self.fx,tid)["status"],"NOT_ADMITTED")
+        self.assertEqual(review_patch(self.db,self.ws,self.fx,tid)["status"],"NOT_PENDING_REVIEW")
         self.assertFalse(evaluated["authorizes_source_mutation"])
 
     def test_arithmetic_correction_generalizes_to_unseen_inputs(self):
