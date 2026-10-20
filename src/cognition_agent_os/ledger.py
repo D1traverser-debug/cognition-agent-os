@@ -1,0 +1,132 @@
+"""Single authoritative durable task and grant ledger, for one local machine."""
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+import uuid
+from pathlib import Path
+
+
+def connect(path: Path) -> sqlite3.Connection:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(str(path), timeout=20)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA busy_timeout=20000")
+    return db
+
+
+def initialize(db: sqlite3.Connection) -> None:
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS authority (
+      singleton INTEGER PRIMARY KEY CHECK(singleton=1), goal_rev INTEGER NOT NULL,
+      grant_rev INTEGER NOT NULL, write_allowed INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS tasks (
+      task_id TEXT PRIMARY KEY, state TEXT NOT NULL, state_version INTEGER NOT NULL,
+      goal_rev INTEGER NOT NULL, grant_rev INTEGER NOT NULL, due_at REAL NOT NULL,
+      interval_seconds INTEGER NOT NULL, source_spec TEXT NOT NULL, lease_until REAL,
+      claim_token TEXT, decision TEXT, artifact_hash TEXT, error_code TEXT,
+      created_at REAL NOT NULL, parent_task TEXT);
+    CREATE TABLE IF NOT EXISTS events (
+      event_id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL,
+      kind TEXT NOT NULL, details TEXT NOT NULL, happened_at REAL NOT NULL);
+    """)
+    db.execute("INSERT OR IGNORE INTO authority VALUES(1,1,1,1)")
+    db.commit()
+
+
+def event(db: sqlite3.Connection, task_id: str, kind: str, details: dict | None = None) -> None:
+    db.execute("INSERT INTO events(task_id,kind,details,happened_at) VALUES(?,?,?,?)",
+               (task_id, kind, json.dumps(details or {}, sort_keys=True), time.time()))
+
+
+def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0, due_at: float | None = None,
+                parent: str | None = None) -> str:
+    if interval_seconds < 0:
+        raise ValueError("Negative recurrence interval")
+    row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+    tid = uuid.uuid4().hex
+    db.execute("""INSERT INTO tasks(task_id,state,state_version,goal_rev,grant_rev,due_at,interval_seconds,
+              source_spec,created_at,parent_task) VALUES(?, 'PENDING',0,?,?,?,?,?,?,?)""",
+               (tid, row["goal_rev"], row["grant_rev"], time.time() if due_at is None else due_at,
+                interval_seconds, json.dumps(spec, sort_keys=True), time.time(), parent))
+    event(db, tid, "ENQUEUED", {"parent": parent})
+    db.commit()
+    return tid
+
+
+def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds: int = 40) -> dict | None:
+    now = time.time() if now is None else now
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        row = db.execute("""SELECT * FROM tasks WHERE due_at<=? AND
+                       (state='PENDING' OR (state='RUNNING' AND lease_until<=?))
+                       ORDER BY due_at,created_at LIMIT 1""", (now, now)).fetchone()
+        if row is None:
+            db.commit()
+            return None
+        token = uuid.uuid4().hex
+        db.execute("""UPDATE tasks SET state='RUNNING',claim_token=?,lease_until=?,state_version=state_version+1
+                    WHERE task_id=?""", (token, now+lease_seconds, row["task_id"]))
+        event(db, row["task_id"], "CLAIMED", {"new_token": token, "prior_state": row["state"]})
+        db.commit()
+        return dict(db.execute("SELECT * FROM tasks WHERE task_id=?", (row["task_id"],)).fetchone())
+    except BaseException:
+        db.rollback()
+        raise
+
+
+def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> tuple[bool, str | None]:
+    row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+    if row["goal_rev"] != task["goal_rev"]:
+        return False, "STALE_GOAL"
+    if needs_write and (not row["write_allowed"] or row["grant_rev"] != task["grant_rev"]):
+        return False, "WRITE_GRANT_REVOKED"
+    return True, None
+
+
+def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | None = None,
+             artifact_writer=None, error_code: str | None = None) -> bool:
+    """Hold SQLite write lock over authorization and local file effect.
+
+    A crash between file creation and DB commit is reconciled by O_EXCL + same-content
+    readback on a later claim. Does NOT imply arbitrary remote exactly-once semantics.
+    """
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task["task_id"],)).fetchone()
+        if not row or row["claim_token"] != task["claim_token"] or row["state"] != "RUNNING":
+            db.commit()
+            return False
+        ok, reason = current_guard(db, task, needs_write=artifact_writer is not None)
+        artifact_hash = None
+        if not ok:
+            state, decision, error_code = "BLOCKED", None, reason
+        elif artifact_writer is not None:
+            artifact_hash = artifact_writer()
+        db.execute("""UPDATE tasks SET state=?,decision=?,artifact_hash=?,error_code=?,lease_until=NULL,
+                    claim_token=NULL,state_version=state_version+1 WHERE task_id=?""",
+                   (state, decision, artifact_hash, error_code, task["task_id"]))
+        event(db, task["task_id"], "FINALIZED", {"state": state, "decision": decision, "error_code": error_code})
+        if state in ("VERIFIED", "NEEDS_REVIEW") and task["interval_seconds"]:
+            current = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            new_task_id = uuid.uuid4().hex
+            db.execute("""INSERT INTO tasks(task_id,state,state_version,goal_rev,grant_rev,due_at,
+                interval_seconds,source_spec,created_at,parent_task) VALUES(?,'PENDING',0,?,?,?,?,?,?,?)""",
+                (new_task_id, current["goal_rev"], current["grant_rev"], time.time()+task["interval_seconds"],
+                 task["interval_seconds"], task["source_spec"], time.time(), task["task_id"]))
+            event(db, new_task_id, "ENQUEUED", {"parent": task["task_id"]})
+        db.commit()
+        return True
+    except BaseException:
+        db.rollback()
+        raise
+
+
+def alter_authority(db: sqlite3.Connection, *, revoke: bool = False, goal_change: bool = False) -> None:
+    if revoke:
+        db.execute("UPDATE authority SET write_allowed=0,grant_rev=grant_rev+1 WHERE singleton=1")
+    if goal_change:
+        db.execute("UPDATE authority SET goal_rev=goal_rev+1 WHERE singleton=1")
+    db.commit()
