@@ -10,6 +10,7 @@ from .ledger import alter_authority, connect, create_task, initialize
 from .host import HostNotConfigured, run_tick
 from .runner import run_once
 from .watch import create_watch
+from .evaluation import EvaluationError, public_inputs, evaluate
 
 
 def main(argv=None) -> int:
@@ -41,6 +42,13 @@ def main(argv=None) -> int:
     host.add_argument("--max-jobs", type=int, default=16)
     host.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     host.add_argument("--local-model", default=None)
+    export = sub.add_parser("reference-export", help="Export model-visible cases without reference gold")
+    export.add_argument("--pack", type=Path, required=True)
+    export.add_argument("--expected-pack-sha256", required=True)
+    review = sub.add_parser("reference-evaluate", help="Read-only two-family evidence/reference gate")
+    review.add_argument("--pack", type=Path, required=True)
+    review.add_argument("--expected-pack-sha256", required=True)
+    review.add_argument("--candidate", type=Path, required=True)
     sub.add_parser("revoke-write")
     sub.add_parser("bump-goal")
     sub.add_parser("status")
@@ -59,6 +67,16 @@ def main(argv=None) -> int:
             return 2
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
+    if args.command in ("reference-export", "reference-evaluate"):
+        try:
+            result = (public_inputs(args.pack, args.expected_pack_sha256)
+                      if args.command == "reference-export" else
+                      evaluate(args.pack, args.expected_pack_sha256, args.candidate))
+        except (EvaluationError, OSError) as exc:
+            print(json.dumps({"status":"UNVERIFIABLE", "reason":str(exc)}, sort_keys=True))
+            return 3
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0 if args.command == "reference-export" or result["status"] == "REFERENCE_MATCH" else 4
     db = connect(args.db)
     try:
         initialize(db)
