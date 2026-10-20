@@ -28,7 +28,9 @@ class ReconciliationError(ValueError):
 
 
 def validate_reconciliation(spec: dict) -> dict:
-    if (not isinstance(spec, dict) or set(spec)!={"kind","reference","observed","objective"}
+    if (not isinstance(spec, dict) or
+            set(spec) not in ({"kind","reference","observed","objective"},
+                             {"kind","reference","observed","objective","relationship_contract"})
             or spec.get("kind")!="record_reconciliation"
             or spec.get("objective")!="identify_discrepancies"):
         raise ReconciliationError("Unsupported record reconciliation contract")
@@ -40,6 +42,9 @@ def validate_reconciliation(spec: dict) -> dict:
             raise ReconciliationError("Invalid local source path")
     if spec["reference"]==spec["observed"]:
         raise ReconciliationError("Two distinct original sources are required")
+    if "relationship_contract" in spec:
+        from .semantic_contract import contract_binding
+        contract_binding(spec["relationship_contract"],spec["reference"],spec["observed"])
     return spec
 
 
@@ -81,21 +86,28 @@ def hypothesis_keys(headers_a: list[str], rows_a: list[dict],
     return sorted(hypotheses,key=lambda x:(-x["score"],x["column"]))
 
 
-def propose_reconciliation(spec: dict, a: bytes, b: bytes) -> dict:
+def propose_reconciliation(spec: dict, a: bytes, b: bytes,
+                           *, pinned: dict | None = None) -> dict:
     validate_reconciliation(spec)
     ha,ra=parse_table(a)
     hb,rb=parse_table(b)
     hypotheses=hypothesis_keys(ha,ra,hb,rb)
+    if "relationship_contract" in spec and pinned is None:
+        raise ReconciliationError("Pinned manifest must be resolved from trusted input")
     named=[item for item in hypotheses if item["key_name_prior"]]
     # Invalid explicit-looking identities cannot be silently replaced with
     # unrelated unique amounts/statuses. Request stronger linkage evidence.
     identity_invalid=bool(named) and any(item["score"]<0 for item in named)
     plausible=[item for item in hypotheses if item["score"]>=0]
-    if named:
+    if pinned is not None:
+        plausible=[item for item in plausible if item["column"]==pinned["key"]]
+        identity_invalid=False
+    elif named:
         plausible=[item for item in plausible if item["key_name_prior"]]
     if identity_invalid or not plausible or (len(plausible)>1 and plausible[0]["score"]==plausible[1]["score"]):
         return {"status":"INSUFFICIENT_KEY_EVIDENCE",
                 "hypotheses":hypotheses,"selected_key":None,"discrepancies":None,
+                "relationship_contract_sha256":pinned["digest"] if pinned else None,
                 "warning":"Cannot infer an unambiguous relationship; no invented join key"}
     key=plausible[0]["column"]
     ea={row[key]:row for row in ra}
@@ -120,6 +132,7 @@ def propose_reconciliation(spec: dict, a: bytes, b: bytes) -> dict:
     return {"status":"DISCREPANCIES_FOUND" if discrepancies or extra_fields_a or extra_fields_b
             else "CONSISTENT",
             "selected_key":key,"hypotheses":hypotheses,
+            "relationship_contract_sha256":pinned["digest"] if pinned else None,
             "reference_only_columns":extra_fields_a,"observed_only_columns":extra_fields_b,
             "discrepancies":discrepancies,
             "rows_reference":len(ra),"rows_observed":len(rb),
@@ -132,11 +145,13 @@ def run_reconciliation(db,task: dict,workspace: Path,fixture_root: Path) -> dict
         spec=validate_reconciliation(json.loads(task["source_spec"]))
         before_a=safe_fixture(fixture_root,spec["reference"])
         before_b=safe_fixture(fixture_root,spec["observed"])
-        plan=propose_reconciliation(spec,before_a,before_b)
+        from .semantic_contract import load_pinned_relationship
+        pinned=load_pinned_relationship(spec,fixture_root)
+        plan=propose_reconciliation(spec,before_a,before_b,pinned=pinned)
         # A distinct SQL/CSV implementation independently verifies the full
         # report before the task may be labelled consistent or auditable.
         from .reconciliation_oracle import sql_audit
-        oracle=sql_audit(spec,before_a,before_b,plan)
+        oracle=sql_audit(spec,before_a,before_b,plan,pinned=pinned)
         if not oracle["agreement"]:
             raise ReconciliationError("Independent SQL source oracle disagreement")
         if plan["status"]=="INSUFFICIENT_KEY_EVIDENCE":
@@ -147,7 +162,8 @@ def run_reconciliation(db,task: dict,workspace: Path,fixture_root: Path) -> dict
         sha_b=hashlib.sha256(before_b).hexdigest()
         def guard_inputs():
             return (hashlib.sha256(safe_fixture(fixture_root,spec["reference"])).hexdigest()==sha_a
-                    and hashlib.sha256(safe_fixture(fixture_root,spec["observed"])).hexdigest()==sha_b)
+                    and hashlib.sha256(safe_fixture(fixture_root,spec["observed"])).hexdigest()==sha_b
+                    and load_pinned_relationship(spec,fixture_root)==pinned)
         if plan["status"]=="CONSISTENT":
             # No artifact needed; still revalidate under finalizing write lock.
             def check_only():
@@ -165,7 +181,7 @@ def run_reconciliation(db,task: dict,workspace: Path,fixture_root: Path) -> dict
             data=(json.dumps(artifact,sort_keys=True,ensure_ascii=False,indent=2)+"\n").encode("utf-8")
             def store():
                 if not guard_inputs(): raise ReconciliationError("Inputs drifted before result commit")
-                if not sql_audit(spec,before_a,before_b,plan)["agreement"]:
+                if not sql_audit(spec,before_a,before_b,plan,pinned=pinned)["agreement"]:
                     raise ReconciliationError("Source/oracle result mismatch")
                 return store_once(workspace,tid,data)
             committed=finalize(db,task,"NEEDS_REVIEW",decision="RECORD_DISCREPANCIES_FOUND",
