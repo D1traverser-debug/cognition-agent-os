@@ -1,5 +1,77 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## CURRENT P10.3 — measured causal mechanisms and independent class repair (2026-10-20)
+
+This is the exact latest continuation; it supersedes P10.2 and historical
+markers below. The user needs autonomous goal/cognition/governance with **no
+paid LLM token charges or expiring free AI credit schemes**, not another
+monitor or library of prewritten demo answers.
+
+**Repository/authority:** `D1traverser-debug/cognition-agent-os`.
+Current cumulative integration candidate: Draft PR #12
+https://github.com/D1traverser-debug/cognition-agent-os/pull/12
+on branch `feat/p10-runtime-conformance-20261020` targeting `main`.
+No PRs were merged, no owner Windows machine or production resources touched.
+
+**Systemic defect P10.3 actually repaired:** P10.2 treated
+`_descendants` exceeding 256 and any cycle as indistinguishable
+`DEPENDENCY_GRAPH_UNBOUNDED`, revoking the entire ledger write grant
+even when the graph was a provably legitimate large acyclic tree.
+P10.3 added `src/cognition_agent_os/graph_experiment.py`:
+- Two independently implemented graph closure experiments on live SQLite
+  in the same write transaction: bounded Python BFS versus SQLite recursive
+  CTE (UNION), with independent ancestor-cycle check. Hard complete
+  closure cap 4096 nodes. Acyclic fanout/chain/branching versus actual
+  cycles and oracle disagreement are evidence-discriminated; never guess
+  a repair from single proof.
+- Only if the graph is complete, acyclic and independently agreed, expand
+  existing `_quarantine` to the *entire* proven descendant list
+  (not just first 256). Preserve unrelated write grants.
+- After executing the local quarantine, use SQL again to check every
+  dependent task's real UNKNOWN/BLOCKED state, along with the root and
+  lineage set. Write `CONFORMANCE_REPAIR_ACCEPTED` only on successful
+  independent readback. Otherwise
+  `CONFORMANCE_REPAIR_REJECTED` + globally revoked grant/circuit.
+- Cycle, missing/invalid graph, >4096, independent oracle exception or
+  oracle disagreement still result in global emergency stop; no branch
+  silently restores authorization. Structural hypotheses and source graph
+  hash persist in same `events` ledger as `CONFORMANCE_GRAPH_EXPERIMENT`.
+- Existing task ownership, approvals, due queue, sandbox-only scope,
+  budget and preflight remain in force. An ancestry index was added at
+  DB initialization for traversal performance. Not a new agent database.
+- Tests `tests/test_graph_experiment.py` and adjusted
+  `tests/test_governance_failclosed.py` prove large legitimate fanout
+  no longer causes whole-ledger revocation, real cycles still stop, 4096+
+  still stops, independent disagreement and SQL exception stop, and
+  deliberately incomplete quarantine is **rejected on independent
+  readback**. Unseen generated fanout/chain/branching shape variations
+  are tested against actual temp SQLite data.
+
+**Verified functional evidence:** GitHub Actions run `39437997734`,
+commit `3563e434f318aa4f3f0fab4d59be4b90dc9daed3`, cumulative
+offline_regression **182/182 PASS**. External live_public_source SKIPPED.
+Latest docs and handoff-only updates need a head CI reread before
+calling the whole final commit verified. No paid remote inference used.
+
+**Interpretation boundary:** genuine structural evidence supports a
+causal mechanism distinction and safe remediation of the dependent
+*state claims*. It does NOT prove broad, independent business
+correctness, open-ended root-cause discovery, arbitrary autonomously
+generated source-code patches, OS-level host deployment, human-approved
+reviewer signatures or real local model intelligence. SHA-pinned
+reviewer manifests are not independent authentication, and no
+breaker-reset interface exists.
+
+**Next highest-value gap:** independently executed unfamiliar user
+workflows and actual goal-outcome measurements, ideally using a
+locally installed zero-paid-token inference model, separately
+authenticated review authority, and real Windows Task Scheduler
+evidence. Establish an isolated holdout experimental test that can
+falsify an automatically proposed *code* patch, rather than merely
+mechanical SQLite containment. Do not create more monitoring-only
+phases or merge the Draft without owner authorization. Preserve these
+exact limits and proof chains.
+
 ## LATEST P10.2 — fail-open containment and pre-effect check fixes (2026-10-20)
 
 This is the **most recent continuation checkpoint**; it supersedes the P10
