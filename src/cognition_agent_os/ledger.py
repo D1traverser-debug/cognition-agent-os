@@ -31,6 +31,7 @@ def initialize(db: sqlite3.Connection) -> None:
     CREATE TABLE IF NOT EXISTS events (
       event_id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL,
       kind TEXT NOT NULL, details TEXT NOT NULL, happened_at REAL NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_tasks_parent_task ON tasks(parent_task);
     """)
     db.execute("INSERT OR IGNORE INTO authority VALUES(1,1,1,1)")
     db.commit()
