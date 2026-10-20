@@ -78,7 +78,7 @@ class GoalAuditTests(unittest.TestCase):
         def dishonest(kind,parsed,desired):
             return [("NO_OP",None),("ADD_MISSING_JSON_KEYS",b'{"owner":"ops"}\n')]
         with patch.object(gl,"_candidates",side_effect=dishonest), \
-             patch.object(gl,"_check_candidate",side_effect=lambda *args:args[2]!=b'{"critical":"keep"}'):
+             patch.object(gl,"_check_candidate",side_effect=lambda kind,parsed,desired,candidate: candidate!=b'{"critical":"keep"}'):
             r=run_once(self.db,self.out,self.fx)
         # Compromised code can create a plausible-looking non-destructive claim;
         # actual separate checker reads before+after and rejects the false claim.
