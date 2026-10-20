@@ -1,5 +1,6 @@
 """P9 typed goal-plan admission, durable child integrity and cross-family outcomes."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -79,6 +80,41 @@ class IntentRuntimeTests(unittest.TestCase):
                          "REPORT_MECHANICALLY_VERIFIED")
         self.assertEqual(audit_intent_plan(self.db_path,tid)["status"],"PLAN_MECHANICALLY_VALID")
         self.assertEqual(self.task(child)["state"],"NEEDS_REVIEW")
+
+    def test_composed_comparison_uses_reviewer_pinned_key_and_sql(self):
+        self.fixtures.joinpath("old.csv").write_text(
+            "primary_id,alternate_id,amount\nA,Z,100\nB,Y,200\n")
+        self.fixtures.joinpath("new.csv").write_text(
+            "primary_id,alternate_id,amount\nA,Z,101\nB,Y,200\n")
+        manifest={
+            "schema_version":1,"contract_kind":"record_relationship",
+            "reference":"old.csv","observed":"new.csv",
+            "join_key":"primary_id",
+            "justification":"Independently reviewed primary record identifier association."
+        }
+        raw=(json.dumps(manifest,sort_keys=True)+"\n").encode()
+        self.fixtures.joinpath("linkage.json").write_bytes(raw)
+        intent={**self.comparison(),"relationship_contract":{
+            "path":"linkage.json","expected_sha256":hashlib.sha256(raw).hexdigest()}}
+        tid=self.seed(intent)
+        first=run_once(self.db_path,self.workspace,self.fixtures)
+        self.assertEqual(first["status"],"DECOMPOSED")
+        child=first["child_task_id"]
+        self.assertEqual(audit_intent_plan(self.db_path,tid)["status"],"PLAN_MECHANICALLY_VALID")
+        result=run_once(self.db_path,self.workspace,self.fixtures)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        self.assertEqual(result["selected_key"],"primary_id")
+        from cognition_agent_os.reconciliation_oracle import audit_stored_report
+        self.assertEqual(
+            audit_stored_report(self.db_path,self.workspace,self.fixtures,child)["status"],
+            "REPORT_MECHANICALLY_VERIFIED")
+        self.assertEqual(self.task(child)["state"],"NEEDS_REVIEW")
+
+    def test_composed_intent_rejects_self_claimed_trust_without_digest(self):
+        bad={**self.comparison(),"relationship_contract":{
+            "path":"linkage.json","key":"primary_id"}}
+        with self.assertRaises(IntentError):
+            compile_intent(bad)
 
     def test_unknown_intent_never_executes_and_never_creates_child(self):
         spec={**self.comparison(),"objective":"execute_shell"}
