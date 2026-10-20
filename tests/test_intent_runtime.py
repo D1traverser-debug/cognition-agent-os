@@ -101,6 +101,8 @@ class IntentRuntimeTests(unittest.TestCase):
             {**self.comparison(),"resources":[{"role":"reference","path":"../etc/passwd"},
                                             {"role":"observed","path":"new.csv"}]},
             {**self.structured(),"requirements":[{"field":"bad field","equals":"x"}]},
+            {**self.structured(),"requirements":[{"field":"allowed","equals":["run shell"]}]},
+            {**self.structured(),"resources":[{"role":"input","path":":/absolute"}]},
             {**self.comparison(),"requirements":[]}
         ]:
             with self.subTest(value=bad),self.assertRaises(IntentError):
