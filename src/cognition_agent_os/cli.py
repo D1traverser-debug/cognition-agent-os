@@ -22,6 +22,8 @@ from .intent_planner import compile_intent
 from .intent_runtime import audit_intent_plan
 from .semantic_contract import load_pinned_relationship
 from .conformance import inspect_conformance
+from .repair_search import validate_repair_spec
+from .repair_oracle import audit_patch,review_patch
 
 
 def main(argv=None) -> int:
@@ -60,6 +62,20 @@ def main(argv=None) -> int:
     plan_audit.add_argument("--task-id",required=True)
     goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
     goal.add_argument("--spec", type=Path, required=True)
+    intake_repair = sub.add_parser("seed-code-repair",
+                         help="Bounded pure-function repair with externally pinned sealed holdout")
+    intake_repair.add_argument("--source",required=True)
+    intake_repair.add_argument("--function",required=True)
+    intake_repair.add_argument("--visible",required=True)
+    intake_repair.add_argument("--holdout",required=True)
+    intake_repair.add_argument("--holdout-sha256",required=True)
+    repair_audit = sub.add_parser("repair-audit",
+                       help="Read-only independent check; holdout remains hidden from proposer")
+    repair_audit.add_argument("--task-id",required=True)
+    repair_audit.add_argument("--include-holdout",action="store_true")
+    repair_review = sub.add_parser("repair-review",
+                       help="Stage a pure repair candidate only after independent holdout acceptance")
+    repair_review.add_argument("--task-id",required=True)
     governance = sub.add_parser("conformance-audit",
         help="Inspect claims vs current evidence; --enforce quarantines confirmed contradictions")
     governance.add_argument("--max-cases",type=int,default=64)
@@ -94,6 +110,17 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "repair-audit":
+        result=audit_patch(args.db,args.workspace,args.fixtures,args.task_id,
+             reveal_holdout=args.include_holdout,
+             require_staged=False)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"] in ("VISIBLE_PATCH_MECHANICALLY_VALID",
+                                        "HOLDOUT_ACCEPTED") else 4
+    if args.command == "repair-review":
+        result=review_patch(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="REPAIR_LAB_VERIFIED" else 4
     if args.command == "conformance-audit":
         result=inspect_conformance(args.db,args.workspace,args.fixtures,
                                    enforce=args.enforce,max_cases=args.max_cases)
@@ -153,6 +180,18 @@ def main(argv=None) -> int:
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
             task_id = create_task(db, spec, interval_seconds=args.interval_seconds)
             result = {"task_id": task_id, "state": "PENDING"}
+        elif args.command == "seed-code-repair":
+            spec=validate_repair_spec({
+                "kind":"pure_code_repair","source":args.source,
+                "function":args.function,"visible":args.visible,
+                "holdout":args.holdout,
+                "holdout_sha256":args.holdout_sha256})
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner["write_allowed"]:
+                raise PermissionError("Repair task rejected after write revoke")
+            result={"task_id":create_task(db,spec),"state":"PENDING",
+                    "holdout_digest_pinned":True,
+                    "scope":"local_pure_ast_only"}
         elif args.command == "seed-intent":
             if args.spec.is_symlink() or not args.spec.is_file() or args.spec.stat().st_size>16384:
                 raise ValueError("Intent file not a small regular file")
