@@ -25,7 +25,7 @@ from .conformance import inspect_conformance
 from .repair_search import validate_repair_spec
 from .repair_oracle import audit_patch,review_patch
 from .outcome_attestation import verify_signed_outcome,prepare_unsigned_outcome
-from .signed_feedback import record_signed_feedback
+from .signed_feedback import record_signed_feedback,bind_owner_review_trust
 
 
 def main(argv=None) -> int:
@@ -82,6 +82,11 @@ def main(argv=None) -> int:
         help="Export unsigned exact-scope candidate for independent reviewer")
     unsigned.add_argument("--task-id",required=True)
     unsigned.add_argument("--principal",required=True)
+    bind = sub.add_parser("attestation-bind-trust",
+        help="Explicit write-once owner review policy enrollment; host never calls this")
+    bind.add_argument("--allowed-signers",required=True,type=Path)
+    bind.add_argument("--expected-allowed-sha256",required=True)
+    bind.add_argument("--principal",required=True)
     imported = sub.add_parser("attestation-record",
         help="Explicitly import an externally signed accept/reject into existing ledger; never deploy")
     imported.add_argument("--statement",required=True,type=Path)
@@ -136,6 +141,13 @@ def main(argv=None) -> int:
             reviewer_principal=args.principal)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"]=="UNSIGNED_REVIEW_SUBJECT" else 4
+    if args.command == "attestation-bind-trust":
+        result=bind_owner_review_trust(
+            args.db,args.workspace,args.fixtures,args.allowed_signers,
+            args.expected_allowed_sha256,expected_principal=args.principal)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"] in ("OWNER_TRUST_BOUND",
+                                        "OWNER_TRUST_ALREADY_BOUND") else 4
     if args.command == "attestation-record":
         result=record_signed_feedback(
             args.db,args.workspace,args.fixtures,args.statement,args.signature,
