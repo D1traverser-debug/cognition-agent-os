@@ -1,5 +1,74 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P10.2 — fail-open containment and pre-effect check fixes (2026-10-20)
+
+This is the **most recent continuation checkpoint**; it supersedes the P10
+and older sections below. The project is still the same
+`D1traverser-debug/cognition-agent-os`, branch
+`feat/p10-runtime-conformance-20261020`, cumulative
+**Draft PR #12 targeting main**:
+https://github.com/D1traverser-debug/cognition-agent-os/pull/12.
+This increment was committed to the existing integration candidate,
+**not a new stacked mini-PR**; all drafts remain unmerged and main unchanged.
+
+**User's actual goal:** genuinely autonomous self-discovering cognition,
+authorized execution, independent outcome verification, systemic causal
+repair and durable learning across unfamiliar tasks. Never mistake static
+task kinds, a watcher, a circuit breaker or passing tests for complete
+general autonomy. **Hard cost budget:** no paid LLM tokens, finite trial
+AI credits or automatic model downloads; local-only opt-in if installed.
+
+**Two concrete governance failures independently identified:**
+1. P10's dependency-closure exception (cycle or >256 descendants) was
+   previously swallowed into `DEPENDENCY_BUDGET_BLOCKED` with no
+   containment; a corrupted parent and its large unknown lineage could
+   keep carrying stale authority. Fixed in `conformance.py`:
+   `_emergency_dependency_stop` atomically revokes ledger-wide write
+   authorization, marks root UNKNOWN and persists global sandbox stop in
+   the **same SQLite transaction**; records
+   `CONFORMANCE_EMERGENCY_STOP` without lying about fully checked
+   descendants. No automatic self-reenable.
+2. Host previously ran conformance only AFTER sandbox auto-stage:
+   a corrupt receipt/file between ticks could be discovered after the
+   next effect. Fixed by bounded *pre-effect* `effect_preflight`, invoked
+   by BOTH `host.run_tick` (before new work and auto-stage) and explicit
+   `sandbox_effect.stage_one`. An incomplete scan (more than 512
+   currently eligible evidence claims) blocks new local effects.
+   Fully quarantined noncritical contradictions do not starve legal
+   independent tasks. Existing source-drift replanning is still allowed;
+   stale evidence must not be mistaken for forged success.
+
+**Evidence:** `tests/test_governance_failclosed.py` includes >256
+descendant fanout, cyclic ancestry, previous forged receipt and sandbox
+tampering followed by a second task, scanner capacity exhausted,
+contained noncritical malformed reviews + subsequent legal effect,
+and source-change control. An initial extended CI
+`39435548093` had a real **1/175 failure** due to excessive
+preflight blocking of valid work. The containment/admission predicate
+was fixed and followed by successful cumulative Actions run
+`39435827296`: **176/176 Python unit tests green**,
+`live_public_source` SKIPPED (not a live upstream check).
+Code commit of passing run:
+`d14e6280f7c8ac949ab504536da04fceba768d44`.
+Subsequent documentation/checkpoint-only commits must receive a
+new head CI check before head is called tested.
+
+**What is NOT proven:** actual cause (cycle vs legitimate fanout) in
+real installations; autonomously generated source-code repair with
+separate independent holdout; professional semantic gold, controlled
+independent business outcome evidence; installed local Ollama; actual
+unattended Windows Task Scheduler; signed external root of trust; real
+`main` release. No production changes occurred.
+
+**Next material work (avoid new fixed-domain adapters):** design a
+separately authorized causal repair experiment inside an isolated code
+workspace that can distinguish competing failure mechanisms using
+holdout tests and prove the remedy across the entire capability class.
+Never auto-reset an integrity circuit without an external trust anchor;
+never let root-cause speculation become approval. When owner host access
+exists, measure true scheduled ticks and end-to-end user outcomes.
+Use Draft integration PR #12 for authorized review, NOT an automatic merge.
+
 ## P10 CURRENT — self-governing conformance and cumulative integration candidate
 
 This replaces P9 and all prior CURRENT markers below as the exact resume state.
