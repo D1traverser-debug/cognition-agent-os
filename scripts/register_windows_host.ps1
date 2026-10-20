@@ -34,6 +34,18 @@ function Require-File([string]$PathValue,[string]$Purpose) {
 $python=Require-File $PythonPath 'Python interpreter'
 $runner=Require-File (Join-Path $root 'scripts\host_tick.py') 'Host entrypoint'
 $db=Require-File $DbPath 'Preseeded SQLite authority'
+# Verifies existing SQLite task and authority schema through a read-only
+# connection. Registration MUST NOT silently initialize/grant capabilities.
+$checker=Require-File (Join-Path $PSScriptRoot 'verify_host_registration.py') 'Authority inspector'
+$inspectionText=& $python $checker --db $db
+if ($LASTEXITCODE -ne 0) {
+    throw "Registration refused: no verifiable preseeded authority: $inspectionText"
+}
+$inspection=$inspectionText | ConvertFrom-Json
+if ($inspection.status -ne 'INITIALIZED_LEDGER_OBSERVED' -or
+    $inspection.new_authority_created) {
+    throw 'Unsafe registration: ledger proof not accepted'
+}
 $fixtures=(Resolve-Path -LiteralPath $FixturesPath -ErrorAction Stop).Path
 if (-not (Test-Path -LiteralPath $fixtures -PathType Container)) {
     throw 'Fixtures must be an existing directory'
