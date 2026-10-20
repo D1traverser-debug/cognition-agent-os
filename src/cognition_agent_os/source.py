@@ -52,7 +52,7 @@ def github_public_snapshot(repo: str, path: str, ref: str) -> bytes:
         if len(payload) > MAX_SOURCE_BYTES * 2:
             raise SourceUnavailable("GitHub metadata too large")
         doc = json.loads(payload)
-        if doc.get("type") != "file" or doc.get("encoding") != "base64":
+        if not isinstance(doc, dict) or doc.get("type") != "file" or doc.get("encoding") != "base64":
             raise SourceUnavailable("GitHub response is not a base64 file")
         content = base64.b64decode(doc["content"], validate=False)
         if len(content) > MAX_SOURCE_BYTES or git_blob_sha(content) != doc.get("sha"):
@@ -95,7 +95,9 @@ def github_public_branch_head(repo: str, branch: str) -> str:
         if len(raw) > 32768:
             raise SourceUnavailable("Branch metadata exceeds limit")
         obj = json.loads(raw)
-        sha = obj.get("commit", {}).get("sha")
+        if not isinstance(obj, dict) or not isinstance(obj.get("commit"), dict):
+            raise SourceUnavailable("Branch metadata was not the expected object")
+        sha = obj["commit"].get("sha")
         if obj.get("name") != branch or not isinstance(sha, str) or not _SHA_RE.fullmatch(sha):
             raise SourceUnavailable("Branch metadata identity mismatch")
         return sha
