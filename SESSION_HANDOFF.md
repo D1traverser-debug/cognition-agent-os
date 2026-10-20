@@ -1,5 +1,89 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P10.7 — externally signed independent outcome boundary (2026-10-20)
+
+This is the newest continuation point; prior P10.6 and older headings
+below are historical. Preserve user goal: truly self-directed agent that
+studies, reasons, executes under authority and independently proves
+outcomes, rather than accumulating fixed monitoring modules or labels.
+Use zero paid AI token billing, no trial/finite free AI credits and no
+unrequested model download.
+
+**Repository:** `D1traverser-debug/cognition-agent-os`;
+branch `feat/p10-runtime-conformance-20261020`;
+cumulative **Draft PR #12** to main:
+https://github.com/D1traverser-debug/cognition-agent-os/pull/12.
+The PR remains OPEN, DRAFT, UNMERGED; user Windows PC untouched.
+P10.6 previously proved true 2-tick Windows Task Scheduler on GitHub
+hosted Windows, NOT owner-PC unattended reboot recovery.
+
+**This increment fixes the P10.4 trust provenance gap**:
+Separate implementations of an evaluator and SHA-pinned holdout can
+validate calculations and unchanged bytes, but CANNOT show the
+reviewer's assertion is not self-issued by the proposing Agent.
+- Added `src/cognition_agent_os/outcome_attestation.py`: a strictly
+  read-only verification of an externally signed JSON result statement
+  using real system OpenSSH `ssh-keygen -Y verify`, fixed namespace
+  `cognition-agent-os-outcome-v1` and an independently supplied SHA256
+  of an `allowed_signers` trust anchor outside the Agent's workspace
+  and fixtures. Private signing key never accepted, copied, generated
+  by Agent code or stored in the repository.
+- Statement binds `task_id`, revision of goal/grant, immutable
+  source_spec SHA, artifact SHA, candidate SHA, holdout SHA, named
+  reviewer principal, exact verdict DOMAIN_ACCEPTED/DOMAIN_REJECTED,
+  rationale and signed bounded validity interval. Reopens SAME existing
+  SQLite, and independently rechecks original source, hidden cases
+  and exact staged candidate via P10.4 oracle after the signature.
+- New CLI `attestation-subject` emits an **unsigned** scope-exact
+  statement from an actually verified lab candidate. It has
+  `outcome=REVIEW_REQUIRED` by default (unacceptable for signed proof),
+  no gold labels, no private key and no write privilege.
+  `attestation-audit` checks externally signed outcome without
+  modifying DB/task/artifacts or granting production authorization.
+- Signature is only evidence that the allowlisted KEY HOLDER made the
+  assertion, not proof of that person's true human identity, honest
+  business review, real-world outcome, or production authority. Output
+  always sets `key_holder_identity_authenticated=false`,
+  `external_business_outcome_verified=false` and
+  `production_write_authorized=false`.
+  If the proposing Agent controls *both* the public trust key and
+  independently supplied expected digest, it can still bootstrap its
+  own false root; proper owner OS ACL / signer governance is NOT
+  installed or tested on the user's machine.
+- `tests/test_outcome_attestation.py` uses **real ephemeral Ed25519
+  ssh-keygen sign and verify** on Linux and Windows with signing keys
+  kept outside Agent workspace, exercising valid accept/reject,
+  unsigned-template refusal, modified verdict, incorrect grant/task,
+  unpinned signer, wrong candidate/holdout, expired/too-future
+  attestation, modified source/file after signing, malformed JSON and
+  CLI read-only no-ledger-create. This is cryptographic mechanism
+  coverage with a TEST signer, NOT actual independent human review.
+- Design and actual manual reviewer handoff:
+  `docs/19-SIGNED-OUTCOME-TRUST-BOUNDARY.md`.
+- First P10.7 functional run `39454163255` SUCCESS with
+  **212/212 Linux and 212/212 Windows**, including real OpenSSH signer;
+  native Windows scheduler also successful. Later changes to the
+  unsigned template and two new tests triggered a run
+  `39454945150` which was cancelled by subsequent documentation
+  commit due to GitHub Actions `cancel-in-progress`, NOT a test failure.
+  Latest docs/checkpoint commit requires NEW head CI verification;
+  do not reuse old success as proof of new head.
+
+**Critical scope constraints:** This cannot enable production patches
+or signed review decisions without a real separately managed reviewer
+private key, independently anchored public-key policy and external gold.
+No such key was granted by the user and no autonomous real-world
+business acceptance has been observed. There is no actual owner Windows
+11 install or local-model inference. No merge or remote paid API calls.
+
+**Next valuable engineering direction:** get an owner-administered,
+permission-separated trust root and a real unseen user-supplied
+outcome/reference source; bind the signed verdict to a durable,
+independently re-auditable learning signal only AFTER trust-root ownership
+is enforced. Do not accept model-generated signer roots or auto-reenable
+fused capabilities. Keep work on cumulative Draft PR #12 and verify the
+last CI head on both OSes before any release claim.
+
 ## LATEST P10.6 — OS-triggered Windows host plus fail-closed registration (2026-10-20)
 
 This section is the exact CURRENT checkpoint, superseding P10.5 below.
