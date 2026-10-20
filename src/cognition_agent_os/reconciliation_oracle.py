@@ -30,19 +30,21 @@ def _read_rows(data: bytes):
     return fields,rows
 
 
-def _derive_sql_key(db, headers_a, a, headers_b, b):
+def _derive_sql_key(db, headers_a, a, headers_b, b, *, pinned_key=None):
     candidates=[]
     common=sorted(set(headers_a)&set(headers_b))
     identity_columns=[field for field in common if
                       field.lower()=="id" or field.lower().endswith("_id")
                       or field.lower().endswith("_key")]
     for field in common:
+        if pinned_key is not None and field!=pinned_key:
+            continue
         av=[row[field] for row in a]
         bv=[row[field] for row in b]
         if (not av or not bv or
             any(not item.strip() for item in av+bv)
             or len(set(av))!=len(av) or len(set(bv))!=len(bv)):
-            if field in identity_columns:
+            if field in identity_columns or pinned_key is not None:
                 return None
             continue
         db.execute("DELETE FROM ids_a")
@@ -57,7 +59,7 @@ def _derive_sql_key(db, headers_a, a, headers_b, b):
         id_prior=(field.lower()=="id" or field.lower().endswith("_id")
                   or field.lower().endswith("_key"))
         score=(100 if id_prior else 0)+int(100*overlap/max(len(a),len(b)))
-        if not identity_columns or field in identity_columns:
+        if pinned_key is not None or not identity_columns or field in identity_columns:
             candidates.append((score,field))
     candidates.sort(key=lambda x:(-x[0],x[1]))
     if not candidates or (len(candidates)>1 and candidates[0][0]==candidates[1][0]):
@@ -65,10 +67,16 @@ def _derive_sql_key(db, headers_a, a, headers_b, b):
     return candidates[0][1]
 
 
-def sql_audit(spec: dict, reference: bytes, observed: bytes, proposal: dict) -> dict:
+def sql_audit(spec: dict, reference: bytes, observed: bytes, proposal: dict,
+              *, pinned: dict | None = None) -> dict:
     """Independently recompute key and *all* differences from original data."""
     if not isinstance(proposal,dict):
         return {"agreement":False,"reason":"INVALID_PROPOSAL"}
+    if "relationship_contract" in spec and pinned is None:
+        return {"agreement":False,"reason":"UNVERIFIED_RELATIONSHIP"}
+    if (proposal.get("relationship_contract_sha256") !=
+        (pinned["digest"] if pinned else None)):
+        return {"agreement":False,"reason":"RELATIONSHIP_IDENTITY_MISMATCH"}
     try:
         ha,ra=_read_rows(reference)
         hb,rb=_read_rows(observed)
@@ -80,7 +88,8 @@ def sql_audit(spec: dict, reference: bytes, observed: bytes, proposal: dict) -> 
                 CREATE TABLE ref(k TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE obs(k TEXT PRIMARY KEY, payload TEXT NOT NULL);
             """)
-            key=_derive_sql_key(db,ha,ra,hb,rb)
+            key=_derive_sql_key(db,ha,ra,hb,rb,
+                                pinned_key=pinned["key"] if pinned else None)
             if key is None:
                 expected={"status":"INSUFFICIENT_KEY_EVIDENCE","selected_key":None,
                           "discrepancies":None}
@@ -187,7 +196,9 @@ def audit_stored_report(db_path, workspace, fixture_root, task_id: str) -> dict:
                 "observed":hashlib.sha256(right).hexdigest()
             }:
                 return {**fail,"reason":"SOURCE_HAS_CHANGED"}
-            result=sql_audit(source_spec,left,right,document["proposal"])
+            from .semantic_contract import load_pinned_relationship
+            pinned=load_pinned_relationship(source_spec,fixture_root)
+            result=sql_audit(source_spec,left,right,document["proposal"],pinned=pinned)
             if not result["agreement"]:
                 return {**fail,"reason":"INDEPENDENT_SQL_REJECTION"}
             return {"task_id":task_id,"status":"REPORT_MECHANICALLY_VERIFIED",
