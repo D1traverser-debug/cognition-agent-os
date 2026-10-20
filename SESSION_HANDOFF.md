@@ -1,5 +1,81 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P10.9 — verify signatures before historical feedback influences planning (2026-10-21)
+
+This supersedes the P10.8 and older checkpoints below. The user wants
+an actually self-improving agent that achieves user goals under explicit
+authorization and outside outcome checks, while using **zero paid
+remote token billing and zero finite AI credits**. Do not falsely equate
+passing regression checks with complete autonomous intelligence.
+
+**Active candidate:** `D1traverser-debug/cognition-agent-os`,
+branch `feat/p10-runtime-conformance-20261020`,
+cumulative [Draft PR #12](https://github.com/D1traverser-debug/cognition-agent-os/pull/12)
+targeting main; all unmerged and not on user's Windows 11 machine.
+
+**Root problem genuinely found:** P10.8 signed negative feedback was
+cryptographically verified when first imported, but future repairs
+trusted a mutable `signed_outcome_feedback` database row by matching
+five hashes and `DOMAIN_REJECTED`. Forging this table could suppress
+subsequent repair candidates without a real review. Existing tests
+blocked forged arbitrary events, NOT forged review table rows.
+
+**Implemented directly in same modules/ledger:**
+- `signed_feedback.py` now retains exact bounded signed statement and
+  detached signature BLOBs at verified import, alongside original
+  source/public/holdout/candidate/method identifiers. New historical
+  negative lookup re-verifies SHA256 of bytes, strict signed statement
+  with expiry, owner-bound external signer file and public digest,
+  real OS OpenSSH `ssh-keygen -Y verify`, previous task source and
+  grant/goal rev, and actual immutable proposal bytes + method.
+- Original planner `repair_search.py` calls this verification before
+  suppressing a proposal and again from the existing SQLite
+  authorization-locked artifact writer, avoiding a concurrent importer
+  race. It does **NOT** read sealed gold labels; scope is checked using
+  original immutable public proposal and signed digest. An unverifiable
+  history causes explicit UNKNOWN/`SIGNED_FEEDBACK_PROOF_UNVERIFIABLE`,
+  not a false independent rejection or silent trust bypass.
+- Legacy P10.8 feedback rows contain hashes but no signature BLOBs.
+  Such records never influence a new task until an explicit original
+  signed verdict is freshly verified by `attestation-record`.
+  That authorized re-import can upgrade nullable BLOB columns and
+  backfill only exact proof bytes after comparing all previous
+  metadata; conflicting rows are never overwritten.
+- New tests in `tests/test_outcome_attestation.py` forge signature
+  bytes (both with stale and matching forged hash), launder old public
+  case SHA into a new input version, mutate signer root, enforce hidden
+  test non-disclosure, exercise legacy unverifiable history, explicit
+  re-import and new task rejection after verified upgrade.
+- Documentation: `docs/21-REVERIFY-SIGNED-METHOD-MEMORY.md`.
+- All work remains on original cumulative Draft #12; no production
+  modification, Windows owner host deployment or paid/limited-credit
+  model calls.
+
+**CI history:** initial P10.9 code/tests commit
+`2e64070f0567ef15b1f2021405efaa75ba9a7fd6` began Actions
+run `39462767594`; later code/schema backfill/docs commits superseded
+it under cancel-in-progress. Test the final head directly and
+inspect Linux, Windows and native Scheduler jobs. Do not claim final
+test counts or success until a completed final-head CI is observed.
+Previous P10.8 was 225/225 Linux and Windows plus OS scheduler success.
+
+**Boundary of proof:** this prevents a simple forged feedback row from
+pretending to be a reviewer. It does NOT create an OS-external signed
+root of trust if an attacker can rewrite both trusted SQLite policy
+and the owner-managed allowed signer file/key. Human business meaning
+still unverified, and untrusted arbitrary code/multi-file autonomous
+patching and machine deployment remain absent. Legacy records may
+require operator re-signature; no secret key or fake gold is produced
+by the Agent. The signed original verdict's time window may expire;
+then it is not authorized as a fresh negative constraint.
+
+**Next useful work:** seek real independently controlled signer/root,
+a concrete unfamiliar user goal with verifiable outside acceptance,
+and a safe general repository-level patch experimentation runtime,
+rather than adding more static sample adapters or monitoring layers.
+No automatic production merge. Preserve actual failure and evidence
+rather than promising unspecified future work.
+
 ## LATEST P10.8 — external signed outcomes change future methods (2026-10-20)
 
 This is the CURRENT candidate checkpoint, superseding P10.7 and all
