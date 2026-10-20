@@ -10,6 +10,7 @@ from .ledger import connect
 from .runner import run_once
 from .watch import poll_due_watches
 from .sandbox_effect import advance_due_reviews
+from .diagnostics import recover_due_unknowns
 
 
 class HostNotConfigured(RuntimeError):
@@ -82,10 +83,16 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     # At most max_jobs reviews in this tick; no external source mutation.
     reviews = (advance_due_reviews(db_path,workspace,fixture_root,max_reviews=min(max_jobs,8))
                if auto_stage_goals else [])
+    # Already-UNKNOWN evidence tasks can be reconsidered only after a fresh
+    # local source is available. New children remain in the same ledger and
+    # are intentionally processed by a subsequent tick, not a recursive loop.
+    recoveries = (recover_due_unknowns(db_path,fixture_root)
+                  if auto_stage_goals else [])
     _record_tick(db_path, processed=len(results), finished_at=time.time())
-    return {"status": "PROCESSED" if results or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+    return {"status": "PROCESSED" if results or reviews or recoveries or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
             "watch_observations": watches,
             "sandbox_reviews": reviews,
+            "diagnostic_followups": recoveries,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
             "tasks": results, "semantic_outcome_verified": False,
             "note": "Local tick observed; OS scheduling and semantic outcomes not thereby proved"}
