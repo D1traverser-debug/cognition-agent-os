@@ -28,8 +28,15 @@ def _read_bounded_json(path: Path) -> tuple[dict, str]:
     raw = path.read_bytes()
     if len(raw) > MAX_FILE:
         raise EvaluationError("Evaluation input exceeds limit")
+    def strict_pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise EvaluationError("Repeated JSON object key")
+            result[key] = value
+        return result
     try:
-        obj = json.loads(raw)
+        obj = json.loads(raw, object_pairs_hook=strict_pairs)
     except (ValueError, UnicodeError) as exc:
         raise EvaluationError("Invalid JSON") from exc
     if not isinstance(obj, dict):
@@ -70,7 +77,8 @@ def _load_pack(path: Path, expected_digest: str) -> tuple[list[dict], str]:
         gold = case["gold"]
         quotes = case["required_quotes"]
         if (not isinstance(cid, str) or not CASE_ID.fullmatch(cid) or cid in seen
-                or family not in FAMILIES or gold not in LABELS
+                or not isinstance(family, str) or family not in FAMILIES
+                or not isinstance(gold, str) or gold not in LABELS
                 or not _text(case["question"], max_len=500)
                 or not _text(case["evidence_text"], max_len=4000)
                 or not isinstance(quotes, list) or not 1 <= len(quotes) <= 3):
@@ -124,7 +132,8 @@ def evaluate(pack: Path, expected_digest: str, candidate: Path) -> dict:
         cid = a["case_id"]
         if not isinstance(cid, str) or cid in lookup or cid not in {c["case_id"] for c in cases}:
             raise EvaluationError("Unknown or repeated case identifier")
-        if a["label"] not in LABELS or not isinstance(a["citations"], list) or not 1 <= len(a["citations"]) <= 3:
+        if (not isinstance(a["label"], str) or a["label"] not in LABELS
+                or not isinstance(a["citations"], list) or not 1 <= len(a["citations"]) <= 3):
             raise EvaluationError("Invalid label or missing bounded citations")
         for citation in a["citations"]:
             if not isinstance(citation, dict):
