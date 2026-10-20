@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from .ledger import connect, create_task, current_guard, event, finalize
@@ -66,7 +67,7 @@ def audit_intent_plan(db_path: Path, task_id: str) -> dict:
         return {**fail,"reason":"MISSING_LEDGER"}
     try:
         uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with sqlite3.connect(uri,uri=True) as db:
+        with closing(sqlite3.connect(uri,uri=True)) as db:
             db.row_factory=sqlite3.Row
             parent=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             rows=db.execute("""SELECT details FROM events WHERE task_id=?
