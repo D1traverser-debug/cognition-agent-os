@@ -1,0 +1,29 @@
+name: P0-P1 offline safety tests (public free runner)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'feat/free-local-inference-20261020'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p0-p1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    # No hosted-minute / credit dependence if the repo is made private.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Python stdlib tests (no package/API downloads)
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
