@@ -1,5 +1,43 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## 2026-10-20 P3 verified extension — current resume point
+
+This section supersedes the previous "Next priorities" when the two differ;
+historical P2 evidence below is retained as historical.
+
+- Project owner candidate branch: `feat/p3-live-source-cursor-20261020`.
+- New Draft PR #5 (stacked on #4): https://github.com/D1traverser-debug/cognition-agent-os/pull/5.
+- Last tested code commit before this checkpoint: `3f139536e022cdad25f69e246963580dff835f89`.
+- GitHub Actions run `39415197547`: **success**, 43 unittest cases OK (4.575s).
+  The CI ran two genuine unauthenticated-public-API checks: (a) mutable
+  branch HEAD to pinned SHA/blob with initial BASELINED/no artificial job;
+  (b) real old/new immutable modelcontextprotocol specification docs
+  producing CHANGE_REQUIRES_REVIEW vs same-source NO_CHANGE with file readback.
+- Functional P3 components: `src/cognition_agent_os/watch.py`,
+  branch resolver in `source.py`, `seed-watch-github` CLI, `host-tick`
+  integration, status/audit, `tests/test_watch.py`, `docs/08-LIVE-SOURCE-CURSOR.md`.
+  SQLite cursor and immutable evidence-task insert occur in one transaction;
+  concurrent observers use cursor_epoch optimism; pre/post-network write
+  authority checks; source failures do not advance the evidence cursor.
+- CI initially failed on missing/mis-escaped regex, which was repaired and
+  reverified. External JSON shape hardening was also added and regression-tested.
+- No cloud model calls, AI tokens, credit allotments or paid tools used by the code.
+
+**Unverified**: Windows Task Scheduler installation/real offline wake-ups; live
+external *future changed commit* moving during a running watcher (tested with
+fault-injected snapshots, not live third-party commits); semantic impact of a
+spec edit; independent goal outcome; automatic goal breakdown; cross-domain
+unknown-problem discovery; systematic autonomous repair; true always-on agent.
+
+**Next independent outcome (P4)**: build an evidence-grounded evaluation and
+human-curated/holdout oracle gate that can score a bounded local-model proposal
+against independently curated affected/unaffected cases without letting the
+proposing model mark itself PASS; then demonstrate a distinct second task family
+beyond GitHub watcher. Keep original long-term autonomous cognition mission
+in scope. Remote model APIs, trial credits and finite AI credits prohibited.
+Local open-source model allowed only if already installed and explicitly
+selected; no claims of installed model tests until observed.
+
 Checkpoint date: 2026-10-20. Repository: `D1traverser-debug/cognition-agent-os`. This file is a checkpoint, not an independently executing agent or permission to mutate production.
 
 ## Governing objective
