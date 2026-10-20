@@ -42,7 +42,7 @@ def event(db: sqlite3.Connection, task_id: str, kind: str, details: dict | None 
 
 
 def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0, due_at: float | None = None,
-                parent: str | None = None) -> str:
+                parent: str | None = None, commit: bool = True) -> str:
     if interval_seconds < 0:
         raise ValueError("Negative recurrence interval")
     row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
@@ -52,7 +52,8 @@ def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0
                (tid, row["goal_rev"], row["grant_rev"], time.time() if due_at is None else due_at,
                 interval_seconds, json.dumps(spec, sort_keys=True), time.time(), parent))
     event(db, tid, "ENQUEUED", {"parent": parent})
-    db.commit()
+    if commit:
+        db.commit()
     return tid
 
 
