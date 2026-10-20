@@ -78,8 +78,21 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         if not ok:
             finalize(db, task, "BLOCKED", error_code=reason)
             return {"task_id": task_id, "status": "BLOCKED", "reason": reason}
+        # A bounded declarative goal is processed by the same claim/grant ledger.
+        # This never silently routes a goal through the protocol diff planner.
         try:
-            old, new, evidence = get_pair(json.loads(task["source_spec"]), fixture_root)
+            source_spec = json.loads(task["source_spec"])
+        except (ValueError, TypeError):
+            finalize(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
+            return {"task_id":task_id,"status":"UNKNOWN","reason":"INVALID_TASK_SPEC"}
+        if source_spec.get("kind")=="goal_case":
+            if planner_mode!="deterministic":
+                finalize(db,task,"UNKNOWN",error_code="GOAL_PLANNER_NOT_AVAILABLE")
+                return {"task_id":task_id,"status":"UNKNOWN","reason":"GOAL_PLANNER_NOT_AVAILABLE"}
+            from .goal_loop import run_goal_case
+            return run_goal_case(db,task,workspace,fixture_root,fail_at=fail_at)
+        try:
+            old, new, evidence = get_pair(source_spec, fixture_root)
             # Compare a second independent source read; no result on unstable observations.
             old_confirm, new_confirm, evidence_confirm = get_pair(json.loads(task["source_spec"]), fixture_root)
             if old != old_confirm or new != new_confirm or evidence != evidence_confirm:
