@@ -1,5 +1,71 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## P5 LATEST — verified bounded goal-driven action candidate loop (2026-10-20)
+
+This is the **current exact continuation** and takes precedence over historical
+P4/P3 checkpoints retained below.
+
+Owner/project: `D1traverser-debug/cognition-agent-os` candidate branch
+`feat/p5-bounded-goal-loop-20261020`, Draft PR #7 stacked on P4 branch:
+https://github.com/D1traverser-debug/cognition-agent-os/pull/7
+
+**Governing objective:** a genuinely useful self-directed cognition and execution
+agent, not a stack of GitHub watchers or synthetic benchmarks. Preserve user's
+hard requirement: NO paid LLM calls, finite free AI model credits or
+trial-dependent services. An explicitly installed local Ollama model is the
+only optional inference path; none needed for this P5 prototype.
+
+**Implemented P5 code:**
+- `src/cognition_agent_os/goal_loop.py`: bounded declarative JSON key and CSV
+  column conformance goals; two alternative candidate actions (NO_OP or
+  explicitly allowed additive repair); original-source double-read, three
+  bounded alternative hypotheses, semantic disagreement marked unresolved;
+  source preservation check before mutation; local immutable proposal only.
+- `seed-goal` CLI and existing `run_once` + `host-tick` support use the
+  **same** SQLite task/grant/lease/fencing ledger, not a second goal state store.
+- `src/cognition_agent_os/goal_audit.py` and CLI `goal-audit`: a second,
+  read-only implementation compares authoritative task, current source
+  SHA, original values, candidate artifact hash and goal constraints.
+  It does NOT approve, source-edit, close a real business goal or mutate DB.
+- Tests `tests/test_goal_loop.py`, `tests/test_goal_audit.py`: two families,
+  real subprocess crash/restart and dual-worker race, grant/goal revision,
+  input changing after planning, corrupted or conflicting sources, dirty
+  artifacts, malicious proposer corruption, extra unrequested JSON fields,
+  safe no-op and opt-in CLI intake.
+- Instructions: `docs/10-BOUNDED-GOAL-LOOP.md`.
+
+**Current code acceptance evidence:**
+- GitHub Actions run `39421227885`, offline_regression success,
+  **85 unittest cases in 5.170s**, including extra-field falsification.
+  `live_public_source` SKIPPED, *not* newly verified. Earlier P3 live-public
+  source smoke remains independently observed in run `39415344574`.
+- Test failure in an earlier P5 candidate was test-only Python continuation
+  escaping (two backslashes); repaired and rerun successfully.
+- Static review found a material scope hole (extra JSON keys permitted
+  by the first version of two constraints checkers); BOTH the proposed
+  candidate checker and separate auditor now fail closed for any
+  unrequested added key. Tested adversarially.
+- Tests demonstrate mechanical non-destructive proposal generation,
+  authorization and separate readback, not open-ended cognition.
+
+**Unfinished genuine capabilities:** arbitrary goal decomposition, unknown
+information discovery, independent semantic/causal hypothesis testing,
+self-initiated evidence gathering, disposition-driven automatic replanning,
+controlled enactment with external success check, cross-domain learned method
+transfer, productive user-goal closure, actually installed Windows unattended
+host, and real existing Ollama model inference. P5 proposal candidates are
+still `NEEDS_REVIEW`, not completed corrections. No main merge.
+
+**Next highest-value P6 action:** bind independent audit outcomes into
+durable revisable plan/evidence-followup transitions rather than leaving
+all candidate review to the user. Use existing tasks/events and strict
+authority/provenance, include successful authorized end-to-end sandbox
+application and post-application outcome observation on at least two distinct
+families. Preserve anti-loop budget and independent oracle separation.
+Then demonstrate transfer on unfamiliar tasks and real unattended host
+before any claim of general autonomy. The user should not have to remind the
+Agent to notice its own failures.
+
 ## P4 LATEST verified continuation, 2026-10-20 (supersedes P4 checkpoint below)
 
 - Current project candidate: Draft PR #6, `feat/p4-evidence-oracle-20261020` against `feat/p3-live-source-cursor-20261020`.
