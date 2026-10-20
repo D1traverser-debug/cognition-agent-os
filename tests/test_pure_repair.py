@@ -138,6 +138,40 @@ class PureRepairTests(unittest.TestCase):
         self.assertEqual(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED"),[])
         self.assertFalse((self.ws/"repair_lab").exists())
 
+    def test_durable_negative_feedback_blocks_identical_refuted_method(self):
+        source="def condition(x, y):\n    return x < y\n"
+        visible=[{"args":[1,2],"expected":False},
+                 {"args":[2,2],"expected":False},
+                 {"args":[3,2],"expected":True},
+                 {"args":[4,2],"expected":True}]
+        holdout=[{"args":[100,2],"expected":False},
+                 {"args":[5,2],"expected":True},
+                 {"args":[-2,2],"expected":False}]
+        original,spec=self.seed(source,visible,holdout)
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        self.assertEqual(review_patch(self.db,self.ws,self.fx,original)["status"],
+                         "HOLDOUT_REFUTED")
+        db=connect(self.db)
+        repeated=create_task(db,spec)
+        db.close()
+        result=run_once(self.db,self.ws,self.fx)
+        self.assertEqual(result["status"],"UNKNOWN")
+        self.assertEqual(result["reason"],"IDENTICAL_REPAIR_PREVIOUSLY_REFUTED")
+        self.assertFalse((self.ws/"artifacts"/(repeated+".json")).exists())
+        # The same failed operator must not be falsely promoted or retested
+        # against the exact same hidden oracle with identical public evidence.
+        self.assertEqual(len(self.receipt(original,"REPAIR_HOLDOUT_REJECTED")),1)
+        self.assertEqual(self.receipt(repeated,"REPAIR_HOLDOUT_ACCEPTED"),[])
+        # New public evidence / explicit test revision must be evaluated afresh.
+        self.fx.joinpath("visible.json").write_text(json.dumps(
+            visible+[{"args":[7,2],"expected":True}]))
+        db=connect(self.db)
+        changed=create_task(db,spec)
+        db.close()
+        retry=run_once(self.db,self.ws,self.fx)
+        self.assertEqual(retry["task_id"],changed)
+        self.assertEqual(retry["status"],"NEEDS_REVIEW")
+
     def test_ambiguous_visible_alternatives_abstain_before_holdout(self):
         visible=[{"args":[5,5],"expected":True},
                  {"args":[5,5],"expected":True}]
