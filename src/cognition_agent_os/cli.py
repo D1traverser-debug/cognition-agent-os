@@ -9,6 +9,7 @@ from pathlib import Path
 from .ledger import alter_authority, connect, create_task, initialize
 from .host import HostNotConfigured, run_tick
 from .runner import run_once
+from .watch import create_watch
 
 
 def main(argv=None) -> int:
@@ -27,6 +28,11 @@ def main(argv=None) -> int:
     gh.add_argument("--old-ref", required=True)
     gh.add_argument("--new-ref", required=True)
     gh.add_argument("--interval-seconds", type=int, default=0)
+    watch = sub.add_parser("seed-watch-github", help="Opt-in public branch watch; baseline first, no fake change")
+    watch.add_argument("--repo", required=True)
+    watch.add_argument("--path", required=True)
+    watch.add_argument("--branch", default="main")
+    watch.add_argument("--interval-seconds", type=int, default=1800)
     run = sub.add_parser("worker-once")
     run.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     run.add_argument("--local-model", default=None)
@@ -61,6 +67,9 @@ def main(argv=None) -> int:
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
             task_id = create_task(db, spec, interval_seconds=args.interval_seconds)
             result = {"task_id": task_id, "state": "PENDING"}
+        elif args.command == "seed-watch-github":
+            result = {"watch_id":create_watch(db, args.repo, args.path, args.branch,
+                        interval_seconds=args.interval_seconds), "state":"PENDING_BASELINE"}
         elif args.command == "revoke-write":
             alter_authority(db, revoke=True)
             result = {"grant": "REVOKED"}
@@ -77,6 +86,12 @@ def main(argv=None) -> int:
                 except sqlite3.OperationalError:  # Before the first host invocation this table is absent.
                     r = None
                 result["host_observation"] = dict(r) if r else None
+                try:
+                    result["watches"] = [dict(w) for w in db.execute("SELECT * FROM watch_sources ORDER BY created_at")]
+                    result["watch_observations"] = [dict(o) for o in db.execute("SELECT * FROM watch_observations ORDER BY observation_id")]
+                except sqlite3.OperationalError:
+                    result["watches"] = []
+                    result["watch_observations"] = []
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
     finally:
