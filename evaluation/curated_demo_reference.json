@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "reference_status": "CURATED_DEMO_NOT_INDEPENDENTLY_VALIDATED",
+  "cases": [
+    {
+      "case_id": "protocol_stream_transport",
+      "family": "protocol_impact",
+      "question": "Does this excerpt support updating the streaming transport parser?",
+      "evidence_text": "Old contract: a streamed response could be plain application/json. New contract: text/event-stream is now mandatory for the streaming endpoint; each event must follow SSE framing. The non-streaming endpoint continues returning a single application/json object.",
+      "gold": "SUPPORTED",
+      "required_quotes": [
+        "text/event-stream is now mandatory"
+      ]
+    },
+    {
+      "case_id": "protocol_nonstream_unchanged",
+      "family": "protocol_impact",
+      "question": "Does this excerpt support the claim that the non-streaming JSON endpoint also changed to SSE?",
+      "evidence_text": "The streaming endpoint now uses SSE framing. The non-streaming endpoint continues returning a single application/json object. No changes to the non-streaming response format are required by this amendment.",
+      "gold": "REFUTED",
+      "required_quotes": [
+        "No changes to the non-streaming response format"
+      ]
+    },
+    {
+      "case_id": "protocol_auth_unknown",
+      "family": "protocol_impact",
+      "question": "Does the excerpt establish whether existing authentication grants must be rotated?",
+      "evidence_text": "The request and response transport section has been rewritten. The document does not state whether preexisting bearer tokens are still accepted, and no authentication migration section is supplied.",
+      "gold": "INSUFFICIENT",
+      "required_quotes": [
+        "does not state whether preexisting bearer tokens are still accepted"
+      ]
+    },
+    {
+      "case_id": "incident_crc_failure",
+      "family": "incident_triage",
+      "question": "Does this captured log support an integrity failure on the DMA write path?",
+      "evidence_text": "2026-10-20T09:02:03Z DMA_WRITE tag=47 issued. 2026-10-20T09:02:04Z ERROR CRC_MISMATCH tag=47 expected=0xA2 observed=0xB2; scoreboard status=FAIL. A separate read path reports PASS.",
+      "gold": "SUPPORTED",
+      "required_quotes": [
+        "ERROR CRC_MISMATCH tag=47 expected=0xA2 observed=0xB2"
+      ]
+    },
+    {
+      "case_id": "incident_perf_counter_only",
+      "family": "incident_triage",
+      "question": "Does this excerpt establish that an output frame was dropped?",
+      "evidence_text": "2026-10-20T09:12:00Z WARN perf_counter_saturated counter=cycle_count. Output frame_valid asserted, frame_count expected=128 observed=128, scoreboard status=PASS. No drop indicator was raised.",
+      "gold": "REFUTED",
+      "required_quotes": [
+        "frame_count expected=128 observed=128"
+      ]
+    },
+    {
+      "case_id": "incident_reset_unresolved",
+      "family": "incident_triage",
+      "question": "Does the excerpt prove the reset recovery sequence completed successfully?",
+      "evidence_text": "2026-10-20T09:22:00Z INFO reset requested by testbench. Capture ends before post-reset ready acknowledgement or functional comparison; no outcome is recorded.",
+      "gold": "INSUFFICIENT",
+      "required_quotes": [
+        "Capture ends before post-reset ready acknowledgement"
+      ]
+    }
+  ]
+}
