@@ -24,6 +24,7 @@ from .semantic_contract import load_pinned_relationship
 from .conformance import inspect_conformance
 from .repair_search import validate_repair_spec
 from .repair_oracle import audit_patch,review_patch
+from .outcome_attestation import verify_signed_outcome
 
 
 def main(argv=None) -> int:
@@ -76,6 +77,13 @@ def main(argv=None) -> int:
     repair_review = sub.add_parser("repair-review",
                        help="Stage a pure repair candidate only after independent holdout acceptance")
     repair_review.add_argument("--task-id",required=True)
+    signed = sub.add_parser("attestation-audit",
+        help="Read-only independently signed outcome statement; no production promotion")
+    signed.add_argument("--statement",required=True,type=Path)
+    signed.add_argument("--signature",required=True,type=Path)
+    signed.add_argument("--allowed-signers",required=True,type=Path)
+    signed.add_argument("--expected-allowed-sha256",required=True)
+    signed.add_argument("--principal",required=True)
     governance = sub.add_parser("conformance-audit",
         help="Inspect claims vs current evidence; --enforce quarantines confirmed contradictions")
     governance.add_argument("--max-cases",type=int,default=64)
@@ -110,6 +118,13 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "attestation-audit":
+        result=verify_signed_outcome(
+            args.db,args.workspace,args.fixtures,args.statement,args.signature,
+            args.allowed_signers,args.expected_allowed_sha256,
+            expected_principal=args.principal)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="SIGNATURE_AND_MECHANICAL_SCOPE_VERIFIED" else 4
     if args.command == "repair-audit":
         result=audit_patch(args.db,args.workspace,args.fixtures,args.task_id,
              reveal_holdout=args.include_holdout,
