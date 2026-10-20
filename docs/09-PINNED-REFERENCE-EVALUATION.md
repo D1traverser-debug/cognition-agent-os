@@ -50,6 +50,28 @@ The example above is **one answer only**, intentionally not a full valid six-cas
 
 The two review CLI commands are read-only: they do not create or modify SQLite task/grant state, do not contact a cloud LLM, and cannot promote a candidate into the existing P0-P3 `VERIFIED` task state.
 
+## Optional local-only candidate generation (already-installed Ollama)
+
+P4 also adds `reference-propose-local`: it consumes ONLY the exported public
+cases (no gold), requires a locally installed Ollama model from
+`http://127.0.0.1:11434/api/tags`, sends a bounded JSON-classification
+prompt to local `/api/generate`, and prints a candidate with strict schema.
+It never auto-pulls models, never uses paid or cloud LLM APIs, and never
+evaluates or authorizes itself. Network requests are fixed to the loopback
+interface with redirects disabled.
+
+```powershell
+# Only after a permitted local model already appears in "ollama list":
+python .\scripts\host_tick.py --db .\runtime\state.sqlite --workspace .\runtime\workspace reference-propose-local --pack .\evaluation\curated_demo_reference.json --expected-pack-sha256 EXPECTED_64_HEX_SHA --model YOUR_INSTALLED_LOCAL_MODEL > .\runtime\candidate.json
+# Then invoke the independent read-only reference-evaluate command shown above.
+```
+
+Automated adapter tests use a mocked Ollama service; **no real model weights,
+task transfer, or model quality have been verified**. The model still performs
+internal inference tokens but does not consume billable remote tokens or
+finite AI credits. True isolation of labels from a model with filesystem
+access requires a separate trusted reviewer/host security boundary.
+
 ## Verification and negative controls
 
 `tests/test_evaluation.py` exercises separate public input, a correct hand-filled reference agreement **harness positive control**, always-SUPPORTED candidate failing REFUTED/INSUFFICIENT cases, fabricated citation, correct citation with wrong source digest, wrong conclusion, tampered reference digest, duplicated/missing answer, untrusted self-grade, single-family collapse, no-network execution and CLI no-database side effect. Existing P0-P3 CI remains required.
