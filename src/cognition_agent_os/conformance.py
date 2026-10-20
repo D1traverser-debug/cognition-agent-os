@@ -202,7 +202,8 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
     except (ValueError,TypeError,KeyError,OSError,sqlite3.Error):
         proof="EVIDENCE_RECHECK_UNAVAILABLE"
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
-              "EVIDENCE_RECHECK_UNAVAILABLE"}
+              "EVIDENCE_RECHECK_UNAVAILABLE",
+              "SOURCE_CHANGED_SINCE_PROPOSAL","SOURCE_HAS_CHANGED"}
     return {"task_id":tid,"state_at_observation":row["state"],
             "proof":proof,"mechanical_conformance":proof=="MECHANICALLY_VALID",
             "disposition":("PASS" if proof=="MECHANICALLY_VALID" else
