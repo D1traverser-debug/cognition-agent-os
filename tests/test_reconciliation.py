@@ -137,6 +137,20 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(r["reason"],"JOIN_KEY_AMBIGUOUS")
         self.assertFalse((self.workspace/"artifacts").exists())
 
+    def test_duplicate_stable_id_never_falls_back_to_unique_amount(self):
+        fields=["invoice_id","amount"]
+        left=csv_bytes(fields,[["DUP","10"],["DUP","11"]])
+        right=csv_bytes(fields,[["DUP","10"],["OTHER","11"]])
+        prediction=propose_reconciliation(self.spec,left,right)
+        self.assertEqual(prediction["status"],"INSUFFICIENT_KEY_EVIDENCE")
+        self.assertIsNone(prediction["selected_key"])
+        self.assertTrue(sql_audit(self.spec,left,right,prediction)["agreement"])
+        invented=json.loads(json.dumps(prediction))
+        invented["status"]="CONSISTENT"
+        invented["selected_key"]="amount"
+        invented["discrepancies"]=[]
+        self.assertFalse(sql_audit(self.spec,left,right,invented)["agreement"])
+
     def test_missing_input_unknown_does_not_invent_source(self):
         d=connect(self.db);tid=create_task(d,self.spec);d.close()
         r=run_once(self.db,self.workspace,self.fixtures)
