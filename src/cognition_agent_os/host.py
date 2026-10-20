@@ -9,6 +9,7 @@ from pathlib import Path
 from .ledger import connect
 from .runner import run_once
 from .watch import poll_due_watches
+from .sandbox_effect import advance_due_reviews
 
 
 class HostNotConfigured(RuntimeError):
@@ -54,7 +55,8 @@ def _record_tick(path: Path, *, processed: int, finished_at: float) -> None:
 
 
 def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: int = 16,
-             planner_mode: str = "deterministic", local_model: str | None = None) -> dict:
+             planner_mode: str = "deterministic", local_model: str | None = None,
+             auto_stage_goals: bool = False) -> dict:
     """Drain a bounded set of due jobs. Reruns/reboots reuse the same local DB.
 
     Scheduling is external (Windows Task Scheduler, cron, systemd); missed ticks
@@ -76,9 +78,14 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
         if result["status"] == "IDLE":
             break
         results.append(result)
+    # Optional sandbox-only follow-up: requires an explicit host flag.
+    # At most max_jobs reviews in this tick; no external source mutation.
+    reviews = (advance_due_reviews(db_path,workspace,fixture_root,max_reviews=min(max_jobs,8))
+               if auto_stage_goals else [])
     _record_tick(db_path, processed=len(results), finished_at=time.time())
     return {"status": "PROCESSED" if results or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
             "watch_observations": watches,
+            "sandbox_reviews": reviews,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
             "tasks": results, "semantic_outcome_verified": False,
             "note": "Local tick observed; OS scheduling and semantic outcomes not thereby proved"}
