@@ -32,8 +32,8 @@ TABLE="""CREATE TABLE IF NOT EXISTS signed_outcome_feedback(
     observed_at REAL NOT NULL
 )"""
 
-def _no(reason:str,**kw):
-    return {"status":reason,"production_write_authorized":False,
+def _no(status:str,**kw):
+    return {"status":status,"production_write_authorized":False,
             "external_business_truth_proven":False,**kw}
 
 
