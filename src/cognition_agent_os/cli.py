@@ -21,6 +21,7 @@ from .reconciliation_oracle import audit_stored_report
 from .intent_planner import compile_intent
 from .intent_runtime import audit_intent_plan
 from .semantic_contract import load_pinned_relationship
+from .conformance import inspect_conformance
 
 
 def main(argv=None) -> int:
@@ -59,6 +60,10 @@ def main(argv=None) -> int:
     plan_audit.add_argument("--task-id",required=True)
     goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
     goal.add_argument("--spec", type=Path, required=True)
+    governance = sub.add_parser("conformance-audit",
+        help="Inspect claims vs current evidence; --enforce quarantines confirmed contradictions")
+    governance.add_argument("--max-cases",type=int,default=64)
+    governance.add_argument("--enforce",action="store_true")
     audit = sub.add_parser("goal-audit", help="Read-only, second-checker audit of a P5 goal artifact")
     audit.add_argument("--task-id", required=True)
     sandbox = sub.add_parser("goal-stage-sandbox",
@@ -89,6 +94,12 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "conformance-audit":
+        result=inspect_conformance(args.db,args.workspace,args.fixtures,
+                                   enforce=args.enforce,max_cases=args.max_cases)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"] in ("MECHANICAL_EVIDENCE_OBSERVED",
+                                        "NO_RUNTIME_EVIDENCE","PARTIAL_EVIDENCE") else 4
     if args.command == "intent-audit":
         result=audit_intent_plan(args.db,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
