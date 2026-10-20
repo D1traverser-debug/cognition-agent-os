@@ -125,6 +125,22 @@ class DiagnosisFairnessTests(unittest.TestCase):
         record=json.loads(self.events(tid,"DIAGNOSIS_REPLAN")[0]["details"])
         self.assertFalse(record["causal_root_proven"])
 
+    def test_csv_corrupt_then_repaired_recovers_and_stages_without_editing_source(self):
+        source=self.fx/"report.csv"
+        source.write_text("case,case\nA,10\n")
+        tid=self.seed("report.csv",{"passed":"NOT_RUN"},kind="csv_columns")
+        self.assertEqual(run_once(self.dbpath,self.work,self.fx)["status"],"UNKNOWN")
+        source.write_text("case,cycles\nA,10\n")
+        first=run_tick(self.dbpath,self.work,self.fx,auto_stage_goals=True)
+        self.assertEqual(first["diagnostic_followups"][0]["status"],"REPLAN_QUEUED")
+        child=first["diagnostic_followups"][0]["next_task_id"]
+        second=run_tick(self.dbpath,self.work,self.fx,auto_stage_goals=True)
+        self.assertEqual(second["sandbox_reviews"][0]["status"],"SANDBOX_VERIFIED")
+        self.assertEqual(self.task(child)["state"],"SANDBOX_VERIFIED")
+        self.assertEqual((self.work/"sandbox"/(child+".candidate")).read_text(),
+                         "case,cycles,passed\nA,10,NOT_RUN\n")
+        self.assertEqual(source.read_text(),"case,cycles\nA,10\n")
+
     def test_unavailable_input_poll_is_delayed_without_creating_fake_child(self):
         tid=self.seed("missing.csv",{"passed":"NO"},kind="csv_columns")
         self.assertEqual(run_once(self.dbpath,self.work,self.fx)["status"],"UNKNOWN")
