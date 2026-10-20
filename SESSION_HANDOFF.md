@@ -1,5 +1,94 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## P10 CURRENT — self-governing conformance and cumulative integration candidate
+
+This replaces P9 and all prior CURRENT markers below as the exact resume state.
+Historical state remains for diagnosis but is not proof of native deployment.
+
+**Goal:** actual independent autonomous cognition + execution + governance, not
+monitoring only, innumerable fixed-schema task modules or made-up CI completion
+claims. User constraint: no paid cloud model tokens, time-limited/credit-based
+AI services or automatic model downloads.
+
+**Candidate owner:** `D1traverser-debug/cognition-agent-os`.
+**Branch:** `feat/p10-runtime-conformance-20261020`.
+**Integration Draft PR #12 -> main:**
+https://github.com/D1traverser-debug/cognition-agent-os/pull/12
+This is one cumulative P0–P10 candidate review target rather than another
+tiny stack-only PR. Historical Draft PR #1–#11 remain open, draft and unmerged.
+**No merge, production change, or physical Windows install was executed.**
+
+**New P10 governance work:**
+- `src/cognition_agent_os/conformance.py`: independent ongoing recheck of
+  `NEEDS_REVIEW`, `SANDBOX_VERIFIED`, `DECOMPOSED`, and mechanically
+  verifiable `VERIFIED` against actual source bytes, stored artifact hashes,
+  sandbox effect bytes, receipt events and bounded parent/child ancestry.
+  Explicit PASS vs INSUFFICIENT_EVIDENCE vs CONFIRMED_INCONSISTENCY.
+- The existing host tick *automatically* runs a bounded enforcement sweep
+  after work (local execution only when an actual host calls it). Confirmed
+  mechanical contradictions are quarantined in the SAME SQLite task authority
+  and all descendants are blocked/invalidated transitively, with durable
+  `CONFORMANCE_VIOLATION` events. Missing proof is not called tampering.
+- Durable `conformance_scan.last_task_id` in the original SQLite DB rotates
+  across eligible tasks, preventing first-N bad observations from hiding later
+  ones. Partial scans NEVER claim complete coverage.
+- **System-level action:** serious confirmed `SANDBOX_VERIFIED` integrity
+  inconsistencies trip persistent `conformance_capability_guard` for
+  `goal_sandbox_stage` in the SAME DB. Exactly-once trigger event and a
+  write-locked guard in P6 `stage_one` ensure future sandbox stage effects
+  are disabled until independently accepted remediation. Auto staging does
+  not bypass the circuit, and no user-observed reminders are necessary for
+  local detection or safe-stop. An unknown / incomplete historical proof
+  does not trip this high-severity guard. No automatic self-reenable.
+- CLI `conformance-audit` is read-only and refuses missing DB;
+  `--enforce` is an explicit manual form of the existing default host
+  enforcement. All release decisions explicitly remain BLOCKED absent
+  independent domain truth and genuine unattended-host proof.
+- Test suite `tests/test_conformance.py` executes real temp SQLite/source
+  artifacts, forgery, false receipts, changed files, verified intent parent
+  descendants, truthful unsupported historical successes, full cursor
+  rotation, CLI read-only/enforce and capability circuit breaker.
+- Design: `docs/15-RUNTIME-CONFORMANCE-AND-RELEASE-GATE.md`.
+
+**Verified evidence:**
+- First integration CI `39432349451` on initial P10 implementation:
+  167/167 Python tests SUCCESS against a Draft PR with base `main`.
+- Latest capability-circuit functional commit
+  `2d79cc206d1d2438ab9de526390abda5041463a7`;
+  CI run `39433023953` SUCCESS: **169/169 offline Python unittest PASS**.
+- `live_public_source` SKIPPED, NOT independently validated this turn.
+- Later documentation and checkpoint-only changes must have latest head
+  CI reread. No paid model API calls, free-credit consumption or remote
+  provider mutations.
+
+**Truth and trust boundaries:**
+- A local scanner cannot prove actual Windows Task Scheduler wakeups, domain
+  semantic correctness, causal root-repair, code provenance of a reviewer,
+  installed local Ollama model quality or open-world goal understanding.
+  `external_semantic_evidence` and `unattended_windows_host_evidence`
+  remain NOT_OBSERVED; release gate unconditionally BLOCKED for these.
+- Integrity guard is local SQLite authority; protecting against a malicious
+  actor who can modify the code + SQLite DB itself requires external signed
+  independent trust roots/OS permissions not yet available.
+- Some legacy fixture `VERIFIED` claims only have incomplete historical
+  evidence; conformance reports INSUFFICIENT_EVIDENCE and does not falsify
+  or hide these records.
+- The 11 earlier PRs plus cumulative integration PR #12 remain unmerged.
+  **Current main is not the candidate Agent.** No Windows background
+  execution or user-host configuration was performed.
+
+**Highest-value next engineering, not phase inflation:**
+1. Obtain independently authenticated domain oracle / trusted reviewer
+   source that cannot be replaced by the proposing agent. Verify actual
+   unknown cases and outcome value; keep separate from mechanical evidence.
+2. Plan+execute genuine unfamiliar goal with local installed inference and
+   independently observed real result. Remediation must address classes of
+   failures and falsify alternative causal hypotheses, not just static checks.
+3. Validate physical Windows unattended host and persistent recovery.
+4. Use cumulative Draft integration PR #12 for authorized release review,
+   with an explicit independent acceptance decision before any merge.
+   Do not merge or claim release without approval.
+
 ## P9 CURRENT — typed goal compilation + caller-pinned semantic relationship (2026-10-20)
 
 THIS IS THE CURRENT CANDIDATE PROJECT CHECKPOINT. Historical P8 and earlier
