@@ -67,8 +67,9 @@ def _constraints(spec: dict, before: bytes, after: bytes) -> bool:
         for key,value in original.items():
             if key not in candidate or type(candidate[key]) is not type(value) or candidate[key]!=value:
                 return False
-        return all(key in candidate and type(candidate[key]) is type(value)
-                   and candidate[key]==value for key,value in spec["desired"].items())
+        return (set(candidate) == set(original) | set(spec["desired"])
+                and all(key in candidate and type(candidate[key]) is type(value)
+                        and candidate[key]==value for key,value in spec["desired"].items()))
     if spec["goal_type"]=="csv_columns":
         original=_parse_csv(before)
         candidate=_parse_csv(after)
