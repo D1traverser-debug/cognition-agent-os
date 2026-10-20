@@ -110,3 +110,47 @@ applicable and a full business-result readback. The project still has a
 stack of unmerged Draft PRs; do not assert that these changes run in
 `main` or on the user's computer. No paid AI API, finite model credits,
 trial services or model auto-download are used.
+
+## Composed goal + reviewer-pinned relationship: actual P9 end-to-end route
+
+A typed `compare_records` intent can now carry the same required
+caller-pinned manifest binding to the approved reconciliation capability,
+without bypassing the generic goal decomposition or its audit:
+
+```json
+{
+  "kind": "goal_intent",
+  "objective": "compare_records",
+  "resources": [
+    {"role": "reference", "path": "expect.csv"},
+    {"role": "observed", "path": "actual.csv"}
+  ],
+  "relationship_contract": {
+    "path": "relationship.json",
+    "expected_sha256": "THE_INDEPENDENTLY_PINNED_64_HEX_DIGEST"
+  }
+}
+```
+
+`seed-intent` now validates the manifest bytes immediately when an intent
+carries such a binding. Its child task inherits the exact pinned spec and
+the existing worker/SQL readback repeats the check before a report can be
+considered mechanically valid. Test
+`test_composed_comparison_uses_reviewer_pinned_key_and_sql` verifies
+parent decomposition → child execution → SQL report readback.
+
+The staged task remains local-only; no emitted step may write input CSV
+files, grant authority, run shell commands or merge GitHub PRs.
+
+### P9 functional evidence
+
+Initial CI `39429762735` ran 151 tests but encountered a single
+validation-error-type leak from `validate_goal` into the typed compiler
+(150 passed, one error). It was corrected by normalizing the lower-level
+validation error to `IntentError`, with an additional negative test.
+
+Functional CI `39430380039`: **153/153 standard-library unittest
+cases passed**, including the unified typed-intent + pinned-contract
+end-to-end route. `live_public_source` remained SKIPPED.
+This is a code and isolated data-flow observation; real reviewer
+authorization and a physical unattended Windows host have not been observed.
