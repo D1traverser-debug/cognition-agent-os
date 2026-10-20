@@ -83,3 +83,21 @@ false `SANDBOX_VERIFIED` is allowed.
 This cap is distinct from the **two source-drift replans**. The regression
 test `test_repeated_sandbox_failure_has_finite_retry_budget` proves the
 same task cannot spin indefinitely through the host after three such failures.
+
+## Optional Windows scheduled host registration
+
+P2 registration script now accepts `-AutoStageGoals` as an **explicit
+owner opt-in**. Omit the switch to keep only read/proposal operation.
+Run only on a Windows host with a deliberately pre-seeded SQLite DB and
+the project checked out locally:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\register_windows_host.ps1 -AutoStageGoals
+```
+
+Registration is one-time and refuses overwriting an existing scheduled task.
+The script's code was updated in the candidate branch; **no successful
+Task Scheduler installation or independent background tick on the user's
+Windows PC was observed**. Before relying on autonomy, inspect Windows
+Task Scheduler history, process exit codes and SQLite host_ticks/events
+in the actual installed environment.
