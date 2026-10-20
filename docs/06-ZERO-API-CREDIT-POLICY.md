@@ -60,3 +60,9 @@ PYTHONPATH=src python -m cognition_agent_os.cli \
 ```
 
 命令在具备公网访问的实际电脑上才可执行真实 GitHub HTTP 读取。本轮受限容器没有网络 DNS，已通过另一个 GitHub 连接核对原始 SHA；不把它包装成 Worker 真实 HTTP 测试。
+
+## 真实上游集成 smoke
+
+`python scripts/verify_public_source.py` 在 GitHub Actions **公开仓库免费 CI** 的实际网络环境中运行：通过未认证 GitHub Contents API 读取两个已知 commit，独立检查 Blob SHA；启动子进程、保存持久记录与草稿产物并读回；使用同一 commit 做无变化负例。这消耗 GitHub 公共 API 的访问次数但不消耗收费模型 Token 或积分。若上游限速/离线，会明确失败，不靠伪造 fixture 冒充成功。
+
+测试发生在单个 Runner 生存期内，因此不代表跨 GitHub Actions run 持久状态、长期自动 schedule 或真实 LLM 自主。
