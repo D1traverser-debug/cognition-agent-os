@@ -27,6 +27,46 @@ EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","SANDBOX_VERIFIED","VERIFIED")
 MAX_SCAN=512
 MAX_DEPENDENCIES=256
 
+SANDBOX_CAPABILITY="goal_sandbox_stage"
+CRITICAL_SANDBOX_BREACHES=frozenset((
+    "STAGED_ARTIFACT_HASH_MISMATCH","STAGED_EFFECT_BYTES_MISMATCH",
+    "FALSE_EFFECT_RECEIPT","MISSING_OR_REPEATED_EFFECT_RECEIPT",
+    "CANDIDATE_HASH_MISMATCH","STAGED_CONSTRAINTS_FAILED"
+))
+
+
+def capability_disabled(db_path: Path, kind: str=SANDBOX_CAPABILITY) -> bool:
+    """Persistent fail-closed state in the existing ledger, never self-reset."""
+    if not db_path.is_file() or db_path.is_symlink():
+        return True
+    try:
+        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
+        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
+            exists=db.execute("""SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='conformance_capability_guard'""").fetchone()
+            if not exists:
+                return False
+            row=db.execute("""SELECT disabled FROM conformance_capability_guard
+                               WHERE kind=?""",(kind,)).fetchone()
+            return bool(row and row[0])
+    except (sqlite3.Error,OSError):
+        return True
+
+
+def _trip_critical_guard(db, task_id: str, reason: str) -> bool:
+    """Only confirmed serious integrity failures can disable future effects."""
+    if reason not in CRITICAL_SANDBOX_BREACHES:
+        return False
+    db.execute("""INSERT OR IGNORE INTO conformance_capability_guard
+                  (kind,disabled,reason,trigger_task)
+                  VALUES (?,1,?,?)""",(SANDBOX_CAPABILITY,reason,task_id))
+    changed=db.execute("SELECT changes()").fetchone()[0]>0
+    if changed:
+        event(db,task_id,"CONFORMANCE_CAPABILITY_DISABLED",{
+            "capability":SANDBOX_CAPABILITY,"reason":reason,
+            "policy":"NO_AUTOMATIC_REENABLE_WITHOUT_SEPARATE_ACCEPTANCE"})
+    return changed
+
 
 def _blocked(code: str, **kw) -> dict:
     return {"status":code,"mechanical_conformance":False,
@@ -207,6 +247,8 @@ def _quarantine(db, row: sqlite3.Row, reason: str) -> list[str]:
                  lease_until=NULL,claim_token=NULL,state_version=state_version+1
                  WHERE task_id=? AND state=?""",
                ("CONFORMANCE_"+reason,tid,row["state"]))
+    if row["state"]=="SANDBOX_VERIFIED":
+        _trip_critical_guard(db,tid,reason)
     event(db,tid,"CONFORMANCE_VIOLATION",{
         "observation":reason,
         "dependent_tasks_quarantined":descendants,
@@ -243,6 +285,9 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             db.execute("""CREATE TABLE IF NOT EXISTS conformance_scan (
                 singleton INTEGER PRIMARY KEY CHECK(singleton=1),
                 last_task_id TEXT NOT NULL)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS conformance_capability_guard (
+                 kind TEXT PRIMARY KEY, disabled INTEGER NOT NULL,
+                 reason TEXT NOT NULL, trigger_task TEXT NOT NULL)""")
             db.execute("INSERT OR IGNORE INTO conformance_scan VALUES(1,'')")
             last=db.execute("SELECT last_task_id FROM conformance_scan WHERE singleton=1").fetchone()[0]
         else:
@@ -303,6 +348,13 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             "exhaustive":total<=len(selected),
             "mechanically_valid":sum(f["mechanical_conformance"] for f in findings),
             "findings":findings,"quarantined":quarantined,
+            "capability_circuit_open": bool(db.execute(
+                """SELECT disabled FROM conformance_capability_guard
+                   WHERE kind=?""",(SANDBOX_CAPABILITY,)).fetchone()[0])
+                if enforce and db.execute(
+                    """SELECT 1 FROM conformance_capability_guard WHERE kind=?""",
+                    (SANDBOX_CAPABILITY,)).fetchone() else
+                capability_disabled(db_path,SANDBOX_CAPABILITY),
             "external_semantic_evidence":"NOT_OBSERVED",
             "unattended_windows_host_evidence":"NOT_OBSERVED",
             "production_mutation_authorized":False,
