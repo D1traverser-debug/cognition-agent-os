@@ -63,7 +63,7 @@ class GovernanceFailClosedTests(unittest.TestCase):
         self.assertEqual(stage_one(self.dbpath,self.out,self.fx,tid)["status"],"SANDBOX_VERIFIED")
         return tid
 
-    def test_unbounded_lineage_revokes_write_grant_and_blocks_new_effect(self):
+    def test_large_acyclic_lineage_fully_contained_without_global_revoke(self):
         self.fx.joinpath("config.json").write_text("{}")
         db=connect(self.dbpath)
         root=create_task(db,{"kind":"goal_intent","objective":"ensure_structure",
@@ -77,20 +77,23 @@ class GovernanceFailClosedTests(unittest.TestCase):
         result=inspect_conformance(self.dbpath,self.out,self.fx,
                                    enforce=True,max_cases=1)
         self.assertEqual(result["status"],"CONFORMANCE_VIOLATIONS")
-        self.assertEqual(result["emergency_stops"],[root])
-        self.assertEqual(result["findings"][0]["enforcement"],"EMERGENCY_STOP")
+        self.assertEqual(result["emergency_stops"],[])
+        self.assertEqual(result["findings"][0]["enforcement"],"QUARANTINED")
+        self.assertEqual(result["findings"][0]["causal_experiment"],"ACYCLIC_HIGH_FANOUT_PROVEN")
+        self.assertEqual(result["quarantined"][0]["descendants"],259)
         self.assertEqual(self._record(root)["state"],"UNKNOWN")
-        self.assertEqual(self._grant()["write_allowed"],0)
-        self.assertTrue(capability_disabled(self.dbpath))
-        self.assertEqual(len(self._events(root,"CONFORMANCE_EMERGENCY_STOP")),1)
+        self.assertEqual(self._grant()["write_allowed"],1)
+        self.assertFalse(capability_disabled(self.dbpath))
+        self.assertEqual(len(self._events(root,"CONFORMANCE_GRAPH_EXPERIMENT")),1)
+        self.assertEqual(self._events(root,"CONFORMANCE_EMERGENCY_STOP"),[])
+        db=connect(self.dbpath)
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=? AND state='BLOCKED'",
+                                    (root,)).fetchone()[0],259)
+        db.close()
         second=inspect_conformance(self.dbpath,self.out,self.fx,enforce=True,max_cases=1)
-        self.assertEqual(second["emergency_stops"],[])
-        self.assertEqual(len(self._events(root,"CONFORMANCE_EMERGENCY_STOP")),1)
-        # Previously issued descendants are not falsely called reviewed, but
-        # no valid write grant exists for any of them.
-        due=run_once(self.dbpath,self.out,self.fx)
-        self.assertIn(due["status"],("BLOCKED","UNKNOWN","IDLE"))
-        self.assertEqual(self._grant()["write_allowed"],0)
+        self.assertEqual(second["quarantined"],[])
+        self.assertEqual(len(self._events(root,"CONFORMANCE_GRAPH_EXPERIMENT")),1)
+        self.assertEqual(run_once(self.dbpath,self.out,self.fx)["status"],"IDLE")
 
     def test_dependency_cycle_emergency_stop_without_recursive_overflow(self):
         self.fx.joinpath("config.json").write_text("{}")
