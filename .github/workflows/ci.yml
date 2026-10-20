@@ -1,4 +1,4 @@
-name: P0-P1 offline safety tests (public free runner)
+name: P0-P3 public safety and source tests (free runner)
 
 on:
   pull_request:
@@ -27,6 +27,10 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
+      - name: Real mutable public HEAD to immutable baseline (no API key)
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_live_watch.py
       - name: Real immutable public GitHub source plus negative control (no API key)
         env:
           PYTHONPATH: src
