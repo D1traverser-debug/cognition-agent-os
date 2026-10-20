@@ -391,23 +391,45 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                     # into an unconditional global stop. Rerun an independently
                     # implemented, bounded causal experiment under the SAME
                     # SQLite write lock, before deciding the remediation scope.
-                    from .graph_experiment import investigate_dependency_graph
-                    proof=investigate_dependency_graph(db,row["task_id"])
+                    from .graph_experiment import (
+                        investigate_dependency_graph, verify_local_quarantine)
+                    try:
+                        proof=investigate_dependency_graph(db,row["task_id"])
+                    except (ValueError,sqlite3.Error,OSError):
+                        proof={"status":"UNVERIFIABLE",
+                               "action":"GLOBAL_FAIL_CLOSED",
+                               "reason":"GRAPH_ORACLE_EXECUTION_FAILED",
+                               "hypotheses":[]}
                     evidence={k:v for k,v in proof.items() if k!="descendants"}
                     event(db,row["task_id"],"CONFORMANCE_GRAPH_EXPERIMENT",evidence)
                     if proof["action"]=="COMPLETE_LOCAL_QUARANTINE":
                         descendants=_quarantine(
                             db,row,finding["proof"],
                             independently_proven_descendants=proof["descendants"])
-                        quarantined.append({
-                            "task_id":row["task_id"],"reason":finding["proof"],
-                            "descendants":len(descendants),
-                            "repair_strategy":"INDEPENDENTLY_PROVEN_FULL_CLOSURE"})
-                        findings[-1]["enforcement"]="QUARANTINED"
-                        findings[-1]["causal_experiment"]="ACYCLIC_HIGH_FANOUT_PROVEN"
+                        readback=verify_local_quarantine(
+                            db,row["task_id"],descendants)
+                        if readback["accepted"]:
+                            event(db,row["task_id"],"CONFORMANCE_REPAIR_ACCEPTED",{
+                                "method":"INDEPENDENT_GRAPH_FULL_CLOSURE",
+                                "post_effect":readback,
+                                "source_graph_sha256":proof["snapshot_sha256"],
+                                "semantic_root_cause_proven":False})
+                            quarantined.append({
+                                "task_id":row["task_id"],"reason":finding["proof"],
+                                "descendants":len(descendants),
+                                "repair_strategy":"INDEPENDENTLY_VERIFIED_FULL_CLOSURE"})
+                            findings[-1]["enforcement"]="QUARANTINED"
+                            findings[-1]["causal_experiment"]="ACYCLIC_HIGH_FANOUT_PROVEN"
+                        else:
+                            # The plan and actual SQLite result disagree.
+                            # No local repair acceptance or global grant
+                            # restoration may follow a failed independent read.
+                            _emergency_dependency_stop(db,row,finding["proof"])
+                            event(db,row["task_id"],"CONFORMANCE_REPAIR_REJECTED",readback)
+                            emergency_stops.append(row["task_id"])
+                            findings[-1]["enforcement"]="EMERGENCY_STOP"
+                            findings[-1]["causal_experiment"]="POST_EFFECT_REJECTION"
                     else:
-                        # Real cycles, over-budget graphs and any disagreement
-                        # retain the strict emergency safety response.
                         _emergency_dependency_stop(db,row,finding["proof"])
                         emergency_stops.append(row["task_id"])
                         findings[-1]["enforcement"]="EMERGENCY_STOP"
