@@ -112,7 +112,7 @@ class NativeSignedOutcomeTests(unittest.TestCase):
         self.assertTrue(self.sig.exists())
         return content
 
-    def audit(self,**,kwargs):
+    def audit(self,**kwargs):
         return verify_signed_outcome(
             self.dbpath,self.work,self.fx,self.statement_file,self.sig,
             self.allowed,self.pinned,expected_principal=self.principal,**kwargs)
