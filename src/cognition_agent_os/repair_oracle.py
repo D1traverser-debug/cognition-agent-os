@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+from contextlib import closing
 
 from .source import safe_fixture
 from .repair_search import parse_function, validate_repair_spec, visible_cases, RepairError
@@ -85,7 +86,7 @@ def audit_patch(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
         return {**fail,"reason":"UNSAFE_LEDGER_OR_WORKSPACE"}
     try:
         uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with sqlite3.connect(uri,uri=True) as db:
+        with closing(sqlite3.connect(uri,uri=True)) as db:
             db.row_factory=sqlite3.Row
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             if not task or task["state"] not in ("NEEDS_REVIEW","REPAIR_LAB_VERIFIED"):
