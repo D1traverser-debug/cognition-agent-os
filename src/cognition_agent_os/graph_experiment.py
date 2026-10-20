@@ -125,3 +125,28 @@ def investigate_dependency_graph(db: sqlite3.Connection, root: str) -> dict:
                 {"mechanism":"ACYCLIC_HIGH_FANOUT","falsified":False},
                 {"mechanism":"DEPENDENCY_CYCLE","falsified":True}],
             "verification":"PYTHON_BFS_AND_SQLITE_RECURSION_WITH_ANCESTOR_PROOF"}
+
+
+def verify_local_quarantine(db: sqlite3.Connection, root: str,
+                            expected_descendants: list[str]) -> dict:
+    """Independent post-effect readback against SQLite recursive closure.
+
+    Do not accept the repair procedure's returned count as proof of result.
+    Any missing row, still-runnable descendant, new graph edge or oracle
+    budget overflow returns non-acceptance. Caller must then fail globally.
+    """
+    ids,why=_sql_closure(db,root,MAX_GRAPH_EXPERIMENT_NODES)
+    if why!="COMPLETE" or ids is None:
+        return {"accepted":False,"reason":"POST_EFFECT_GRAPH_UNVERIFIABLE"}
+    actual=ids-{root}
+    if actual!=set(expected_descendants) or len(expected_descendants)!=len(actual):
+        return {"accepted":False,"reason":"POST_EFFECT_LINEAGE_MISMATCH"}
+    root_row=db.execute("SELECT state FROM tasks WHERE task_id=?",(root,)).fetchone()
+    if not root_row or root_row["state"]!="UNKNOWN":
+        return {"accepted":False,"reason":"ROOT_CLAIM_STILL_ACTIVE"}
+    for descendant in actual:
+        row=db.execute("SELECT state FROM tasks WHERE task_id=?",(descendant,)).fetchone()
+        if not row or row["state"] not in ("UNKNOWN","BLOCKED"):
+            return {"accepted":False,"reason":"DEPENDENT_ACTION_STILL_ACTIVE"}
+    return {"accepted":True,"checked":len(actual),
+            "evidence":"SQLITE_POST_ACTION_CLOSURE_AND_ACTUAL_TASK_STATES"}
