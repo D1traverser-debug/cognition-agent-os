@@ -101,10 +101,14 @@ def investigate_dependency_graph(db: sqlite3.Connection, root: str) -> dict:
         return {"status":"ORACLE_DISAGREEMENT","action":"GLOBAL_FAIL_CLOSED",
                 "reason":"CYCLE_PROOF_MISMATCH",
                 "hypotheses":[]}
-    rows=db.execute("SELECT task_id,parent_task FROM tasks").fetchall()
-    # Hash only the reachable structural facts, not random unrelated tasks.
-    p={r["task_id"]:r["parent_task"] for r in rows if r["task_id"] in py_nodes}
-    snapshot=[[id,p[id]] for id in sorted(py_nodes)]
+    # Build snapshot only from bounded observed edges. Do not sweep the
+    # entire task ledger, which may have millions of unrelated tasks.
+    parent_of={root:db.execute("SELECT parent_task FROM tasks WHERE task_id=?",
+                               (root,)).fetchone()[0]}
+    for parent,children in adjacency.items():
+        for child in children:
+            parent_of[child]=parent
+    snapshot=[[id,parent_of[id]] for id in sorted(py_nodes)]
     digest=hashlib.sha256(json.dumps(snapshot,separators=(",",":")).encode()).hexdigest()
     if cyclic:
         return {"status":"CYCLE_CONFIRMED","action":"GLOBAL_FAIL_CLOSED",
