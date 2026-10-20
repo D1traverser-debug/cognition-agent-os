@@ -71,7 +71,7 @@ def _operator_change(before,after):
     if type(original_expr) is ast.Compare:original_expr.ops=[new()]
     else:original_expr.op=new()
     return ast.dump(clone,include_attributes=False)==ast.dump(
-        ast.Module(body=[after],type_ignores=[]),include_attributes=False)
+        after,include_attributes=False)
 
 
 def audit_patch(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
