@@ -155,6 +155,26 @@ class GovernanceFailClosedTests(unittest.TestCase):
         self.assertFalse(capability_disabled(self.dbpath))
         self.assertEqual(self._grant()["write_allowed"],1)
 
+    def test_contained_noncritical_old_records_do_not_starve_valid_new_effect(self):
+        self.fx.joinpath("new.json").write_text("{}")
+        db=connect(self.dbpath)
+        stale=[]
+        for i in range(3):
+            tid=create_task(db,{"kind":"fixture","old":"a","new":"b"})
+            db.execute("UPDATE tasks SET state='NEEDS_REVIEW' WHERE task_id=?",(tid,))
+            stale.append(tid)
+        db.commit();db.close()
+        valid=self._seed("new.json")
+        self.assertEqual(run_once(self.dbpath,self.out,self.fx)["status"],"NEEDS_REVIEW")
+        # The preflight must quarantine independent forged reviews, but
+        # fully-contained noncritical defects cannot monopolize the host.
+        outcome=stage_one(self.dbpath,self.out,self.fx,valid)
+        self.assertEqual(outcome["status"],"SANDBOX_VERIFIED")
+        self.assertEqual(self._record(valid)["state"],"SANDBOX_VERIFIED")
+        self.assertTrue(all(self._record(tid)["state"]=="UNKNOWN" for tid in stale))
+        self.assertFalse(capability_disabled(self.dbpath))
+        self.assertEqual(self._grant()["write_allowed"],1)
+
     def test_normal_source_drift_is_not_a_forged_effect(self):
         self.fx.joinpath("config.json").write_text("{}")
         tid=self._seed()
