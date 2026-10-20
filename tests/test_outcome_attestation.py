@@ -301,6 +301,81 @@ class NativeSignedOutcomeTests(unittest.TestCase):
         self.assertEqual(outcome["status"],"AUTHORITY_NOT_INITIALIZED")
         self.assertEqual(missing.stat().st_size,0)
 
+    def _record_negative_for_historical_tests(self):
+        from cognition_agent_os.signed_feedback import record_signed_feedback
+        self.sign(self.statement(outcome="DOMAIN_REJECTED"))
+        outcome=record_signed_feedback(
+            self.dbpath,self.work,self.fx,self.statement_file,self.sig,
+            self.allowed,self.pinned,expected_principal=self.principal)
+        self.assertEqual(outcome["status"],"SIGNED_FEEDBACK_RECORDED",outcome)
+
+    def _repeat_exact_task(self):
+        db=connect(self.dbpath)
+        tid=create_task(db,self.spec)
+        db.close()
+        result=run_once(self.dbpath,self.work,self.fx)
+        self.assertEqual(result["task_id"],tid)
+        return tid,result
+
+    def test_forged_db_feedback_signature_does_not_reject_method_as_authentic(self):
+        self._record_negative_for_historical_tests()
+        db=connect(self.dbpath)
+        db.execute("UPDATE signed_outcome_feedback SET signed_signature=?",
+                   (b"-----BEGIN SSH SIGNATURE-----\\nFAKE\\n-----END SSH SIGNATURE-----",))
+        db.commit();db.close()
+        tid,result=self._repeat_exact_task()
+        self.assertEqual(result["reason"],"SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
+        self.assertTrue(result["untrusted_memory_did_not_change_method"])
+        self.assertFalse((self.work/"artifacts"/(tid+".json")).exists())
+
+    def test_forged_db_feedback_hash_cannot_self_certify_signature(self):
+        self._record_negative_for_historical_tests()
+        forged=b"-----BEGIN SSH SIGNATURE-----\\nFAKE\\n-----END SSH SIGNATURE-----"
+        db=connect(self.dbpath)
+        db.execute("""UPDATE signed_outcome_feedback
+                   SET signed_signature=?,signature_sha256=?""",
+                   (forged,hashlib.sha256(forged).hexdigest()))
+        db.commit();db.close()
+        tid,result=self._repeat_exact_task()
+        self.assertEqual(result["reason"],"SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
+        self.assertFalse((self.work/"artifacts"/(tid+".json")).exists())
+
+    def test_signed_feedback_laundered_to_wrong_visible_scope_is_refused(self):
+        self._record_negative_for_historical_tests()
+        public=json.loads((self.fx/"public.json").read_text())
+        public.append({"args":[12,12],"expected":True})
+        data=json.dumps(public).encode()
+        (self.fx/"public.json").write_bytes(data)
+        db=connect(self.dbpath)
+        db.execute("""UPDATE signed_outcome_feedback SET public_cases_sha256=?""",
+                   (hashlib.sha256(data).hexdigest(),))
+        db.commit();db.close()
+        tid,result=self._repeat_exact_task()
+        self.assertEqual(result["reason"],"SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
+        self.assertFalse((self.work/"artifacts"/(tid+".json")).exists())
+
+    def test_external_trust_key_mutation_prevents_feedback_use(self):
+        self._record_negative_for_historical_tests()
+        self.allowed.write_bytes(self.allowed.read_bytes()+b"# changed externally\\n")
+        _,result=self._repeat_exact_task()
+        self.assertEqual(result["reason"],"SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
+
+    def test_negative_method_proof_never_reads_sealed_gold_in_planner(self):
+        from unittest.mock import patch
+        from cognition_agent_os import repair_search as planner
+        self._record_negative_for_historical_tests()
+        real=planner.safe_fixture
+        seen=[]
+        def safe_only_public(root,name):
+            seen.append(name)
+            if name=="holdout.json":
+                raise AssertionError("Planner is reading sealed gold")
+            return real(root,name)
+        with patch.object(planner,"safe_fixture",side_effect=safe_only_public):
+            _,result=self._repeat_exact_task()
+        self.assertEqual(result["reason"],"SIGNED_REVIEW_PREVIOUSLY_REJECTED")
+        self.assertEqual(set(seen),{"rule.py","public.json"})
+
     def test_signed_rejection_persists_and_blocks_repeated_method(self):
         from cognition_agent_os.signed_feedback import record_signed_feedback
         self.sign(self.statement(outcome="DOMAIN_REJECTED"))
