@@ -111,7 +111,12 @@ def sql_audit(spec: dict, reference: bytes, observed: bytes, proposal: dict) -> 
                 }
             verified=(expected["status"]==proposal.get("status")
                       and expected["selected_key"]==proposal.get("selected_key")
-                      and expected["discrepancies"]==proposal.get("discrepancies"))
+                      and (expected["discrepancies"] is None and proposal.get("discrepancies") is None
+                           or isinstance(expected["discrepancies"],list)
+                           and isinstance(proposal.get("discrepancies"),list)
+                           and expected["discrepancies"]==sorted(
+                               proposal["discrepancies"],
+                               key=lambda d:(d["kind"],d["key"],d.get("field","")))))
             if key is not None:
                 for field in ("reference_only_columns","observed_only_columns",
                               "rows_reference","rows_observed"):
