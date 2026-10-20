@@ -14,6 +14,8 @@ MAX_SOURCE_BYTES = 1024 * 1024
 _SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 _REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
+_BRANCH_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\\Z")
+
 
 class SourceUnavailable(Exception):
     """No credible upstream evidence was obtained."""
