@@ -258,6 +258,56 @@ def _quarantine(db, row: sqlite3.Row, reason: str) -> list[str]:
     return descendants
 
 
+def _emergency_dependency_stop(db, row: sqlite3.Row, reason: str) -> None:
+    """A partial dependency closure is NOT acceptable as containment.
+
+    Revoke the ledger-wide write grant and open the sandbox circuit in the
+    *same* transaction. Pending descendants remain recorded for later
+    diagnosis, but none can receive authorized write effects. This does not
+    guess or silently truncate a large/cyclic dependency graph.
+    """
+    tid=row["task_id"]
+    db.execute("""UPDATE authority SET write_allowed=0,grant_rev=grant_rev+1
+                  WHERE singleton=1 AND write_allowed!=0""")
+    db.execute("""UPDATE tasks SET state='UNKNOWN',error_code=?,
+        lease_until=NULL,claim_token=NULL,state_version=state_version+1
+        WHERE task_id=? AND state=?""",
+        ("CONFORMANCE_DEPENDENCY_GRAPH_UNBOUNDED",tid,row["state"]))
+    db.execute("""INSERT OR IGNORE INTO conformance_capability_guard
+          (kind,disabled,reason,trigger_task) VALUES (?,1,?,?)""",
+          (SANDBOX_CAPABILITY,"DEPENDENCY_GRAPH_UNBOUNDED",tid))
+    event(db,tid,"CONFORMANCE_EMERGENCY_STOP",{
+        "observation":reason,
+        "failure_family":"DEPENDENCY_GRAPH_UNBOUNDED",
+        "alternative_hypotheses":[
+            "A task may have excessive legitimate fan-out",
+            "A corrupted or cyclic dependency graph may have enlarged scope"
+        ],
+        "unreviewed_descendants_may_exist":True,
+        "response":"REVOKED_LEDGER_WRITE_GRANT_AND_DISABLED_SANDBOX",
+        "root_cause_proven":False,
+        "requires_independent_recovery_acceptance":True})
+
+
+def effect_preflight(db_path: Path, workspace: Path, fixtures: Path) -> dict:
+    """Run full bounded pre-effect verification; partial coverage blocks writes."""
+    result=inspect_conformance(db_path,workspace,fixtures,enforce=True,
+                               max_cases=MAX_SCAN)
+    safe=(result.get("exhaustive") is True and
+          result["status"] in ("NO_RUNTIME_EVIDENCE",
+                               "MECHANICAL_EVIDENCE_OBSERVED",
+                               "EVIDENCE_INSUFFICIENT") and
+          not result.get("capability_circuit_open",True))
+    return {"admitted":bool(safe),
+            "reason":"PREFLIGHT_ACCEPTED" if safe else "PREFLIGHT_NOT_SATISFIED",
+            "checked":result.get("checked",0),
+            "eligible":result.get("eligible"),
+            "status":result["status"],
+            "capability_circuit_open":result.get("capability_circuit_open",True),
+            "quarantined":len(result.get("quarantined",[])),
+            "emergency_stops":len(result.get("emergency_stops",[]))}
+
+
 def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                         *, enforce: bool=False, max_cases: int=64) -> dict:
     """No DB creation on read-only path, no external writes on enforce.
@@ -304,6 +354,7 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                  (last,max_cases-len(selected))).fetchall()
         findings=[]
         quarantined=[]
+        emergency_stops=[]
         for row in selected:
             # A previously assessed parent may have quarantined this child in
             # the same transaction. Never act on a stale snapshot of its state.
@@ -322,9 +373,12 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                 try:
                     descendants=_quarantine(db,row,finding["proof"])
                 except ValueError:
-                    # Cannot determine whole blast radius safely; never
-                    # pretend remediation was successful or hide the blocker.
-                    findings[-1]["enforcement"]="DEPENDENCY_BUDGET_BLOCKED"
+                    # The previous implementation only reported this error,
+                    # allowing further effects despite unknown blast radius.
+                    # Escalate to a same-transaction global grant revocation.
+                    _emergency_dependency_stop(db,row,finding["proof"])
+                    emergency_stops.append(row["task_id"])
+                    findings[-1]["enforcement"]="EMERGENCY_STOP"
                 else:
                     quarantined.append({"task_id":row["task_id"],
                                         "reason":finding["proof"],
@@ -348,6 +402,7 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             "exhaustive":total<=len(selected),
             "mechanically_valid":sum(f["mechanical_conformance"] for f in findings),
             "findings":findings,"quarantined":quarantined,
+            "emergency_stops":emergency_stops,
             "capability_circuit_open": bool(db.execute(
                 """SELECT disabled FROM conformance_capability_guard
                    WHERE kind=?""",(SANDBOX_CAPABILITY,)).fetchone()[0])
