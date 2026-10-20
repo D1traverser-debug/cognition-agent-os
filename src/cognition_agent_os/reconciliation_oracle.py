@@ -122,3 +122,63 @@ def sql_audit(spec: dict, reference: bytes, observed: bytes, proposal: dict) -> 
         finally:db.close()
     except (ValueError,TypeError,KeyError,csv.Error,sqlite3.Error,UnicodeError):
         return {"agreement":False,"reason":"ORACLE_SOURCE_INVALID"}
+
+
+def audit_stored_report(db_path, workspace, fixture_root, task_id: str) -> dict:
+    """Read-only independent post-artifact check; no DB or source mutation."""
+    import hashlib
+    import re
+    from pathlib import Path
+    from urllib.parse import quote
+    from .source import safe_fixture
+    fail={"task_id":task_id,"status":"UNVERIFIABLE",
+          "business_outcome_verified":False,"authorizes_mutation":False}
+    if not isinstance(task_id,str) or not re.fullmatch(r"[0-9a-f]{32}",task_id):
+        return {**fail,"reason":"INVALID_TASK_ID"}
+    db_path=Path(db_path)
+    workspace=Path(workspace)
+    fixture_root=Path(fixture_root)
+    if not db_path.is_file() or db_path.is_symlink() or workspace.is_symlink():
+        return {**fail,"reason":"UNSAFE_OR_MISSING_LEDGER"}
+    try:
+        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
+        with sqlite3.connect(uri,uri=True) as db:
+            db.row_factory=sqlite3.Row
+            row=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not row or not owner or row["state"]!="NEEDS_REVIEW":
+                return {**fail,"reason":"TASK_NOT_REVIEWABLE"}
+            if row["goal_rev"]!=owner["goal_rev"]:
+                return {**fail,"reason":"STALE_GOAL"}
+            source_spec=json.loads(row["source_spec"])
+            if source_spec.get("kind")!="record_reconciliation":
+                return {**fail,"reason":"INCORRECT_TASK_TYPE"}
+            artifact_dir=workspace/"artifacts"
+            artifact=artifact_dir/(task_id+".json")
+            if (artifact_dir.is_symlink() or artifact.is_symlink()
+                    or not artifact.is_file() or artifact.stat().st_size>150000):
+                return {**fail,"reason":"ARTIFACT_MISSING_OR_UNSAFE"}
+            data=artifact.read_bytes()
+            if (hashlib.sha256(data).hexdigest()!=row["artifact_hash"]):
+                return {**fail,"reason":"ARTIFACT_HASH_MISMATCH"}
+            document=json.loads(data)
+            if (document.get("task_id")!=task_id or
+                document.get("source_spec")!=source_spec or
+                document.get("status")!="PROPOSAL_NOT_APPROVED"):
+                return {**fail,"reason":"ARTIFACT_IDENTITY_MISMATCH"}
+            left=safe_fixture(fixture_root,source_spec["reference"])
+            right=safe_fixture(fixture_root,source_spec["observed"])
+            if document.get("source_sha256")!={
+                "reference":hashlib.sha256(left).hexdigest(),
+                "observed":hashlib.sha256(right).hexdigest()
+            }:
+                return {**fail,"reason":"SOURCE_HAS_CHANGED"}
+            result=sql_audit(source_spec,left,right,document["proposal"])
+            if not result["agreement"]:
+                return {**fail,"reason":"INDEPENDENT_SQL_REJECTION"}
+            return {"task_id":task_id,"status":"REPORT_MECHANICALLY_VERIFIED",
+                    "independent_sql_recheck":True,"business_outcome_verified":False,
+                    "authorizes_mutation":False,
+                    "artifact_sha256":row["artifact_hash"]}
+    except (OSError,ValueError,KeyError,TypeError,sqlite3.Error):
+        return {**fail,"reason":"EVIDENCE_RECHECK_UNAVAILABLE"}
