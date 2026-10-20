@@ -254,7 +254,7 @@ class HistoricalFeedbackUnverifiable(RuntimeError):
     """Candidate matches a historical rejection with missing or forged proof."""
 
 
-def _historical_negative_is_authentic(db:sqlite3.Connection,feedback,
+def _historical_negative_is_authentic(db:sqlite3.Connection,workspace:Path,feedback,
                                       source_hash:str,public_hash:str,
                                       holdout_hash:str,candidate_hash:str,
                                       method:str)->bool:
@@ -323,6 +323,26 @@ def _historical_negative_is_authentic(db:sqlite3.Connection,feedback,
         raise HistoricalFeedbackUnverifiable("INVALID_SOURCE_TASK_SPEC")
     if original_spec.get("holdout_sha256")!=parsed["holdout_sha256"]:
         raise HistoricalFeedbackUnverifiable("SIGNED_HOLDOUT_SCOPE_CHANGED")
+    # The original immutable proposal identifies public data and the
+    # exact operator mechanism; neither is inside the signed statement.
+    # Reading this proposal DOES NOT read sealed gold test answers.
+    try:
+        if (workspace.is_symlink() or (workspace/"artifacts").is_symlink()):
+            raise HistoricalFeedbackUnverifiable("UNSAFE_ARTIFACT_ROOT")
+        path=workspace/"artifacts"/(parsed["task_id"]+".json")
+        raw=_read(path,32000)
+        proposal=json.loads(raw)
+        selected=proposal["selected"]
+        if (hashlib.sha256(raw).hexdigest()!=parsed["proposal_sha256"]
+            or proposal["task_id"]!=parsed["task_id"]
+            or proposal["source_sha256"]!=source_hash
+            or proposal["visible_sha256"]!=public_hash
+            or proposal["source_spec"]!=original_spec
+            or selected["candidate_sha256"]!=candidate_hash
+            or selected["mechanism"]!=method):
+            raise HistoricalFeedbackUnverifiable("UNSIGNED_PROVENANCE_LAUNDERING")
+    except (OSError,ValueError,KeyError,TypeError):
+        raise HistoricalFeedbackUnverifiable("IMMUTABLE_PROPOSAL_UNAVAILABLE")
     binary=shutil.which("ssh-keygen")
     if not binary:
         raise HistoricalFeedbackUnverifiable("SSH_SIGNATURE_VERIFIER_UNAVAILABLE")
@@ -343,7 +363,7 @@ def _historical_negative_is_authentic(db:sqlite3.Connection,feedback,
     return True
 
 
-def previously_signed_rejected(db:sqlite3.Connection,*,original_sha256:str,
+def previously_signed_rejected(db:sqlite3.Connection,workspace:Path,*,original_sha256:str,
                                 visible_sha256:str,holdout_sha256:str,
                                 candidate_sha256:str,mechanism:str)->bool:
     """Never use an unverified SQLite row as a durable reviewer decision.
@@ -366,6 +386,6 @@ def previously_signed_rejected(db:sqlite3.Connection,*,original_sha256:str,
         raise HistoricalFeedbackUnverifiable("AMBIGUOUS_MANY_REVIEW_CLAIMS")
     for record in rows:
         _historical_negative_is_authentic(
-            db,record,original_sha256,visible_sha256,
+            db,workspace,record,original_sha256,visible_sha256,
             holdout_sha256,candidate_sha256,mechanism)
     return bool(rows)
