@@ -13,6 +13,7 @@ from .watch import create_watch
 from .evaluation import EvaluationError, public_inputs, evaluate
 from .reference_model import propose_reference_local
 from .local_model import LocalModelUnavailable
+from .goal_loop import validate_goal
 
 
 def main(argv=None) -> int:
@@ -36,6 +37,8 @@ def main(argv=None) -> int:
     watch.add_argument("--path", required=True)
     watch.add_argument("--branch", default="main")
     watch.add_argument("--interval-seconds", type=int, default=1800)
+    goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
+    goal.add_argument("--spec", type=Path, required=True)
     run = sub.add_parser("worker-once")
     run.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     run.add_argument("--local-model", default=None)
@@ -95,6 +98,14 @@ def main(argv=None) -> int:
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
             task_id = create_task(db, spec, interval_seconds=args.interval_seconds)
             result = {"task_id": task_id, "state": "PENDING"}
+        elif args.command == "seed-goal":
+            if args.spec.is_symlink() or args.spec.stat().st_size > 16384:
+                raise ValueError("Goal spec file must be bounded and regular")
+            spec = validate_goal(json.loads(args.spec.read_text(encoding="utf-8")))
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner["write_allowed"]:
+                raise PermissionError("Cannot enqueue new goal after write grant revocation")
+            result={"task_id":create_task(db,spec),"state":"PENDING","goal_type":spec["goal_type"]}
         elif args.command == "seed-watch-github":
             result = {"watch_id":create_watch(db, args.repo, args.path, args.branch,
                         interval_seconds=args.interval_seconds), "state":"PENDING_BASELINE"}
