@@ -91,6 +91,10 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
     Fault hook simulates a killed worker after the sandbox file is written but
     before SQLite commit. Retry reconciles identical immutable file.
     """
+    from .conformance import capability_disabled
+    if capability_disabled(db_path):
+        return _result(task_id,"CAPABILITY_DISABLED",
+                       reason="CONFORMANCE_INTEGRITY_CIRCUIT_OPEN")
     observed=audit_goal(db_path,workspace,fixtures,task_id)
     if observed["status"] not in ("CANDIDATE_MECHANICALLY_VALID",
                                   "SOURCE_CHANGED_SINCE_PROPOSAL"):
@@ -104,6 +108,17 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
         db.execute("BEGIN IMMEDIATE")
         task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
         owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+        # The same write lock fences a circuit trip from concurrently
+        # authorizing another sandbox file effect after a critical breach.
+        guard_exists=db.execute("""SELECT 1 FROM sqlite_master
+              WHERE type='table' AND name='conformance_capability_guard'""").fetchone()
+        if guard_exists:
+            blocked=db.execute("""SELECT disabled FROM conformance_capability_guard
+                          WHERE kind='goal_sandbox_stage'""").fetchone()
+            if blocked and blocked[0]:
+                db.commit()
+                return _result(task_id,"CAPABILITY_DISABLED",
+                               reason="CONFORMANCE_INTEGRITY_CIRCUIT_OPEN")
         if not task or task["state"]!="NEEDS_REVIEW":
             db.commit()
             return _result(task_id,"NOT_PENDING_REVIEW")
@@ -193,6 +208,9 @@ def advance_due_reviews(db_path: Path, workspace: Path, fixtures: Path,
                         *, max_reviews: int=8) -> list[dict]:
     """Bounded host step; no hidden loop or unbounded new job creation."""
     if not 1<=max_reviews<=16:raise ValueError("Review batch outside bound")
+    from .conformance import capability_disabled
+    if capability_disabled(db_path):
+        return []
     db=connect(db_path)
     try:
         rows=db.execute("""SELECT task_id FROM tasks
