@@ -24,7 +24,7 @@ from .semantic_contract import load_pinned_relationship
 from .conformance import inspect_conformance
 from .repair_search import validate_repair_spec
 from .repair_oracle import audit_patch,review_patch
-from .outcome_attestation import verify_signed_outcome
+from .outcome_attestation import verify_signed_outcome,prepare_unsigned_outcome
 
 
 def main(argv=None) -> int:
@@ -77,6 +77,10 @@ def main(argv=None) -> int:
     repair_review = sub.add_parser("repair-review",
                        help="Stage a pure repair candidate only after independent holdout acceptance")
     repair_review.add_argument("--task-id",required=True)
+    unsigned=sub.add_parser("attestation-subject",
+        help="Export unsigned exact-scope candidate for independent reviewer")
+    unsigned.add_argument("--task-id",required=True)
+    unsigned.add_argument("--principal",required=True)
     signed = sub.add_parser("attestation-audit",
         help="Read-only independently signed outcome statement; no production promotion")
     signed.add_argument("--statement",required=True,type=Path)
@@ -118,6 +122,12 @@ def main(argv=None) -> int:
     sub.add_parser("bump-goal")
     sub.add_parser("status")
     args = p.parse_args(argv)
+    if args.command == "attestation-subject":
+        result=prepare_unsigned_outcome(
+            args.db,args.workspace,args.fixtures,args.task_id,
+            reviewer_principal=args.principal)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="UNSIGNED_REVIEW_SUBJECT" else 4
     if args.command == "attestation-audit":
         result=verify_signed_outcome(
             args.db,args.workspace,args.fixtures,args.statement,args.signature,
