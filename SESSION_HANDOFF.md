@@ -1,5 +1,64 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## P8 CURRENT — evidence-driven record reconciliation (2026-10-20)
+
+This is the authoritative latest *candidate project checkpoint*, superseding
+historical P7 and below. Do not confuse a proposed capability branch with
+deployed system capabilities.
+
+- Owner: `D1traverser-debug/cognition-agent-os`.
+- Candidate head branch: `feat/p8-evidence-reconciliation-20261020`.
+- Draft PR #10: https://github.com/D1traverser-debug/cognition-agent-os/pull/10
+  stacked on P7, open/unmerged. `main` remains unchanged.
+- Principal purpose: progress beyond hard-coded individual repairs by
+  inferring **competing relational join hypotheses from actual unseen data**
+  in bounded, opt-in record reconciliation tasks. Same SQLite task authority,
+  bounded host and independent artifact ledger; no new parallel governor.
+- `src/cognition_agent_os/reconciliation.py`: source CSV parsing,
+  hypotheses for shared join keys, identifier uniqueness and overlap
+  evidence, ambiguous-case abstention, full missing/extra/field-mismatch
+  enumeration, and immutable report proposal after independent oracle.
+- `src/cognition_agent_os/reconciliation_oracle.py`: second implementation
+  independently reparses source CSVs, recomputes proposed key with SQL overlap
+  evidence, uses SQLite joins to check all differences, and provides
+  post-write read-only audit of artifact and authoritative source state.
+  This is independent **algorithmic/mechanical** evidence, not external
+  domain semantic endorsement.
+- CLI: `seed-reconciliation --reference expected.csv --observed actual.csv`
+  and `reconciliation-audit --task-id ...`, using existing worker/host.
+- Dynamic tests: `tests/test_reconciliation.py` cover generated DV regression
+  cases and financial invoices, shuffle/missing/extra/field changes,
+  15 seeded unfamiliar random cases, ambiguity, source and report tampering,
+  grants, malformed input, CLI + host, and malicious SQL/proposal mismatch.
+- Initial P8 CI run `39427366238`: 131 tests, one FAILURE exposing
+  real unsafe hypothesis substitution: duplicate `invoice_id` could
+  silently fall back to coincidentally unique `amount`.
+  Both planner and independently coded SQL oracle now reject such invalid
+  explicit identity evidence (no implicit weaker fallback), with regression.
+- **Most recent verified code run** `39427596976`: SUCCESS,
+  `offline_regression` **132/132 tests**; `live_public_source` SKIPPED.
+  After P8 code test run, documentation/handoff-only commits also need
+  latest head CI check. No claim of new external GitHub live validation.
+- Budget: zero paid remote LLM API tokens, no finite AI credits, no model pulls.
+  Original business sources are read-only; discrepancies are
+  `NEEDS_REVIEW / PROPOSAL_NOT_APPROVED`; `VERIFIED` for consistent
+  records means only this specific mechanical relational contract.
+
+**Unproven:** inferred key reflects real-world business meaning, user-validated
+financial or chip-testing correctness, independent human/third-party semantic
+oracle, genuinely open-ended natural-language goal planning, unknown
+cross-domain risk discovery, broad causal mechanism comparison, self-directed
+systemic repair, real installed Windows unattended host, or tested local
+model inference. Code regression counts do not prove these outcomes.
+
+**Next highest-value P9:** challenge the inference assumptions via actual
+independent domain truth: semantic join-key provenance, alternative hypotheses
+and falsification against withheld non-synthetic records; introduce general
+goal-to-observation-to-decision planning with explicit resources/authority,
+and test actual result transfer. Address stacks of unmerged PRs: request an
+authorized integration/release acceptance process before assuming this code
+is running from main. Do not spend paid AI credits.
+
 ## P7 CURRENT — durable diagnostic routing and fair recovery (2026-10-20)
 
 This section supersedes P6 and older descriptions below; those are history, not
