@@ -155,6 +155,25 @@ class P4ReferenceTests(unittest.TestCase):
         self.assertEqual(bad.returncode,3,bad.stderr)
         self.assertEqual(json.loads(bad.stdout)["status"],"UNVERIFIABLE")
 
+    def test_malformed_types_and_duplicate_json_keys_fail_closed(self):
+        answer_set = json.loads(self.candidate_file().read_text())["answers"]
+        for bad_value in ([], {}, None, 5):
+            with self.subTest(label=repr(bad_value)):
+                copies = json.loads(json.dumps(answer_set))
+                copies[0]["label"] = bad_value
+                with self.assertRaises(EvaluationError):
+                    evaluate(PACK,self.pack_digest,self.candidate_file(copies))
+        bad_json = self.root / "candidate.json"
+        bad_json.write_text('{"schema_version":1,"schema_version":1,"answers":[]}')
+        with self.assertRaises(EvaluationError):
+            evaluate(PACK,self.pack_digest,bad_json)
+        pack = json.loads(PACK.read_text())
+        pack["cases"][0]["gold"] = []
+        corrupt_pack = self.root / "invalid_pack.json"
+        corrupt_pack.write_text(json.dumps(pack))
+        with self.assertRaises(EvaluationError):
+            public_inputs(corrupt_pack,hashlib.sha256(corrupt_pack.read_bytes()).hexdigest())
+
     def test_reference_input_never_calls_network(self):
         with patch("urllib.request.urlopen", side_effect=AssertionError("no remote model or source")):
             obj = public_inputs(PACK,self.pack_digest)
