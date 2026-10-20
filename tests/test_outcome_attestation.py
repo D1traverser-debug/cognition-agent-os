@@ -210,6 +210,43 @@ class NativeSignedOutcomeTests(unittest.TestCase):
             expected_principal=self.principal)
         self.assertEqual(result["reason"],"TRUST_ANCHOR_INSIDE_AGENT_CONTROL")
 
+    def test_unsigned_subject_matches_real_lab_but_cannot_self_approve(self):
+        from cognition_agent_os.outcome_attestation import prepare_unsigned_outcome
+        draft=prepare_unsigned_outcome(self.dbpath,self.work,self.fx,self.tid,
+                                       reviewer_principal=self.principal)
+        self.assertEqual(draft["status"],"UNSIGNED_REVIEW_SUBJECT",draft)
+        self.assertFalse(draft["gold_answers_exported"])
+        self.assertFalse(draft["private_key_used"])
+        self.assertEqual(draft["statement"]["outcome"],"REVIEW_REQUIRED")
+        self.assertEqual(draft["statement"]["candidate_sha256"],
+                         self.statement()["candidate_sha256"])
+        # A candidate proposing 'REVIEW_REQUIRED' has no accepted signature,
+        # even if an external test signer signs this unreviewed draft.
+        self.sign(draft["statement"])
+        self.assertEqual(self.audit()["status"],"UNVERIFIABLE")
+        self.assertEqual(self.task()["state"],"REPAIR_LAB_VERIFIED")
+        # Only a reviewer may change the verdict and sign externally.
+        attested=dict(draft["statement"])
+        attested["outcome"]="DOMAIN_REJECTED"
+        attested["rationale"]="Independent evidence from test reviewer found an unrelated behavior."
+        self.sign(attested)
+        self.assertEqual(self.audit()["signed_outcome"],"DOMAIN_REJECTED")
+
+    def test_unsigned_cli_does_not_create_signature_or_change_ledger(self):
+        env=os.environ.copy();env["PYTHONPATH"]=str(ROOT/"src")
+        args=[sys.executable,"-m","cognition_agent_os.cli",
+              "--db",str(self.dbpath),"--workspace",str(self.work),
+              "--fixtures",str(self.fx),
+              "attestation-subject","--task-id",self.tid,"--principal",self.principal]
+        before=self.task()
+        r=subprocess.run(args,capture_output=True,text=True,env=env,timeout=20)
+        self.assertEqual(r.returncode,0,r.stderr)
+        result=json.loads(r.stdout)
+        self.assertEqual(result["status"],"UNSIGNED_REVIEW_SUBJECT")
+        self.assertEqual(result["statement"]["task_id"],self.tid)
+        self.assertFalse(self.sig.exists())
+        self.assertEqual(self.task(),before)
+
     def test_cli_is_read_only_and_never_seeds_new_authority(self):
         self.sign()
         env=os.environ.copy();env["PYTHONPATH"]=str(ROOT/"src")
