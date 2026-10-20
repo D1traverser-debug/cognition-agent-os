@@ -11,8 +11,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from .goal_loop import validate_goal
-from .reconciliation import validate_reconciliation
+from .goal_loop import validate_goal, GoalError
+from .reconciliation import validate_reconciliation, ReconciliationError
 
 MAX_INTENT_BYTES=16384
 MAX_STEPS=5
@@ -74,16 +74,22 @@ def compile_intent(intent: dict) -> dict:
                     or not isinstance(rule["field"],str) or rule["field"] in result):
                 raise IntentError("Malformed/duplicate acceptance constraint")
             result[rule["field"]]=rule["equals"]
-        spec=validate_goal({"kind":"goal_case","goal_type":"json_keys",
-                            "input":source["input"],"desired":result})
+        try:
+            spec=validate_goal({"kind":"goal_case","goal_type":"json_keys",
+                                "input":source["input"],"desired":result})
+        except (GoalError,TypeError,ValueError) as exc:
+            raise IntentError("Structural objective constraints invalid") from exc
         capability="json_structural_conformance_v1"
         expected="JSON_REQUIRED_FIELDS_PRESERVED"
     else:
         if set(intent)!={"kind","objective","resources"}:
             raise IntentError("Unknown relationship or contract extension")
-        spec=validate_reconciliation({
-            "kind":"record_reconciliation","reference":source["reference"],
-            "observed":source["observed"],"objective":"identify_discrepancies"})
+        try:
+            spec=validate_reconciliation({
+                "kind":"record_reconciliation","reference":source["reference"],
+                "observed":source["observed"],"objective":"identify_discrepancies"})
+        except (ReconciliationError,TypeError,ValueError) as exc:
+            raise IntentError("Comparison objective scope invalid") from exc
         capability="csv_evidence_reconciliation_v1"
         expected="SQLITE_RECOMPUTED_REPORT_OR_ABSTENTION"
     steps=[
