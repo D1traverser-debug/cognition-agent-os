@@ -11,7 +11,7 @@ param(
     [string]$FixturesPath,
     [string]$PythonPath,
     [datetime]$FirstRunAt = [datetime]::MinValue,
-    [ValidateRange(1,365)][int]$DurationDays = 30
+    [ValidateRange(1,3650)][int]$DurationDays = 3650
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
