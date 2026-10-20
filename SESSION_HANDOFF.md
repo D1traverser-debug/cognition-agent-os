@@ -1,5 +1,59 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## P7 CURRENT — durable diagnostic routing and fair recovery (2026-10-20)
+
+This section supersedes P6 and older descriptions below; those are history, not
+proof of new semantic autonomy.
+
+- New independent repository `D1traverser-debug/cognition-agent-os`.
+- **Current Draft PR #9**: https://github.com/D1traverser-debug/cognition-agent-os/pull/9
+- Head branch: `feat/p7-diagnosis-fairness-20261020`, stacked on
+  `feat/p6-sandbox-outcome-loop-20261020`, NOT merged into `main`.
+- Most recently verified functional commit BEFORE this checkpoint:
+  `a9a65889b544a2979e7a56e064c3ff7b915b01a2`.
+- GitHub Actions run `39425408187`: offline_regression SUCCESS,
+  **113/113 Python tests**, including cross-family JSON/CSV recovery.
+  `live_public_source`: SKIPPED (NOT a fresh live-source pass).
+- No paid LLM APIs, expiring model-credit allowances, paid provider API,
+  model installation or real Windows host actions. Model quality not tested.
+
+**Outcome and implementation:** P6 had a real systemic review starvation
+failure. Old invalid proposals occupied a bounded first-N query each host tick,
+suppressing later legal candidates. P7 `diagnostics.py` now re-evaluates
+audit evidence inside the existing SQLite write transaction, atomically
+classifies untrusted artifacts -> UNKNOWN, revoked/stale grants -> BLOCKED,
+persists competing UNPROVEN candidate causes and a disposition-specific
+next-action class; closes invalid tasks from automatic review selection.
+P7 `sandbox_effect.py` selects strictly JSON kind=goal_case and due reviews,
+honors 60s/120s transient-stage cooldown and prior three-attempt limit.
+It does NOT automatically approve tampered proposals or overwrite source files.
+
+**Autonomous narrow recovery:** Previously UNKNOWN
+`GOAL_EVIDENCE_UNAVAILABLE` JSON/CSV tasks can be independently re-observed
+after the source file reappears/corrects. An opted-in host tick
+`--auto-stage-goals` rereads the source, guards goal and grant, and
+atomically produces one new child on the EXISTING tasks ledger (no parallel
+planner/scheduler). Missing evidence gets a 900s due-time cooldown,
+conflicting requirement stops with NO_SAFE_GOAL_PLAN, stale authority blocks,
+and two ancestry replans remain the budget. Next tick processes child and
+may stage into isolated sandbox, with independent readback.
+Tests prove invalid older items do not starve younger valid ones, repeated
+failures do not multiply child tasks, a stale pre-audit cannot close newly
+valid work, and both JSON and CSV tasks can resume without touching originals.
+
+**Not proved:** open-ended autonomous goal decomposition, unknown-risk discovery,
+genuine competing cause falsification or self-corrective method learning,
+external semantic/user-goal acceptance, real provider effects, true Windows
+unattended host scheduling, or installed local Ollama inference. Mechanical
+`SANDBOX_VERIFIED` remains distinct from business outcome success.
+
+**Next highest-value P8:** move toward open-ended but bounded goal
+decomposition into evidence-seeking/competing-hypothesis/action steps, with
+a genuinely independently executable domain oracle; test at least two real
+non-handwritten input families and prioritize effective systemic repair
+rather than new monitors. Do not elevate to general autonomous agent or merge
+candidate stacks without independent outcome proofs.
+
 ## P6 LATEST checkpoint — 2026-10-20 (current exact resume)
 
 This checkpoint supersedes P5 and earlier below; those remain historical.
