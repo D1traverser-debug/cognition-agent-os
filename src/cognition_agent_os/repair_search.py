@@ -211,16 +211,26 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
     # has a different provenance from a local holdout mismatch. Both are
     # exact-scope negatives. Never turn an externally signed ACCEPT into
     # automatic authorization to apply an operator patch.
-    from .signed_feedback import previously_signed_rejected
+    from .signed_feedback import (
+        previously_signed_rejected,HistoricalFeedbackUnverifiable)
     candidate_sha=plan["selected"]["candidate_sha256"]
     method=plan["selected"]["mechanism"]
-    if previously_signed_rejected(db,original_sha256=sh,visible_sha256=vh,
-                                  holdout_sha256=spec["holdout_sha256"],
-                                  candidate_sha256=candidate_sha,mechanism=method):
+    try:
+        rejected=previously_signed_rejected(db,workspace,
+                  original_sha256=sh,visible_sha256=vh,
+                  holdout_sha256=spec["holdout_sha256"],
+                  candidate_sha256=candidate_sha,mechanism=method)
+    except (HistoricalFeedbackUnverifiable,OSError,ValueError) as exc:
+        finalize(db,task,"UNKNOWN",error_code="SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
+        return {"task_id":tid,"status":"UNKNOWN",
+                "reason":"SIGNED_FEEDBACK_PROOF_UNVERIFIABLE",
+                "untrusted_memory_did_not_change_method":True,
+                "diagnostic":type(exc).__name__}
+    if rejected:
         finalize(db,task,"UNKNOWN",error_code="SIGNED_REVIEW_PREVIOUSLY_REJECTED")
         return {"task_id":tid,"status":"UNKNOWN",
                 "reason":"SIGNED_REVIEW_PREVIOUSLY_REJECTED",
-                "method_action":"REJECT_EXACT_PREVIOUSLY_DISPROVEN_PATCH",
+                "method_action":"REJECT_EXACT_CRYPTOGRAPHICALLY_VERIFIED_PATCH",
                 "production_write_authorized":False}
     artifact={"task_id":tid,"goal_rev":task["goal_rev"],"source_spec":spec,
               "source_sha256":sh,"visible_sha256":vh,
@@ -235,9 +245,14 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
         # The SQLite write lock is held by finalize(). A concurrently
         # imported signed rejection cannot race between this check and
         # the immutable proposal's file+task commit.
-        if previously_signed_rejected(db,original_sha256=sh,visible_sha256=vh,
-                                      holdout_sha256=spec["holdout_sha256"],
-                                      candidate_sha256=candidate_sha,mechanism=method):
+        try:
+            rejected_under_lock=previously_signed_rejected(
+                db,workspace,original_sha256=sh,visible_sha256=vh,
+                holdout_sha256=spec["holdout_sha256"],
+                candidate_sha256=candidate_sha,mechanism=method)
+        except HistoricalFeedbackUnverifiable as exc:
+            raise RepairError("External review proof became unverifiable") from exc
+        if rejected_under_lock:
             raise RepairError("Signed external rejection arrived before commit")
         return store_once(workspace,tid,data)
     try:
