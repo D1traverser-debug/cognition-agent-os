@@ -25,6 +25,7 @@ from .conformance import inspect_conformance
 from .repair_search import validate_repair_spec
 from .repair_oracle import audit_patch,review_patch
 from .outcome_attestation import verify_signed_outcome,prepare_unsigned_outcome
+from .signed_feedback import record_signed_feedback
 
 
 def main(argv=None) -> int:
@@ -81,6 +82,13 @@ def main(argv=None) -> int:
         help="Export unsigned exact-scope candidate for independent reviewer")
     unsigned.add_argument("--task-id",required=True)
     unsigned.add_argument("--principal",required=True)
+    imported = sub.add_parser("attestation-record",
+        help="Explicitly import an externally signed accept/reject into existing ledger; never deploy")
+    imported.add_argument("--statement",required=True,type=Path)
+    imported.add_argument("--signature",required=True,type=Path)
+    imported.add_argument("--allowed-signers",required=True,type=Path)
+    imported.add_argument("--expected-allowed-sha256",required=True)
+    imported.add_argument("--principal",required=True)
     signed = sub.add_parser("attestation-audit",
         help="Read-only independently signed outcome statement; no production promotion")
     signed.add_argument("--statement",required=True,type=Path)
@@ -128,6 +136,14 @@ def main(argv=None) -> int:
             reviewer_principal=args.principal)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"]=="UNSIGNED_REVIEW_SUBJECT" else 4
+    if args.command == "attestation-record":
+        result=record_signed_feedback(
+            args.db,args.workspace,args.fixtures,args.statement,args.signature,
+            args.allowed_signers,args.expected_allowed_sha256,
+            expected_principal=args.principal)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"] in ("SIGNED_FEEDBACK_RECORDED",
+                                        "SIGNED_FEEDBACK_ALREADY_RECORDED") else 4
     if args.command == "attestation-audit":
         result=verify_signed_outcome(
             args.db,args.workspace,args.fixtures,args.statement,args.signature,
