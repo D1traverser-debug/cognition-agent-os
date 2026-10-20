@@ -96,6 +96,17 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
         return _result(task_id,"CAPABILITY_DISABLED",
                        reason="CONFORMANCE_INTEGRITY_CIRCUIT_OPEN")
     observed=audit_goal(db_path,workspace,fixtures,task_id)
+    if observed["status"]=="CANDIDATE_MECHANICALLY_VALID":
+        # Review the rest of the runtime BEFORE taking a new local effect.
+        # Stale input cases below need replanning rather than a new write.
+        from .conformance import effect_preflight
+        preflight=effect_preflight(db_path,workspace,fixtures)
+        if not preflight["admitted"]:
+            return _result(task_id,"PREFLIGHT_BLOCKED",
+                           reason=preflight["reason"],
+                           preflight_status=preflight["status"],
+                           capacity_reached=preflight["eligible"] is not None and
+                           preflight["eligible"]>preflight["checked"])
     if observed["status"] not in ("CANDIDATE_MECHANICALLY_VALID",
                                   "SOURCE_CHANGED_SINCE_PROPOSAL"):
         response=reject_review_if_untrusted(db_path,workspace,fixtures,task_id)
