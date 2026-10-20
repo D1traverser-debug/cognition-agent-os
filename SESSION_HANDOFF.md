@@ -1,5 +1,92 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## P9 CURRENT — typed goal compilation + caller-pinned semantic relationship (2026-10-20)
+
+THIS IS THE CURRENT CANDIDATE PROJECT CHECKPOINT. Historical P8 and earlier
+sections below are not evidence that candidate code is deployed.
+
+**Owner:** `D1traverser-debug/cognition-agent-os`.
+**Branch:** `feat/p9-intent-contract-20261020` stacked on P8.
+**Draft PR #11:** https://github.com/D1traverser-debug/cognition-agent-os/pull/11
+**Integration:** confirmed PRs #1 through #11 are ALL OPEN / DRAFT / UNMERGED,
+with #1 based on `main` and others successively stacked on preceding branches.
+`main` is NOT the functioning Agent. No approval or attempt to merge, deploy
+to user's Windows PC, auto-download local model or incur paid AI credits.
+
+**User outcome / hard constraints:**
+Create a genuinely self-directed autonomous cognition/execution system able
+to discover problems, reason about hypotheses, select authorized actions,
+verify real outcomes and revise across unfamiliar domains, with NO remote
+paid LLM tokens, limited AI free credits or trial-dependent quota. Code
+regressions and more typed task adapters alone do NOT satisfy this outcome.
+
+**New P9 implementation:**
+- `src/cognition_agent_os/intent_planner.py`: one typed `goal_intent`
+  compiler for `ensure_structure` (read local JSON and preserve data while
+  meeting explicit constraints) or `compare_records` (two local CSV sources,
+  dynamic join/discrepancy). Records bounded OBSERVE, CHALLENGE, PLAN, CHECK,
+  COMMIT steps and a reproducible `plan_sha256` with explicit source and
+  effect scopes. No arbitrary commands or agent-generated permissions.
+- `src/cognition_agent_os/intent_runtime.py`: integrates with the
+  existing `tasks`/`events`/`authority` database. Fences claimed parent,
+  checks fresh grant/goal under one SQLite transaction, atomically emits
+  exactly one typed child and marks parent `DECOMPOSED`. Nested intent
+  creation refused. `intent-audit` independently reconstructs plan and
+  validates persisted event/child parentage. New CLI `seed-intent`.
+- `src/cognition_agent_os/semantic_contract.py`: strict caller-supplied
+  out-of-band SHA-256 of exact reviewer-claimed relationship manifest,
+  scoped to specific original source names and a declared join column.
+  `seed-reconciliation --relationship-contract ... --expected-contract-sha256 ...`
+  refuses unsigned-by-digest substitution or wrong scope. The P8 planner
+  and separate SQL audit only use the specified key after checking source
+  uniqueness and overlap. A stale or tampered manifest invalidates later
+  read-only `reconciliation-audit` even when a previous report looked valid.
+  The composed `compare_records` intent can now directly carry the same
+  pinned manifest binding, validated at `seed-intent` intake and by its child.
+- Tests `tests/test_intent_runtime.py` and `tests/test_semantic_contract.py`
+  cover both task families, composed pin-through-intent integration,
+  unregistered/recursive goals, path/privilege injection, genuine SQLite
+  child+event linkage, false/falsified audit records, stale goal/permission,
+  bad digest/scope, tampered manifest, ambiguous keys and no fallback to
+  unrelated business fields.
+- Design and acceptance: `docs/14-GOAL-INTENT-AND-SEMANTIC-CONTRACTS.md`.
+
+**Hard CI evidence:**
+- First P9 run `39429762735` executed 151 cases but had one
+  validation-error-contract leak (GoalError instead of IntentError);
+  corrected with typed lower-level error normalization and new negatives.
+- Functional P9 run `39430380039` SUCCESS: **153/153 offline Python
+  regressions PASS**. `live_public_source` SKIPPED by design.
+  Later docs/checkpoint commits must have final head CI reread.
+- Zero paid remote model tokens/free credit allocation used.
+
+**Limitations demanding external evidence:**
+- Fixed capability registry + typed constraints is an *increment toward*
+  generic planning, not unrestricted natural-language understanding or
+  open-world tool planning. The five steps are a compiled plan receipt, not
+  five independently executed cognitive agents.
+- SHA256 detects substituted manifest bytes but does NOT cryptographically
+  authenticate a reviewer or prove human/domain semantic correctness.
+  A model allowed to edit both manifest and expected digest can forge a
+  supposed 'review'. A real deployment MUST isolate trusted expected digest
+  from proposing-agent authority and independently validate actual labels.
+- `REPORT_MECHANICALLY_VERIFIED` and `PLAN_MECHANICALLY_VALID`
+  are not independent business outcome validation or permissions to mutate
+  production. Original sources remain unchanged. No Windows unattended
+  schedule / local Ollama inference has been physically observed.
+
+**Next highest-value objective (do not multiply placeholder phases):**
+1. Establish a genuine trusted reviewer/domain acceptance channel (or an
+   externally executable objective oracle), with separate signer/security
+   authority and unseen real-world cases; test disagreement and proof provenance.
+2. Demonstrate bounded goal-to-outcome closure on genuinely unfamiliar tasks,
+   causal mechanism falsification, independent readback and persistent method
+   revision; avoid replacing autonomy with new fixed-schema examples.
+3. Address draft stack #1–#11 through a deliberate, owner-authorized
+   integration acceptance workflow; until integrated, the Candidate Agent
+   does not exist on `main` or the user's Windows host. Do NOT merge without
+   user consent; no pretend background processing.
+
 ## P8 CURRENT — evidence-driven record reconciliation (2026-10-20)
 
 This is the authoritative latest *candidate project checkpoint*, superseding
