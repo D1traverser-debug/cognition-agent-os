@@ -176,18 +176,33 @@ def _stage_patch(workspace: Path,task_id: str,content: bytes)->str:
     return hashlib.sha256(content).hexdigest()
 
 
-def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str)->dict:
+def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
+                 *,fault_after_effect:bool=False)->dict:
     # A preliminary check minimizes transactions; every decision is rechecked
     # under the single SQLite write lock before an effect or state change.
+    from .conformance import (
+        capability_disabled,effect_preflight,REPAIR_LAB_CAPABILITY)
+    if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
+        return {"task_id":task_id,"status":"CAPABILITY_DISABLED"}
     first=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=False)
     if first["status"]!="VISIBLE_PATCH_MECHANICALLY_VALID":
         return {"task_id":task_id,"status":"NOT_ADMITTED",
                 "reason":first.get("reason",first["status"])}
+    preflight=effect_preflight(db_path,workspace,fixtures)
+    if not preflight["admitted"]:
+        return {"task_id":task_id,"status":"PREFLIGHT_BLOCKED",
+                "reason":preflight["reason"]}
     db=connect(db_path)
     try:
         db.execute("BEGIN IMMEDIATE")
         row=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
         authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+        circuit=db.execute("""SELECT 1 FROM conformance_capability_guard
+              WHERE disabled=1 AND kind IN (?,?) LIMIT 1""",
+              ("goal_sandbox_stage",REPAIR_LAB_CAPABILITY)).fetchone()
+        if circuit:
+            db.commit()
+            return {"task_id":task_id,"status":"CAPABILITY_DISABLED"}
         if not row or row["state"]!="NEEDS_REVIEW":
             db.commit()
             return {"task_id":task_id,"status":"NOT_PENDING_REVIEW"}
@@ -211,9 +226,23 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str)->dict
             return {"task_id":task_id,"status":"HOLDOUT_REFUTED",
                     "authorizes_source_mutation":False}
         if decision["status"]!="HOLDOUT_ACCEPTED":
+            attempts=db.execute("""SELECT COUNT(*) FROM events
+              WHERE task_id=? AND kind='REPAIR_HOLDOUT_UNAVAILABLE'""",
+              (task_id,)).fetchone()[0]+1
+            event(db,task_id,"REPAIR_HOLDOUT_UNAVAILABLE",{
+                "attempt":attempts,"reason":decision.get("reason"),
+                "outcome":"INSUFFICIENT_EVIDENCE_NOT_ACCEPTED"})
+            if attempts>=3:
+                db.execute("""UPDATE tasks SET state='UNKNOWN',
+                    error_code='REPAIR_HOLDOUT_UNAVAILABLE_EXHAUSTED',
+                    state_version=state_version+1 WHERE task_id=?""",(task_id,))
+            else:
+                db.execute("UPDATE tasks SET due_at=due_at+900 WHERE task_id=?",
+                           (task_id,))
             db.commit()
-            return {"task_id":task_id,"status":"HOLDOUT_UNVERIFIABLE",
-                    "reason":decision.get("reason")}
+            return {"task_id":task_id,
+                    "status":"HOLDOUT_RETRY_EXHAUSTED" if attempts>=3 else "HOLDOUT_UNVERIFIABLE",
+                    "attempts":attempts,"reason":decision.get("reason")}
         artifact=json.loads((workspace/"artifacts"/(task_id+".json")).read_bytes())
         try:
             patch_sha=_stage_patch(workspace,task_id,
@@ -221,6 +250,8 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str)->dict
         except (OSError,ValueError):
             db.commit()
             return {"task_id":task_id,"status":"LAB_EFFECT_UNKNOWN"}
+        if fault_after_effect:
+            os._exit(82)
         db.execute("""UPDATE tasks SET state='REPAIR_LAB_VERIFIED',
             decision='ISOLATED_OPERATOR_PATCH_HOLDOUT_PASS',
             lease_until=NULL,claim_token=NULL,error_code=NULL,
