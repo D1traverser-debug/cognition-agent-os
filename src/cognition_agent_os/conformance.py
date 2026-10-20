@@ -28,6 +28,12 @@ MAX_SCAN=512
 MAX_DEPENDENCIES=256
 
 SANDBOX_CAPABILITY="goal_sandbox_stage"
+REPAIR_LAB_CAPABILITY="pure_code_repair_lab"
+CRITICAL_REPAIR_LAB_BREACHES=frozenset((
+    "STAGED_PATCH_DIFFERS","STAGED_PATCH_MISSING",
+    "ACCEPTANCE_RECEIPT_MISMATCH","ACCEPTANCE_RECEIPT_MISSING",
+    "ARTIFACT_HASH_MISMATCH","NON_MINIMAL_SOURCE_PATCH"
+))
 CRITICAL_SANDBOX_BREACHES=frozenset((
     "STAGED_ARTIFACT_HASH_MISMATCH","STAGED_EFFECT_BYTES_MISMATCH",
     "FALSE_EFFECT_RECEIPT","MISSING_OR_REPEATED_EFFECT_RECEIPT",
@@ -53,17 +59,20 @@ def capability_disabled(db_path: Path, kind: str=SANDBOX_CAPABILITY) -> bool:
         return True
 
 
-def _trip_critical_guard(db, task_id: str, reason: str) -> bool:
-    """Only confirmed serious integrity failures can disable future effects."""
-    if reason not in CRITICAL_SANDBOX_BREACHES:
+def _trip_critical_guard(db, task_id: str, reason: str,
+                         *, kind: str=SANDBOX_CAPABILITY) -> bool:
+    """Independently confirmed integrity breaches disable only own effect family."""
+    allowed=(CRITICAL_SANDBOX_BREACHES if kind==SANDBOX_CAPABILITY else
+             CRITICAL_REPAIR_LAB_BREACHES if kind==REPAIR_LAB_CAPABILITY else ())
+    if reason not in allowed:
         return False
     db.execute("""INSERT OR IGNORE INTO conformance_capability_guard
                   (kind,disabled,reason,trigger_task)
-                  VALUES (?,1,?,?)""",(SANDBOX_CAPABILITY,reason,task_id))
+                  VALUES (?,1,?,?)""",(kind,reason,task_id))
     changed=db.execute("SELECT changes()").fetchone()[0]>0
     if changed:
         event(db,task_id,"CONFORMANCE_CAPABILITY_DISABLED",{
-            "capability":SANDBOX_CAPABILITY,"reason":reason,
+            "capability":kind,"reason":reason,
             "policy":"NO_AUTOMATIC_REENABLE_WITHOUT_SEPARATE_ACCEPTANCE"})
     return changed
 
@@ -265,6 +274,8 @@ def _quarantine(db, row: sqlite3.Row, reason: str,
                ("CONFORMANCE_"+reason,tid,row["state"]))
     if row["state"]=="SANDBOX_VERIFIED":
         _trip_critical_guard(db,tid,reason)
+    elif row["state"]=="REPAIR_LAB_VERIFIED":
+        _trip_critical_guard(db,tid,reason,kind=REPAIR_LAB_CAPABILITY)
     event(db,tid,"CONFORMANCE_VIOLATION",{
         "observation":reason,
         "dependent_tasks_quarantined":descendants,
