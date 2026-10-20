@@ -207,6 +207,21 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
                 "reason":"IDENTICAL_REPAIR_PREVIOUSLY_REFUTED",
                 "method_action":"DO_NOT_REPLAY_FAILED_HYPOTHESIS",
                 "external_business_outcome_verified":False}
+    # Outcome correction from a genuinely signed, manually imported review
+    # has a different provenance from a local holdout mismatch. Both are
+    # exact-scope negatives. Never turn an externally signed ACCEPT into
+    # automatic authorization to apply an operator patch.
+    from .signed_feedback import previously_signed_rejected
+    candidate_sha=plan["selected"]["candidate_sha256"]
+    method=plan["selected"]["mechanism"]
+    if previously_signed_rejected(db,original_sha256=sh,visible_sha256=vh,
+                                  holdout_sha256=spec["holdout_sha256"],
+                                  candidate_sha256=candidate_sha,mechanism=method):
+        finalize(db,task,"UNKNOWN",error_code="SIGNED_REVIEW_PREVIOUSLY_REJECTED")
+        return {"task_id":tid,"status":"UNKNOWN",
+                "reason":"SIGNED_REVIEW_PREVIOUSLY_REJECTED",
+                "method_action":"REJECT_EXACT_PREVIOUSLY_DISPROVEN_PATCH",
+                "production_write_authorized":False}
     artifact={"task_id":tid,"goal_rev":task["goal_rev"],"source_spec":spec,
               "source_sha256":sh,"visible_sha256":vh,
               "selected":plan["selected"],"hypotheses":plan["hypotheses"],
@@ -217,6 +232,13 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
         if (hashlib.sha256(safe_fixture(fixtures,spec["source"])).hexdigest()!=sh or
             hashlib.sha256(safe_fixture(fixtures,spec["visible"])).hexdigest()!=vh):
             raise RepairError("Source drifted before immutable proposal commit")
+        # The SQLite write lock is held by finalize(). A concurrently
+        # imported signed rejection cannot race between this check and
+        # the immutable proposal's file+task commit.
+        if previously_signed_rejected(db,original_sha256=sh,visible_sha256=vh,
+                                      holdout_sha256=spec["holdout_sha256"],
+                                      candidate_sha256=candidate_sha,mechanism=method):
+            raise RepairError("Signed external rejection arrived before commit")
         return store_once(workspace,tid,data)
     try:
         ok=finalize(db,task,"NEEDS_REVIEW",decision="BOUNDED_CODE_PATCH_PROPOSAL",
