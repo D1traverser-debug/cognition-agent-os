@@ -126,7 +126,8 @@ def _check_candidate(kind: str, parsed, desired: dict, candidate: bytes) -> bool
     except (GoalError,ValueError):
         return False
     if kind=="json_keys":
-        return (all(k in checked and type(checked[k]) is type(v) and checked[k]==v
+        return (set(checked) == set(parsed) | set(desired)
+                and all(k in checked and type(checked[k]) is type(v) and checked[k]==v
                     for k,v in desired.items())
                 and all(k in checked and type(checked[k]) is type(v) and checked[k]==v
                         for k,v in parsed.items()))
