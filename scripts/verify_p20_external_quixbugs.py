@@ -72,7 +72,7 @@ CASES=(
 
 def git_blob_sha1(raw:bytes)->str:
     return hashlib.sha1(
-        b"blob "+str(len(raw)).encode("ascii")+b"\\0"+raw).hexdigest()
+        b"blob "+str(len(raw)).encode("ascii")+b"\0"+raw).hexdigest()
 
 
 def source_url(path:str)->str:
@@ -127,15 +127,15 @@ def make_case(meta:dict,source:bytes,test_bytes:bytes)->dict:
     # Original upstream program's bytes must remain a contiguous prefix.
     # Add only a fixed JSON-data adapter into the isolated experiment file.
     original=source.decode("utf-8")
-    if len(source)>12000 or "\\0" in original:
+    if len(source)>12000 or "\0" in original:
         raise ValueError("Unsupported upstream Python module")
     symbol=meta["symbol"]
     if symbol not in ("gcd","max_sublist_sum"):
         raise ValueError("Unauthorized external function")
     wrapper=(
-        "\\n\\n# Local JSON I/O adapter; not a repair, never applied upstream.\\n"
-        "def calculate(data):\\n"
-        f"    return {{'value': {symbol}(*data['args'])}}\\n"
+        "\n\n# Local JSON I/O adapter; not a repair, never applied upstream.\n"
+        "def calculate(data):\n"
+        f"    return {{'value': {symbol}(*data['args'])}}\n"
     )
     def turn(row):
         args,expected=row
