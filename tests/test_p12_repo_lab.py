@@ -224,6 +224,41 @@ class RepoLabTest(unittest.TestCase):
         self.assertNotEqual(result["status"],"REPAIR_LAB_VERIFIED")
         self.assertFalse((self.ws/"repo_lab").exists())
 
+    def test_repo_candidate_error_after_lease_takeover_is_not_unknown(self):
+        from cognition_agent_os import repo_repair
+        tid=self.seed()
+        def steal_lease_then_reject(*args,**kwargs):
+            db=connect(self.dbpath)
+            try:
+                db.execute("UPDATE tasks SET claim_token=?,state_version=state_version+1"
+                           " WHERE task_id=?",("new_worker_claim",tid))
+                db.commit()
+            finally:db.close()
+            raise ValueError("Candidate makes no actual source change")
+        with patch.object(repo_repair,"candidate_changes",
+                          side_effect=steal_lease_then_reject):
+            result=run_once(self.dbpath,self.ws,self.fx)
+        self.assertEqual(result["status"],"STALE_WORKER")
+        self.assertEqual(self.state(tid)["state"],"RUNNING")
+        self.assertEqual(self.state(tid)["claim_token"],"new_worker_claim")
+        self.assertFalse((self.ws/"artifacts"/(tid+".json")).exists())
+
+    def test_repo_candidate_invalid_output_after_goal_rotation_reports_blocked(self):
+        from cognition_agent_os import repo_repair
+        tid=self.seed()
+        def rotate_then_reject(*args,**kwargs):
+            db=connect(self.dbpath)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            raise ValueError("Candidate makes no actual source change")
+        with patch.object(repo_repair,"candidate_changes",side_effect=rotate_then_reject):
+            result=run_once(self.dbpath,self.ws,self.fx)
+        self.assertEqual(result["task_id"],tid)
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"STALE_GOAL")
+        self.assertEqual(self.state(tid)["state"],"BLOCKED")
+        self.assertFalse((self.ws/"artifacts"/(tid+".json")).exists())
+
     def test_successful_lab_tamper_trips_original_repair_breaker(self):
         tid=self.plan()
         with patch("cognition_agent_os.repo_repair.run_suite",
