@@ -28,7 +28,9 @@ Ollama localhost, genuine no-network Docker and 3-generation budget.
 
 P20 current stage: implementation / offline CI check.
 **Actual first P20 7B inference and external testcase scores NOT YET
-OBSERVED.** Preserve authentic failure and do not announce success
+OBSERVED.** One-time P20 PR opt-in was explicitly enabled for the
+next CI push; PR body edit alone does not run the default pull_request
+synchronize workflow. Preserve authentic failure and do not announce success
 without real hosted result. One-time opt-in `[run-p20-external-7b]`
 will trigger disposable Linux 7B source experiment only after ordinary
 regressions, and must be removed once actual evidence is collected.
