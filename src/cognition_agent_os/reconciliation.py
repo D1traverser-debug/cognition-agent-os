@@ -12,7 +12,7 @@ import json
 import re
 from pathlib import Path
 
-from .ledger import finalize
+from .ledger import finalize_observed
 from .runner import ArtifactConflict, store_once
 from .source import safe_fixture, SourceUnavailable
 
@@ -155,9 +155,9 @@ def run_reconciliation(db,task: dict,workspace: Path,fixture_root: Path) -> dict
         if not oracle["agreement"]:
             raise ReconciliationError("Independent SQL source oracle disagreement")
         if plan["status"]=="INSUFFICIENT_KEY_EVIDENCE":
-            finalize(db,task,"UNKNOWN",error_code="JOIN_KEY_AMBIGUOUS")
-            return {"task_id":tid,"status":"UNKNOWN","reason":"JOIN_KEY_AMBIGUOUS",
-                    "hypotheses":plan["hypotheses"]}
+            observed=finalize_observed(db,task,"UNKNOWN",error_code="JOIN_KEY_AMBIGUOUS")
+            return ({**observed,"hypotheses":plan["hypotheses"]}
+                    if observed["status"]=="UNKNOWN" else observed)
         sha_a=hashlib.sha256(before_a).hexdigest()
         sha_b=hashlib.sha256(before_b).hexdigest()
         def guard_inputs():
@@ -169,8 +169,9 @@ def run_reconciliation(db,task: dict,workspace: Path,fixture_root: Path) -> dict
             def check_only():
                 if not guard_inputs(): raise ReconciliationError("Inputs drifted before result commit")
                 return None
-            committed=finalize(db,task,"VERIFIED",decision="RECORD_SETS_CONSISTENT",
-                               artifact_writer=check_only)
+            observed=finalize_observed(db,task,"VERIFIED",
+                                      decision="RECORD_SETS_CONSISTENT",
+                                      artifact_writer=check_only)
         else:
             artifact={
                 "task_id":tid,"goal_rev":task["goal_rev"],"source_spec":spec,
@@ -184,17 +185,17 @@ def run_reconciliation(db,task: dict,workspace: Path,fixture_root: Path) -> dict
                 if not sql_audit(spec,before_a,before_b,plan,pinned=pinned)["agreement"]:
                     raise ReconciliationError("Source/oracle result mismatch")
                 return store_once(workspace,tid,data)
-            committed=finalize(db,task,"NEEDS_REVIEW",decision="RECORD_DISCREPANCIES_FOUND",
-                               artifact_writer=store)
-        if not committed:
-            return {"task_id":tid,"status":"STALE_WORKER"}
-        actual=db.execute("SELECT state,decision,error_code FROM tasks WHERE task_id=?",(tid,)).fetchone()
-        return {"task_id":tid,"status":actual["state"],"decision":actual["decision"],
-                "error_code":actual["error_code"],
+            observed=finalize_observed(db,task,"NEEDS_REVIEW",
+                                      decision="RECORD_DISCREPANCIES_FOUND",
+                                      artifact_writer=store)
+        if observed["status"] not in ("VERIFIED","NEEDS_REVIEW"):
+            return observed
+        return {**observed,"error_code":observed.get("reason"),
                 "selected_key":plan["selected_key"],
                 "discrepancies_count":len(plan["discrepancies"]),
                 "business_outcome_verified":False}
     except (ReconciliationError,SourceUnavailable,ValueError,KeyError,TypeError,OSError,ArtifactConflict) as exc:
-        finalize(db,task,"UNKNOWN",error_code="RECONCILIATION_UNVERIFIABLE")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"RECONCILIATION_UNVERIFIABLE",
-                "diagnostic":type(exc).__name__}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code="RECONCILIATION_UNVERIFIABLE")
+        return ({**observed,"diagnostic":type(exc).__name__}
+                if observed["status"]=="UNKNOWN" else observed)
