@@ -59,7 +59,7 @@ def _record_tick(path: Path, *, processed: int, finished_at: float) -> None:
 
 def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: int = 16,
              planner_mode: str = "deterministic", local_model: str | None = None,
-             auto_stage_goals: bool = False) -> dict:
+             auto_stage_goals: bool = False, auto_review_repos: bool = False) -> dict:
     """Drain a bounded set of due jobs. Reruns/reboots reuse the same local DB.
 
     Scheduling is external (Windows Task Scheduler, cron, systemd); missed ticks
@@ -67,6 +67,8 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     task intentionally schedules the next job relative to successful completion,
     rather than fabricating execution for each missed wall-clock interval.
     """
+    if auto_review_repos and not auto_stage_goals:
+        raise ValueError("Repo code review needs both explicit host opt-in flags")
     if not 1 <= max_jobs <= 64:
         raise ValueError("max_jobs must be between 1 and 64")
     if planner_mode not in ("deterministic", "ollama-local"):
@@ -93,7 +95,8 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     # local source is available. New children remain in the same ledger and
     # are intentionally processed by a subsequent tick, not a recursive loop.
     repair_reviews = (review_due_repairs(db_path,workspace,fixture_root,
-                                         limit=min(max_jobs,4))
+                                         limit=min(max_jobs,4),
+                                         allow_repo_execution=auto_review_repos)
                       if auto_stage_goals and preflight["admitted"] else [])
     recoveries = (recover_due_unknowns(db_path,fixture_root)
                   if auto_stage_goals else [])
