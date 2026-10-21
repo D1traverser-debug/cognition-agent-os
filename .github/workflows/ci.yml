@@ -123,13 +123,20 @@ jobs:
           # Qwen2.5 Coder 0.5B is a real open-weight code model (~398MB).
           # The pull is CI-only and explicit; app runtime never auto-pulls.
           timeout 420 ollama pull qwen2.5-coder:0.5b
+          # A larger code-specialized model is independently measured,
+          # not silently substituted if the 0.5B baseline has 0% success.
+          timeout 420 ollama pull qwen2.5-coder:1.5b
           ollama list
       - name: Measure real model proposals with independent Docker tests
         env:
           PYTHONPATH: src
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_NO_CLOUD: '1'
-        run: python scripts/verify_actual_local_model.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          P14_LOCAL_MODEL=qwen2.5-coder:0.5b python scripts/verify_actual_local_model.py
+          P14_LOCAL_MODEL=qwen2.5-coder:1.5b python scripts/verify_actual_local_model.py
 
   live_public_source:
     # Explicit opt-in: third-party public API quota is separate from local correctness.
