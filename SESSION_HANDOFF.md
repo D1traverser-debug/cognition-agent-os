@@ -1,5 +1,83 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P11 — linked two-file code repair with an independent hidden result (2026-10-21)
+
+Current candidate for user goal: **genuinely self-directing cognition**:
+construct proposals for unfamiliar work, execute with explicit bounded
+authorization, independently validate outcome, learn from failed hypotheses,
+repair systemic mistakes and persist progress. Hard resource constraint:
+NO paid cloud LLM tokens, NO finite AI-credit schemes/trials, NO unrequested
+model download. Tests of bounded deterministic algorithms are not proof
+of open-ended autonomy.
+
+**Repository:** D1traverser-debug/cognition-agent-os
+**Branch:** `feat/p10-runtime-conformance-20261020`
+**Cumulative integration:** Draft PR #12 targeting main,
+https://github.com/D1traverser-debug/cognition-agent-os/pull/12 ,
+open / NOT MERGED. No owner Windows host deployment or production writes.
+
+**This increment is actual new task execution, not another monitor:**
+- `src/cognition_agent_os/pipeline_repair.py`: original SQLite worker
+  accepts `pipeline_code_repair` task with **two coupled Python source
+  files/functions** and a three-input visible functional requirement.
+  Deterministic exhaustive small AST operator search evaluates all
+  two-stage transformations including single-stage-only changes, demands
+  precisely one public-passing combined candidate, and freezes hashes
+  and two source patches into original create-once artifact. Planner
+  does NOT read independent hidden/holdout file.
+- `src/cognition_agent_os/pipeline_oracle.py`: independently evaluates
+  source/candidates with a separately implemented operator checker,
+  rechecks source/visible/proposal digests, runs separately pinned hidden
+  cases only after proposal freeze, and stages passing **two-file**
+  candidate only in `workspace/pipeline_lab/<taskid>/<source>`.
+  Same SQLite write lock checks grant/capability, then repeats hidden
+  oracle and real file readback after stage before recording
+  `REPAIR_LAB_VERIFIED` and `PIPELINE_HOLDOUT_ACCEPTED`.
+  Failed hidden or post-effect proof => UNKNOWN, no fake success.
+- `runner.py` routes new kind through same existing claim/authority,
+  `cli.py` adds `seed-pipeline-repair`, `pipeline-audit`,
+  `pipeline-review`. Existing `host-tick --auto-stage-goals` now
+  optionally performs bounded independent P11 followup through the
+  original `repair_oracle.review_due_repairs` queue, while default
+  host never uses hidden tests or stages.
+- `conformance.py` handles P11 proof in both pending and verified states,
+  and P11 forged staging or receipt claims trip existing durable
+  `pure_code_repair_lab` family circuit (no parallel second authority).
+- `tests/test_p11_pipeline_repair.py`: really edits two dependent
+  pure functions (first `+` => `-`, second `+` => `*`), independently
+  rejects public-pass/hidden-fail case, covers ambiguity, unsupported
+  imports/path traversal, revoked grant, staged tampering, changed source
+  after first review, CLI subprocess and real host opt-in/default.
+- The code parses/INSPECTS, never executes arbitrary Python source;
+  only allows two pure single-return 2-arg numeric functions. This is
+  a safe bounded step towards cross-module interaction, NOT general
+  repair synthesis or a general sandbox.
+- Main docs: `docs/22-COUPLED-CROSS-FILE-REPAIR.md`.
+- First P11 functional CI with 8 tests: Linux **239/239 PASS**
+  in Actions `39528965779`. Subsequent host integration added 4
+  tests, Linux **243/243 PASS** in Actions `39529260081`.
+  Later documentation/handoff commits supersede these runs:
+  verify the latest head CI across Linux, Windows and native Scheduler
+  before any final all-green claim.
+  External GitHub live public source smoke remains SKIPPED by default.
+
+**Unproven:** externally sourced *truly unfamiliar* user tasks, unknown
+multi-module algorithms, general self-generated code with validated
+container isolation, a real human reviewer/OS independent trust root,
+a genuine owner Windows deployment, arbitrary production/source writes,
+independent business outcome or fully autonomous agent. Prior P10.9
+cryptographically reverified signed feedback remains present but not
+yet generalized to multi-stage pipeline outcome types. Do not conflate
+mechanical holdout with human-approved business success.
+
+**Next high-value engineering:** independent unfamiliar task corpus and
+owner-controlled true outcome oracle; opt-in local installed open-weight
+model for generating full-file hypotheses, but no automatic download or
+finite remote credits. Establish a real isolated execution environment
+before allowing arbitrary generated code to run. Keep all further work
+in same cumulative Draft PR #12; do not merge without user authority,
+and preserve risk/positive-negative evidence and zero-token budget.
+
 ## LATEST P10.9 — verify signatures before historical feedback influences planning (2026-10-21)
 
 This supersedes the P10.8 and older checkpoints below. The user wants
