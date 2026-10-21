@@ -30,3 +30,29 @@ The initial transport unit regression hit a real `ZipInfo` metadata aliasing err
 ## Outcome
 
 **PENDING ORIGINAL ONE-SHOT REAL 7B EVIDENCE.** Do not infer repair quality from this document, from CI success, or from source-code inspection. Record genuine generated candidate validity, PUBLIC/HIDDEN behavior, exact Actions run link, and status in a subsequent appendix; do not alter frozen gold or repeat a failed attempt. No deployment or merge permitted.
+
+
+## Genuine one-shot result — 2026-10-21, NEGATIVE (do not retune)
+
+[GitHub Actions #39629376264](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39629376264) ran the intended temporary-only Ollama/Qwen2.5-Coder 7B real experiment and **COMPLETED/SUCCESS** on all five jobs: Linux offline regression, Windows offline, real Docker integration, hosted native Windows Scheduled Task and actual 7B task. The optional older model and live-source jobs were SKIPPED. The temporary PR trigger was REMOVED immediately after dispatch. This green Actions status means the negative result was measured and recorded; **it is NOT repair acceptance**.
+
+The real P31 task log shows the pre-inference original-wheel baseline again: real `python-dateutil 2.9.0.post0` + actual `six 1.17.0` in no-network unprivileged Docker; PUBLIC **2/4**, immutable manifest `8e5db99800c505cbd2482fe74059df0831ca3237f084ffdc5d4fd68caae380b5`. No HIDDEN was run on original; model had no HIDDEN labels.
+
+Actual local 7B completed exactly **ONE** generation and candidate handling attempt in **159.75 seconds**. The deterministic compact edit path returned `COMPACT_CANDIDATE_REJECTED`, `validation_error_type=ValueError`, `candidate_frozen=false`, `source_files_changed_in_package=[]`, `public_passes=null`, `hidden_passes=null`, `hidden_evaluated=false`, `feedback_retries=0`, `original_upstream_modified=false`, `external_maintainer_accepted=false`, `full_upstream_package_execution=false` (for **a modified candidate**; original wheel baseline itself was executed). Model's actual output bytes were not logged and no finer classifier distinguishes bad JSON shape, ambiguous literal find or out-of-scope edit. Do not fabricate this subreason from `ValueError`.
+
+The generated candidate never passed deterministic validation and thus was **NOT EXECUTED** against PUBLIC or HIDDEN. Therefore this is NOT "test-checked patch failed"; this is **no effective executable model patch in one actual generation**, a negative capacity/output-transport sample. The independent full-wheel original baseline remains a useful new capability gate over earlier extracted-method experiments, but this does NOT demonstrate correct software repair, a multi-source-file fix, upstream maintainer acceptance or broad autonomous competence.
+
+STOP rule: no retry, prompt-tune or hidden-gold revision on #1588 as part of P31. Preserve the exact frozen original/public/hidden manifest and negative Actions evidence. Next distinct meaningful experiment should demand genuine multi-module **editable** upstream sources or an independently available maintainer patch, a real dependency/install environment and deterministic guard + validation; do not confuse "runs whole distribution" with "repairs multiple files".
+
+### Outcome matrix
+
+| Scope | Outcome |
+| --- | --- |
+| Original published dateutil imported with real six in Docker | **MEASURED / PASS** |
+| Original issue PUBLIC regression | **MEASURED / 2/4 (bug reproduced)** |
+| Pure stdlib-authored public and hidden gold contract | **FROZEN 4 + 8** |
+| Compact AST allowlist and wheel RECORD validation | **OFFLINE TESTED**, no real model candidate passed it |
+| Unmocked one-shot installed 7B inference | **MEASURED / COMPLETE**, 159.75s |
+| Model candidate frozen | **NO** |
+| Candidate PUBLIC/HIDDEN semantic correctness | **NOT EVALUATED** |
+| Multi-source-file patch / upstream acceptance / production deployment | **NOT PROVEN / NOT AUTHORIZED** |
