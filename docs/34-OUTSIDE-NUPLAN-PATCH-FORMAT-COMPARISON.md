@@ -29,3 +29,25 @@ After experimental evidence: remove PR marker, append the ACTUAL result (includi
 ## P23 admission before first real model proposal (2026-10-21)
 
 Immutable NuPlan original-source Docker baseline **actually passed** (expected broken 2/4 PUBLIC), with manifest SHA256 `8c60b11e315e9aed378228b030e3e8704a64247c0e5eccd5744a3848424aa8c8` printed by CI. Original Git blob `c61a13776fcb1fc55a43daa826a757eb992e4bda` was checked at the pinned upstream `e9241677`. Entire no-model preflight [Actions #39597456905](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39597456905) **COMPLETED/SUCCESS** for Linux, Windows, native Docker and hosted Windows Task Scheduler. Other local-model experiments SKIPPED. This document-only commit is a one-time trigger for the exact preregistered P23 local-7B comparison using the temporary PR-body opt-in; no changed benchmark/test gold/source or production source, no external/upstream writing. The model result is **not yet known**, regardless of experiment job conclusion. Remove the opt-in after confirming run dispatch.
+
+
+## Observed authentic P23 7B A/B result — both source formats pass (2026-10-21)
+
+Actual unmocked, single opt-in [GitHub Actions #39597947150](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39597947150), candidate experimental HEAD `ef15f09e674eecb999eba174d7710a9284473298`: workflow **COMPLETED/SUCCESS**, including Linux offline regressions, native Windows regressions, actual no-network Docker integration, real hosted Windows native Scheduler, and the one-time genuine Ollama 7B experiment. The one-time PR body trigger has already been **REMOVED**; subsequent normal pushes must SKIP model downloads.
+
+At job startup both the no-model and installed-model baselines reproduced original pinned NuPlan method failure as **2/4 PUBLIC passed**, with matching pre-registered manifest SHA256 `8c60b11e315e9aed378228b030e3e8704a64247c0e5eccd5744a3848424aa8c8`, source Git blob `c61a13776fcb1fc55a43daa826a757eb992e4bda`. Actual installed loopback Qwen2.5-Coder 7B completed its genuine generation probe. Neither format used a prepared correct patch, hidden answer feedback, cloud LLM inference, owner Windows machine, or third-party source writes.
+
+| Independent outcome | Whole-file `changes` | Compact `exact_replace` |
+| --- | --- | --- |
+| Frozen changed candidate | YES, first attempt | YES, first attempt |
+| Genuine Docker PUBLIC | 4/4 | 4/4 |
+| Sealed independent Docker HIDDEN | 8/8 | 8/8 |
+| Original-method-only staged scope | PASS | PASS |
+| Model refinement attempts | 0 | 0 |
+| Full case elapsed | 56.95 s | 43.17 s |
+| Existing SQLite review disposition | `REPAIR_LAB_VERIFIED` | `REPAIR_LAB_VERIFIED` |
+| External maintainer signoff | NONE | NONE |
+
+**Causal limits:** This is one deliberately isolated, small method, not a complete NuPlan integration or true production repair. The third-party public issue includes a suggested fix; model pretraining/issue contamination cannot be ruled out. Both formats succeeded, so this experiment does **not** demonstrate improved task success probability; one 43.17s vs 56.95s elapsed pair cannot justify latency superiority either. Different output-token limits and candidate sizes are part of the contracts; the time delta is observational. Positive evidence supports only that the existing compact representation can produce and admit a valid real model repair while retaining the existing offline Docker and scope gates. Continue with *distinct* prospectively frozen, harder outside work plus external acceptance; do not repeatedly tune NuPlan or promote to main automatically.
+
+After these documentation-only and durable handoff writes, obtain a fresh final-head ordinary CI **with real 7B SKIPPED** before claiming the new HEAD regression-green. Production merge/release, user-PC install and upstream commit remain unapproved.
