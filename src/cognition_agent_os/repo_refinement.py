@@ -149,7 +149,28 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
             from .local_model import LocalModelUnavailable
             try:
                 raw=_candidate_from_model(spec,base,public_bytes,model,feedback=feedback)
-                changed=candidate_changes(raw,spec["files"])
+                try:
+                    changed=candidate_changes(raw,spec["files"])
+                except (ValueError,UnicodeError,KeyError,TypeError):
+                    # Invalid model JSON is still a completed generation.
+                    # It cannot evade the three-attempt budget across calls.
+                    key=sha(raw)
+                    record={"candidate_fingerprint":key,
+                            "public_passes":None,"public_total":len(public),
+                            "attempt":prior+iteration+1,"hidden_seen":False,
+                            "rejected_reason":"MODEL_CANDIDATE_INVALID",
+                            "model_origin":"LOOPBACK_ONLY_UNTRUSTED"}
+                    if not _record_attempt(db_path,tid,parent,record):
+                        return _deny("REVIEW_AUTHORITY_OR_BUDGET_CHANGED",
+                                     attempts=len(history))
+                    history.append(record)
+                    feedback=dict(feedback)
+                    feedback["latest_rejection"]={
+                        "reason":"MODEL_CANDIDATE_INVALID",
+                        "candidate_fingerprint":key,
+                        "retry_index":prior+iteration+1,
+                        "must_propose_different_full_source":True}
+                    continue
                 key=sha(json.dumps({p:sha(v) for p,v in changed.items()},
                                        sort_keys=True).encode())
                 repeated=key in seen
