@@ -60,9 +60,10 @@ Files:
 `docs/32-LIVE-EXTERNAL-ISSUE-REPAIR-EXPERIMENT.md`.
 Follow-up must check current HEAD Linux, Windows, real Docker and hosted
 Windows Scheduler CI. Only after verified regression should
-one-time PR marker `[run-p21-issue-7b]` be set and a single new HEAD
-commit trigger actual disposable Linux Qwen2.5-Coder 7B experiment,
-bounded to two 300s generations. Remove marker after genuine evidence.
+one-time PR marker `[run-p21-issue-7b]` WAS set and this
+checkpoint commit TRIGGERS the real disposable Linux Qwen2.5-Coder
+7B experiment, bounded to two 300s generations. Actual third
+experiment outcome is NOT YET OBSERVED; do not infer success. Remove marker after genuine evidence.
 Record frozen candidate/PUBLIC/HIDDEN/adapter-scope counts honestly,
 especially if second candidate is still no-change or model times out.
 Never retune hidden cases or invent external maintainer acceptance.
