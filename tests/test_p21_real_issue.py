@@ -228,7 +228,10 @@ class ExternalLiveIssueTests(unittest.TestCase):
         with patch("cognition_agent_os.repo_refinement.run_suite",
                    side_effect=failing_suite),\
              patch("cognition_agent_os.repo_refinement._candidate_from_model",
-                   return_value=outputs[1]) as model:
+                   return_value=json.dumps({"changes":[{
+                       "path":"rules.py",
+                       "content":"def calculate(data):\\n    return {'out':data['x']+2}\\n"
+                   }]}).encode()) as model:
             verdict=refine_repo_public(db,ws,fx,tid,
                                        model="qwen2.5-coder:7b",max_attempts=3)
         self.assertEqual(verdict["status"],"PUBLIC_REFINEMENT_BUDGET_EXHAUSTED")
