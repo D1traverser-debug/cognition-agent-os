@@ -42,6 +42,13 @@ def _public_feedback(changes,public,outcome):
                 "CANDIDATE_NONZERO","CANDIDATE_EMPTY_OR_OVERSIZE_OUTPUT",
                 "CANDIDATE_INVALID_JSON_OUTPUT"):
                 entry["execution_error"]=observation["execution_error"]
+            # Actual returned JSON is a useful counterexample. Only
+            # PUBLIC run_suite(include_observed=True) can populate it;
+            # independent hidden-case calls always use the default False.
+            if "observed_value" in observation:
+                value=observation["observed_value"]
+                if len(json.dumps(value,sort_keys=True).encode())<=512:
+                    entry["observed_value"]=value
             errors.append(entry)
     # Public-only feedback; the previously proposed source was untrusted,
     # never verified; model text is data, not an instruction for tools.
@@ -124,7 +131,8 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
         baseline=run_suite(base,{},spec["entrypoint"],public)
         if baseline["passes"]==baseline["total"]:
             return _deny("ORIGINAL_FAILURE_NOT_REPRODUCED")
-        previous=run_suite(base,changes,spec["entrypoint"],public)
+        previous=run_suite(base,changes,spec["entrypoint"],public,
+                           include_observed=True)
         if previous["passes"]==previous["total"]:
             return _deny("PUBLIC_ALREADY_PASSES")
         feedback=_public_feedback(changes,public,previous)
@@ -143,7 +151,8 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
                     return _deny("MODEL_REPEATED_PRIOR_HYPOTHESIS",
                                  attempts=len(history))
                 seen.add(key)
-                output=run_suite(base,changed,spec["entrypoint"],public)
+                output=run_suite(base,changed,spec["entrypoint"],public,
+                                 include_observed=True)
             except LocalModelUnavailable:
                 return _deny("INSTALLED_LOCAL_MODEL_UNAVAILABLE",attempts=len(history))
             except (ValueError,UnicodeError,KeyError,TypeError):
