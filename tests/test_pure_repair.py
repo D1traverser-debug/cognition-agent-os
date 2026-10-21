@@ -76,6 +76,20 @@ class PureRepairTests(unittest.TestCase):
                  {"args":[12,8],"expected":True}]
         return self.seed(source,visible,holdout)
 
+    def test_pure_repair_failure_after_goal_rotation_must_not_claim_unknown(self):
+        from cognition_agent_os import repair_search
+        tid,_=self.example_compare()
+        def rotate(*args,**kwargs):
+            db=connect(self.db)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            raise ValueError("Injected candidate proposal failure")
+        with patch.object(repair_search,"propose_patch",side_effect=rotate):
+            result=run_once(self.db,self.ws,self.fx)
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"STALE_GOAL")
+        self.assertEqual(self.row(tid)["state"],"BLOCKED")
+
     def test_comparison_patch_accepted_by_separate_holdout_oracle(self):
         tid,spec=self.example_compare()
         original=self.fx.joinpath("function.py").read_bytes()
