@@ -81,3 +81,36 @@ goals/cases, source-authenticated acceptance and holdout outcomes; a two-case
 post-hoc benchmark alone cannot validate open-world autonomy. No paid remote
 LLM API, finite trial/credit service, owner's Windows machine, or main branch
 mutation is permitted by this work.
+
+## Observed real model comparison — 2026-10-21
+
+Actual disposable hosted Linux 7B + real Docker run
+[GitHub Actions #39568633684](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39568633684)
+completed successfully **as an infrastructure and candidate-quality experiment**.
+The identical archived P14 fixture manifest remained
+`0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf`.
+No correct reference source was given to the local model, no hidden case
+was used to adjust a candidate, and original project source stayed unchanged.
+
+| Genuine 7B condition | Initial candidates frozen | PUBLIC full pass | HIDDEN full pass | Revisions |
+|---|---:|---:|---:|---:|
+| P17 — no explicit goal | 1/2 | 0/2 | 0/2 | failed corrections |
+| P18 — explicit task intent | **2/2** | **2/2** | **2/2** | **0** |
+
+P18 invoice result: native first review `REPAIR_LAB_VERIFIED`, PUBLIC
+2/2, HIDDEN 2/2, elapsed ~65.6 seconds. Distinct-threshold result:
+native first review `REPAIR_LAB_VERIFIED`, PUBLIC 2/2, HIDDEN 2/2,
+elapsed ~66.1 seconds. The same run completed Linux **285/285**,
+Windows **285/285**, true Docker integration and genuine hosted Windows
+Scheduler with SUCCESS; third-party live source job was SKIPPED.
+The P18 model opt-in marker was removed from Draft PR #12 after the result.
+
+**Causal limits:** The test uses the identical two already-known tasks, and
+Agent-authored outcome descriptions written *after* previous failures.
+They are not actual owner-signed requirements, genuine new blind corpus,
+or independent third-party semantic adjudication. The outcome supports
+that missing intent materially contributed to these two observed failures;
+it cannot rule out model nondeterminism or benchmark contamination or prove
+transferable repair competence. P18 remains a bounded experiment under
+Draft/unmerged release constraints. The next meaningful test must
+pre-register unfamiliar tasks and gold before any local-model inference.
