@@ -88,6 +88,11 @@ jobs:
           PYTHONPATH: src
           P23_BASELINE_ONLY: '1'
         run: python scripts/verify_p23_nuplan_comparison.py
+      - name: P24 pinned financial breakeven two-method Docker baseline, no model
+        env:
+          PYTHONPATH: src
+          P24_BASELINE_ONLY: '1'
+        run: python scripts/verify_p24_financial_breakeven.py
 
   experimental_real_local_model:
     # Explicit PR opt-in marker only. This is genuine CPU inference on an
@@ -203,7 +208,7 @@ jobs:
   experimental_local_7b_capacity:
     # One explicitly requested nonmetered coder-capacity test only.
     # Installed on disposable hosted Linux CI, never owner's computer.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]') || contains(github.event.pull_request.body, '[run-p23-nuplan-ab]')) }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]') || contains(github.event.pull_request.body, '[run-p23-nuplan-ab]') || contains(github.event.pull_request.body, '[run-p24-finance-7b]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 28
     steps:
@@ -224,6 +229,12 @@ jobs:
           PYTHONPATH: src
           P23_BASELINE_ONLY: '1'
         run: python scripts/verify_p23_nuplan_comparison.py
+      - name: Independently prove original finance monotonic-root defect before 7B
+        if: ${{ contains(github.event.pull_request.body, '[run-p24-finance-7b]') }}
+        env:
+          PYTHONPATH: src
+          P24_BASELINE_ONLY: '1'
+        run: python scripts/verify_p24_financial_breakeven.py
       - name: Install actual Ollama only on disposable CI host
         shell: bash
         run: |
@@ -267,6 +278,7 @@ jobs:
           P21_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
           P22_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p22-issue-7b]') && '1' || '0' }}
           P23_COMPARISON_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p23-nuplan-ab]') && '1' || '0' }}
+          P24_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p24-finance-7b]') && '1' || '0' }}
           # P21 observed an honest 180s local-generation timeout. Only
           # this explicitly opted-in disposable 7B experiment uses 300s.
           COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS: ${{ (contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]')) && '300' || '180' }}
@@ -276,7 +288,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$P23_COMPARISON_OPT_IN" = "1" ]; then
+          if [ "$P24_ISSUE_OPT_IN" = "1" ]; then
+            python scripts/verify_p24_financial_breakeven.py
+          elif [ "$P23_COMPARISON_OPT_IN" = "1" ]; then
             python scripts/verify_p23_nuplan_comparison.py
           elif [ "$P22_ISSUE_OPT_IN" = "1" ]; then
             python scripts/verify_p22_cpython_userstring.py
