@@ -1,5 +1,80 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## CURRENT P12 — offline Docker whole-file repo experiments and explicit execution consent (2026-10-21)
+
+This supersedes P11 and older checkpoints. The user's goal is an
+actually autonomous agent that proposes, executes, independently validates,
+and improves methods on unfamiliar real tasks. Cost constraints remain:
+NO paid model token billing, NO finite AI credit pools or free trials,
+NO automatic cloud model calls/pulls. All candidate PRs remain DRAFT,
+including `D1traverser-debug/cognition-agent-os` cumulative Draft PR #12
+at `feat/p10-runtime-conformance-20261020` targeting `main`.
+Nothing is merged or deployed on the user's Windows 11 computer.
+
+**New code discovered on resuming:** previous interrupted P12 work had
+already added `container_lab.py`, `repo_repair.py`, linked runner/CLI,
+GitHub Actions `repo_container_integration`, and
+`scripts/verify_repo_container.py`. This implementation supports a
+2–6 file untrusted complete Python file candidate and optional installed
+loopback-only Ollama source proposal; unlike P11, its grammar is not a
+single AST operator. It executes candidates solely inside an
+explicitly preinstalled no-network non-root read-only capped Docker
+container, NOT in the host Python environment. It compares actual
+case outputs with host-side expected JSON; hidden examples are not
+passed to the candidate. No production code changes.
+
+**Real failure and direct correction in this continuation:**
+Original P12 CI run `39531912897` completed FAILURE: Linux and
+Windows standard-library regression + native Windows scheduler were
+successful, but the actual `repo_container_integration` FAILED with
+`ISOLATION_UNAVAILABLE/CONTAINER_EXIT_NONZERO`. Root cause:
+`subprocess.run(input=...)` wrote JSON to Docker's stdin but the
+`docker run` process lacked `-i`, so the container saw EOF and its
+JSON parsing entrypoint failed. `container_lab._docker_run` now
+uses `docker run --rm -i --pull=never ...`. This is not a fail-open
+bypass or regression skip.
+
+**Additional substantive safety changes:**
+- Original `repo_repair.review_repo` now runs the **baseline
+  original code** against visible tests within the same Docker
+  environment, requiring a demonstrated failure before claiming
+  a repair. An already-correct program with comment-only change
+  returns `NO_FAILURE_REPRODUCED` and is not staged.
+- `host-tick --auto-stage-goals` historically meant simple AST
+  execution and did NOT authorize arbitrary Python even in Docker.
+  It no longer triggers repo source execution. New independent
+  `--auto-review-repos` flag is required **together** with
+  `--auto-stage-goals` to enable automatic whole-file Docker review.
+  The explicit `repo-review` CLI remains a manual positive action.
+  Missing Docker/image refuses with no host execution fallback.
+- New `tests/test_p12_repository_permissions.py` asserts implicit
+  opt-in cannot execute arbitrary code, required combined flags,
+  no host fallback, source allowlists, and that the mocked locally
+  installed Ollama prompt contains no held-out labels. This mock is
+  NOT evidence of a real local model on owner computer.
+- The real Docker integration script adds negative `already-correct`
+  baseline to actual candidate/hidden refutation and network/root
+  isolation probes. Docker image is only explicitly prefetched in
+  ephemeral GitHub Linux CI, never on user host. Release requires
+  image digest pinning and owner host isolation acceptance.
+- Design and limitations: `docs/23-OFFLINE-DOCKER-REPO-REPAIR.md`.
+
+**VERIFICATION STATUS:** P12 final-head CI must be checked, especially
+`repo_container_integration` RUNNING REAL DOCKER, Linux/Windows
+offline_regression, Windows native scheduler. Earlier P12 run
+`39531912897` was FAILED; do not claim Docker success based on passing
+unit tests. The code/docs updated after that run and CI may be queued.
+No signed independent real business review, no actual untrusted
+general-source local Ollama output, and no owner PC deployment occurred.
+
+**Next meaningful engineering after actual Docker PASS:** Test from a
+separately provided unseen user task with original real-world
+acceptance, and verify an actually installed local non-metered model
+can propose correct unfamiliar code (as distinct from a curated
+external candidate). Separate externally managed reviewer and
+production release policy are still required, as is controlled
+OS-level sandboxing on the real Windows 11 host. No automatic merge.
+
 ## LATEST P11 — linked two-file code repair with an independent hidden result (2026-10-21)
 
 Current candidate for user goal: **genuinely self-directing cognition**:
