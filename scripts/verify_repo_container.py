@@ -250,7 +250,14 @@ def verify_public_revision_docker():
             require("sealed.json" not in json.dumps(feedback) and
                     "travel" not in json.dumps(feedback),
                     "Model observed a hidden-only reference category")
-            attempted.append({"failures":len(feedback["failed_public_cases"])})
+            failed=feedback["failed_public_cases"]
+            require(all("observed_value" in row for row in failed),
+                    "Real Docker PUBLIC wrong output must be visible, not only SHA")
+            require(all(len(json.dumps(row["observed_value"]).encode())<=512
+                        for row in failed),
+                    "PUBLIC feedback exceeded response bound")
+            attempted.append({"failures":len(failed),
+                              "real_observed_values":True})
             code=partial if len(attempted)==1 else full
             return json.dumps({"changes":[{"path":"rules.py",
                                           "content":code}]}).encode()
@@ -278,6 +285,8 @@ def verify_public_revision_docker():
             "test":"real_docker_two_round_public_feedback_with_stub_proposer",
             "status":"PASS","actual_docker":True,"actual_ollama_model":False,
             "revision_attempts":len(attempted),
+            "public_observed_values_from_real_docker":all(
+                 x["real_observed_values"] for x in attempted),
             "hidden_cases_evaluated_only_by_final_reviewer":True,
             "production_code_changed":False},sort_keys=True))
 
