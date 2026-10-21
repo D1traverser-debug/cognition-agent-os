@@ -141,6 +141,8 @@ def main(argv=None) -> int:
     host.add_argument("--max-jobs", type=int, default=16)
     host.add_argument("--auto-stage-goals", action="store_true",
                       help="Explicitly opt in to local sandbox-only follow-up")
+    host.add_argument("--auto-review-repos", action="store_true",
+                      help="Separately opt in to untrusted whole-file Python execution IN Docker; also requires --auto-stage-goals")
     host.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     host.add_argument("--local-model", default=None)
     export = sub.add_parser("reference-export", help="Export model-visible cases without reference gold")
@@ -246,7 +248,8 @@ def main(argv=None) -> int:
         try:
             result = run_tick(args.db, args.workspace, args.fixtures, max_jobs=args.max_jobs,
                               planner_mode=args.planner_mode, local_model=args.local_model,
-                              auto_stage_goals=args.auto_stage_goals)
+                              auto_stage_goals=args.auto_stage_goals,
+                              auto_review_repos=args.auto_review_repos)
         except HostNotConfigured as exc:
             print(json.dumps({"status":"HOST_NOT_CONFIGURED", "error":str(exc)}))
             return 2
