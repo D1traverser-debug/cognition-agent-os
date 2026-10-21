@@ -96,3 +96,48 @@ After the run, remove temporary model opt-in, write observed outcome
 non-model head CI on Draft PR #12. Next tier beyond P20 still requires
 actual new issues and private/independent maintainer acceptance; P20
 does not authorize release.
+
+## Observed outcome on external official QuixBugs gold (2026-10-21)
+
+Genuine first P20 run:
+[GitHub Actions #39574300182](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39574300182).
+This was actual loopback Ollama Qwen2.5-Coder **7B** inference on
+disposable Linux plus the original SQLite authority and real offline Docker,
+NOT a mocked unit test, scripted patch or presupplied answer.
+
+**Upstream identity was verified during the job**:
+`jkoppel/QuixBugs@4257f44b0ff1181dedaedee6a447e133219fcebf`
+with all four preregistered source and official test Git blob hashes
+matching actual downloaded bytes. The locally adapted two-task manifest
+SHA256 printed by the real runner was
+`d13924a771bb5c0a744e8ff1c194f4f1c03fe74ff7870f1534e3ac17cdef91ae`.
+
+| Original external defect | Initial model candidate | PUBLIC official rows | HELDOUT official rows | Revisions | Run time |
+|---|---|---:|---:|---:|---:|
+| gcd recursive argument bug | Frozen | 2/2 | 4/4 | 0 | 91.40 seconds |
+| maximum sublist sum running-maximum bug | Frozen | 2/2 | 4/4 | 0 | 109.17 seconds |
+| **Aggregate** | **2/2** | **4/4** | **8/8** | **0** | |
+
+The original QuixBugs source was unchanged, the original code
+remained an immutable prefix of the temporary fixture, and no upstream
+correct reference implementation was fetched. The separate Docker
+review returned `REPAIR_LAB_VERIFIED` on the first candidate for each
+case. This is an actual observed externally authored expected-value
+match, beyond P19's Agent-authored corpus.
+
+The same CI run verified **Linux 295/295**, **Windows 295/295**,
+native offline Docker integration and native hosted Windows Scheduler
+with SUCCESS. Mutable public GitHub watch smoke was SKIPPED. The
+temporary P20 7B PR opt-in marker was removed after observation.
+
+**Do not overclaim:** QuixBugs is widely published with a public
+corrected implementation and official tests; no credible claim of
+training-set novelty or hidden-from-model-pretraining independence
+is possible. Two classic Python functions also cannot establish
+root-cause discovery on arbitrary repositories, a genuine external
+maintainer acceptance, unsupervised host operation on the owner's
+Windows 11 PC or a production release. Preserve Draft/unmerged state
+until genuine separate owner-judged outcomes and release authorization.
+The next evidence tier needs live externally raised defects whose
+specific gold/acceptance was not available to the model during
+planning, never more retuning of these old known cases.
