@@ -23,7 +23,7 @@ from .runner import verify_artifact
 from .ledger import event, connect
 
 TASK_ID=re.compile(r"[0-9a-f]{32}\Z")
-EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED")
+EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED")
 MAX_SCAN=512
 MAX_DEPENDENCIES=256
 
@@ -214,8 +214,21 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 result=audit_intent_plan(db_path,tid)
             proof=("MECHANICALLY_VALID" if result["status"]=="PLAN_MECHANICALLY_VALID"
                    else result.get("reason","PLAN_AUDIT_FAILED"))
+        elif state=="RESEARCH_NEEDED":
+            if kind=="knowledge_intent":
+                from .research_gap import audit_gap
+                r=audit_gap(db_path,fixtures,workspace,tid)
+                proof=("MECHANICALLY_VALID" if r["status"]=="PLAN_MECHANICALLY_VALID"
+                       else r.get("reason","RESEARCH_GAP_INVALID"))
+            else:
+                proof="UNREGISTERED_RESEARCH_PARENT"
         elif state=="NEEDS_REVIEW":
-            if kind=="repo_container_repair":
+            if kind=="research_gap":
+                from .research_gap import audit_gap
+                r=audit_gap(db_path,fixtures,workspace,row["parent_task"],tid)
+                proof=("MECHANICALLY_VALID" if r["status"]=="PLAN_MECHANICALLY_VALID"
+                       else r.get("reason","RESEARCH_ARTIFACT_INVALID"))
+            elif kind=="repo_container_repair":
                 from .repo_repair import audit_repo
                 report=audit_repo(db_path,workspace,fixtures,tid)
                 proof=("MECHANICALLY_VALID" if report["status"]=="REPO_BYTES_MECHANICALLY_VALID"
@@ -416,13 +429,13 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
         else:
             last=""
         total=db.execute("""SELECT COUNT(*) FROM tasks
-                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')""").fetchone()[0]
+                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')""").fetchone()[0]
         selected=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')
                    AND task_id>? ORDER BY task_id LIMIT ?""",(last,max_cases)).fetchall()
         if enforce and len(selected)<max_cases and last:
             selected+=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED')
                    AND task_id<=? ORDER BY task_id LIMIT ?""",
                  (last,max_cases-len(selected))).fetchall()
         findings=[]
