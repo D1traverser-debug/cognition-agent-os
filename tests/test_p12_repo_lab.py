@@ -99,8 +99,14 @@ class RepoLabTest(unittest.TestCase):
 
     def _fake_suite(self,base,changes,entrypoint,cases):
         self.assertEqual(entrypoint,"main.py")
-        self.assertIn("for row in",changes["calculations.py"].decode())
         self.assertNotIn("hidden.json",json.dumps(base,default=str))
+        if not changes:
+            # The original broken module must be independently witnessed
+            # failing visible cases before any patch may count as repair.
+            self.assertEqual(base["calculations.py"],self.original_rules)
+            return {"passes":0,"total":len(cases),
+                    "observed":[{"pass":False} for _ in cases]}
+        self.assertIn("for row in",changes["calculations.py"].decode())
         return {"passes":len(cases),"total":len(cases),
                 "observed":[{"pass":True} for _ in cases]}
 
@@ -235,8 +241,14 @@ class RepoLabTest(unittest.TestCase):
         self.assertEqual(ordinary["repair_lab_reviews"],[])
         self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
         with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=self._fake_suite) as executor:
+            legacy=run_tick(self.dbpath,self.ws,self.fx,auto_stage_goals=True)
+        executor.assert_not_called()
+        self.assertEqual(legacy["repair_lab_reviews"],[])
+        with patch("cognition_agent_os.repo_repair.run_suite",
                    side_effect=self._fake_suite):
-            enabled=run_tick(self.dbpath,self.ws,self.fx,auto_stage_goals=True)
+            enabled=run_tick(self.dbpath,self.ws,self.fx,
+                             auto_stage_goals=True,auto_review_repos=True)
         self.assertEqual(enabled["repair_lab_reviews"][0]["status"],
                          "REPAIR_LAB_VERIFIED")
 
@@ -272,6 +284,8 @@ class RepoLabTest(unittest.TestCase):
             res=lab._docker_run(self.base,"main.py",{"x":1})
         self.assertEqual(res,{"ok":True})
         command,options=commands[0]
+        self.assertIn("-i",command)
+        self.assertEqual(options["input"],b'{"x":1}\\n'.replace(b'\\n',b'\n'))
         self.assertIn("--network=none",command)
         self.assertIn("--pull=never",command)
         self.assertIn("--read-only",command)
