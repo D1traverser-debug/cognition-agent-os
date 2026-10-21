@@ -150,13 +150,29 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
             try:
                 raw=_candidate_from_model(spec,base,public_bytes,model,feedback=feedback)
                 changed=candidate_changes(raw,spec["files"])
-                if not changed or all(base[p]==v for p,v in changed.items()):
-                    return _deny("MODEL_CANDIDATE_NO_CHANGE",attempts=len(history))
                 key=sha(json.dumps({p:sha(v) for p,v in changed.items()},
                                        sort_keys=True).encode())
-                if key in seen:
-                    return _deny("MODEL_REPEATED_PRIOR_HYPOTHESIS",
-                                 attempts=len(history))
+                repeated=key in seen
+                unchanged=(not changed or all(base[p]==v for p,v in changed.items()))
+                if repeated or unchanged:
+                    reason=("MODEL_REPEATED_PRIOR_HYPOTHESIS" if repeated
+                            else "MODEL_CANDIDATE_NO_CHANGE")
+                    record={"candidate_fingerprint":key,
+                            "public_passes":None,"public_total":len(public),
+                            "attempt":prior+iteration+1,"hidden_seen":False,
+                            "rejected_reason":reason,
+                            "model_origin":"LOOPBACK_ONLY_UNTRUSTED"}
+                    if not _record_attempt(db_path,tid,parent,record):
+                        return _deny("REVIEW_AUTHORITY_OR_BUDGET_CHANGED",
+                                     attempts=len(history))
+                    history.append(record)
+                    seen.add(key)
+                    feedback=dict(feedback)
+                    feedback["latest_rejection"]={
+                        "reason":reason,"candidate_fingerprint":key,
+                        "retry_index":prior+iteration+1,
+                        "must_propose_different_full_source":True}
+                    continue
                 seen.add(key)
                 output=run_suite(base,changed,spec["entrypoint"],public,
                                  include_observed=True)
@@ -180,6 +196,10 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
                 return _freeze_revision(db_path,workspace,fixtures,tid,parent,
                                         spec,base,public_bytes,changed,history)
             feedback=_public_feedback(changed,public,output)
+        if history[-1].get("rejected_reason"):
+            return _deny(history[-1]["rejected_reason"],
+                         attempts=len(history),
+                         remaining_parent_budget=MAX_ATTEMPTS_PER_LINEAGE-prior-len(history))
         return _deny("PUBLIC_REFINEMENT_BUDGET_EXHAUSTED",
                      attempts=len(history),last_public_passes=history[-1]["public_passes"])
     except ContainerUnavailable as exc:
