@@ -124,7 +124,7 @@ def main():
     if MODEL not in installed:
         raise RuntimeError("P19 model not installed: no auto-download or cloud fallback")
     proof=local_model._request("POST","/api/generate",{
-        "model":MODEL,"prompt":"Return JSON {\\\"probe\\\":true}.",
+        "model":MODEL,"prompt":'Return the JSON object {"probe":true}.',
         "stream":False,"format":"json",
         "options":{"temperature":0,"num_predict":50},
         "keep_alive":"0"},90)
