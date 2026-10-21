@@ -81,11 +81,23 @@ CASES=[
     },
 ]
 
+# The independent task owner supplies intended behavior to the model.
+# These descriptions are NEVER the hidden test answers or executable patches.
+# P18 is an intervention on a known benchmark, NOT an unseen benchmark.
+GOAL_STATEMENTS={
+    "invoice_discount_then_postage":
+        "The invoice total is the sum of price times quantity for every item, "
+        "minus the monetary discount, plus postage. Return the total.",
+    "distinct_positive_above_threshold":
+        "Count distinct numeric values strictly greater than the supplied "
+        "threshold. Duplicate qualifying values count exactly once."
+}
+
 
 def sha(b):return hashlib.sha256(b).hexdigest()
 
 
-def source_cases(root,case):
+def source_cases(root,case,*,goal_statement=None):
     fx=root/"fixtures";fx.mkdir()
     ws=root/"workspace";ws.mkdir()
     db=root/"state.sqlite"
@@ -103,6 +115,8 @@ def source_cases(root,case):
           "files":["main.py","calculator.py"],"entrypoint":"main.py",
           "candidate":"seed.json","visible":"visible.json",
           "holdout":"sealed.json","holdout_sha256":sha(hidden)}
+    if goal_statement is not None:
+        spec["goal_statement"]=goal_statement
     with closing(connect(db)) as con:
         initialize(con)
         tid=create_task(con,spec)
@@ -117,10 +131,10 @@ def only_status(output):
                      "model_candidates_tested")}
 
 
-def evaluate_one(parent,case):
+def evaluate_one(parent,case,*,goal_statement=None):
     root=parent/case["name"]
     root.mkdir()
-    fx,ws,db,tid=source_cases(root,case)
+    fx,ws,db,tid=source_cases(root,case,goal_statement=goal_statement)
     # All golden labels are kept solely in fixture filesystem; only
     # PUBLIC cases can enter the generation prompt.
     baseline_sources={
@@ -180,6 +194,10 @@ def evaluate_one(parent,case):
 
 
 def main():
+    # Preserve the archived P14/P17 baseline unless separately opted in.
+    goal_mode=os.environ.get("P18_EXPLICIT_GOAL","0")
+    if goal_mode not in ("0","1"):
+        raise ValueError("P18_EXPLICIT_GOAL must be 0 or 1")
     # No model or network fallback and no auto-pull from application.
     tags=local_model._request("GET","/api/tags",None,10)
     installed={x.get("name") for x in tags.get("models",[])
@@ -197,12 +215,15 @@ def main():
              "model":MODEL,"real_ollama_generation_completed":True,
              "using_cloud_api":False,"prewritten_patch_fallback":False,
              "owner_pc_touched":False,"hidden_test_separate":True,
-             "testset_digest":sha(json.dumps(CASES,sort_keys=True).encode())}
+             "testset_digest":sha(json.dumps(CASES,sort_keys=True).encode()),
+             "explicit_goal_mode":goal_mode=="1"}
     with tempfile.TemporaryDirectory(prefix="cognition-p14-real-model-") as temp:
         results=[]
         for case in CASES:
             try:
-                result=evaluate_one(Path(temp),case)
+                statement=(GOAL_STATEMENTS[case["name"]]
+                           if goal_mode=="1" else None)
+                result=evaluate_one(Path(temp),case,goal_statement=statement)
             except ContainerUnavailable as exc:
                 raise RuntimeError("Native Docker execution required, not fallback") from exc
             results.append(result)
