@@ -117,6 +117,10 @@ def source_cases(root,case,*,goal_statement=None):
           "holdout":"sealed.json","holdout_sha256":sha(hidden)}
     if goal_statement is not None:
         spec["goal_statement"]=goal_statement
+    if case.get("candidate_format")=="exact_replace":
+        # The task owner explicitly enables a short untrusted model proposal.
+        # It does NOT bypass the existing full-file immutable audit or Docker.
+        spec["candidate_format"]="exact_replace"
     with closing(connect(db)) as con:
         initialize(con)
         tid=create_task(con,spec)
