@@ -57,7 +57,7 @@ def validate_task_spec(spec):
         goal=spec["goal_statement"]
         if (not isinstance(goal,str) or not goal.strip()
             or len(goal.encode("utf-8"))>1200
-            or any(ord(ch)<32 and ch not in "\\n\\t" for ch in goal)):
+            or any(ord(ch)<32 and ch not in "\n\t" for ch in goal)):
             raise ValueError("Invalid bounded task goal statement")
     files=spec["files"]
     if (not isinstance(files,list) or not 2<=len(files)<=6
