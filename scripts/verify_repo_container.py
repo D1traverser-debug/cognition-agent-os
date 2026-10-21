@@ -181,5 +181,107 @@ def main():
                           "already_correct_no_stage":True},sort_keys=True))
 
 
+def verify_public_revision_docker():
+    """REAL Docker executions with a STUB local proposer; not model inference.
+
+    A generated full-file hypothesis first fits only 2/3 public examples,
+    then uses the public failure evidence to produce a 3/3 patch, which is
+    separately checked against sealed hidden data. Gold is never a model
+    input. All code is run only in the same isolated container lab.
+    """
+    from unittest.mock import patch
+    from cognition_agent_os.repo_refinement import refine_repo_public
+    with tempfile.TemporaryDirectory(prefix="cognition-p13-docker-") as tmp:
+        root=Path(tmp)
+        fixture=root/"fixtures";fixture.mkdir()
+        workspace=root/"workspace";workspace.mkdir()
+        database=root/"state.sqlite"
+        fixture.joinpath("main.py").write_bytes(
+            b"import sys,json\\nfrom rules import calculate\\n"
+            b"print(json.dumps(calculate(json.loads(sys.stdin.read()))))\\n")
+        fixture.joinpath("rules.py").write_bytes(
+            b"def calculate(data):\\n    return {'net':0}\\n")
+        public_cases=[
+            {"input":{"rows":[{"kind":"credit","amount":10,"group":"hardware"}]},
+             "expected":{"by_group":{"hardware":10},"net":10}},
+            {"input":{"rows":[{"kind":"debit","amount":4,"group":"software"}]},
+             "expected":{"by_group":{"software":-4},"net":-4}},
+            {"input":{"rows":[]},"expected":{"by_group":{},"net":0}}
+        ]
+        secret_cases=[
+            {"input":{"rows":[{"kind":"credit","amount":7,"group":"travel"},
+                              {"kind":"debit","amount":2,"group":"travel"}]},
+             "expected":{"by_group":{"travel":5},"net":5}}
+        ]
+        fixture.joinpath("visible.json").write_bytes(json.dumps(public_cases).encode())
+        gold=json.dumps(secret_cases).encode()
+        fixture.joinpath("sealed.json").write_bytes(gold)
+        base_candidate="def calculate(data):\\n    return {'by_group': {}, 'net': len(data['rows'])}\\n"
+        fixture.joinpath("proposal.json").write_bytes(json.dumps({
+            "changes":[{"path":"rules.py","content":base_candidate}]}).encode())
+        full=(
+            "def calculate(data):\\n"
+            "    totals = {}\\n"
+            "    for row in data['rows']:\\n"
+            "        value = row['amount']\\n"
+            "        if row['kind'] == 'debit':\\n"
+            "            value = -value\\n"
+            "        group = row['group']\\n"
+            "        totals[group] = totals.get(group, 0) + value\\n"
+            "    return {'by_group':totals,'net':sum(totals.values())}\\n"
+        )
+        partial=full.replace("        value = row['amount']\\n",
+                             "        if row['group'] != 'hardware':\\n"
+                             "            continue\\n"
+                             "        value = row['amount']\\n")
+        spec={"kind":"repo_container_repair","files":["main.py","rules.py"],
+              "entrypoint":"main.py","candidate":"proposal.json",
+              "visible":"visible.json","holdout":"sealed.json",
+              "holdout_sha256":hashlib.sha256(gold).hexdigest()}
+        db=connect(database);initialize(db)
+        parent=create_task(db,spec);db.close()
+        initial=run_once(database,workspace,fixture)
+        require(initial["status"]=="NEEDS_REVIEW",
+                f"P13 initial source candidate cannot freeze: {initial}")
+        attempted=[]
+        def scripted_model(_spec,base,visible,model,*,feedback=None):
+            require(feedback is not None and "failed_public_cases" in feedback,
+                    "Model must receive failed PUBLIC feedback, not sealed gold")
+            require("sealed.json" not in json.dumps(feedback) and
+                    "travel" not in json.dumps(feedback),
+                    "Model observed a hidden-only reference category")
+            attempted.append({"failures":len(feedback["failed_public_cases"])})
+            code=partial if len(attempted)==1 else full
+            return json.dumps({"changes":[{"path":"rules.py",
+                                          "content":code}]}).encode()
+        with patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   side_effect=scripted_model):
+            proposal=refine_repo_public(database,workspace,fixture,parent,
+                                        model="scripted_fake_not_a_real_model",
+                                        max_attempts=2)
+        require(proposal["status"]=="REVISED_PUBLIC_CANDIDATE_FROZEN",
+                f"Real Docker public adaptation did not freeze: {proposal}")
+        require(proposal["model_candidates_tested"]==2 and len(attempted)==2,
+                f"Real public negative should force two attempts: {proposal}")
+        child=proposal["child_task_id"]
+        require(audit_repo(database,workspace,fixture,child)["status"]==
+                "REPO_BYTES_MECHANICALLY_VALID",
+                "Publicly revised artifact lacks immutable provenance")
+        reviewed=review_repo(database,workspace,fixture,child)
+        require(reviewed["status"]=="REPAIR_LAB_VERIFIED" and
+                reviewed["holdout_passes"]==1,
+                f"Independent actual Docker sealed holdout did not pass: {reviewed}")
+        require(fixture.joinpath("rules.py").read_bytes()==
+                b"def calculate(data):\\n    return {'net':0}\\n",
+                "Original Python source was modified by iterative repair")
+        print(json.dumps({
+            "test":"real_docker_two_round_public_feedback_with_stub_proposer",
+            "status":"PASS","actual_docker":True,"actual_ollama_model":False,
+            "revision_attempts":len(attempted),
+            "hidden_cases_evaluated_only_by_final_reviewer":True,
+            "production_code_changed":False},sort_keys=True))
+
+
 if __name__=="__main__":
     main()
+    verify_public_revision_docker()
