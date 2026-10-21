@@ -145,7 +145,7 @@ def _docker_run(directory:Path,entrypoint:str,case_input)->dict:
 
 
 def run_suite(base_sources:dict[str,bytes],changes:dict[str,bytes],
-              entrypoint:str, cases:list[dict])->dict:
+              entrypoint:str, cases:list[dict],*,include_observed:bool=False)->dict:
     """Run candidate in disposable directory; comparison remains in HOST.
 
     Expected values NEVER enter files, Docker mounts, stdin, CLI arguments
@@ -179,6 +179,13 @@ def run_suite(base_sources:dict[str,bytes],changes:dict[str,bytes],
             observed_bytes=_json_bytes(result)
             accepted=observed_bytes==expected
             passes+=int(accepted)
-            observed.append({"output_sha256":hashlib.sha256(observed_bytes).hexdigest(),
-                             "pass":accepted})
+            observation={"output_sha256":hashlib.sha256(observed_bytes).hexdigest(),
+                         "pass":accepted}
+            # PUBLIC feedback only, opt-in from the proposer loop.
+            # Hidden-case evaluation uses the default False and cannot
+            # disclose its actual result into a candidate prompt.
+            # Never transmit unbounded or freeform stderr/host paths.
+            if include_observed and not accepted and len(observed_bytes)<=512:
+                observation["observed_value"]=result
+            observed.append(observation)
     return {"passes":passes,"total":len(cases),"observed":observed}
