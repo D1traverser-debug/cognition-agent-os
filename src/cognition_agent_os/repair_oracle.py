@@ -318,7 +318,8 @@ def review_due_repairs(db_path: Path,workspace: Path,fixtures: Path,
     if not 1<=limit<=8:raise ValueError("Invalid repair review budget")
     db=connect(db_path)
     try:
-        rows=db.execute("""SELECT task_id,json_extract(source_spec,'$.kind') FROM tasks
+        rows=db.execute("""SELECT task_id,CASE WHEN json_valid(source_spec)
+              THEN json_extract(source_spec,'$.kind') ELSE NULL END FROM tasks
               WHERE state='NEEDS_REVIEW' AND due_at<=?
                 AND CASE WHEN json_valid(source_spec)
                   THEN json_extract(source_spec,'$.kind')
