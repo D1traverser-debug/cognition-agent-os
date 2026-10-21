@@ -318,13 +318,17 @@ def review_due_repairs(db_path: Path,workspace: Path,fixtures: Path,
     if not 1<=limit<=8:raise ValueError("Invalid repair review budget")
     db=connect(db_path)
     try:
-        rows=db.execute("""SELECT task_id FROM tasks
+        rows=db.execute("""SELECT task_id,json_extract(source_spec,'$.kind') FROM tasks
               WHERE state='NEEDS_REVIEW' AND due_at<=?
                 AND CASE WHEN json_valid(source_spec)
                   THEN json_extract(source_spec,'$.kind')
-                  ELSE NULL END='pure_code_repair'
+                  ELSE NULL END IN ('pure_code_repair','pipeline_code_repair')
               ORDER BY due_at,created_at LIMIT ?""",
               (__import__("time").time(),limit)).fetchall()
-        tasks=[r[0] for r in rows]
+        tasks=[(r[0],r[1]) for r in rows]
     finally:db.close()
-    return [review_patch(db_path,workspace,fixtures,tid) for tid in tasks]
+    from .pipeline_oracle import review_pipeline
+    return [(review_pipeline(db_path,workspace,fixtures,tid)
+             if kind=="pipeline_code_repair"
+             else review_patch(db_path,workspace,fixtures,tid))
+            for tid,kind in tasks]
