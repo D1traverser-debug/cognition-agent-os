@@ -40,6 +40,41 @@ class CandidateExecutionFeedbackTests(unittest.TestCase):
                          "CANDIDATE_NONZERO")
         self.assertNotIn("hidden",str(feedback).lower())
 
+    def test_public_wrong_output_contains_bounded_actual_value(self):
+        with patch("cognition_agent_os.container_lab._docker_run",
+                   side_effect=[{"value":99},{"value":3}]):
+            result=run_suite(self.base,{},"main.py",self.cases,
+                             include_observed=True)
+        self.assertEqual(result["passes"],1)
+        self.assertEqual(result["observed"][0]["observed_value"],{"value":99})
+        feedback=_public_feedback({"module.py":b"bad source"},self.cases,result)
+        row=feedback["failed_public_cases"][0]
+        self.assertEqual(row["observed_value"],{"value":99})
+        self.assertEqual(row["expected"],{"value":2})
+        self.assertNotIn("observed_value",result["observed"][1])
+
+    def test_hidden_oracle_default_returns_only_hash_even_on_wrong_output(self):
+        # All independent hidden reviewers call run_suite without the flag.
+        with patch("cognition_agent_os.container_lab._docker_run",
+                   return_value={"value":99}):
+            hidden=run_suite(self.base,{},"main.py",self.cases)
+        self.assertEqual(hidden["passes"],0)
+        self.assertTrue(all("observed_value" not in obs
+                            for obs in hidden["observed"]))
+        self.assertTrue(all("output_sha256" in obs
+                            for obs in hidden["observed"]))
+
+    def test_huge_public_wrong_output_is_hashed_not_echoed(self):
+        with patch("cognition_agent_os.container_lab._docker_run",
+                   return_value={"value":"A"*600}):
+            results=run_suite(self.base,{},"main.py",self.cases,
+                              include_observed=True)
+        self.assertTrue(all("observed_value" not in obs
+                            for obs in results["observed"]))
+        feedback=_public_feedback({"module.py":b"bad source"},self.cases,results)
+        self.assertTrue(all("observed_value" not in row
+                            for row in feedback["failed_public_cases"]))
+
     def test_real_docker_service_failure_cannot_become_public_failure(self):
         with patch("cognition_agent_os.container_lab._docker_run",
                    side_effect=ContainerUnavailable("DOCKER_CLI_NOT_INSTALLED")):
