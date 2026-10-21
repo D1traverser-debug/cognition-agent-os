@@ -36,7 +36,7 @@ CRITICAL_REPAIR_LAB_BREACHES=frozenset((
     "STAGED_PATCH_MISMATCH","PIPELINE_RECEIPT_MISSING",
     "PIPELINE_RECEIPT_CONFLICT","PROPOSAL_HASH_CHANGED",
     "STAGED_REPO_PATCH_MISMATCH","REPO_RECEIPT_MISSING",
-    "REPO_RECEIPT_CONFLICT"
+    "REPO_RECEIPT_CONFLICT","PROPOSAL_HASH_CHANGED"
 ))
 CRITICAL_SANDBOX_BREACHES=frozenset((
     "STAGED_ARTIFACT_HASH_MISMATCH","STAGED_EFFECT_BYTES_MISMATCH",
@@ -202,7 +202,8 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 from .repair_oracle import audit_patch
                 report=audit_patch(db_path,workspace,fixtures,tid,
                                    reveal_holdout=True,require_staged=True)
-            proof=("MECHANICALLY_VALID" if report["status"]=="HOLDOUT_ACCEPTED"
+            proof=("MECHANICALLY_VALID" if report["status"] in (
+                "HOLDOUT_ACCEPTED","REPO_BYTES_MECHANICALLY_VALID")
                    else report.get("reason",report["status"]))
         elif state=="DECOMPOSED":
             result=audit_intent_plan(db_path,tid)
