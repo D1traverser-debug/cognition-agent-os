@@ -116,9 +116,20 @@ to check a multi-module debit/credit aggregation fix, hidden failures,
 network and file-write restrictions, no hidden gold mounted and baseline
 failure reproduction.
 
-**CI STATUS MUST BE VERIFIED ON THE LATEST HEAD** before marking this
-phase accepted: earlier P12 Linux/Windows regressions were green while
-Docker integration FAILED. A green unit test alone is insufficient.
+**Verified functional CI:** Commit
+`316b4cb33b2ca83187136519def343faf9e7a4d9` completed
+[GitHub Actions run 39535169493](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39535169493)
+with Linux **260/260 PASS**, Windows **260/260 PASS**,
+`repo_container_integration` **PASS** (real public/hidden multi-file
+execution, no-network nonroot and read-only rejection probe,
+public-fitting/hidden-refuted candidate, original-no-failure rejection),
+and real Windows native Scheduler **PASS** (two OS ticks, two processed
+tasks and clean temporary task removal). A previous intermediate
+commit caused four old test failures because their mock assumed no
+baseline and a single host flag; the old tests were corrected for the
+new security contract, not skipped. Public third-party live-source
+smoke remains SKIPPED and no local Ollama model was actually run.
+Later documentation-only commits still require a fresh final-head CI.
 
 ## Evidence still missing
 
