@@ -1,11 +1,15 @@
 """P14 benchmark contract tests. NEVER substitute a fake model for CI proof."""
 from __future__ import annotations
+from contextlib import closing
 import hashlib
 import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.verify_actual_local_model import CASES,MODEL
+from cognition_agent_os.ledger import connect
+from scripts.verify_actual_local_model import CASES,MODEL,GOAL_STATEMENTS,source_cases
 
 
 class RealModelBenchmarkContractTests(unittest.TestCase):
@@ -22,6 +26,37 @@ class RealModelBenchmarkContractTests(unittest.TestCase):
             for test in case["hidden"]:
                 self.assertNotIn(json.dumps(test["input"],sort_keys=True),exposed)
             self.assertLess(len(case["source"].encode()),16384)
+
+    def test_p18_explicit_goal_is_opt_in_and_benchmark_holdout_unchanged(self):
+        self.assertEqual(set(GOAL_STATEMENTS),{x["name"] for x in CASES})
+        for case in CASES:
+            with tempfile.TemporaryDirectory() as temporary:
+                base=Path(temporary)/"baseline";base.mkdir()
+                basefx,_,basedb,basetid=source_cases(base,case)
+                directed=Path(temporary)/"directed";directed.mkdir()
+                fx,_,db,tid=source_cases(
+                    directed,case,goal_statement=GOAL_STATEMENTS[case["name"]])
+                with closing(connect(basedb)) as con:
+                    baseline=json.loads(con.execute(
+                        "SELECT source_spec FROM tasks WHERE task_id=?",
+                        (basetid,)).fetchone()[0])
+                with closing(connect(db)) as con:
+                    spec=json.loads(con.execute(
+                        "SELECT source_spec FROM tasks WHERE task_id=?",
+                        (tid,)).fetchone()[0])
+                self.assertNotIn("goal_statement",baseline)
+                self.assertEqual(spec["goal_statement"],
+                                 GOAL_STATEMENTS[case["name"]])
+                self.assertEqual(
+                    {k:v for k,v in spec.items() if k!="goal_statement"},
+                    baseline)
+                self.assertEqual(fx.joinpath("sealed.json").read_bytes(),
+                                 basefx.joinpath("sealed.json").read_bytes())
+                self.assertEqual(fx.joinpath("visible.json").read_bytes(),
+                                 basefx.joinpath("visible.json").read_bytes())
+        self.assertEqual(hashlib.sha256(json.dumps(CASES,sort_keys=True)
+                         .encode()).hexdigest(),
+                         "0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf")
 
     def test_model_output_schema_allows_only_approved_source_paths(self):
         from cognition_agent_os.repo_repair import _candidate_from_model
