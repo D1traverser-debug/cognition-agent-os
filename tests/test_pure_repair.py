@@ -112,8 +112,8 @@ class PureRepairTests(unittest.TestCase):
         self.assertEqual(reviews[0]["status"],"REPAIR_LAB_VERIFIED",reviews)
         self.assertEqual(self.row(tid)["state"],"REPAIR_LAB_VERIFIED")
         self.assertEqual(report["status"],"NEEDS_REVIEW",report)
-        self.assertEqual(report["decision"],"VISIBLE_OPERATOR_REPAIR",report)
-        self.assertEqual(report["semantic_review"],"NOT_PERFORMED",report)
+        self.assertEqual(report["decision"],"BOUNDED_CODE_PATCH_PROPOSAL",report)
+        self.assertEqual(report["mechanism"],"Gt->GtE",report)
         self.assertNotEqual(report["status"],self.row(tid)["state"])
 
     def test_comparison_patch_accepted_by_separate_holdout_oracle(self):
