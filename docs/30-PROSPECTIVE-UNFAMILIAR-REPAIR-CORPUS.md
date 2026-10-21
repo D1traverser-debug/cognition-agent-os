@@ -57,9 +57,8 @@ algorithms; this alone cannot prove open-world autonomy.
   before HIDDEN review. A failure remains a measured failure, not
   skipped/auto-completed. Revisions remain bounded to the existing P16
   three-attempt total.
-- `script/verify_p19_unfamiliar_model.py` is intentionally misspelled
-  nowhere as an executable installation; real entry is
-  `scripts/verify_p19_unfamiliar_model.py`.
+- Executable entry is `scripts/verify_p19_unfamiliar_model.py`;
+  it is not installed on the owner's Windows computer.
 - `[run-p19-unfamiliar-7b]` opts into one disposable GitHub-hosted
   Linux 7B run; without it, no model weights are pulled. Nothing
   installs on the owner's Windows 11 computer, uses metered model
@@ -94,3 +93,40 @@ Primary references:
 - https://github.com/SWE-bench/SWE-bench
 - https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/
 - https://openai.com/index/separating-signal-from-noise-coding-evaluations/
+
+## Actual frozen-corpus acceptance — 2026-10-21
+
+The corpus bytes were committed **before the first P19 inference**.
+Actual source manifest SHA256 from the runner:
+`ec60b7ef40d4f396795e529e28ef194be4616b5f760c6733165c04cc9ab2969c`.
+
+One genuine unmocked Qwen2.5-Coder 7B run,
+[GitHub Actions #39570647119](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39570647119),
+completed with no prewritten patch and no application source overwrite.
+The Agent did not edit these cases after observing its output.
+
+| Prospective task | Valid initial candidate | PUBLIC full pass | HIDDEN full pass | Duration |
+|---|---:|---:|---:|---:|
+| DV latest retry per test | Yes | 2/2 | 3/3 | 96.35 s |
+| Half-open interval union | Yes | 2/2 | 4/4 | 62.53 s |
+
+**Both 2/2 tasks passed PUBLIC and HIDDEN in their first candidate,
+with zero model feedback revision attempts.** The same CI run passed
+Linux **290/290** and Windows **290/290** offline tests, actual Docker
+integration and native GitHub-hosted Windows Scheduler. Mutable
+external upstream GitHub source job remained SKIPPED.
+
+This provides narrow observed transfer of the P18 explicit-task-intent
+protocol to two new semantics, not merely a re-evaluation on the
+original invoice/threshold examples. The source/problem/goal/HIDDEN
+answers were still authored by this Agent before model execution, so
+this is **not external professionally reviewed domain evidence**.
+The model may already know the underlying generic algorithms; no
+third-party owner signed business acceptance, actual user Windows
+deployment, real open-world issue discovery or systemic multi-project
+causal repair occurred. A small N=2 does not establish statistical
+reliability. Continue with independently supplied tasks/acceptance,
+and do not merge or authorize production changes.
+
+The temporary P19 model opt-in marker was removed from PR #12 after
+the measured result; follow-up ordinary CI must not download weights.
