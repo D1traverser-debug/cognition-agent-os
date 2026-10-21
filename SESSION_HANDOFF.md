@@ -59,11 +59,21 @@ bypass or regression skip.
   image digest pinning and owner host isolation acceptance.
 - Design and limitations: `docs/23-OFFLINE-DOCKER-REPO-REPAIR.md`.
 
-**VERIFICATION STATUS:** P12 final-head CI must be checked, especially
-`repo_container_integration` RUNNING REAL DOCKER, Linux/Windows
-offline_regression, Windows native scheduler. Earlier P12 run
-`39531912897` was FAILED; do not claim Docker success based on passing
-unit tests. The code/docs updated after that run and CI may be queued.
+**VERIFIED FUNCTIONAL EVIDENCE:** Last functional code commit
+`316b4cb33b2ca83187136519def343faf9e7a4d9`, GitHub Actions
+`39535169493` completed SUCCESS: Linux **260/260** and Windows
+**260/260** Python tests, real Docker repository integration PASS with
+four independently executed probes (multi-file code and held-out
+acceptance, container networking/readonly non-root, hidden gold
+refutation, baseline no-failure rejection), plus genuine Windows
+Task Scheduler **ticks=2, processed_total=2**, cleanup PASS.
+`live_public_source` was SKIPPED. Initial P12 Actions
+`39531912897` actually FAILED Docker before stdin fix; intermediate
+`39534903520` showed legacy tests failing after the tighter baseline
+and auto-consent changes, and those tests were corrected and rerun.
+No local installed Ollama model, real external business reference,
+owner PC host execution or production deployment has been proven.
+Any later documentation-only commit needs a final HEAD CI reread.
 No signed independent real business review, no actual untrusted
 general-source local Ollama output, and no owner PC deployment occurred.
 
