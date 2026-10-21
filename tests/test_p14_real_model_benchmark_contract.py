@@ -114,7 +114,7 @@ class RealModelBenchmarkContractTests(unittest.TestCase):
         statement="Count unique values strictly above threshold, once each."
         with_goal={**contract,"goal_statement":statement}
         self.assertEqual(validate_task_spec(with_goal),with_goal)
-        for invalid in ("", "  ", "a"*1201, "\\x00bad", 21, None):
+        for invalid in ("", "  ", "a"*1201, "\x00bad", 21, None):
             with self.subTest(invalid=repr(invalid)), self.assertRaises(ValueError):
                 validate_task_spec({**contract,"goal_statement":invalid})
         with self.assertRaises(ValueError):
