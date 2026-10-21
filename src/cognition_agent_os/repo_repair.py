@@ -29,6 +29,20 @@ def _sources(spec,fixtures):
     return {name:safe_fixture(fixtures,name) for name in spec["files"]}
 
 
+def _local_generate_timeout(model):
+    # Experiment-only non-metered local compute bound, NOT execution
+    # authority. Preserve the historical P17-P20 7B timeout by default.
+    # A single explicitly configured 300s retry tests whether the
+    # observed 180s P21 model-generation failure was a time cap.
+    from . import local_model
+    if model!="qwen2.5-coder:7b":
+        return 90
+    raw=os.environ.get("COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS","180")
+    if raw not in ("180","300"):
+        raise local_model.LocalModelUnavailable("Unapproved bounded local generation timeout")
+    return int(raw)
+
+
 def _candidate_from_model(spec,base,visible,model,*,feedback=None):
     from . import local_model
     if (not isinstance(model,str) or not local_model._MODEL_RE.fullmatch(model)
@@ -85,7 +99,7 @@ def _candidate_from_model(spec,base,visible,model,*,feedback=None):
     result=local_model._request("POST","/api/generate",{
         "model":model,"prompt":prompt,"stream":False,"format":contract,
         "options":{"temperature":0.35 if retry else 0,"num_predict":3500},
-        "keep_alive":"0"},180 if model=="qwen2.5-coder:7b" else 90)
+        "keep_alive":"0"},_local_generate_timeout(model))
     if result.get("done") is not True or not isinstance(result.get("response"),str):
         raise local_model.LocalModelUnavailable("No completed local candidate")
     return result["response"].encode("utf-8")
