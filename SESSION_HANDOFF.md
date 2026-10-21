@@ -1,47 +1,62 @@
 # cognition-agent-os — durable continuation checkpoint
 
-## CURRENT P20 — authentic external QuixBugs source and official tests preregistered (2026-10-21)
+## CURRENT P20 — genuine third-party QuixBugs defects + official holdout PASS (2026-10-21)
 
-Goal: improve autonomous repair evidence beyond P19 Agent-authored
-examples. Use *third-party historically published* original buggy
-Python code and its original independently authored QuixBugs test
-expected values, without manufacturing gold or reading upstream fixes.
+Candidate repository `D1traverser-debug/cognition-agent-os`,
+branch `feat/p10-runtime-conformance-20261020`, cumulative OPEN
+DRAFT PR #12 against `main`. No release, merge, owner Windows 11
+machine installation, upstream write or paid/free-credit inference API.
 
-Source: `jkoppel/QuixBugs`, historical immutable Git commit
-`4257f44b0ff1181dedaedee6a447e133219fcebf`, exact Git
-blob identities preregistered for `gcd.py`, `max_sublist_sum.py`
-and their official `json_testcases/*.json`. Two upstream official
-rows per task are PUBLIC; four upstream rows are Docker sealed-only.
-The model never receives upstream fixed code, hidden rows or accepted
-source. See `scripts/verify_p20_external_quixbugs.py`,
-`tests/test_p20_external_quixbugs.py` and
-`docs/31-PINNED-EXTERNAL-QUIXBUGS-REPAIR.md`.
+P19 genuine real Ollama 7B repair passed 2/2 Agent-authored new
+tasks (4/4 PUBLIC, 7/7 HIDDEN), but a model/Agent can invent a
+benchmark that it solves. P20 escalated to historic third-party
+externally authored buggy code and original official expected values
+from `jkoppel/QuixBugs`, immutable Git commit
+`4257f44b0ff1181dedaedee6a447e133219fcebf`.
+Pinned Git blobs were independently checked for
+`python_programs/gcd.py`, `python_programs/max_sublist_sum.py`
+and `json_testcases/gcd.json` /
+`json_testcases/max_sublist_sum.json`; exact identities and the
+two-PUBLIC/four-official-heldout case selection are in
+`scripts/verify_p20_external_quixbugs.py`. No upstream reference
+correct source was fetched, no fixed source substituted. Existing
+SQLite/Docker/real installed local 7B execution pipeline reused,
+not a parallel agent runtime.
 
-The P20 source/test values are externally authored and Git-pinned.
-However QuixBugs is a PUBLIC historical benchmark with possible model
-pretraining contamination, not a real live issue or a fresh private
-external user acceptance. Do not claim model generalization merely
-from these two tasks; request real holdout external cases next.
-No paid model API/credit service, owner PC install, production writes,
-upstream mutation, PR merge or extra scheduler. Same SQLite authority,
-Ollama localhost, genuine no-network Docker and 3-generation budget.
+**REAL observed evidence**:
+[GitHub Actions #39574300182](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39574300182)
+ran actual Qwen2.5-Coder 7B on a disposable hosted Linux CI
+and true Docker isolation, verified original external Git blobs.
+Adapted manifest SHA256:
+`d13924a771bb5c0a744e8ff1c194f4f1c03fe74ff7870f1534e3ac17cdef91ae`.
+`gcd` model candidate frozen on first attempt, PUBLIC **2/2**,
+official independent heldout **4/4**, ~91s. `max_sublist_sum`
+candidate frozen on first attempt, PUBLIC **2/2**, official heldout
+**4/4**, ~109s. Aggregate **2/2 frozen, 2/2 public task passes,
+2/2 official heldout task passes, 4/4 public rows and 8/8
+heldout rows, zero revision attempts**; originals unchanged.
+Same run Linux **295/295**, Windows **295/295**, real offline
+Docker and real hosted Windows Task Scheduler all SUCCESS;
+third-party mutable public-source smoke SKIPPED.
+Detailed evidence `docs/31-PINNED-EXTERNAL-QUIXBUGS-REPAIR.md`.
 
-P20 current stage: implementation / offline CI check.
-**Actual first P20 7B inference and external testcase scores NOT YET
-OBSERVED.** One-time P20 PR opt-in was explicitly enabled for the
-next CI push; PR body edit alone does not run the default pull_request
-synchronize workflow. Preserve authentic failure and do not announce success
-without real hosted result. One-time opt-in `[run-p20-external-7b]`
-will trigger disposable Linux 7B source experiment only after ordinary
-regressions, and must be removed once actual evidence is collected.
-Last completed P19 real Ollama evidence remains Actions #39570647119;
-last P19 final normal head CI remains #39571455626.
+Critical limit: This is NOT a truly blind, private or currently
+reported defect: QuixBugs and upstream corrected solutions are
+public historical benchmarks; model pretraining leakage is possible
+and cannot be excluded. The third-party official gold is independent
+of THIS Agent's authorship, not independently hidden from all model
+learning. No live unfamiliar GitHub issue diagnosis, external user
+business sign-off, open-world systemic repair, isolated owner
+trust-root or owner-machine scheduled host has been accepted.
 
-Next exact actions: inspect new P20 offline Linux/Windows/Docker/
-Windows-Scheduler checks; fix actual failures; run one real unmocked
-external benchmark in CI; record source hashes, candidates, PUBLIC
-and official heldout score; remove opt-in; recheck final Draft HEAD.
-Keep the broad independence/production gates blocked.
+Temporary P20 model opt-in marker was REMOVED from the Draft PR
+after the actual result, so subsequent ordinary CI does not
+redownload 7B public weights. Next action: recheck exact final
+HEAD ordinary Linux/Windows/Docker/Windows Scheduler after docs
+and handoff-only commits; keep Draft. Then investigate actual live
+externally raised defect with separately held-out maintainer/
+external acceptance and no prior issue memorization claim.
+Do not describe this as a completed autonomous general Agent.
 
 ## CURRENT P19 — real prospective unfamiliar code-repair transfer PASS, still NOT production (2026-10-21)
 
