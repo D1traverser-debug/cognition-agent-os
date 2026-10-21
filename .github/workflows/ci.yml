@@ -93,6 +93,25 @@ jobs:
           PYTHONPATH: src
           P24_BASELINE_ONLY: '1'
         run: python scripts/verify_p24_financial_breakeven.py
+      - name: P31 pin complete 2024 upstream dateutil and real six wheel without host execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p31_wheels"
+          printf '%s\n' \
+            'python-dateutil==2.9.0.post0 --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427' \
+            'six==1.17.0 --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274' \
+            > "$RUNNER_TEMP/p31-requirements.txt"
+          python -m pip download --disable-pip-version-check --require-hashes --no-deps \
+            --only-binary=:all: -r "$RUNNER_TEMP/p31-requirements.txt" \
+            --dest "$RUNNER_TEMP/p31_wheels"
+      - name: P31 full original real-wheel dateutil recurrence baseline inside offline Docker
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          P31_WHEELS="$RUNNER_TEMP/p31_wheels" python scripts/verify_p31_full_dateutil.py
 
   experimental_real_local_model:
     # Explicit PR opt-in marker only. This is genuine CPU inference on an
