@@ -112,6 +112,7 @@ def only_status(output):
     return {k:v for k,v in output.items()
             if k in ("status","reason","model_called","passes","total",
                      "public_passes","holdout_passes","holdout_total","diagnostic",
+                     "validation_failure",
                      "model_candidates_tested")}
 
 
