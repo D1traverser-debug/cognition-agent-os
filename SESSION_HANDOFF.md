@@ -1,5 +1,97 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P14 — real local model failure measured, infrastructure and feedback fixed (2026-10-21)
+
+This is CURRENT. Previous P13/P12 checkpoints below remain historical,
+not evidence of real model quality. User goal: genuinely autonomous
+cognition, safe action, independently validated outcomes and cross-task
+method revision, without paid model API token billing, expiring trial
+AI credits or incidental cloud inference. Do NOT equate passed CI
+infrastructure with a successful autonomous system.
+
+**Repo:** `D1traverser-debug/cognition-agent-os`.
+**Branch:** `feat/p10-runtime-conformance-20261020`.
+**Cumulative open Draft PR #12:** https://github.com/D1traverser-debug/cognition-agent-os/pull/12 .
+`main` untouched; user's own Windows 11 PC neither installed nor
+touched, no production write authorization.
+
+**Actual new genuine-model work completed:**
+- `scripts/verify_actual_local_model.py`: uses *unmocked* installed
+  local Ollama, loopback only (127.0.0.1, OLLAMA_NO_CLOUD=1), actual
+  Qwen2.5-Coder 0.5B / 1.5B / 3B inference on the SAME two independent
+  real Python whole-file repair fixtures. Both original defects
+  reproduced inside real GitHub-hosted Docker. Hidden cases are never
+  input to the model; immutable public and gold fixture set SHA256
+  `0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf`.
+  No scripted model code or prewritten correct patch fallback. Supports
+  existing P12 proposal and P13 bounded failure-feedback method.
+  Install + model weight pull occurs ONLY on ephemeral CI runner
+  behind a PR opt-in marker, not in normal host/runtime.
+- Early real experiment Actions `39539858927` proved 0.5B completed
+  local inference but yielded **0/2 valid frozen candidates**, 0/2
+  public and 0/2 holdout. Initial ValueError did NOT imply Docker
+  or model unavailable.
+- Ollama's supported JSON Schema `format` is now enforced in
+  `repo_repair._candidate_from_model` for exact `changes` with
+  allowlisted `path` and complete source `content`. Existing file
+  allowlist and size hash controls still apply; no gold answers
+  injected into the model prompt. After this, 0.5B generated
+  2/2 structurally valid candidates but 0/2 public success;
+  1.5B generated candidates that still failed public tests.
+- Real experiment caught a systemic error: candidate nonzero/empty
+  stdout or invalid JSON was previously classified
+  `ISOLATION_UNAVAILABLE` (as though Docker was missing), stopping
+  the P13 revision loop prematurely.
+  `container_lab.CandidateExecutionFailed` now distinguishes actual
+  candidate program failure from missing Docker / Docker CLI internals;
+  run_suite counts the former as failed PUBLIC tests. P13 feeds
+  only the allowlisted `execution_error` code and PUBLIC expected
+  outputs, never host traceback or gold. Prompt instructs the model
+  not to repeat a failed source, but duplicate-digest refusal and
+  budget remain authoritative. New negative controls in
+  `tests/test_p14_candidate_execution_feedback.py`.
+- **Final complete functional comparative CI:**
+  [Actions #39541759002](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39541759002)
+  for code commit `f7bf3d76293d6682547b3481c1d89a4068eb7405`:
+  Linux **277/277 PASS**, Windows **277/277 PASS**, genuine native
+  Docker integration PASS, real Windows Task Scheduler **two ticks /
+  two tasks / cleanup PASS**, real Ollama 0.5B, 1.5B, 3B benchmark
+  experiment completed SUCCESS. External live GitHub source SKIPPED.
+  **Actual measured autonomous code-repair success is 0% for ALL
+  THREE model sizes**:
+  0.5B frozen 2/2, PUBLIC 0/2, HOLDOUT 0/2;
+  1.5B frozen 0/2 (no actual change), PUBLIC 0/2, HOLDOUT 0/2;
+  3B frozen 2/2, PUBLIC 0/2, HOLDOUT 0/2.
+  3B runtime ~97 seconds per task on CPU runner; its feedback
+  attempt repeated an earlier refuted hypothesis.
+  CI SUCCESS means truthful execution+measurement, **NOT usable
+  autonomous intelligence**.
+- `docs/25-GENUINE-LOCAL-MODEL-BENCHMARK.md` contains design, exact
+  evidence, observed failures and limits. The opt-in PR marker
+  `[run-p14-real-model]` was removed once genuine CI evidence was
+  collected to avoid downloading 3.3GB of weights on every docs
+  commit. The archived complete experiment is reproducible if the
+  opt-in is explicitly restored; the current docs-only head should
+  run ordinary Linux/Windows/Docker/Windows-Scheduler CI and skip
+  this expensive special model experiment.
+
+**Non-claims/gates:** A very small fixed two-task benchmark is not an
+external third-party unseen challenge; zero current success cannot
+generalize to larger models or all real tasks. A live ephemeral
+GitHub Ubuntu runner is not user Windows 11 hardware/driver/ACL proof.
+External signed business review, owner-machine local model
+acceptance, trust-root OS separation, strong sandbox image digest
+pinning, genuine task discovery and novel multi-repo fix ability
+remain NOT VERIFIED. Do not merge or allow autonomous production
+patching. No paid model tokens/finite free-credit APIs used.
+
+**Next useful work:** without fabricating ability, improve *actual*
+candidate quality using capable non-metered open models and/or clearer
+goal specifications, and test on independently chosen unseen tasks.
+Hardware/cost constraints need to be matched to owner real machine
+before any model deployment. Avoid another monitoring/governance
+subsystem. Keep P14 measured 0/2 failures in all further status.
+
 ## LATEST P13 — bounded public-feedback local model revision inside real Docker (2026-10-21)
 
 This is CURRENT; P12 and older sections are historical. Owner objective
