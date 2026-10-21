@@ -90,6 +90,32 @@ class PureRepairTests(unittest.TestCase):
         self.assertEqual(result["reason"],"STALE_GOAL")
         self.assertEqual(self.row(tid)["state"],"BLOCKED")
 
+    def test_review_between_finalize_commit_and_result_read_cannot_be_misattributed(self):
+        # A second trusted reviewer may legitimately promote an already
+        # frozen proposal immediately after the original worker commits.
+        # The worker's response must describe ITS OWN commit (NEEDS_REVIEW),
+        # not claim the independent review's later REPAIR_LAB_VERIFIED.
+        import cognition_agent_os.ledger as ledger
+        tid,_=self.example_compare()
+        original_finalize=ledger.finalize
+        reviews=[]
+        def finalize_then_independent_review(db,task,state,**kwargs):
+            result=original_finalize(db,task,state,**kwargs)
+            if result and task["task_id"]==tid and state=="NEEDS_REVIEW":
+                # Separate SQLite connection and real independent gold review,
+                # not an arbitrary forced task-state UPDATE.
+                reviews.append(review_patch(self.db,self.ws,self.fx,tid))
+            return result
+        with patch.object(ledger,"finalize",side_effect=finalize_then_independent_review):
+            report=run_once(self.db,self.ws,self.fx)
+        self.assertEqual(len(reviews),1,reviews)
+        self.assertEqual(reviews[0]["status"],"REPAIR_LAB_VERIFIED",reviews)
+        self.assertEqual(self.row(tid)["state"],"REPAIR_LAB_VERIFIED")
+        self.assertEqual(report["status"],"NEEDS_REVIEW",report)
+        self.assertEqual(report["decision"],"VISIBLE_OPERATOR_REPAIR",report)
+        self.assertEqual(report["semantic_review"],"NOT_PERFORMED",report)
+        self.assertNotEqual(report["status"],self.row(tid)["state"])
+
     def test_comparison_patch_accepted_by_separate_holdout_oracle(self):
         tid,spec=self.example_compare()
         original=self.fx.joinpath("function.py").read_bytes()
