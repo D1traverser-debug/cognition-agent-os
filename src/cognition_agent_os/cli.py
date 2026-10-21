@@ -26,6 +26,8 @@ from .repair_search import validate_repair_spec
 from .repair_oracle import audit_patch,review_patch
 from .pipeline_repair import validate_pipeline
 from .pipeline_oracle import audit_pipeline,review_pipeline
+from .container_lab import validate_task_spec
+from .repo_repair import audit_repo,review_repo
 from .outcome_attestation import verify_signed_outcome,prepare_unsigned_outcome
 from .signed_feedback import record_signed_feedback,bind_owner_review_trust
 
@@ -113,6 +115,15 @@ def main(argv=None) -> int:
     pipeline_review=sub.add_parser("pipeline-review",
        help="Isolated coupled code effect under authority + independent holdout")
     pipeline_review.add_argument("--task-id",required=True)
+    repo_seed=sub.add_parser("seed-repo-repair",
+        help="Queue whole-file repo candidate; Docker execution is separate and opt-in")
+    repo_seed.add_argument("--spec",type=Path,required=True)
+    repo_audit=sub.add_parser("repo-audit",
+        help="Read-only digest/authority check without Docker or gold execution")
+    repo_audit.add_argument("--task-id",required=True)
+    repo_review=sub.add_parser("repo-review",
+        help="Run entire candidate only in a preinstalled no-network Docker container")
+    repo_review.add_argument("--task-id",required=True)
     governance = sub.add_parser("conformance-audit",
         help="Inspect claims vs current evidence; --enforce quarantines confirmed contradictions")
     governance.add_argument("--max-cases",type=int,default=64)
@@ -175,6 +186,14 @@ def main(argv=None) -> int:
             expected_principal=args.principal)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"]=="SIGNATURE_AND_MECHANICAL_SCOPE_VERIFIED" else 4
+    if args.command == "repo-audit":
+        result=audit_repo(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="REPO_BYTES_MECHANICALLY_VALID" else 4
+    if args.command == "repo-review":
+        result=review_repo(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="REPAIR_LAB_VERIFIED" else 4
     if args.command == "pipeline-audit":
         result=audit_pipeline(args.db,args.workspace,args.fixtures,
                   args.task_id,hidden=args.include_holdout)
@@ -255,6 +274,16 @@ def main(argv=None) -> int:
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
             task_id = create_task(db, spec, interval_seconds=args.interval_seconds)
             result = {"task_id": task_id, "state": "PENDING"}
+        elif args.command == "seed-repo-repair":
+            if (args.spec.is_symlink() or not args.spec.is_file()
+                or args.spec.stat().st_size>4096):
+                raise ValueError("Unsafe repository task specification")
+            spec=validate_task_spec(json.loads(args.spec.read_text(encoding="utf-8")))
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner or not owner["write_allowed"]:
+                raise PermissionError("Repo experiment requires existing authority")
+            result={"task_id":create_task(db,spec),"state":"PENDING",
+                    "scope":"local_Docker_only_no_production_mutation"}
         elif args.command == "seed-pipeline-repair":
             if (args.spec.is_symlink() or not args.spec.is_file()
                 or args.spec.stat().st_size>4096):
