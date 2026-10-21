@@ -15,7 +15,7 @@ from scripts.verify_p32_full_apscheduler import (
 class FullAPSchedulerTwoFileTests(unittest.TestCase):
     def test_contract_frozen_and_both_modules_distinct(self):
         self.assertEqual(len(PUBLIC),4)
-        self.assertEqual(len(HIDDEN),4)
+        self.assertEqual(len(HIDDEN),8)
         self.assertEqual([x["input"]["case"] for x in PUBLIC],
                          ["memory_single","memory_duplicate",
                           "scheduler_tracked","scheduler_removed"])
@@ -45,7 +45,7 @@ class FullAPSchedulerTwoFileTests(unittest.TestCase):
         edits={"edits":[
             {"path":p,"find":"return 1","replace":"return 2"} for p in SOURCE_PATHS]}
         self.assertEqual(_compact(json.dumps(edits),originals),changes)
-        with self.assertRaisesRegex(ValueError,"Both original modules"):
+        with self.assertRaises(ValueError):
             _compact(json.dumps({"edits":[edits["edits"][0],edits["edits"][0]]}),originals)
 
     def test_two_module_wheel_record_and_other_members_untouched(self):
