@@ -140,6 +140,41 @@ def prepare_case(raw:bytes)->dict:
     return result
 
 
+def candidate_preserves_adapter(candidate:bytes,original_function:str,
+                                adapter:str)->bool:
+    # A Docker PASS alone would also accept a rewritten test adapter.
+    # Require the candidate to change the isolated upstream function
+    # while retaining the original test/input conversion verbatim.
+    try:
+        body=candidate.decode("utf-8")
+    except UnicodeError:
+        return False
+    return (body.startswith("def set_partitions(")
+            and body.count("def calculate(data):")==1
+            and body.endswith(adapter)
+            and body[:-len(adapter)]!=original_function)
+
+
+def check_independent_patch_scope(root:Path,case:dict,raw:bytes)->dict:
+    old=extract_unmodified_function(raw)
+    suffix=case["source"][len(old):]
+    staged=root/case["name"]/"workspace"/"repo_lab"
+    if staged.is_symlink() or not staged.is_dir():
+        return {"scope_verified":False,"reason":"NO_ACCEPTED_STAGED_PATCH"}
+    # One original worker, at most one accepted child per P13
+    # lineage. No data from PRIVATE holdout reaches proposer.
+    dirs=[p for p in staged.iterdir() if p.is_dir() and not p.is_symlink()]
+    if len(dirs)!=1:
+        return {"scope_verified":False,"reason":"AMBIGUOUS_STAGED_PATCH"}
+    candidate=dirs[0]/"calculator.py"
+    if (candidate.is_symlink() or not candidate.is_file()
+        or (dirs[0]/"main.py").exists()):
+        return {"scope_verified":False,"reason":"PATCH_REWROTE_ENTRYPOINT_OR_NO_FUNCTION"}
+    if not candidate_preserves_adapter(candidate.read_bytes(),old,suffix):
+        return {"scope_verified":False,"reason":"PATCH_CHANGED_ADAPTER_OR_NOT_UPSTREAM_FUNCTION"}
+    return {"scope_verified":True,"reason":"FUNCTION_ONLY_PATCH_AND_ADAPTER_UNCHANGED"}
+
+
 def main():
     # No silent model download and no external GitHub source read except
     # when P21 explicitly opted into one temporary 7B experiment.
@@ -186,14 +221,21 @@ def main():
     if probe.get("done") is not True or not isinstance(probe.get("response"),str):
         raise RuntimeError("No real Ollama model token generation observed")
     with tempfile.TemporaryDirectory(prefix="cognition-p21-real-issue-") as temp:
-        result=evaluate_one(Path(temp),case,
+        root=Path(temp)
+        result=evaluate_one(root,case,
                             goal_statement=case["goal_statement"])
+        patch_scope=(check_independent_patch_scope(root,case,raw)
+                     if result["holdout_pass"] else
+                     {"scope_verified":False,"reason":"HOLDOUT_NOT_ACCEPTED"})
     print(json.dumps({"test":"p21_real_reported_issue_result",
         "issue":ISSUE_URL,"manifest_sha256":manifest,
         "model":MODEL,"model_completion_genuine":True,
         "frozen_candidate":result["candidate_frozen"],
         "public_pass":result["public_pass"],
         "heldout_pass":result["holdout_pass"],
+        "function_only_contract_pass":result["holdout_pass"] and
+                                      patch_scope["scope_verified"],
+        "patch_scope":patch_scope,
         "heldout_case_count":len(HIDDEN),
         "revision_attempts":result["revision_attempts"],
         "original_source_unchanged":result["source_unchanged"],
