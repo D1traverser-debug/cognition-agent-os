@@ -125,6 +125,23 @@ class ExternalLiveIssueTests(unittest.TestCase):
         self.assertFalse(p21.candidate_preserves_adapter(
             b"not valid utf8 \\xff",original,adapter))
 
+    def test_local_7b_generation_timeout_is_strictly_bounded(self):
+        from cognition_agent_os.repo_repair import _local_generate_timeout
+        with patch.dict(os.environ,{},clear=True):
+            self.assertEqual(_local_generate_timeout("qwen2.5-coder:7b"),180)
+            self.assertEqual(_local_generate_timeout("qwen2.5-coder:3b"),90)
+        with patch.dict(os.environ,{
+                "COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS":"300"}):
+            self.assertEqual(_local_generate_timeout("qwen2.5-coder:7b"),300)
+            self.assertEqual(_local_generate_timeout("qwen2.5-coder:0.5b"),90)
+        from cognition_agent_os.local_model import LocalModelUnavailable
+        for rejected in ("0","999999","301","nan","-1"," 300 ",""):
+            with self.subTest(raw=rejected):
+                with patch.dict(os.environ,{
+                    "COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS":rejected}):
+                    with self.assertRaises(LocalModelUnavailable):
+                        _local_generate_timeout("qwen2.5-coder:7b")
+
     def test_no_actual_issue_access_or_inference_without_exact_opt_in(self):
         with tempfile.TemporaryDirectory() as directory:
             env=dict(os.environ)
