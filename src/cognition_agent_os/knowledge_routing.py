@@ -195,3 +195,69 @@ def run_knowledge_intent(db:sqlite3.Connection,task:dict,fixtures:Path)->dict:
     except BaseException:
         db.rollback()
         raise
+
+
+def audit_knowledge_intent_plan(db_path:Path,fixtures:Path,task_id:str)->dict:
+    """Independent read-only source/route/child/receipt provenance check.
+
+    It is not a semantic proof that a user's desired business effect occurred
+    and does not turn retrieved knowledge into a new authorization authority.
+    """
+    fail={"task_id":task_id,"status":"UNVERIFIABLE",
+          "business_outcome_verified":False}
+    if not isinstance(task_id,str) or not re.fullmatch(r"[0-9a-f]{32}",task_id):
+        return {**fail,"reason":"INVALID_TASK_ID"}
+    if not db_path.is_file() or db_path.is_symlink():
+        return {**fail,"reason":"MISSING_LEDGER"}
+    try:
+        db=connect(db_path)
+        try:
+            root=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
+            if root is None or root["state"]!="DECOMPOSED":
+                return {**fail,"reason":"PLAN_EVENT_UNAVAILABLE"}
+            spec=json.loads(root["source_spec"])
+            try:
+                chosen=resolve_knowledge_route(spec,fixtures)
+            except KnowledgeRoutingError as exc:
+                return {**fail,"reason":exc.reason}
+            events=db.execute("""SELECT details FROM events WHERE task_id=?
+                AND kind='KNOWLEDGE_INTENT_DECOMPOSED'""",(task_id,)).fetchall()
+            if len(events)!=1:
+                return {**fail,"reason":"KNOWLEDGE_RECEIPT_INVALID"}
+            receipt=json.loads(events[0]["details"])
+            if (not isinstance(receipt,dict)
+                or set(receipt)!={"child_task_id","route","source_ref",
+                                  "knowledge_sha256","plan_sha256","semantic_approval"}
+                or receipt["semantic_approval"] is not False
+                or receipt["route"]!=chosen["route"]
+                or receipt["source_ref"]!=chosen["source_ref"]
+                or receipt["knowledge_sha256"]!=chosen["knowledge_sha256"]
+                or receipt["plan_sha256"]!=chosen["plan"]["plan_sha256"]):
+                return {**fail,"reason":"KNOWLEDGE_RECEIPT_INVALID"}
+            child=db.execute("SELECT * FROM tasks WHERE task_id=?",
+                             (receipt["child_task_id"],)).fetchone()
+            dependent=db.execute("""SELECT evidence_path,evidence_sha256,source_id
+                FROM knowledge_dependencies WHERE task_id=?""",
+                (receipt["child_task_id"],)).fetchone()
+            count=db.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=?",
+                             (task_id,)).fetchone()[0]
+            if (not child or count!=1 or child["parent_task"]!=task_id
+                or child["goal_rev"]!=root["goal_rev"]
+                or child["grant_rev"]!=root["grant_rev"]
+                or json.loads(child["source_spec"])!=chosen["plan"]["child_source_spec"]
+                or not dependent or
+                (dependent["evidence_path"],dependent["evidence_sha256"],
+                 dependent["source_id"])
+                !=(spec["knowledge"]["path"],chosen["knowledge_sha256"],
+                   spec["knowledge"]["source_id"])):
+                return {**fail,"reason":"KNOWLEDGE_CHILD_DEPENDENCY_MISMATCH"}
+            return {"task_id":task_id,"status":"PLAN_MECHANICALLY_VALID",
+                    "route":chosen["route"],
+                    "child_task_id":receipt["child_task_id"],
+                    "knowledge_sha256":chosen["knowledge_sha256"],
+                    "business_outcome_verified":False,
+                    "authorizes_production_mutation":False}
+        finally:
+            db.close()
+    except (OSError,sqlite3.Error,TypeError,KeyError,ValueError):
+        return {**fail,"reason":"KNOWLEDGE_AUDIT_UNAVAILABLE"}
