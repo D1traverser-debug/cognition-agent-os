@@ -355,6 +355,18 @@ def audit_repo(db_path,workspace,fixtures,tid,*,require_staged=False):
                 or not any(sources[p]!=b for p,b in candidate.items())):
                 return {**fail,"reason":"CANDIDATE_CONTENT_INVALID"}
             if require_staged:
+                # Independent post-acceptance evidence check: the hash in
+                # source_spec AND the historical Docker receipt cannot
+                # attest the CURRENT sealed gold bytes. Only the reviewer
+                # reads the holdout; the planner's ordinary audit still
+                # never opens it. A swapped or missing fixture invalidates
+                # the earlier verified-state claim.
+                try:
+                    sealed=safe_fixture(fixtures,spec["holdout"])
+                except (OSError,ValueError,UnicodeError):
+                    return {**fail,"reason":"HOLDOUT_PIN_MISMATCH"}
+                if sha(sealed)!=spec["holdout_sha256"]:
+                    return {**fail,"reason":"HOLDOUT_PIN_MISMATCH"}
                 stage=workspace/"repo_lab"/tid
                 if stage.is_symlink() or not stage.is_dir():
                     return {**fail,"reason":"STAGED_DIRECTORY_MISSING"}
