@@ -164,6 +164,13 @@ class P1Test(unittest.TestCase):
             self.assertEqual(first["state_version"],1)
             self.assertEqual(proxy.stolen["state_version"],2)
             self.assertEqual(rows[0]["state_version"],2)
+            # A provenance-correct first claim is intentionally STALE once
+            # the second worker takes over. It must not finalize that task.
+            from cognition_agent_os.ledger import finalize
+            self.assertFalse(finalize(first_db,first,"VERIFIED",decision="NO_CHANGE"))
+            after_takeover,_=self.records()
+            self.assertEqual(after_takeover[0]["state"],"RUNNING")
+            self.assertEqual(after_takeover[0]["claim_token"],claimed[1])
         finally:
             first_db.close()
             second_db.close()
