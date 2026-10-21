@@ -1,3 +1,19 @@
+# CURRENT P29 — original SQLite claim receipt no longer borrows a later worker's lease token (2026-10-21)
+
+Authority: separate `D1traverser-debug/cognition-agent-os` experimental repo, Draft PR #12 `feat/p10-runtime-conformance-20261020`; NOT a registered UAOS child, NOT merged/deployed/installed on owner Windows PC. No paid/finite-credit inference, no upstream source writes, no main merge.
+
+P28 fixed `finalize_observed` post-COMMIT reviewer state attribution. P29 discovered a similar real issue in `ledger.claim_one`: it committed the `CLAIMED` event and new token under an IMMEDIATE SQLite lock, **then independently selected** the task row for its return. With a legitimately expired lease and second authorized claimant in between, the first claimant was given the **second** worker's token/version. This is a credential provenance violation, not merely an expired lease error.
+
+Red-first immutable [Actions #39620032712](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39620032712) after adding `tests/test_p1.py::test_claim_owner_snapshot_cannot_be_replaced_after_commit` to unmodified source: Linux ran 341 tests with ONE new test FAIL, comparing first `CLAIMED` event token vs falsely returned second token. Test uses genuine temporary SQLite with **two distinct connections**, first's real COMMIT interception, second's actual `claim_one` on already expired lease, and ledger event receipts—never a faked task-row overwrite.
+
+Fix in `de6f0f04175b6cce8401b7abb6388f32ecaed950`: move the claimed row's immutable snapshot SELECT inside existing IMMEDIATE transaction, before COMMIT, then return the worker's OWN token/state_version snapshot. API, lease timeout, single SQLite authority, recovery and guards otherwise unchanged. Strengthened test in `9317a90dd8a379f5396f95ec2211ac4b0dc6b55b` additionally demonstrates first worker with its legitimately stale token CANNOT `finalize` after second takeover and cannot alter second's durable RUNNING state. No new monitor or broader privileges.
+
+Full pre-archive [Actions #39620403889](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39620403889) on `9317a90d` COMPLETED/SUCCESS: Linux 341/341 including formerly-red P29 test, Windows offline regression, actual no-network Docker integration and hosted Windows user-scoped Scheduled Task two ticks all PASS; optional 7B and live-source experiments SKIPPED. First fix-head Linux green #39620240459 had other jobs cancelled due follow-on test commit; not counted as full CI.
+
+Full scope and limitations: `docs/40-CLAIM-LEASE-PROVENANCE.md`. **NEXT:** verify FINAL HEAD ordinary CI after THIS handoff commit with models SKIPPED, record result as a PR comment without triggering an endless new code commit. Then prioritize further real runtime effects-vs-claims and independent actual model capabilities rather than cycling on earlier P21/P22/P23/P24 benchmarks. The test addresses one actual lease takeover schedule; does NOT imply all concurrency, remote exactly-once or general AI code repair success. All production/owner-host permissions remain unchanged.
+
+---
+
 # CURRENT P28 — committed finalization receipts cannot borrow later reviewer's state (2026-10-21)
 
 Authority: `D1traverser-debug/cognition-agent-os`, Draft PR #12 on `feat/p10-runtime-conformance-20261020`, NOT merged/released/installed on owner Windows PC and NOT a registered UAOS child. No cloud paid/finite-credit inference and no upstream repository writes.
