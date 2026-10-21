@@ -34,10 +34,15 @@ def _public_feedback(changes,public,outcome):
     errors=[]
     for index,(case,observation) in enumerate(zip(public,outcome["observed"])):
         if not observation["pass"]:
-            errors.append({"index":index,
-                           "input":case["input"],
-                           "expected":case["expected"],
-                           "observed_output_sha256":observation["output_sha256"]})
+            entry={"index":index,
+                   "input":case["input"],
+                   "expected":case["expected"],
+                   "observed_output_sha256":observation["output_sha256"]}
+            if observation.get("execution_error") in (
+                "CANDIDATE_NONZERO","CANDIDATE_EMPTY_OR_OVERSIZE_OUTPUT",
+                "CANDIDATE_INVALID_JSON_OUTPUT"):
+                entry["execution_error"]=observation["execution_error"]
+            errors.append(entry)
     # Public-only feedback; the previously proposed source was untrusted,
     # never verified; model text is data, not an instruction for tools.
     return {"previous_changes":{k:v.decode("utf-8") for k,v in changes.items()},
