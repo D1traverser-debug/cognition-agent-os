@@ -19,7 +19,7 @@ from .container_lab import (
     ContainerUnavailable)
 from .runner import store_once,ArtifactConflict
 from .source import safe_fixture
-from .ledger import connect,finalize,event
+from .ledger import connect,finalize_observed,event
 
 
 def sha(value):return hashlib.sha256(value).hexdigest()
@@ -259,7 +259,10 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
             # Previously this falsely reported model_called=False for P24.
             # The second (P21 opt-in) generation must also be counted.
             completed_model_generations+=1
-        finalize(db,task,"UNKNOWN",error_code="REPOSITORY_PROPOSAL_UNAVAILABLE")
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code="REPOSITORY_PROPOSAL_UNAVAILABLE")
+        if observed["status"]!="UNKNOWN":
+            return observed
         # Distinguish invalid JSON structure from a weak hypothesis in
         # P14 experiments, without echoing untrusted model/source text.
         safe_codes={
@@ -273,8 +276,7 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
         }
         code=(str(exc) if isinstance(exc,ValueError) and str(exc) in safe_codes
               else "OTHER_CANDIDATE_VALIDATION_FAILURE")
-        return {"task_id":tid,"status":"UNKNOWN",
-                "reason":"REPOSITORY_PROPOSAL_UNAVAILABLE",
+        return {**observed,
                 "diagnostic":type(exc).__name__,
                 "validation_failure":code,
                 "completed_model_generations":completed_model_generations,
@@ -289,15 +291,14 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
             raise ValueError("Candidate changed before proposal freeze")
         return store_once(workspace,tid,data)
     try:
-        committed=finalize(db,task,"NEEDS_REVIEW",
+        observed=finalize_observed(db,task,"NEEDS_REVIEW",
                            decision="UNTRUSTED_WHOLE_FILE_REPO_CANDIDATE",
                            artifact_writer=write)
     except (OSError,ValueError,ArtifactConflict):
-        finalize(db,task,"UNKNOWN",error_code="REPOSITORY_PROPOSAL_CONFLICT")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"REPOSITORY_PROPOSAL_CONFLICT"}
-    if not committed:return {"task_id":tid,"status":"STALE_WORKER"}
-    row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(tid,)).fetchone()
-    return {"task_id":tid,"status":row["state"],"reason":row["error_code"],
+        return finalize_observed(db,task,"UNKNOWN",
+                                 error_code="REPOSITORY_PROPOSAL_CONFLICT")
+    if observed["status"]!="NEEDS_REVIEW":return observed
+    return {**observed,
             "files":len(spec["files"]),"model_called":planner_mode=="ollama-local",
             "completed_model_generations":completed_model_generations,
             "nochange_retry_attempted":nochange_retry_attempted,
