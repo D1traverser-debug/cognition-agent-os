@@ -37,7 +37,7 @@ class ExternalQuixbugsContractTests(unittest.TestCase):
                 self.assertNotIn("/master/",p20.source_url(task[kind+"_path"]))
             self.assertNotIn("correct_python_programs",str(task))
         self.assertEqual(p20.git_blob_sha1(b""),
-            hashlib.sha1(b"blob 0\\0").hexdigest())
+            hashlib.sha1(b"blob 0\0").hexdigest())
 
     def test_reject_unregistered_correct_source_and_wrong_blob(self):
         with self.assertRaises(ValueError):
@@ -55,8 +55,8 @@ class ExternalQuixbugsContractTests(unittest.TestCase):
             self.assertEqual(response.read.call_args.args,(25001,))
 
     def test_upstream_jsonl_case_adaptation_uses_only_pinned_gold(self):
-        original=b"def gcd(a,b):\\n    return 0\\n"
-        upstream=b'[[17,0],17]\\n[[20,100],20]\\n[[3,12],3]\\n'
+        original=b"def gcd(a,b):\n    return 0\n"
+        upstream=b'[[17,0],17]\n[[20,100],20]\n[[3,12],3]\n'
         task={**p20.CASES[0],
               "source_blob":p20.git_blob_sha1(original),
               "tests_blob":p20.git_blob_sha1(upstream),
@@ -75,9 +75,9 @@ class ExternalQuixbugsContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             p20.make_case({**task,"source_blob":"0"*40},original,upstream)
         with self.assertRaises(ValueError):
-            p20.parse_upstream_test_rows(b'[[1],1]\\n',3)
+            p20.parse_upstream_test_rows(b'[[1],1]\n',3)
         with self.assertRaises(ValueError):
-            p20.parse_upstream_test_rows(b'[[1],1]\\nmalformed\\n',2)
+            p20.parse_upstream_test_rows(b'[[1],1]\nmalformed\n',2)
 
     def test_source_acceptance_is_original_ledger_spec_not_new_authority(self):
         task=p20.CASES[0]
