@@ -210,7 +210,11 @@ def audit_knowledge_intent_plan(db_path:Path,fixtures:Path,task_id:str)->dict:
     if not db_path.is_file() or db_path.is_symlink():
         return {**fail,"reason":"MISSING_LEDGER"}
     try:
-        db=connect(db_path)
+        # A verifier is read-only and cannot create, upgrade or re-own
+        # a DB while the conformance sweep holds its original transaction.
+        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
+        db=sqlite3.connect(uri,uri=True,timeout=5)
+        db.row_factory=sqlite3.Row
         try:
             root=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             if root is None or root["state"]!="DECOMPOSED":
