@@ -111,8 +111,14 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
             db.row_factory=sqlite3.Row
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
             auth=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
-            prior=db.execute("""SELECT COUNT(*) FROM events WHERE task_id=?
-                 AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",(tid,)).fetchone()[0]
+            old_trials=db.execute("""SELECT details FROM events WHERE task_id=?
+                 AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",(tid,)).fetchall()
+            prior=len(old_trials)
+            previously_tested=set()
+            for old in old_trials:
+                evidence=json.loads(old["details"])
+                if isinstance(evidence.get("candidate_fingerprint"),str):
+                    previously_tested.add(evidence["candidate_fingerprint"])
             if (not task or not auth or task["state"]!="NEEDS_REVIEW"
                 or not auth["write_allowed"] or auth["goal_rev"]!=task["goal_rev"]
                 or auth["grant_rev"]!=task["grant_rev"]):
@@ -138,6 +144,7 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
         feedback=_public_feedback(changes,public,previous)
         history=[]
         seen={sha(json.dumps(frozen["change_sha256"],sort_keys=True).encode())}
+        seen.update(previously_tested)
         for iteration in range(remaining):
             from .local_model import LocalModelUnavailable
             try:
