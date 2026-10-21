@@ -1,5 +1,50 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## CURRENT P19 — unfamiliar prospective corpus frozen before local model inference (2026-10-21)
+
+On cumulative Draft PR #12 / branch
+`feat/p10-runtime-conformance-20261020`, P18 genuinely passed
+two known tasks PUBLIC 2/2 and sealed HIDDEN 2/2 with explicit goal
+descriptions, but that was after inspecting failed P17 examples.
+No merge, owner PC deployment or production patch authorization.
+
+P19 now defines a new, prospective two-family task set in
+`scripts/verify_p19_unfamiliar_model.py`:
+(1) digital-verification regression retry semantics, highest attempt
+per suite/test, and (2) half-open interval union without duplicate
+coverage. Both have distinct buggy Python source, task-intent text,
+PUBLIC and separately sealed HIDDEN cases. Independent deterministic
+reference checks are in
+`tests/test_p19_unfamiliar_corpus.py`; the model receives no gold.
+Original P14 benchmark `CASES` remains untouched. These tasks
+and gold are still Agent-authored, NOT independently human-reviewed
+or externally owner-signed. See
+`docs/30-PROSPECTIVE-UNFAMILIAR-REPAIR-CORPUS.md`.
+
+**Pre-model evidence:** code/task fixture and test suite frozen by
+Git commit `4ef8ef1a9b3a9ebd839e1c962af5e07b4f91c187`.
+Ordinary CI `39570154902` completed: **Linux 290/290**,
+**Windows 290/290**, real Docker integration and hosted native
+Windows Scheduled Task two-tick checks all SUCCESS; public mutable
+upstream source SKIPPED, local Ollama experiment SKIPPED.
+Never infer model outcome from this structural success.
+
+Temporary PR body opt-in `[run-p19-unfamiliar-7b]` is intentionally
+present to run one genuine installed disposable runner Qwen2.5-Coder
+7B check on *the already frozen task corpus* under existing SQLite
+and offline Docker boundaries. The experiment result, frozen-candidate
+rate, PUBLIC and sealed HIDDEN pass counts are PENDING, not PASS.
+No owner host is touched, and no remote paid or credit-limited model
+inference service is used.
+
+**Next:** inspect actual 7B job output; preserve authentic scores and
+manifest digest; remove opt-in marker; update this checkpoint and PR;
+final normal Linux/Windows/Docker/Scheduler CI on docs-only head.
+Successful new-task results still cannot establish general autonomy,
+independent external domain acceptance or permitted production writes.
+All changes remain Draft / unmerged.
+
+
 ## CURRENT P18 — explicit intended outcome moved real 7B holdout score from 0/2 to 2/2 (2026-10-21)
 
 Repository `D1traverser-debug/cognition-agent-os`, cumulative open
