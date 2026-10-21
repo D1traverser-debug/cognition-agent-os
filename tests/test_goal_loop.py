@@ -61,6 +61,24 @@ class GoalLoopTests(unittest.TestCase):
         env["PYTHONPATH"]=str(ROOT/"src")
         return subprocess.run(args,env=env,capture_output=True,text=True,timeout=15)
 
+    def test_goal_noop_after_goal_rotation_must_not_return_old_decision(self):
+        import cognition_agent_os.goal_loop as goal_loop
+        (self.fx/"settings.json").write_text('{"owner":"ops"}')
+        tid=self.seed("json_keys","settings.json",{"owner":"ops"})
+        real=goal_loop.plan_goal
+        def rotate_goal(*args,**kwargs):
+            result=real(*args,**kwargs)
+            db=connect(self.dbpath)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            return result
+        with patch.object(goal_loop,"plan_goal",side_effect=rotate_goal):
+            output=run_once(self.dbpath,self.out,self.fx)
+        self.assertEqual(output["status"],"BLOCKED")
+        self.assertEqual(output["reason"],"STALE_GOAL")
+        self.assertNotEqual(output.get("decision"),"GOAL_ALREADY_SATISFIED")
+        self.assertEqual(self.record(tid)["state"],"BLOCKED")
+
     def test_json_missing_key_to_non_destructive_candidate(self):
         (self.fx/"settings.json").write_text('{"port": 1234, "debug": false}')
         tid=self.seed("json_keys","settings.json",{"port":1234,"owner":"ops"})
