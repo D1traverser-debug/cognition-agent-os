@@ -265,7 +265,7 @@ class RepoLabTest(unittest.TestCase):
         commands=[]
         class Process:
             returncode=0
-            stdout=b'{"ok":true}\\n'
+            stdout=b'{"ok":true}'
         with patch.object(lab.shutil,"which",return_value="/usr/bin/docker"),\
              patch.object(lab.subprocess,"run",
                side_effect=lambda args,**kw: (commands.append((args,kw)) or Process())):
