@@ -190,6 +190,55 @@ jobs:
           P14_LOCAL_MODEL: qwen2.5-coder:3b
         run: python scripts/verify_actual_local_model.py
 
+  experimental_local_7b_capacity:
+    # One explicitly requested nonmetered coder-capacity test only.
+    # Installed on disposable hosted Linux CI, never owner's computer.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p17-7b-local-model]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prefetch actual offline Docker image on disposable runner
+        run: docker pull python:3.12-alpine
+      - name: Install actual Ollama only on disposable CI host
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/p17-install.sh"
+          sh "$RUNNER_TEMP/p17-install.sh"
+          ollama --version
+      - name: Start local-only Ollama and prefetch 7B weights
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/p17-ollama.log" 2>&1 &)
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            tail -n 60 "$RUNNER_TEMP/p17-ollama.log"
+            exit 1
+          fi
+          timeout 600 ollama pull qwen2.5-coder:7b
+          ollama list
+      - name: Genuine 7B local model code repair on identical P14 holdouts
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          P14_LOCAL_MODEL: qwen2.5-coder:7b
+        run: python scripts/verify_actual_local_model.py
+
   live_public_source:
     # Explicit opt-in: third-party public API quota is separate from local correctness.
     # GitHub workflow_dispatch UI becomes usable when the workflow is on the default branch.
