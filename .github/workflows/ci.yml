@@ -62,6 +62,23 @@ jobs:
         shell: pwsh
         run: ./scripts/verify_windows_scheduler.ps1 -TimeoutSeconds 180
 
+  repo_container_integration:
+    # Actual Docker execution, not monkeypatched; image explicitly fetched
+    # by CI only, never by the owner runtime or model connector.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Explicitly prefetch public Python runtime image for ephemeral CI
+        run: docker pull python:3.12-alpine
+      - name: Real no-network non-root repository repair and independent holdout
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_repo_container.py
+
   live_public_source:
     # Explicit opt-in: third-party public API quota is separate from local correctness.
     # GitHub workflow_dispatch UI becomes usable when the workflow is on the default branch.
