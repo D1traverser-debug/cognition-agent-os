@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from cognition_agent_os.ledger import connect,create_task,initialize,alter_authority
 from cognition_agent_os.runner import run_once
@@ -47,6 +48,20 @@ class IntentRuntimeTests(unittest.TestCase):
         db=connect(self.db_path)
         try:return dict(db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone())
         finally:db.close()
+
+    def test_invalid_intent_after_goal_rotation_must_report_blocked(self):
+        from cognition_agent_os import intent_runtime
+        tid=self.seed(self.structured())
+        def rotate(*args,**kwargs):
+            db=connect(self.db_path)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            raise IntentError("Injected malformed intent")
+        with patch.object(intent_runtime,"compile_intent",side_effect=rotate):
+            result=run_once(self.db_path,self.workspace,self.fixtures)
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"STALE_GOAL")
+        self.assertEqual(self.task(tid)["state"],"BLOCKED")
 
     def test_json_intent_generates_child_and_actual_sandbox(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
