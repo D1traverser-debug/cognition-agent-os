@@ -1,6 +1,7 @@
 """P21 scope and independently reported edge behavior tests (offline only)."""
 from __future__ import annotations
 
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -12,6 +13,8 @@ import unittest
 from unittest.mock import patch
 
 from cognition_agent_os.container_lab import cases_from_bytes
+from cognition_agent_os.ledger import connect,initialize,create_task
+from cognition_agent_os.runner import run_once
 from scripts import verify_p21_live_issue as p21
 
 
@@ -124,6 +127,117 @@ class ExternalLiveIssueTests(unittest.TestCase):
             b"import os\n"+genuine,original,adapter))
         self.assertFalse(p21.candidate_preserves_adapter(
             b"not valid utf8 \\xff",original,adapter))
+
+    def _new_repair_task_for_local_retry(self):
+        folder=tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        base=Path(folder.name)
+        fx=base/"fx";fx.mkdir()
+        ws=base/"workspace";ws.mkdir()
+        db=base/"state.sqlite"
+        source="def calculate(data):\n    return {'out':0}\n"
+        expected="def calculate(data):\n    return {'out':data['x']+1}\n"
+        fx.joinpath("main.py").write_text(
+            "import json,sys\nfrom rules import calculate\n"
+            "print(json.dumps(calculate(json.loads(sys.stdin.read()))))\n")
+        fx.joinpath("rules.py").write_text(source)
+        visible=[{"input":{"x":1},"expected":{"out":2}}]
+        hidden=[{"input":{"x":37},"expected":{"out":38}}]
+        fx.joinpath("visible.json").write_text(json.dumps(visible))
+        sealed=json.dumps(hidden).encode()
+        fx.joinpath("sealed.json").write_bytes(sealed)
+        fx.joinpath("candidate.json").write_text(
+            json.dumps({"changes":[{"path":"rules.py","content":source}]}))
+        spec={"kind":"repo_container_repair",
+              "files":["main.py","rules.py"],"entrypoint":"main.py",
+              "candidate":"candidate.json","visible":"visible.json",
+              "holdout":"sealed.json",
+              "holdout_sha256":hashlib.sha256(sealed).hexdigest(),
+              "goal_statement":"Compute x plus one."}
+        with closing(connect(db)) as con:
+            initialize(con)
+            tid=create_task(con,spec)
+        return fx,ws,db,tid,source,expected
+
+    def test_model_nochange_regenerates_only_once_with_public_rejection(self):
+        fx,ws,db,tid,original,repaired=self._new_repair_task_for_local_retry()
+        seen=[]
+        def model(spec,base,visible,model,*,feedback=None):
+            self.assertNotIn("sealed",str(feedback))
+            seen.append(feedback)
+            code=original if len(seen)==1 else repaired
+            return json.dumps({"changes":[{"path":"rules.py","content":code}]}).encode()
+        with patch.dict(os.environ,{"COGNITION_LOCAL_NOCHANGE_RETRY":"1"}),\
+             patch("cognition_agent_os.repo_repair._candidate_from_model",
+                   side_effect=model) as local:
+            answer=run_once(db,ws,fx,planner_mode="ollama-local",
+                            local_model="qwen2.5-coder:7b")
+        self.assertEqual(answer["status"],"NEEDS_REVIEW",answer)
+        self.assertTrue(answer["nochange_retry_attempted"])
+        self.assertEqual(answer["completed_model_generations"],2)
+        self.assertEqual(local.call_count,2)
+        self.assertIsNone(seen[0])
+        self.assertEqual(seen[1]["latest_rejection"]["reason"],
+                         "MODEL_CANDIDATE_NO_CHANGE")
+        self.assertTrue(seen[1]["latest_rejection"]["must_propose_different_full_source"])
+        document=json.loads((ws/"artifacts"/(tid+".json")).read_text())
+        self.assertEqual(document["initial_model_generations"],2)
+        self.assertEqual(document["initial_public_rejections"][0]["reason"],
+                         "MODEL_CANDIDATE_NO_CHANGE")
+        self.assertEqual(document["changes"]["rules.py"],repaired)
+        self.assertEqual(fx.joinpath("rules.py").read_text(),original)
+        self.assertNotIn("sealed",json.dumps(document["initial_public_rejections"]))
+
+    def test_retry_cannot_escape_nochange_or_opt_in_budget(self):
+        from cognition_agent_os.repo_repair import audit_repo
+        for flag,expected_calls in (("0",1),("1",2),("2",1)):
+            with self.subTest(flag=flag):
+                fx,ws,db,tid,source,_=self._new_repair_task_for_local_retry()
+                output=json.dumps({"changes":[
+                    {"path":"rules.py","content":source}]}).encode()
+                with patch.dict(os.environ,{"COGNITION_LOCAL_NOCHANGE_RETRY":flag}),\
+                     patch("cognition_agent_os.repo_repair._candidate_from_model",
+                           return_value=output) as local:
+                    result=run_once(db,ws,fx,planner_mode="ollama-local",
+                                    local_model="qwen2.5-coder:7b")
+                self.assertEqual(result["status"],"UNKNOWN",result)
+                self.assertTrue(result["model_called"])
+                self.assertEqual(local.call_count,expected_calls)
+                self.assertEqual(result["completed_model_generations"],expected_calls)
+                self.assertFalse((ws/"artifacts"/(tid+".json")).exists())
+                self.assertNotEqual(audit_repo(db,ws,fx,tid)["status"],
+                                    "REPO_BYTES_MECHANICALLY_VALID")
+
+    def test_post_initial_retry_public_refiner_gets_only_one_more_call(self):
+        from cognition_agent_os.repo_refinement import refine_repo_public
+        fx,ws,db,tid,original,repaired=self._new_repair_task_for_local_retry()
+        outputs=[
+            json.dumps({"changes":[{"path":"rules.py","content":original}]}).encode(),
+            json.dumps({"changes":[{"path":"rules.py","content":repaired}]}).encode()
+        ]
+        with patch.dict(os.environ,{"COGNITION_LOCAL_NOCHANGE_RETRY":"1"}),\
+             patch("cognition_agent_os.repo_repair._candidate_from_model",
+                   side_effect=outputs):
+            result=run_once(db,ws,fx,planner_mode="ollama-local",
+                            local_model="qwen2.5-coder:7b")
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        def failing_suite(base,changes,entrypoint,cases,*,include_observed=False):
+            return {"passes":0,"total":len(cases),
+                    "observed":[{"pass":False,"output_sha256":"0"*64}
+                                for _ in cases]}
+        with patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=failing_suite),\
+             patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   return_value=outputs[1]) as model:
+            verdict=refine_repo_public(db,ws,fx,tid,
+                                       model="qwen2.5-coder:7b",max_attempts=3)
+        self.assertEqual(verdict["status"],"PUBLIC_REFINEMENT_BUDGET_EXHAUSTED")
+        self.assertEqual(verdict["attempts"],1)
+        self.assertEqual(model.call_count,1)
+        with closing(connect(db)) as con:
+            count=con.execute("""SELECT COUNT(*) FROM events WHERE task_id=?
+                AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",(tid,)).fetchone()[0]
+        self.assertEqual(count,1)
 
     def test_local_7b_generation_timeout_is_strictly_bounded(self):
         from cognition_agent_os.repo_repair import _local_generate_timeout
