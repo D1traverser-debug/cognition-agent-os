@@ -1,5 +1,88 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P13 — bounded public-feedback local model revision inside real Docker (2026-10-21)
+
+This is CURRENT; P12 and older sections are historical. Owner objective
+remains real autonomous goal interpretation, safe execution, independent
+outside acceptance, durable causal correction and evolving methods — not
+a proliferation of monitoring, static governance documents or an
+AI-logo wrapper. Hard budget: zero paid LLM API tokens, zero finite AI
+trial credits, no automatic model pulls. No work on actual user Windows
+PC is authorized or verified.
+
+Repo: `D1traverser-debug/cognition-agent-os`,
+branch `feat/p10-runtime-conformance-20261020`, cumulative Draft
+PR #12 targeting `main`, open/unmerged, no production release.
+
+P12 on final head `3de660954e37fc0d705b3cfb3aaf2a1ac82c1585`
+had Actions `39535549248` SUCCESS: 260/260 Linux and Windows,
+true Docker multi-file repair and hidden pass/refusal/baseline checks,
+actual hosted Windows Scheduler (2 ticks/2 tasks). P12's failed Docker
+stdin and legacy test assumptions were not hidden.
+
+**P13 actual new code path:**
+- `src/cognition_agent_os/repo_refinement.py`:
+  `refine_repo_public(db,workspace,fixtures,existing_task_id,
+  model=...,max_attempts=1/2/3)`. Explicit one-shot user command;
+  requires P12 immutable parent NEEDS_REVIEW, current authority and
+  positive conformance preflight. Runs baseline/original and initial
+  candidate against PUBLIC JSON cases only in preinstalled Docker.
+  Calls only **installed** loopback Ollama via existing
+  `repo_repair._candidate_from_model`, which now accepts bounded
+  `prior_public_feedback`: failed PUBLIC indices/inputs/expected,
+  observed result hashes and previous proposed source. Never reads
+  hidden JSON or passes gold to model.
+- Generates full-file candidates (not fixed AST substitutions);
+  validates allowlist/size, detects repeated candidate, runs each
+  in Docker, persists candidate SHA and public pass counts in
+  `REPO_LOCAL_PUBLIC_REVISION_TRIAL` events in SAME SQLite task ledger.
+  Three attempts MAX per parent cumulatively; grant revocation
+  between model and commit blocks write.
+- On PUBLIC success, another write lock rechecks source/public bytes,
+  previous task version, authority, attempts; atomically enqueues a
+  **linked child** already `NEEDS_REVIEW` with create-once frozen
+  proposed full-file source, and retires its parent UNKNOWN /
+  PUBLIC_REVISION_SUPERSEDED. New child is NOT holdout reviewed,
+  production accepted, source modified or approved; only original
+  `repo-review` may later run independent hidden cases.
+- CLI `repo-refine-local --task-id ... --model LOCAL_INSTALLED_TAG
+  --max-attempts 1/2/3`. NOT automatically called by host-tick or
+  old --auto-stage-goals flag. Missing Docker/model never causes host
+  source execution or paid cloud fallback.
+- `tests/test_p13_public_refinement.py`: eight distinct controlled
+  regressions for two-round improvement, no gold/model leakage,
+  durable revision linkage, bounded attempts, repeated proposal,
+  missing model or Docker and grant revocation during generation.
+  Uses model and container mocks ONLY for control-flow properties.
+- `scripts/verify_repo_container.py` expanded with
+  `verify_public_revision_docker`: a stubbed scripted proposer emits
+  two sequential full-file candidates against real Linux Docker and
+  real public tests, then separately accepts actual hidden results.
+  This proves actual Docker loop execution, **NOT real Ollama
+  generative capacity**; emitted proof explicitly records
+  actual_ollama_model=false.
+- First P13 real Docker run `39536906634` FAILED; root cause was
+  literal `\\n` in new test-generated Python sources (not
+  actual newline bytes). Corrected in
+  `scripts/verify_repo_container.py` commit `552dc75d...`.
+  Linux run for P13 first implementation `39536669194` passed
+  268/268 standard library tests; fresh Docker and both OS CI
+  must be checked on final HEAD. No pretending mock model = real AI.
+- Detailed contract: `docs/24-PUBLIC-REVISION-LOOP.md`.
+
+**Validation gate:** check final commit GitHub Actions for Linux,
+Windows, actual real Docker P13 probe and true Windows Task Scheduler.
+Previous functional-only success must not be used for final head.
+
+**Irreducible blocker:** no actual model installed on user's Windows 11
+machine, no genuine first-attempt failure and later meaningful
+LLM-generated novel patch witnessed, no independent user-provided gold
+business review, and no owner-PC OS sandbox deployment.
+A constrained public-test iterative algorithm is NOT general autonomous
+intelligence. Keep current PR Draft and do not merge without owner
+release decision. After CI, seek genuine installed local model and
+unseen goal evidence rather than increasing monitoring modules.
+
 ## CURRENT P12 — offline Docker whole-file repo experiments and explicit execution consent (2026-10-21)
 
 This supersedes P11 and older checkpoints. The user's goal is an
