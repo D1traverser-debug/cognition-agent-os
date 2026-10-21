@@ -59,10 +59,10 @@ or auto-pull, no owner PC operations. P21 original task/
 public/hidden/source all unchanged. This is a falsifiable
 resource-bound hypothesis, not a known source fix.
 
-Temporary first P21 PR opt-in marker already removed after
-observed first run; next actions: first verify new
-Linux/Windows/Docker/Scheduler CI, then briefly re-add P21
-one-time marker to trigger a single 300s local 7B run.
+The first P21 PR opt-in marker was removed after honest
+180s timeout; ordinary candidate CI then passed Linux and real Docker.
+One-time P21 300s opt-in marker is now briefly re-added and this
+checkpoint commit triggers exactly one more actual local 7B run.
 Record whether new candidate actually freezes, PUBLIC/HIDDEN
 pass or fail, adapter source unchanged and exact manifest.
 Then remove marker and finish final ordinary head CI.
