@@ -123,6 +123,51 @@ class P1Test(unittest.TestCase):
         self.assertEqual(results.count(tid),1)
         self.assertEqual(results.count(None),1)
 
+    def test_claim_owner_snapshot_cannot_be_replaced_after_commit(self):
+        # The first worker legitimately claims a zero-duration lease.
+        # On its actual SQLite COMMIT, a second connection legitimately
+        # takes over the expired lease BEFORE the first worker returns.
+        # The first worker must return its OWN token, not the second's.
+        tid=self.seed()
+        first_db=connect(self.dbpath)
+        second_db=connect(self.dbpath)
+        instant=time.time()+5
+        class AfterFirstCommit:
+            def __init__(self,original):
+                self.original=original
+                self.stolen=None
+                self.triggered=False
+            def __getattr__(self,name):
+                return getattr(self.original,name)
+            def commit(self):
+                self.original.commit()
+                if not self.triggered:
+                    self.triggered=True
+                    self.stolen=claim_one(second_db,now=instant+1,lease_seconds=90)
+        proxy=AfterFirstCommit(first_db)
+        try:
+            first=claim_one(proxy,now=instant,lease_seconds=0)
+            self.assertTrue(proxy.triggered)
+            self.assertIsNotNone(proxy.stolen)
+            self.assertEqual(first["task_id"],tid)
+            self.assertEqual(proxy.stolen["task_id"],tid)
+            self.assertEqual(first["state"],"RUNNING")
+            self.assertEqual(proxy.stolen["state"],"RUNNING")
+            rows,events=self.records()
+            claimed=[json.loads(e["details"])["new_token"] for e in events
+                     if e["task_id"]==tid and e["kind"]=="CLAIMED"]
+            self.assertEqual(len(claimed),2)
+            self.assertNotEqual(claimed[0],claimed[1])
+            self.assertEqual(first["claim_token"],claimed[0])
+            self.assertEqual(proxy.stolen["claim_token"],claimed[1])
+            self.assertEqual(rows[0]["claim_token"],claimed[1])
+            self.assertEqual(first["state_version"],1)
+            self.assertEqual(proxy.stolen["state_version"],2)
+            self.assertEqual(rows[0]["state_version"],2)
+        finally:
+            first_db.close()
+            second_db.close()
+
     def test_claim_crash_then_recover_other_process(self):
         tid=self.seed()
         p=self.child(fail_at="after_claim")
