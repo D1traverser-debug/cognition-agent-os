@@ -1,5 +1,71 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## CURRENT P21 — real OPEN external Issue #1332 scoped code-repair experiment (2026-10-21)
+
+Continue on existing unmerged OPEN DRAFT PR #12 of
+`D1traverser-debug/cognition-agent-os`,
+branch `feat/p10-runtime-conformance-20261020`. P20 genuinely
+passed third-party QuixBugs original source and public official
+heldout tests 2/2 tasks but classic benchmark pretraining
+contamination cannot be ruled out. P21 moves to a recently
+reported actual GitHub Issue, without falsely claiming a
+complete autonomous discovery or accepted upstream patch.
+
+**External reporter and source:** Actual more-itertools
+[Issue #1332](https://github.com/more-itertools/more-itertools/issues/1332)
+created 2026-10-15, OPEN as read 2026-10-21, reporter
+`saadkhantareen`. The reported defect is that
+`list(set_partitions([]))` returns `[]` instead of `[[]]`;
+explicit `k=1` still yields none, `k=0` still raises ValueError,
+empty partition unaffected by size limits. Pinned UPSTREAM
+pre-issue source Git commit
+`4aeb4338ae1407d8da9723e86da99efeb446f719`,
+original `more_itertools/more.py` Git blob
+`9c56ab37558733ece94d676f71d502d8048bc1d5`.
+No actual upstream mutation or external maintainer review.
+
+**Implementation:** `scripts/verify_p21_live_issue.py`,
+`tests/test_p21_real_issue.py` and
+`docs/32-LIVE-EXTERNAL-ISSUE-REPAIR-EXPERIMENT.md`.
+Because upstream module exceeds existing 16KB repo lab
+allowlist, extract only exact contiguous self-contained
+`def set_partitions` body from verified full Git blob,
+preserving it as original function code with a separate JSON
+adapter. The experiment therefore tests function-local
+repair in existing SQLite/real offline Docker, NOT a real
+complete upstream repository PR. Independent staged-candidate
+scope check refuses Docker-pass patches that rewrite the
+adapter or `main.py` in lieu of fixing original function.
+Actual reported old bug MUST fail a real baseline Docker
+PUBLIC case before local model runs.
+
+PUBLIC: reported empty case plus normal n=2 Bell count.
+HIDDEN: eight Agent-derived sanity/regression cases, including
+empty explicit k=1/k=0, size constraints, and Bell numbers up to
+n=5 validated with distinct Stirling recurrence. This is
+reporter-owned issue goal + Agent-derived tests, NOT private
+owner acceptance. Gold not sent to model in prompt but all
+mathematics is publicly inferable.
+
+**Actual real 7B model result NOT YET OBSERVED** at creation
+of this checkpoint. P21 needs green preliminary ordinary
+Linux/Windows/Docker/Scheduler CI and one explicitly opted-in
+temporary PR body `[run-p21-issue-7b]` plus new head commit
+to run genuine Qwen2.5-Coder 7B on hosted disposable Linux.
+No cloud paid model, finite credit/trial use, owner PC install,
+new autonomous monitoring/management subsystem or production
+merge. Remove marker after honest measurement and rerun final
+ordinary CI.
+
+Next exact actions: inspect P21 offline CI for tests and fix
+any actual regression. Trigger exactly one real 7B benchmark
+only after source and expected behaviors are preregistered.
+Record original source hash, real baseline failure, model
+candidate/PUBLIC/HIDDEN/scope results and reason if failed.
+No prewritten replacement; don't retune hidden cases to a
+model answer. Persist real result here and in P21 doc/PR
+body, then verify final DRAFT/unmerged head and common CI.
+
 ## CURRENT P20 — genuine third-party QuixBugs defects + official holdout PASS (2026-10-21)
 
 Candidate repository `D1traverser-debug/cognition-agent-os`,
