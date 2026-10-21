@@ -46,11 +46,16 @@ def _json_bytes(value)->bytes:
 def validate_task_spec(spec):
     required={"kind","files","entrypoint","candidate","visible","holdout",
               "holdout_sha256"}
-    optional={"goal_statement"}
+    optional={"goal_statement","candidate_format"}
     if (not isinstance(spec,dict) or not required.issubset(spec)
         or set(spec)-required-optional
         or spec["kind"]!="repo_container_repair"):
         raise ValueError("Unsupported repository experiment contract")
+    # Exact replacement is a compact UNTRUSTED model proposal transport, not
+    # a new permission or alternate execution/reviewer path.
+    if ("candidate_format" in spec and
+        spec["candidate_format"]!="exact_replace"):
+        raise ValueError("Unsupported compact candidate representation")
     # An independently supplied outcome description is evidence for the
     # proposer, not execution authority or a hidden evaluator answer.
     if "goal_statement" in spec:
