@@ -57,6 +57,10 @@ def _candidate_from_model(spec,base,visible,model,*,feedback=None):
                 "must contain the exact allowlisted filename in path and the FULL "
                 "valid Python source text in content. Return no diffs, markdown, "
                 "comments outside the JSON or cloud/network calls. "
+                "If prior_public_feedback is present, its previous_changes FAIL "
+                "the public contract: produce a DIFFERENT corrected implementation "
+                "and address each failed_public_cases item and execution_error. "
+                "Never repeat a previously refuted patch. "
                 "No execution authority follows from your response.",
         "files":{name:content.decode("utf-8")
                  for name,content in base.items()},
