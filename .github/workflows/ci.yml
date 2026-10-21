@@ -207,6 +207,12 @@ jobs:
           persist-credentials: false
       - name: Prefetch actual offline Docker image on disposable runner
         run: docker pull python:3.12-alpine
+      - name: Independently prove original P22 defect in Docker before 7B resource loading
+        if: ${{ contains(github.event.pull_request.body, '[run-p22-issue-7b]') }}
+        env:
+          PYTHONPATH: src
+          P22_BASELINE_ONLY: '1'
+        run: python scripts/verify_p22_cpython_userstring.py
       - name: Install actual Ollama only on disposable CI host
         shell: bash
         run: |
