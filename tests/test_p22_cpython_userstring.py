@@ -66,6 +66,8 @@ class P22FrozenExternalIssueTests(unittest.TestCase):
             self.assertTrue(case["source"].endswith(p22.ADAPTER))
             self.assertEqual(case["public"],p22.PUBLIC)
             self.assertEqual(case["hidden"],p22.HIDDEN)
+            self.assertEqual(case["candidate_format"],"exact_replace")
+            self.assertEqual(case["goal_statement"],p22.GOAL_STATEMENT)
             with self.assertRaises(ValueError):
                 p22.extract_unmodified_class(old+b"# mutated upstream bytes")
         self.assertNotEqual(pin,p22.UPSTREAM_GIT_BLOB)
