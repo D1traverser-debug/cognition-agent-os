@@ -473,6 +473,16 @@ def review_repo(db_path,workspace,fixtures,tid):
         if (fresh["status"]!="REPO_BYTES_MECHANICALLY_VALID" or
             fresh["changes"]!=initial["changes"]):
             db.commit();return {"task_id":tid,"status":"EVIDENCE_CHANGED_BEFORE_ACCEPTANCE"}
+        # The Docker result was calculated from hidden OUTSIDE this DB
+        # transaction. Source/artifact readback alone cannot attest current
+        # sealed gold. Reattest exact bytes before staging or acceptance.
+        try:
+            current_hidden=safe_fixture(fixtures,spec["holdout"])
+        except (OSError,ValueError):
+            db.commit();return {"task_id":tid,"status":"HOLDOUT_PIN_MISMATCH"}
+        if (sha(current_hidden)!=spec["holdout_sha256"]
+            or current_hidden!=hidden):
+            db.commit();return {"task_id":tid,"status":"HOLDOUT_PIN_MISMATCH"}
         if result["passes"]!=result["total"]:
             db.execute("""UPDATE tasks SET state='UNKNOWN',
                 error_code='REPO_DOCKER_HOLDOUT_REFUTED',
@@ -488,15 +498,27 @@ def review_repo(db_path,workspace,fixtures,tid):
             db.commit()
             return {"task_id":tid,"status":"STAGING_UNVERIFIABLE"}
         post=audit_repo(db_path,workspace,fixtures,tid)
+        # Staging is a file-system effect; gold can be swapped mid-effect.
+        # Without a second test-byte readback, an obsolete Docker verdict
+        # can be promoted against changed gold with unchanged patch files.
+        try:
+            post_hidden=safe_fixture(fixtures,spec["holdout"])
+            holdout_still_pinned=(
+                sha(post_hidden)==spec["holdout_sha256"] and post_hidden==hidden)
+        except (OSError,ValueError):
+            holdout_still_pinned=False
         if (post["status"]!="REPO_BYTES_MECHANICALLY_VALID"
             or post["changes"]!=initial["changes"]
+            or not holdout_still_pinned
             or any((workspace/"repo_lab"/tid/p).read_bytes()!=content
                    for p,content in changes.items())):
             db.execute("""UPDATE tasks SET state='UNKNOWN',
                 error_code='REPO_POST_STAGE_EVIDENCE_CHANGED',
                 state_version=state_version+1 WHERE task_id=?""",(tid,))
             event(db,tid,"REPO_DOCKER_POST_STAGE_REJECTED",{
-                "status":post["status"],"production_write_authorized":False})
+                "status":post["status"],
+                "holdout_pin_still_valid":holdout_still_pinned,
+                "production_write_authorized":False})
             db.commit()
             return {"task_id":tid,"status":"POST_EFFECT_REJECTED"}
         db.execute("""UPDATE tasks SET state='REPAIR_LAB_VERIFIED',
