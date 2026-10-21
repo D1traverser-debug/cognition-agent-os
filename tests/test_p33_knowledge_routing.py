@@ -77,6 +77,36 @@ class KnowledgeRoutingRuntimeTests(unittest.TestCase):
         self.assertEqual(self.rows()[0]["task_id"],root)
         self.assertFalse(report["semantic_outcome_verified"])
 
+    def test_independent_verifier_catches_later_knowledge_withdrawal_without_user(self):
+        from cognition_agent_os.knowledge_routing import audit_knowledge_intent_plan
+        digest=self.knowledge([{"goal_key":"settings-owner","route":"repair_structure",
+                               "status":"active","source_ref":"atlas:Q01/fit"}])
+        root=self.seed(self.spec(digest))
+        tick=run_tick(self.dbpath,self.workspace,self.fixtures,
+                      max_jobs=3,auto_stage_goals=True)
+        child=tick["tasks"][0]["child_task_id"]
+        self.assertEqual(self.rows()[0]["state"],"DECOMPOSED")
+        checked=audit_knowledge_intent_plan(self.dbpath,self.fixtures,root)
+        self.assertEqual(checked["status"],"PLAN_MECHANICALLY_VALID",checked)
+        self.assertFalse(checked["business_outcome_verified"])
+        self.assertEqual([r for r in self.rows() if r["task_id"]==child][0]["state"],
+                         "SANDBOX_VERIFIED")
+        # Later evidence withdrawal is NOT an instruction from the user.
+        # A scheduled *idle* host pass detects drift through native
+        # conformance and revokes both root and dependent success claims.
+        self.knowledge([{"goal_key":"settings-owner","route":"repair_structure",
+                         "status":"withdrawn","source_ref":"atlas:withdrawn"}])
+        self.assertEqual(audit_knowledge_intent_plan(
+            self.dbpath,self.fixtures,root)["status"],"UNVERIFIABLE")
+        second=run_tick(self.dbpath,self.workspace,self.fixtures,max_jobs=4)
+        self.assertEqual(second["processed"],0)
+        self.assertTrue(second["conformance"]["quarantined"],second)
+        states={r["task_id"]:r["state"] for r in self.rows()}
+        self.assertEqual(states[root],"UNKNOWN")
+        self.assertEqual(states[child],"UNKNOWN")
+        self.assertEqual(self.fixtures.joinpath("settings.json").read_text(),
+                         '{"keep":"value"}')
+
     def test_evidence_selects_a_different_existing_capability(self):
         digest=self.knowledge([{"goal_key":"settings-owner","route":"compare_records",
                                "status":"active","source_ref":"atlas:Q05/observe"}])
