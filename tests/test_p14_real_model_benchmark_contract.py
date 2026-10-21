@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import unittest
+from unittest.mock import patch
 
 from scripts.verify_actual_local_model import CASES,MODEL
 
@@ -21,6 +22,35 @@ class RealModelBenchmarkContractTests(unittest.TestCase):
             for test in case["hidden"]:
                 self.assertNotIn(json.dumps(test["input"],sort_keys=True),exposed)
             self.assertLess(len(case["source"].encode()),16384)
+
+    def test_model_output_schema_allows_only_approved_source_paths(self):
+        from cognition_agent_os.repo_repair import _candidate_from_model
+        from cognition_agent_os import local_model
+        source={"main.py":b"print(1)\\n",
+                "calculator.py":b"def calculate(x):\\n    return 0\\n"}
+        visible=json.dumps([{"input":{"x":3},"expected":{"total":4}}]).encode()
+        requests=[]
+        def fake_local_request(method,path,payload,timeout):
+            requests.append((method,path,payload))
+            if path=="/api/tags":
+                return {"models":[{"name":"installed:local"}]}
+            self.assertEqual(payload["format"]["type"],"object")
+            self.assertEqual(payload["format"]["required"],["changes"])
+            self.assertFalse(payload["format"]["additionalProperties"])
+            item=payload["format"]["properties"]["changes"]["items"]
+            self.assertEqual(item["required"],["path","content"])
+            self.assertFalse(item["additionalProperties"])
+            self.assertEqual(item["properties"]["path"]["enum"],list(source))
+            self.assertNotIn("secret.json",payload["prompt"])
+            return {"done":True,"response":json.dumps({"changes":[{
+                "path":"calculator.py",
+                "content":"def calculate(x):\\n    return {'total': x + 1}\\n"
+            }]})}
+        with patch.object(local_model,"_request",side_effect=fake_local_request):
+            result=_candidate_from_model(
+                {"files":list(source)},source,visible,"installed:local")
+        self.assertTrue(result.startswith(b'{"changes"'))
+        self.assertEqual([x[1] for x in requests],["/api/tags","/api/generate"])
 
     def test_invoice_expected_reference_uses_subtract_discount(self):
         case=CASES[0]
