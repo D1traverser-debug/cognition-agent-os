@@ -315,7 +315,8 @@ def _scope(original:dict[str,bytes],changes:dict[str,bytes])->bool:
             if len(old_methods)!=1 or len(new_methods)!=1:return False
             prior,replacement=old_methods[0],new_methods[0]
             if (ast.dump(prior.args)!=ast.dump(replacement.args)
-                or ast.dump(prior.returns)!=ast.dump(replacement.returns)
+                or (ast.dump(prior.returns) if prior.returns is not None else None)
+                   !=(ast.dump(replacement.returns) if replacement.returns is not None else None)
                 or [ast.dump(d) for d in prior.decorator_list]
                    !=[ast.dump(d) for d in replacement.decorator_list]
                 or prior.type_comment!=replacement.type_comment
