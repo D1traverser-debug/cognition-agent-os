@@ -323,13 +323,17 @@ def review_due_repairs(db_path: Path,workspace: Path,fixtures: Path,
               WHERE state='NEEDS_REVIEW' AND due_at<=?
                 AND CASE WHEN json_valid(source_spec)
                   THEN json_extract(source_spec,'$.kind')
-                  ELSE NULL END IN ('pure_code_repair','pipeline_code_repair')
+                  ELSE NULL END IN ('pure_code_repair','pipeline_code_repair',
+                                  'repo_container_repair')
               ORDER BY due_at,created_at LIMIT ?""",
               (__import__("time").time(),limit)).fetchall()
         tasks=[(r[0],r[1]) for r in rows]
     finally:db.close()
     from .pipeline_oracle import review_pipeline
-    return [(review_pipeline(db_path,workspace,fixtures,tid)
-             if kind=="pipeline_code_repair"
-             else review_patch(db_path,workspace,fixtures,tid))
+    from .repo_repair import review_repo
+    return [(review_repo(db_path,workspace,fixtures,tid)
+             if kind=="repo_container_repair" else
+             review_pipeline(db_path,workspace,fixtures,tid)
+             if kind=="pipeline_code_repair" else
+             review_patch(db_path,workspace,fixtures,tid))
             for tid,kind in tasks]
