@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import time
 
-from .ledger import claim_one, connect, current_guard, event, finalize, initialize
+from .ledger import claim_one, connect, current_guard, event, finalize_observed, initialize
 from .planner import propose
 from .local_model import LocalModelUnavailable, propose_local
 from .source import SourceUnavailable, get_pair
@@ -76,34 +76,27 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         task_id = task["task_id"]
         ok, reason = current_guard(db, task, needs_write=False)
         if not ok:
-            finalize(db, task, "BLOCKED", error_code=reason)
-            return {"task_id": task_id, "status": "BLOCKED", "reason": reason}
+            return finalize_observed(db,task,"BLOCKED",error_code=reason)
         # A bounded declarative goal is processed by the same claim/grant ledger.
         # This never silently routes a goal through the protocol diff planner.
         try:
             source_spec = json.loads(task["source_spec"])
         except (ValueError, TypeError):
-            finalize(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
-            return {"task_id":task_id,"status":"UNKNOWN","reason":"INVALID_TASK_SPEC"}
+            return finalize_observed(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
         if not isinstance(source_spec,dict):
-            finalize(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
-            return {"task_id":task_id,"status":"UNKNOWN","reason":"INVALID_TASK_SPEC"}
+            return finalize_observed(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
         if source_spec.get("kind")=="repo_container_repair":
             from .repo_repair import run_repo_candidate
             return run_repo_candidate(db,task,workspace,fixture_root,
                                       planner_mode=planner_mode,local_model=local_model)
         if source_spec.get("kind")=="pipeline_code_repair":
             if planner_mode!="deterministic":
-                finalize(db,task,"UNKNOWN",error_code="PIPELINE_PLANNER_UNAVAILABLE")
-                return {"task_id":task_id,"status":"UNKNOWN",
-                        "reason":"PIPELINE_PLANNER_UNAVAILABLE"}
+                return finalize_observed(db,task,"UNKNOWN",error_code="PIPELINE_PLANNER_UNAVAILABLE")
             from .pipeline_repair import run_pipeline_case
             return run_pipeline_case(db,task,workspace,fixture_root)
         if source_spec.get("kind")=="pure_code_repair":
             if planner_mode!="deterministic":
-                finalize(db,task,"UNKNOWN",error_code="REPAIR_PLANNER_UNAVAILABLE")
-                return {"task_id":task_id,"status":"UNKNOWN",
-                        "reason":"REPAIR_PLANNER_UNAVAILABLE"}
+                return finalize_observed(db,task,"UNKNOWN",error_code="REPAIR_PLANNER_UNAVAILABLE")
             from .repair_search import run_repair_case
             return run_repair_case(db,task,workspace,fixture_root)
         if source_spec.get("kind")=="goal_intent":
@@ -111,14 +104,12 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
             return run_intent(db,task)
         if source_spec.get("kind")=="record_reconciliation":
             if planner_mode!="deterministic":
-                finalize(db,task,"UNKNOWN",error_code="RECONCILIATION_PLANNER_NOT_AVAILABLE")
-                return {"task_id":task_id,"status":"UNKNOWN","reason":"RECONCILIATION_PLANNER_NOT_AVAILABLE"}
+                return finalize_observed(db,task,"UNKNOWN",error_code="RECONCILIATION_PLANNER_NOT_AVAILABLE")
             from .reconciliation import run_reconciliation
             return run_reconciliation(db,task,workspace,fixture_root)
         if source_spec.get("kind")=="goal_case":
             if planner_mode!="deterministic":
-                finalize(db,task,"UNKNOWN",error_code="GOAL_PLANNER_NOT_AVAILABLE")
-                return {"task_id":task_id,"status":"UNKNOWN","reason":"GOAL_PLANNER_NOT_AVAILABLE"}
+                return finalize_observed(db,task,"UNKNOWN",error_code="GOAL_PLANNER_NOT_AVAILABLE")
             from .goal_loop import run_goal_case
             return run_goal_case(db,task,workspace,fixture_root,fail_at=fail_at)
         try:
@@ -134,30 +125,27 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
             else:
                 raise ValueError("Unsupported planner mode")
         except LocalModelUnavailable as exc:
-            finalize(db, task, "UNKNOWN", error_code="LOCAL_MODEL_UNAVAILABLE")
-            return {"task_id": task_id, "status": "UNKNOWN", "reason": "LOCAL_MODEL_UNAVAILABLE", "diagnostic": type(exc).__name__}
+            observed=finalize_observed(db,task,"UNKNOWN",error_code="LOCAL_MODEL_UNAVAILABLE")
+            return ({**observed,"diagnostic":type(exc).__name__}
+                    if observed["status"]=="UNKNOWN" else observed)
         except (SourceUnavailable, FileNotFoundError, KeyError, ValueError, OSError) as exc:
-            finalize(db, task, "UNKNOWN", error_code="SOURCE_UNAVAILABLE")
-            return {"task_id": task_id, "status": "UNKNOWN", "reason": "SOURCE_UNAVAILABLE", "diagnostic": type(exc).__name__}
+            observed=finalize_observed(db,task,"UNKNOWN",error_code="SOURCE_UNAVAILABLE")
+            return ({**observed,"diagnostic":type(exc).__name__}
+                    if observed["status"]=="UNKNOWN" else observed)
         if proposal["decision"] == "NO_CHANGE":
-            finalize(db, task, "VERIFIED", decision="NO_CHANGE")
-            return {"task_id": task_id, "status": "VERIFIED", "decision": "NO_CHANGE"}
+            return finalize_observed(db,task,"VERIFIED",decision="NO_CHANGE")
         data = _artifact_bytes(task, proposal)
         try:
-            committed = finalize(db, task, "NEEDS_REVIEW", decision=proposal["decision"],
-                                 artifact_writer=lambda: store_once(workspace, task_id, data,
-                                     crash_after_write=fail_at == "after_artifact_before_commit"))
-        except (ArtifactConflict, ValueError, OSError):
-            finalize(db, task, "UNKNOWN", error_code="ARTIFACT_CONFLICT")
-            return {"task_id": task_id, "status": "UNKNOWN", "reason": "ARTIFACT_CONFLICT"}
-        if not committed:
-            return {"task_id": task_id, "status": "STALE_WORKER"}
-        # The grant or goal may have changed after source fetch. The transaction's
-        # authoritative state wins over the planner's pre-execution prediction.
-        actual = db.execute("SELECT state,decision,error_code FROM tasks WHERE task_id=?", (task_id,)).fetchone()
-        if actual["state"] != "NEEDS_REVIEW":
-            return {"task_id": task_id, "status": actual["state"], "reason": actual["error_code"]}
-        return {"task_id": task_id, "status": "NEEDS_REVIEW", "decision": actual["decision"],
-                "artifact": f"artifacts/{task_id}.json", "semantic_review": "NOT_PERFORMED"}
+            observed=finalize_observed(
+                db,task,"NEEDS_REVIEW",decision=proposal["decision"],
+                artifact_writer=lambda: store_once(
+                    workspace,task_id,data,
+                    crash_after_write=fail_at=="after_artifact_before_commit"))
+        except (ArtifactConflict,ValueError,OSError):
+            return finalize_observed(db,task,"UNKNOWN",error_code="ARTIFACT_CONFLICT")
+        if observed["status"]!="NEEDS_REVIEW":
+            return observed
+        return {**observed,"artifact":f"artifacts/{task_id}.json",
+                "semantic_review":"NOT_PERFORMED"}
     finally:
         db.close()
