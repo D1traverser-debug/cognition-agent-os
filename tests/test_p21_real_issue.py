@@ -140,7 +140,9 @@ class ExternalLiveIssueTests(unittest.TestCase):
         fx.joinpath("main.py").write_text(
             "import json,sys\nfrom rules import calculate\n"
             "print(json.dumps(calculate(json.loads(sys.stdin.read()))))\n")
-        fx.joinpath("rules.py").write_text(source)
+        # Preserve exact LF source bytes on Windows too; write_text()
+        # expands newlines to CRLF there, creating a FALSE source change.
+        fx.joinpath("rules.py").write_bytes(source.encode("utf-8"))
         visible=[{"input":{"x":1},"expected":{"out":2}}]
         hidden=[{"input":{"x":37},"expected":{"out":38}}]
         fx.joinpath("visible.json").write_text(json.dumps(visible))
@@ -234,7 +236,7 @@ class ExternalLiveIssueTests(unittest.TestCase):
                    }]}).encode()) as model:
             verdict=refine_repo_public(db,ws,fx,tid,
                                        model="qwen2.5-coder:7b",max_attempts=3)
-        self.assertEqual(verdict["status"],"PUBLIC_REFINEMENT_BUDGET_EXHAUSTED")
+        self.assertEqual(verdict["status"],"MODEL_REPEATED_PRIOR_HYPOTHESIS")
         self.assertEqual(verdict["attempts"],1)
         self.assertEqual(model.call_count,1)
         with closing(connect(db)) as con:
