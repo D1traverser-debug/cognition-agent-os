@@ -54,5 +54,47 @@ outcome, authentic owner OS trust root and multi-repository open-world
 evaluation remain unproven. Draft PR #12 is not merged; no change to
 production sources is authorized.
 
-Evidence status: **await genuine P17 CI result for this commit**.
-Do not reuse the P16 basic unit-test green as 7B capability evidence.
+## Actual unmocked experimental result (2026-10-21)
+
+The explicitly opted-in native experimental run
+[Actions #39562470066](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39562470066)
+completed **SUCCESS as infrastructure and evidence collection**.
+It installed genuine Ollama and `qwen2.5-coder:7b` on disposable
+Linux CI, performed a real token-generation probe, and executed
+whole-file proposals in the existing real offline Docker runtime.
+The benchmark manifest remained
+`0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf`.
+
+| Unchanged task | Initial valid candidate | Public test pass | Hidden test pass | Observed failure |
+|---|---:|---:|---:|---|
+| Invoice discount and postage | NO | 0/2 | 0/2 | Source replacement was unchanged, rejected as `Candidate makes no actual source change`. |
+| Distinct values above threshold | YES | 0/2 | 0/2 | Wrong whole-file candidate failed publicly. Two P16 correction generations repeated the same refuted hypothesis and were denied by duplicate fingerprints. |
+
+**Aggregate: valid frozen candidates 1/2; public acceptance 0/2;
+independent sealed-holdout acceptance 0/2.** Real completed model
+inference is independently confirmed. Approximate per-task experiment
+wall times were 59 s and 208 s respectively. Hidden examples were
+not used to adapt the proposals, and no original source file was
+modified. No predetermined correct replacement was supplied.
+
+The same run's standard checks also passed: Linux **283/283** and
+Windows **283/283** unittests, genuine sandbox Docker integration
+(including strict isolation and hidden refusal probes), and true
+hosted Windows Scheduler two ticks / two tasks and cleanup. The
+third-party mutable GitHub live source check was SKIPPED by design.
+
+**Interpretation:** The P16 retry/budget mechanism is operating
+mechanically, but Qwen2.5-Coder 7B still failed the autonomy capability
+gate. It does **not** demonstrate useful general code repair.
+The observed data are a tiny fixed benchmark, not proof that 7B
+universally fails coding; no general inference should be drawn.
+
+After collecting the actual experimental evidence, the PR's 7B
+opt-in marker was removed. Subsequent docs-only CI runs do not
+re-download weights, and the archived run above is the reference.
+No deployment on the owner's Windows 11 machine, production merge,
+paid remote model tokens or finite-trial AI credits occurred.
+
+The next meaningful problem is improving *hypothesis quality* under
+a proven public-only evidence boundary and testing on an independent
+unseen corpus, not repeating the same two source defects indefinitely.
