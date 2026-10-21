@@ -188,5 +188,191 @@ def main()->None:
         if not 0<report["passes"]<report["total"]:
             raise RuntimeError("Original release must exhibit both failures and controls")
 
+
+def _public_prompt(source:str)->str:
+    """Scope reads to the actual constructor, filter and ordinal mask; no gold."""
+    constructor=source.index("        # byweekday / bynweekday")
+    cond=source.index("            for i in dayset[start:end]:")
+    mask=source.index("                self.nwdaymask = [0]*self.yearlen")
+    slices=(
+        ("weekday representation",source[constructor:constructor+1900]),
+        ("recurrence iteration filter",source[cond:cond+1500]),
+        ("ordinal weekday mask construction",source[mask:mask+750]),
+    )
+    return (
+        "You are fixing a REAL bug in python-dateutil 2.9.0.post0, whose "
+        "complete original package and actual six dependency are evaluated "
+        "offline. The target is only dateutil/rrule.py; change only the "
+        "existing rrule._iter method body. Preserve ordinary weekday, ordinal "
+        "weekday and unrelated recurrence semantics. This is a one-shot "
+        "unfamiliar-project experiment: NO gold cases or model feedback. "
+        "Return only a JSON object with an edits list of 1 to 3 entries. "
+        "Each entry must have EXACTLY string fields find and replace, where "
+        "find is a short UNIQUE LITERAL substring of the original source "
+        "(at most 1000 characters) and replace is the corresponding changed "
+        "code (at most 1800 characters). No new imports/files, no Markdown. "
+        "Do not copy or rewrite the whole 66KB source file.\n"
+        "Independent issue goal:\n"+GOAL+"\n"
+        "Public visible tests only:\n"
+        +json.dumps(PUBLIC,sort_keys=True)+"\n"
+        +"\n".join("\n"+label+":\n"+part for label,part in slices)
+    )
+
+def _scope_ok(base:str,patched:str)->bool:
+    """Allow only the original rrule._iter function AST to change."""
+    import ast
+    try:
+        old=ast.parse(base)
+        new=ast.parse(patched)
+        if len(old.body)!=len(new.body):return False
+        changed=False
+        for prev,next_ in zip(old.body,new.body):
+            if isinstance(prev,ast.ClassDef) and prev.name=="rrule":
+                if not isinstance(next_,ast.ClassDef) or next_.name!="rrule":
+                    return False
+                if len(prev.body)!=len(next_.body):return False
+                if (prev.bases!=next_.bases or len(prev.decorator_list)!=len(next_.decorator_list)):
+                    return False
+                for prev_method,next_method in zip(prev.body,next_.body):
+                    if (isinstance(prev_method,(ast.FunctionDef,ast.AsyncFunctionDef))
+                        and prev_method.name=="_iter"):
+                        if not isinstance(next_method,ast.FunctionDef) or next_method.name!="_iter":
+                            return False
+                        if ast.dump(prev_method.args)!=ast.dump(next_method.args):
+                            return False
+                        changed=changed or ast.dump(prev_method)!=ast.dump(next_method)
+                    elif ast.dump(prev_method)!=ast.dump(next_method):
+                        return False
+            elif ast.dump(prev)!=ast.dump(next_):
+                return False
+        return changed
+    except (SyntaxError,ValueError,TypeError,UnicodeError):
+        return False
+
+def _expand_one_compact(raw_response:str,source:str)->str:
+    response=json.loads(raw_response)
+    if (not isinstance(response,dict) or set(response)!={"edits"}
+        or not isinstance(response["edits"],list)
+        or not 1<=len(response["edits"])<=3):
+        raise ValueError("INVALID_COMPACT_CANDIDATE")
+    result=source
+    for edit in response["edits"]:
+        if (not isinstance(edit,dict) or set(edit)!={"find","replace"}
+            or not isinstance(edit["find"],str)
+            or not isinstance(edit["replace"],str)
+            or not 1<=len(edit["find"])<=1000
+            or not 1<=len(edit["replace"])<=1800
+            or edit["find"]==edit["replace"]):
+            raise ValueError("INVALID_EDIT_SHAPE")
+        if result.count(edit["find"])!=1:
+            raise ValueError("FIND_NOT_UNIQUE")
+        result=result.replace(edit["find"],edit["replace"],1)
+    if result==source or not _scope_ok(source,result):
+        raise ValueError("UNAPPROVED_METHOD_CHANGE")
+    return result
+
+def _repack_only_rrule(wheel:bytes,new_rrule:bytes)->bytes:
+    import io
+    import zipfile
+    target="dateutil/rrule.py"
+    original=io.BytesIO(wheel)
+    dest=io.BytesIO()
+    with zipfile.ZipFile(original) as incoming,zipfile.ZipFile(dest,"w") as outgoing:
+        names=incoming.namelist()
+        if names.count(target)!=1:
+            raise ValueError("Expected a single original rrule source")
+        for info in incoming.infolist():
+            data=new_rrule if info.filename==target else incoming.read(info)
+            outgoing.writestr(info,data)
+    repacked=dest.getvalue()
+    with zipfile.ZipFile(io.BytesIO(repacked)) as check:
+        if check.read(target)!=new_rrule:
+            raise RuntimeError("Patched module was not frozen")
+        for name in names:
+            if name!=target:
+                with zipfile.ZipFile(io.BytesIO(wheel)) as origin:
+                    if check.read(name)!=origin.read(name):
+                        raise RuntimeError("Unrelated upstream package source changed")
+    return repacked
+
+def run_one_real_model()->None:
+    """Exactly ONE 7B generation with verified full-wheel independent cases."""
+    import io
+    import time
+    import zipfile
+    from cognition_agent_os import local_model
+    if os.environ.get("P31_REAL_7B_OPT_IN")!="1":
+        raise RuntimeError("P31 real model requires distinct explicit opt-in")
+    model="qwen2.5-coder:7b"
+    tags=local_model._request("GET","/api/tags",None,10)
+    names={x.get("name") for x in tags.get("models",[]) if isinstance(x,dict)}
+    if model not in names:raise RuntimeError("7B must be installed on disposable runner")
+    wheel_root=Path(os.environ.get("P31_WHEELS","")).resolve()
+    wheels=verify_wheels(wheel_root)
+    with zipfile.ZipFile(io.BytesIO(wheels[DATEUTIL_WHEEL])) as incoming:
+        original=incoming.read("dateutil/rrule.py").decode("utf-8")
+    start=time.monotonic()
+    reply=local_model._request("POST","/api/generate",{
+        "model":model,"prompt":_public_prompt(original),
+        "stream":False,"format":"json",
+        "options":{"temperature":0,"num_predict":1800},
+        "keep_alive":"0",
+    },180)
+    if reply.get("done") is not True or not isinstance(reply.get("response"),str):
+        raise RuntimeError("No genuine completed Ollama inference")
+    record={
+        "status":"GENUINE_LOCAL_7B_REPAIR_ATTEMPT",
+        "model":model,"manifest_sha256":manifest(),
+        "source_wheel_sha256":WHEEL_SHAS[DATEUTIL_WHEEL],
+        "inference_completed":True,"model_called":True,
+        "one_shot_generations":1,"feedback_retries":0,
+        "candidate_frozen":False,"public_passes":None,
+        "hidden_passes":None,"hidden_evaluated":False,
+        "original_upstream_modified":False,
+        "source_files_changed_in_package":[],
+        "external_maintainer_accepted":False,
+        "full_upstream_package_execution":False,
+    }
+    with tempfile.TemporaryDirectory(prefix="p31-full-wheel-candidate-") as tmp:
+        stage=Path(tmp)
+        os.chmod(stage,0o755)
+        try:
+            edited=_expand_one_compact(reply["response"],original)
+            new_wheel=_repack_only_rrule(wheels[DATEUTIL_WHEEL],edited.encode())
+        except (ValueError,TypeError,UnicodeError,KeyError) as exc:
+            # A true completed inference with invalid code is still a
+            # measured negative result, never a fabricated refuted patch.
+            record["reason"]="COMPACT_CANDIDATE_REJECTED"
+            record["validation_error_type"]=type(exc).__name__
+        else:
+            record["candidate_frozen"]=True
+            record["source_files_changed_in_package"]=["dateutil/rrule.py"]
+            for name,data in wheels.items():
+                output=stage/name
+                output.write_bytes(new_wheel if name==DATEUTIL_WHEEL else data)
+                output.chmod(0o644)
+            probe=stage/"probe.py"
+            probe.write_text(PROBE,encoding="utf-8")
+            probe.chmod(0o644)
+            actual=_run_cases(stage,PUBLIC)
+            record["public_passes"]=actual["passes"]
+            record["public_total"]=actual["total"]
+            record["full_upstream_package_execution"]=True
+            if actual["passes"]==len(PUBLIC):
+                independent=_run_cases(stage,HIDDEN)
+                record["hidden_evaluated"]=True
+                record["hidden_passes"]=independent["passes"]
+                record["hidden_total"]=independent["total"]
+                record["isolated_repair_verified"]=(independent["passes"]==len(HIDDEN))
+            else:
+                record["isolated_repair_verified"]=False
+        record["elapsed_seconds"]=round(time.monotonic()-start,2)
+    # Never emit generated code, hidden expected values or model answers.
+    print("p31_real_full_upstream_7b_result="+json.dumps(record,sort_keys=True),
+          flush=True)
+
 if __name__=="__main__":
-    main()
+    if os.environ.get("P31_REAL_7B_OPT_IN")=="1":
+        run_one_real_model()
+    else:
+        main()
