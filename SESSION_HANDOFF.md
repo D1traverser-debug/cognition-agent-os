@@ -1,5 +1,46 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## CURRENT P20 — authentic external QuixBugs source and official tests preregistered (2026-10-21)
+
+Goal: improve autonomous repair evidence beyond P19 Agent-authored
+examples. Use *third-party historically published* original buggy
+Python code and its original independently authored QuixBugs test
+expected values, without manufacturing gold or reading upstream fixes.
+
+Source: `jkoppel/QuixBugs`, historical immutable Git commit
+`4257f44b0ff1181dedaedee6a447e133219fcebf`, exact Git
+blob identities preregistered for `gcd.py`, `max_sublist_sum.py`
+and their official `json_testcases/*.json`. Two upstream official
+rows per task are PUBLIC; four upstream rows are Docker sealed-only.
+The model never receives upstream fixed code, hidden rows or accepted
+source. See `scripts/verify_p20_external_quixbugs.py`,
+`tests/test_p20_external_quixbugs.py` and
+`docs/31-PINNED-EXTERNAL-QUIXBUGS-REPAIR.md`.
+
+The P20 source/test values are externally authored and Git-pinned.
+However QuixBugs is a PUBLIC historical benchmark with possible model
+pretraining contamination, not a real live issue or a fresh private
+external user acceptance. Do not claim model generalization merely
+from these two tasks; request real holdout external cases next.
+No paid model API/credit service, owner PC install, production writes,
+upstream mutation, PR merge or extra scheduler. Same SQLite authority,
+Ollama localhost, genuine no-network Docker and 3-generation budget.
+
+P20 current stage: implementation / offline CI check.
+**Actual first P20 7B inference and external testcase scores NOT YET
+OBSERVED.** Preserve authentic failure and do not announce success
+without real hosted result. One-time opt-in `[run-p20-external-7b]`
+will trigger disposable Linux 7B source experiment only after ordinary
+regressions, and must be removed once actual evidence is collected.
+Last completed P19 real Ollama evidence remains Actions #39570647119;
+last P19 final normal head CI remains #39571455626.
+
+Next exact actions: inspect new P20 offline Linux/Windows/Docker/
+Windows-Scheduler checks; fix actual failures; run one real unmocked
+external benchmark in CI; record source hashes, candidates, PUBLIC
+and official heldout score; remove opt-in; recheck final Draft HEAD.
+Keep the broad independence/production gates blocked.
+
 ## CURRENT P19 — real prospective unfamiliar code-repair transfer PASS, still NOT production (2026-10-21)
 
 Cumulative candidate on `D1traverser-debug/cognition-agent-os`,
