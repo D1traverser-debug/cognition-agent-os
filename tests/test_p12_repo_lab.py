@@ -380,6 +380,34 @@ class RepoLabTest(unittest.TestCase):
         self.assertEqual(self.state(tid)["state"],"UNKNOWN")
         self.assertTrue(capability_disabled(self.dbpath,REPAIR_LAB_CAPABILITY))
 
+    def test_p30_host_full_lifecycle_never_accepts_expired_docker_gold(self):
+        tid=self.seed()
+        contaminated=b'[{"input":{},"expected":{"net":999}}]'
+        def expire_gold_on_hidden_evaluation(base,changes,entrypoint,cases):
+            result=self._fake_suite(base,changes,entrypoint,cases)
+            if cases==self.hidden:
+                self.fx.joinpath("hidden.json").write_bytes(contaminated)
+            return result
+        # Actual host orchestration, SQLite task claim, deterministic proposal
+        # freeze, explicit review admission and final conformance sweep. Only
+        # the Docker executable boundary is mocked for the fault injection.
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=expire_gold_on_hidden_evaluation) as executor:
+            report=run_tick(self.dbpath,self.ws,self.fx,
+                            auto_stage_goals=True,auto_review_repos=True)
+        self.assertEqual(report["processed"],1)
+        self.assertEqual(report["tasks"][0]["status"],"NEEDS_REVIEW")
+        self.assertGreaterEqual(executor.call_count,3)
+        self.assertEqual(len(report["repair_lab_reviews"]),1)
+        self.assertEqual(report["repair_lab_reviews"][0]["status"],
+                         "HOLDOUT_PIN_MISMATCH")
+        self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
+        self.assertFalse((self.ws/"repo_lab"/tid).exists())
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='REPO_DOCKER_HOLDOUT_ACCEPTED'",(tid,)).fetchone()[0],0)
+
     def test_default_host_no_hidden_evaluation_and_explicit_optin(self):
         tid=self.seed()
         ordinary=run_tick(self.dbpath,self.ws,self.fx)
