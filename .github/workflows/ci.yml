@@ -193,7 +193,7 @@ jobs:
   experimental_local_7b_capacity:
     # One explicitly requested nonmetered coder-capacity test only.
     # Installed on disposable hosted Linux CI, never owner's computer.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]')) }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 28
     steps:
@@ -242,10 +242,13 @@ jobs:
           P18_EXPLICIT_GOAL: ${{ contains(github.event.pull_request.body, '[run-p18-goal-7b]') && '1' || '0' }}
           P19_UNFAMILIAR_CORPUS: ${{ contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') && '1' || '0' }}
           P20_EXTERNAL_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p20-external-7b]') && '1' || '0' }}
+          P21_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$P20_EXTERNAL_OPT_IN" = "1" ]; then
+          if [ "$P21_ISSUE_OPT_IN" = "1" ]; then
+            python scripts/verify_p21_live_issue.py
+          elif [ "$P20_EXTERNAL_OPT_IN" = "1" ]; then
             python scripts/verify_p20_external_quixbugs.py
           elif [ "$P19_UNFAMILIAR_CORPUS" = "1" ]; then
             python scripts/verify_p19_unfamiliar_model.py
