@@ -63,7 +63,7 @@ class PublicRevisionTests(unittest.TestCase):
         with closing(connect(self.db)) as db:
             return dict(db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone())
 
-    def suite(self,base,changes,entrypoint,cases):
+    def suite(self,base,changes,entrypoint,cases,*,include_observed=False):
         self.assertEqual(entrypoint,"main.py")
         self.assertNotIn("hidden_PRIVATE_SECRET_987",repr(cases))
         if not changes or changes["rules.py"] in (
@@ -181,7 +181,7 @@ class PublicRevisionTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
 
     def test_original_public_working_refuses_to_refine(self):
-        def passed(base,changes,entrypoint,cases):
+        def passed(base,changes,entrypoint,cases,*,include_observed=False):
             return {"passes":len(cases),"total":len(cases),
                     "observed":[{"pass":True,"output_sha256":"0"*64} for _ in cases]}
         with patch("cognition_agent_os.repo_refinement.run_suite",side_effect=passed),\
