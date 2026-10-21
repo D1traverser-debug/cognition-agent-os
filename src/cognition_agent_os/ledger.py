@@ -72,8 +72,15 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
         db.execute("""UPDATE tasks SET state='RUNNING',claim_token=?,lease_until=?,state_version=state_version+1
                     WHERE task_id=?""", (token, now+lease_seconds, row["task_id"]))
         event(db, row["task_id"], "CLAIMED", {"new_token": token, "prior_state": row["state"]})
+        # Capture THIS claim's token/version while our IMMEDIATE write lock
+        # still excludes competing lease owners. After COMMIT, an expired
+        # lease can legitimately be taken over before this worker returns.
+        # A post-commit SELECT would then hand the first worker the second
+        # worker's claim token. Its original snapshot must never be replaced.
+        claimed=dict(db.execute("SELECT * FROM tasks WHERE task_id=?",
+                                (row["task_id"],)).fetchone())
         db.commit()
-        return dict(db.execute("SELECT * FROM tasks WHERE task_id=?", (row["task_id"],)).fetchone())
+        return claimed
     except BaseException:
         db.rollback()
         raise
