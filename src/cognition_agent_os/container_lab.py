@@ -24,7 +24,18 @@ _HEX=re.compile(r"[0-9a-f]{64}\Z")
 
 
 class ContainerUnavailable(Exception):
-    pass
+    """Docker runtime/service missing or unavailable; NEVER host fallback."""
+
+
+class CandidateExecutionFailed(Exception):
+    """A real Docker run completed, but the untrusted program failed."""
+
+    def __init__(self, code: str):
+        if code not in ("CANDIDATE_NONZERO","CANDIDATE_EMPTY_OR_OVERSIZE_OUTPUT",
+                        "CANDIDATE_INVALID_JSON_OUTPUT"):
+            raise ValueError("Unapproved candidate failure code")
+        self.code=code
+        super().__init__(code)
 
 
 def _json_bytes(value)->bytes:
@@ -120,14 +131,17 @@ def _docker_run(directory:Path,entrypoint:str,case_input)->dict:
                              capture_output=True,timeout=8,check=False)
     except (OSError,subprocess.TimeoutExpired) as exc:
         raise ContainerUnavailable("CONTAINER_LAUNCH_OR_TIMEOUT") from exc
+    if child.returncode in (125,126,127):
+        # Docker CLI/runtime failures, not evidence about candidate logic.
+        raise ContainerUnavailable("DOCKER_PROCESS_UNAVAILABLE")
     if child.returncode!=0:
-        raise ContainerUnavailable("CONTAINER_EXIT_NONZERO")
+        raise CandidateExecutionFailed("CANDIDATE_NONZERO")
     if not child.stdout or len(child.stdout)>MAX_OUTPUT:
-        raise ContainerUnavailable("CONTAINER_OUTPUT_BOUNDS")
+        raise CandidateExecutionFailed("CANDIDATE_EMPTY_OR_OVERSIZE_OUTPUT")
     try:
         return json.loads(child.stdout)
     except (ValueError,UnicodeError) as exc:
-        raise ContainerUnavailable("CONTAINER_INVALID_JSON_OUTPUT") from exc
+        raise CandidateExecutionFailed("CANDIDATE_INVALID_JSON_OUTPUT") from exc
 
 
 def run_suite(base_sources:dict[str,bytes],changes:dict[str,bytes],
@@ -151,7 +165,16 @@ def run_suite(base_sources:dict[str,bytes],changes:dict[str,bytes],
         passes=0
         observed=[]
         for case in cases:
-            result=_docker_run(root,entrypoint,case["input"])
+            try:
+                result=_docker_run(root,entrypoint,case["input"])
+            except CandidateExecutionFailed as exc:
+                # A broken candidate is a public-test failure, NOT proof
+                # Docker is missing. Safe enum can be fed back to a model;
+                # no traceback/host paths/hidden expected values disclosed.
+                observed.append({
+                    "output_sha256":hashlib.sha256(exc.code.encode()).hexdigest(),
+                    "pass":False,"execution_error":exc.code})
+                continue
             expected=_json_bytes(case["expected"])
             observed_bytes=_json_bytes(result)
             accepted=observed_bytes==expected
