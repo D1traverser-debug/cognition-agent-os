@@ -156,6 +156,41 @@ class P1Test(unittest.TestCase):
         self.assertEqual(self.execute_once()["status"],"UNKNOWN")
         self.assertEqual(self.records()[0][0]["error_code"],"ARTIFACT_CONFLICT")
 
+    def test_nochange_goal_rotation_during_proposal_cannot_report_verified(self):
+        from unittest.mock import patch
+        from cognition_agent_os import runner
+        tid=self.seed(old="same.txt",new="same.txt")
+        def rotate_goal_then_noop(old,new,evidence):
+            db=connect(self.dbpath)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            return {"decision":"NO_CHANGE"}
+        with patch.object(runner,"propose",side_effect=rotate_goal_then_noop):
+            result=self.execute_once()
+        self.assertEqual(result["task_id"],tid)
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"STALE_GOAL")
+        self.assertNotEqual(result.get("decision"),"NO_CHANGE")
+        self.assertFalse((self.out/"artifacts").exists())
+        self.assertEqual(self.records()[0][0]["state"],"BLOCKED")
+
+    def test_source_failure_during_goal_rotation_reports_committed_block(self):
+        from unittest.mock import patch
+        from cognition_agent_os import runner
+        tid=self.seed()
+        def rotate_then_raise(spec,fixtures):
+            from cognition_agent_os.source import SourceUnavailable
+            db=connect(self.dbpath)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            raise SourceUnavailable("forced origin unavailable")
+        with patch.object(runner,"get_pair",side_effect=rotate_then_raise):
+            result=self.execute_once()
+        self.assertEqual(result["task_id"],tid)
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"STALE_GOAL")
+        self.assertEqual(self.records()[0][0]["state"],"BLOCKED")
+
     def test_recurrence_is_pending_not_host_wakeup(self):
         self.seed(old="same.txt",new="same.txt",interval=3600)
         r=self.execute_once()
