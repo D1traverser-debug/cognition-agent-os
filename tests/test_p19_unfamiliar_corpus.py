@@ -3,6 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from cognition_agent_os.container_lab import validate_task_spec,cases_from_bytes
@@ -82,6 +87,20 @@ class UnfamiliarCorpusContract(unittest.TestCase):
             self.assertNotIn("subprocess",case["source"])
             self.assertNotIn("os.system",case["source"])
             self.assertLess(len(case["source"].encode()),16384)
+
+    def test_standalone_entrypoint_imports_without_installing_or_using_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            env=dict(os.environ)
+            env["P14_LOCAL_MODEL"]="qwen2.5-coder:0.5b"
+            env.pop("PYTHONPATH",None)
+            result=subprocess.run(
+                [sys.executable,str(Path(__file__).resolve().parents[1]/
+                                    "scripts"/"verify_p19_unfamiliar_model.py")],
+                cwd=temporary,env=env,capture_output=True,text=True,timeout=15)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn("requires explicitly opted-in genuine local 7B",
+                      result.stderr)
+        self.assertNotIn("ModuleNotFoundError",result.stderr)
 
     def test_broken_source_and_hidden_reference_are_not_model_correct_patches(self):
         self.assertIn("if key not in latest",CASES[0]["source"])
