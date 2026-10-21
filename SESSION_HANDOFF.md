@@ -48,10 +48,12 @@ owner acceptance. Gold not sent to model in prompt but all
 mathematics is publicly inferable.
 
 **Actual real 7B model result NOT YET OBSERVED** at creation
-of this checkpoint. P21 needs green preliminary ordinary
-Linux/Windows/Docker/Scheduler CI and one explicitly opted-in
-temporary PR body `[run-p21-issue-7b]` plus new head commit
-to run genuine Qwen2.5-Coder 7B on hosted disposable Linux.
+of this checkpoint. Preliminary ordinary Linux 302/302, Windows
+302/302 and real Docker succeeded; native Windows Scheduler check
+was still finishing when one-time P21 PR opt-in was activated.
+A new checkpoint-only branch commit triggers genuine Qwen2.5-Coder
+7B on hosted disposable Linux. Temporary PR body marker
+`[run-p21-issue-7b]` MUST be removed after experiment conclusion.
 No cloud paid model, finite credit/trial use, owner PC install,
 new autonomous monitoring/management subsystem or production
 merge. Remove marker after honest measurement and rerun final
