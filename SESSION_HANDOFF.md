@@ -1,5 +1,71 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P16 — failed local model hypotheses are durable negative evidence (2026-10-21)
+
+Current goal remains real self-governing local autonomy with actual
+independent outcome acceptance and durable method evolution. Owner
+hard cost constraint: ZERO paid remote LLM tokens/finite trial credits,
+no involuntary local model installation or owner machine deployment.
+Repo D1traverser-debug/cognition-agent-os; active cumulative Draft
+PR #12 targeting main; branch feat/p10-runtime-conformance-20261020.
+Still unmerged/unreleased. The user's Windows 11 machine is untouched.
+
+**P15 real causal result:**
+- Added `container_lab.run_suite(include_observed=True)` for
+  PUBLIC only; bounded actual wrong output (<512 bytes) now reaches
+  `repo_refinement._public_feedback`; independent withheld tests
+  keep default hash-only observations, no hidden oracle disclosure.
+  Linux 280/280 and Windows 280/280 regression passed; real Docker
+  PUBLIC output feedback passed.
+- Genuine Qwen2.5-Coder 3B on ephemeral Linux Ollama + real Docker
+  [Actions #39557639097](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39557639097)
+  passed as MEASUREMENT; benchmark held-out SHA unchanged
+  0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf.
+  **2/2 candidates froze, 0/2 PUBLIC, 0/2 HIDDEN.** Both first
+  generated repairs were refuted by real Docker. With actual
+  observed wrong output in PUBLIC feedback, the deterministic
+  local model returned the same refuted patch again; the earlier
+  P13 path immediately terminated with
+  MODEL_REPEATED_PRIOR_HYPOTHESIS. Actual model reasoning still
+  NOT ACCEPTED, and no completed task gold was leaked.
+  Details in docs/26-PUBLIC-OBSERVED-OUTPUT-REPAIR.md.
+
+**P16 substantive change:**
+- The original `repo_refinement.py` uses original SQLite
+  REPO_LOCAL_PUBLIC_REVISION_TRIAL events to load fingerprints
+  of all previously attempted candidates across invocations.
+  A verified repeated, unchanged, or invalid model response
+  consumes a durable one-of-three generation slot, rather than
+  allowing unlimited retries or immediately terminating.
+  The next bounded inference receives structured PUBLIC
+  `latest_rejection` (never hidden gold or untrusted tracebacks)
+  to request an entirely different implementation.
+- `repo_repair._candidate_from_model` remains deterministic
+  `temperature=0` for first generation; only after an actual
+  duplicate/no-change/invalid rejection does it use `0.35`
+  to explore a new hypothesis within its remaining slots.
+  Candidate approval still requires original source hashes,
+  allowlist, actual offline Docker PUBLIC, independent held-out
+  Docker acceptance, authority revisions and separate opt-in.
+- Tests added for duplicate-then-creative child freeze, durable
+  across-call three-slot limit for repeated/no-change, malformed
+  responses consuming budget, and different sampling request
+  only with latest_rejection. Linux 283/283 passed on earlier
+  code commit; final dual-platform + real Docker and the
+  new true 3B benchmark must be confirmed from final head.
+  Docs/27-NEGATIVE-HYPOTHESIS-RETRY.md details the claim.
+- The PR temporarily contains [run-p15-feedback-model] opt-in
+  to trigger ONE real installed 3B benchmark under P16 changed
+  correction loop on the SAME two P14 tasks. The job MUST
+  be observed before stating capability improvement; remove
+  PR opt-in after the run to avoid downloading model weights
+  on every subsequent docs-only commit. No local model quality
+  success has been verified for P16 at this checkpoint.
+- Remain in same Draft #12, never merge without explicit release.
+  No owner OS-level isolation or independently managed real
+  human business result is proven. Avoid treating mocks, docs
+  or engineering CI checks as proof of autonomous intelligence.
+
 ## CURRENT P15 — Public semantic counterexamples for real local repair (2026-10-21)
 
 P14's genuine local Qwen2.5-Coder 0.5B/1.5B/3B experiment ended
