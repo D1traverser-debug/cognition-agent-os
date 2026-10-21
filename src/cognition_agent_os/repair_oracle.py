@@ -314,19 +314,24 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
 
 
 def review_due_repairs(db_path: Path,workspace: Path,fixtures: Path,
-                       *,limit:int=4)->list[dict]:
+                       *,limit:int=4,allow_repo_execution:bool=False)->list[dict]:
     if not 1<=limit<=8:raise ValueError("Invalid repair review budget")
+    # Arbitrary whole-file Python execution requires separate positive
+    # opt-in. Historical --auto-stage-goals only authorized bounded AST
+    # evaluation; it must NOT silently inherit Docker code execution.
+    kinds=(("pure_code_repair","pipeline_code_repair","repo_container_repair")
+           if allow_repo_execution else ("pure_code_repair","pipeline_code_repair"))
+    placeholders=",".join("?" for _ in kinds)
     db=connect(db_path)
     try:
-        rows=db.execute("""SELECT task_id,CASE WHEN json_valid(source_spec)
+        rows=db.execute(f"""SELECT task_id,CASE WHEN json_valid(source_spec)
               THEN json_extract(source_spec,'$.kind') ELSE NULL END FROM tasks
               WHERE state='NEEDS_REVIEW' AND due_at<=?
                 AND CASE WHEN json_valid(source_spec)
                   THEN json_extract(source_spec,'$.kind')
-                  ELSE NULL END IN ('pure_code_repair','pipeline_code_repair',
-                                  'repo_container_repair')
+                  ELSE NULL END IN ({placeholders})
               ORDER BY due_at,created_at LIMIT ?""",
-              (__import__("time").time(),limit)).fetchall()
+              (__import__("time").time(),*kinds,limit)).fetchall()
         tasks=[(r[0],r[1]) for r in rows]
     finally:db.close()
     from .pipeline_oracle import review_pipeline
