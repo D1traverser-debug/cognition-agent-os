@@ -26,6 +26,16 @@ PACKAGES={
     "tzlocal":"5.3.1","idna":"3.10","sniffio":"1.3.1",
     "typing_extensions":"4.13.2",
 }
+WHEEL_SHA256={
+    "anyio-4.9.0-py3-none-any.whl":"9f76d541cad6e36af7beb62e978876f3b41e3e04f2c1fbf0884604c0a9c4d93c",
+    "apscheduler-4.0.0a6-py3-none-any.whl":"87031f7537aaa6ea2d3e69fdd9454b641f18938fc8cd0c589972006eceba8ee9",
+    "attrs-25.3.0-py3-none-any.whl":"427318ce031701fea540783410126f03899a97ffc6f61596ad581ac2e40e3bc3",
+    "idna-3.10-py3-none-any.whl":"946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3",
+    "sniffio-1.3.1-py3-none-any.whl":"2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2",
+    "tenacity-9.1.2-py3-none-any.whl":"f77bf36710d8b73a50b2dd155c97b870017ad21afe6ab300326b0371b3b05138",
+    "typing_extensions-4.13.2-py3-none-any.whl":"a439e7c04b49fec3e5d3e2beaa21755cadbbdc391694e28ccdd36ca4a1408f8c",
+    "tzlocal-5.3.1-py3-none-any.whl":"eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d",
+}
 SOURCE_PATHS=(
     "apscheduler/datastores/memory.py",
     "apscheduler/_schedulers/async_.py",
@@ -157,19 +167,22 @@ def sha(raw:bytes)->str:return hashlib.sha256(raw).hexdigest()
 def git_blob_sha(raw:bytes)->str:
     return hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\0"+raw).hexdigest()
 def _manifest()->str:
-    payload={"issue":ISSUE,"versions":PACKAGES,
+    payload={"issue":ISSUE,"versions":PACKAGES,"wheels":WHEEL_SHA256,
              "git_blobs":SOURCE_GIT_BLOBS,"goal":GOAL,
              "public":PUBLIC,"hidden":HIDDEN,"probe_sha256":sha(PROBE.encode())}
     return sha(json.dumps(payload,sort_keys=True,separators=(",",":")).encode())
 
 def _wheels(root:Path)->tuple[dict[str,bytes],str,dict[str,bytes]]:
     roots=list(root.glob("*.whl"))
-    if len(roots)!=len(PACKAGES):raise RuntimeError("Expected exact real dependency wheels")
+    if len(roots)!=len(WHEEL_SHA256) or {x.name for x in roots}!=set(WHEEL_SHA256):
+        raise RuntimeError("Expected exact pinned real dependency wheels")
     wheel_bytes={}
     package_wheel=None
     original={}
     for file in roots:
         data=file.read_bytes()
+        if sha(data)!=WHEEL_SHA256[file.name]:
+            raise RuntimeError("Published real wheel SHA256 changed")
         if not data or file.name in wheel_bytes:
             raise RuntimeError("Missing real upstream wheel")
         wheel_bytes[file.name]=data
