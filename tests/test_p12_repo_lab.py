@@ -131,6 +131,54 @@ class RepoLabTest(unittest.TestCase):
         self.assertEqual(inspect_conformance(
             self.dbpath,self.ws,self.fx)["mechanically_valid"],1)
 
+    def test_p30_hidden_gold_drifts_after_docker_before_review_commit(self):
+        tid=self.plan()
+        contaminated=b'[{"input":{},"expected":{"net":999}}]'
+        def change_gold_after_real_review_boundary(base,changes,entrypoint,cases):
+            observed=self._fake_suite(base,changes,entrypoint,cases)
+            if cases==self.hidden:
+                # Docker already evaluated the ORIGINAL frozen gold.
+                # It must never approve that verdict against new gold.
+                self.fx.joinpath("hidden.json").write_bytes(contaminated)
+            return observed
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=change_gold_after_real_review_boundary):
+            result=review_repo(self.dbpath,self.ws,self.fx,tid)
+        self.assertNotEqual(result["status"],"REPAIR_LAB_VERIFIED",result)
+        self.assertEqual(result["status"],"HOLDOUT_PIN_MISMATCH",result)
+        self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
+        self.assertFalse((self.ws/"repo_lab"/tid).exists())
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='REPO_DOCKER_HOLDOUT_ACCEPTED'",(tid,)).fetchone()[0],0)
+
+    def test_p30_hidden_gold_drifts_during_staging_before_receipt(self):
+        from cognition_agent_os import repo_repair
+        tid=self.plan()
+        original_stage=repo_repair._stage
+        contaminated=b'[{"input":{},"expected":{"net":999}}]'
+        def stage_then_change_hidden(*args,**kwargs):
+            effect=original_stage(*args,**kwargs)
+            # The sandbox file effect was created but acceptance is not
+            # yet authorized by the original hidden gold.
+            self.fx.joinpath("hidden.json").write_bytes(contaminated)
+            return effect
+        with (patch("cognition_agent_os.repo_repair.run_suite",
+                    side_effect=self._fake_suite),
+              patch.object(repo_repair,"_stage",side_effect=stage_then_change_hidden)):
+            result=review_repo(self.dbpath,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"POST_EFFECT_REJECTED",result)
+        self.assertEqual(self.state(tid)["state"],"UNKNOWN")
+        self.assertNotEqual(self.state(tid)["state"],"REPAIR_LAB_VERIFIED")
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='REPO_DOCKER_HOLDOUT_ACCEPTED'",(tid,)).fetchone()[0],0)
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='REPO_DOCKER_POST_STAGE_REJECTED'",(tid,)).fetchone()[0],1)
+
     def test_hidden_counterexample_refutes_without_creating_lab(self):
         tid=self.plan()
         def mismatch(base,changes,entrypoint,cases):
