@@ -31,7 +31,8 @@ from cognition_agent_os.container_lab import run_suite,cases_from_bytes,Containe
 # The hosted benchmark tests two independently installed non-metered
 # coder weights; accepting an arbitrary model name is deliberately disallowed.
 MODEL=os.environ.get("P14_LOCAL_MODEL","qwen2.5-coder:0.5b")
-if MODEL not in ("qwen2.5-coder:0.5b","qwen2.5-coder:1.5b"):
+if MODEL not in ("qwen2.5-coder:0.5b","qwen2.5-coder:1.5b",
+                 "qwen2.5-coder:3b"):
     raise ValueError("P14 benchmark model is not on explicit local allowlist")
 ENTRY=(
     "import json,sys\n"
