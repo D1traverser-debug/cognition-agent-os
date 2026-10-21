@@ -18,6 +18,7 @@ class KnowledgeRoutingRuntimeTests(unittest.TestCase):
         self.root=Path(tmp.name)
         self.fixtures=self.root/"fixture";self.fixtures.mkdir()
         self.workspace=self.root/"workspace"
+        self.workspace.mkdir()
         self.dbpath=self.root/"state.sqlite"
         db=connect(self.dbpath);initialize(db);db.close()
         self.fixtures.joinpath("settings.json").write_text('{"keep":"value"}')
