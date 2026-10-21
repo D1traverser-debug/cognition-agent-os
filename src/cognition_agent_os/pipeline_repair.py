@@ -19,7 +19,7 @@ from .repair_search import (
 )
 from .runner import store_once,ArtifactConflict
 from .source import safe_fixture
-from .ledger import finalize
+from .ledger import finalize_observed
 
 OPS=(ast.Add,ast.Sub,ast.Mult,ast.Lt,ast.LtE,ast.Gt,ast.GtE,ast.Eq,ast.NotEq)
 SHA=lambda b:hashlib.sha256(b).hexdigest()
@@ -148,13 +148,16 @@ def run_pipeline_case(db,task,workspace,fixtures):
         # No open/read for spec["holdout"] anywhere in this planner.
         proposal=propose_pipeline(spec,*src,public)
     except (RepairError,OSError,ValueError,KeyError,TypeError) as exc:
-        finalize(db,task,"UNKNOWN",error_code="PIPELINE_INPUT_UNSUPPORTED")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"PIPELINE_INPUT_UNSUPPORTED",
-                "diagnostic":type(exc).__name__}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code="PIPELINE_INPUT_UNSUPPORTED")
+        return ({**observed,"diagnostic":type(exc).__name__}
+                if observed["status"]=="UNKNOWN" else observed)
     if proposal["status"]!="UNIQUE_VISIBLE_CANDIDATE":
-        finalize(db,task,"UNKNOWN",error_code=proposal["status"])
-        return {"task_id":tid,"status":"UNKNOWN","reason":proposal["status"],
-                "alternatives_checked":proposal.get("alternatives_checked",0)}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code=proposal["status"])
+        return ({**observed,
+                 "alternatives_checked":proposal.get("alternatives_checked",0)}
+                if observed["status"]=="UNKNOWN" else observed)
     hashes=[SHA(v) for v in src]
     public_hash=SHA(public)
     record={"task_id":tid,"goal_rev":task["goal_rev"],"source_spec":spec,
@@ -170,15 +173,14 @@ def run_pipeline_case(db,task,workspace,fixtures):
             raise RepairError("Source changed during candidate freeze")
         return store_once(workspace,tid,data)
     try:
-        ok=finalize(db,task,"NEEDS_REVIEW",decision="CROSS_FILE_OPERATOR_REPAIR",
-                    artifact_writer=write)
+        observed=finalize_observed(db,task,"NEEDS_REVIEW",
+                                   decision="CROSS_FILE_OPERATOR_REPAIR",
+                                   artifact_writer=write)
     except (ArtifactConflict,RepairError,OSError,ValueError):
-        finalize(db,task,"UNKNOWN",error_code="PIPELINE_PROPOSAL_CONFLICT")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"PIPELINE_PROPOSAL_CONFLICT"}
-    if not ok:return {"task_id":tid,"status":"STALE_WORKER"}
-    row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(tid,)).fetchone()
-    return {"task_id":tid,"status":row["state"],
-            "reason":row["error_code"],
+        return finalize_observed(db,task,"UNKNOWN",
+                                 error_code="PIPELINE_PROPOSAL_CONFLICT")
+    if observed["status"]!="NEEDS_REVIEW":return observed
+    return {**observed,"reason":observed.get("reason"),
             "alternatives_checked":proposal["alternatives_checked"],
             "stages":2,"holdout_seen_by_planner":False,
             "production_write_authorized":False}
