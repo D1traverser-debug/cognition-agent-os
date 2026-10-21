@@ -254,8 +254,9 @@ five Windows-only unit assertion failures because
 introduced CRLF bytes on Windows. Linux 306/306, actual Docker and
 real Windows Scheduled Task succeeded, but Windows unit tests were
 RED. Fixed the fixture with exact `write_bytes(source.encode())`,
-and corrected a refiner test expectation to the actual bounded
-`MODEL_REPEATED_PRIOR_HYPOTHESIS` refusal. No production source
+and corrected a refiner test expectation to the observed bounded
+`PUBLIC_REFINEMENT_BUDGET_EXHAUSTED` status when the final distinct
+candidate also fails the public test after three model generations. No production source
 admission was loosened; raw bytes remain source authority.
 The follow-on ordinary Linux+Windows+Docker+Scheduler CI, rather
 than the failed third-run Windows job, is the acceptance check.
