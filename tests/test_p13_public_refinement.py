@@ -139,6 +139,49 @@ class PublicRevisionTests(unittest.TestCase):
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
 
+    def test_repeated_model_hypothesis_triggers_alternative_then_freezes_child(self):
+        seen_feedback=[]
+        def model(*args,**kw):
+            seen_feedback.append(kw["feedback"])
+            return self.model_output(self.bad if len(seen_feedback)==1 else self.good)
+        with patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite) as executed,\
+             patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   side_effect=model):
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=2)
+        self.assertEqual(result["status"],"REVISED_PUBLIC_CANDIDATE_FROZEN",result)
+        self.assertEqual(result["model_candidates_tested"],2)
+        self.assertIn("latest_rejection",seen_feedback[1])
+        self.assertEqual(seen_feedback[1]["latest_rejection"]["reason"],
+                         "MODEL_REPEATED_PRIOR_HYPOTHESIS")
+        self.assertEqual(self.task(result["child_task_id"])["state"],"NEEDS_REVIEW")
+        # Bad repeated source must not be executed a second time in Docker.
+        self.assertEqual(executed.call_count,3)
+
+    def test_repeated_model_hypotheses_consume_parent_budget_across_calls(self):
+        with patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite),\
+             patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   return_value=self.model_output(self.bad)) as model:
+            first=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                     model="installed:7b",max_attempts=2)
+            second=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=2)
+            third=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                     model="installed:7b",max_attempts=2)
+        self.assertEqual(first["status"],"MODEL_REPEATED_PRIOR_HYPOTHESIS")
+        self.assertEqual(first["attempts"],2)
+        self.assertEqual(second["attempts"],1)
+        self.assertEqual(third["status"],"REFINEMENT_BUDGET_EXHAUSTED")
+        self.assertEqual(model.call_count,3)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                """SELECT COUNT(*) FROM events WHERE task_id=?
+                AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",
+                (self.parent,)).fetchone()[0],3)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
+
     def test_bounded_failed_attempts_recorded_then_refused(self):
         with patch("cognition_agent_os.repo_refinement.run_suite",
                    side_effect=self.suite),\
