@@ -43,10 +43,22 @@ PUBLIC=[
     {"input":{"case":"scheduler_removed"},"expected":{"safe":True}},
 ]
 HIDDEN=[
-    {"input":{"case":"memory_single"},"expected":{"safe":True}},
-    {"input":{"case":"scheduler_tracked"},"expected":{"safe":True}},
-    {"input":{"case":"memory_duplicate"},"expected":{"safe":True}},
-    {"input":{"case":"scheduler_removed"},"expected":{"safe":True}},
+    {"input":{"case":"memory_duplicate","task_id":"p32:held_one",
+              "result_retention_s":45},"expected":{"safe":True}},
+    {"input":{"case":"memory_duplicate","task_id":"p32:held_two",
+              "result_kind":"error"},"expected":{"safe":True}},
+    {"input":{"case":"memory_duplicate","task_id":"p32:held_three",
+              "result_retention_s":180,"result_kind":"error"},"expected":{"safe":True}},
+    {"input":{"case":"memory_single","task_id":"p32:held_four",
+              "result_retention_s":30},"expected":{"safe":True}},
+    {"input":{"case":"scheduler_removed","task_id":"p32:held_five",
+              "fail_job":True},"expected":{"safe":True}},
+    {"input":{"case":"scheduler_removed","task_id":"p32:held_six",
+              "result_retention_s":45},"expected":{"safe":True}},
+    {"input":{"case":"scheduler_tracked","task_id":"p32:held_seven",
+              "fail_job":True},"expected":{"safe":True}},
+    {"input":{"case":"scheduler_removed","task_id":"p32:held_eight",
+              "missing_executor":True},"expected":{"safe":True}},
 ]
 GOAL=(
     "Fix the REAL APScheduler 4.0.0a6 memory lease-duplicate completion "
@@ -64,7 +76,7 @@ GOAL=(
 # hidden cases are replayed with separate original fresh objects; this is not
 # a broad distribution or maintainer acceptance, explicitly record limitation.
 
-PROBE=String_probe=String = r'''
+PROBE = r'''
 import asyncio
 import json
 import os
@@ -78,11 +90,14 @@ from apscheduler import AsyncScheduler
 from apscheduler._enums import JobOutcome
 from apscheduler._structures import Task,Job,JobResult
 
-def seed(scheduler):
+def seed(scheduler,request):
+    from datetime import timedelta
     data=scheduler.data_store
-    task=Task(id="p32:real_task",func="p32:real_task",
-              job_executor="async",running_jobs=1)
+    task=Task(id=request.get("task_id","p32:real_task"),
+              func="p32:real_task",job_executor="async",running_jobs=1)
     job=Job(task_id=task.id,executor="async",
+            result_expiration_time=timedelta(
+                seconds=request.get("result_retention_s",0)),
             acquired_by=scheduler.identity)
     data._tasks[task.id]=task
     data._jobs_by_id[job.id]=job
@@ -92,23 +107,39 @@ def seed(scheduler):
 async def check(data):
     case=data["case"]
     async with AsyncScheduler() as scheduler:
-        store,task,job=seed(scheduler)
+        store,task,job=seed(scheduler,data)
         if case.startswith("memory_"):
-            result=JobResult.from_job(job,JobOutcome.success)
+            if data.get("result_kind")=="error":
+                result=JobResult.from_job(job,JobOutcome.error,
+                    exception=ValueError("private-case sentinel"))
+            else:
+                result=JobResult.from_job(job,JobOutcome.success)
             await store.release_job(scheduler.identity,job,result)
             if case=="memory_duplicate":
                 await store.release_job(scheduler.identity,job,result)
+            should_retain=data.get("result_retention_s",0)>0
             return {"safe":(
                 task.running_jobs==0
                 and job.id not in store._jobs_by_id
-                and task.id not in store._jobs_by_task_id)}
+                and task.id not in store._jobs_by_task_id
+                and (job.id in store._job_results)==should_retain)}
         if case.startswith("scheduler_"):
             scheduler._running_jobs.add(job)
+            if data.get("missing_executor"):
+                scheduler._running_jobs.discard(job)
             async def fn():
                 if case=="scheduler_removed":
                     scheduler._running_jobs.discard(job)
+                if data.get("fail_job"):
+                    raise ValueError("private-case sentinel")
                 return 17
-            await scheduler._run_job(job,fn,"async")
+            await scheduler._run_job(job,fn,
+                "unavailable" if data.get("missing_executor") else "async")
+            if data.get("missing_executor"):
+                return {"safe":(
+                    not scheduler._running_jobs
+                    and task.running_jobs==1
+                    and job.id in store._jobs_by_id)}
             return {"safe":(
                 not scheduler._running_jobs
                 and task.running_jobs==0
