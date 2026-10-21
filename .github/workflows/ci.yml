@@ -140,6 +140,56 @@ jobs:
           P14_LOCAL_MODEL=qwen2.5-coder:1.5b python scripts/verify_actual_local_model.py
           P14_LOCAL_MODEL=qwen2.5-coder:3b python scripts/verify_actual_local_model.py
 
+  experimental_public_feedback_model:
+    # P15: separate opt-in, one real nonmetered 3B coder model only.
+    # This measures quality on unchanged P14 hidden cases. A zero pass
+    # remains valid observed model-quality failure, not fabricated success.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p15-feedback-model]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare actual offline Docker, temporary CI runner only
+        run: docker pull python:3.12-alpine
+      - name: Install local Ollama on temporary CI runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/p15-ollama-install.sh"
+          sh "$RUNNER_TEMP/p15-ollama-install.sh"
+          ollama --version
+      - name: Launch loopback-only local model and prefetch 3B code weights
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/p15-ollama-server.log" 2>&1 &)
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            tail -n 60 "$RUNNER_TEMP/p15-ollama-server.log"
+            exit 1
+          fi
+          timeout 420 ollama pull qwen2.5-coder:3b
+          ollama list
+      - name: Measure genuine model repairs with actual PUBLIC output feedback
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          P14_LOCAL_MODEL: qwen2.5-coder:3b
+        run: python scripts/verify_actual_local_model.py
+
   live_public_source:
     # Explicit opt-in: third-party public API quota is separate from local correctness.
     # GitHub workflow_dispatch UI becomes usable when the workflow is on the default branch.
