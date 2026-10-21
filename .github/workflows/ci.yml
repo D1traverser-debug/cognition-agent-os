@@ -193,7 +193,7 @@ jobs:
   experimental_local_7b_capacity:
     # One explicitly requested nonmetered coder-capacity test only.
     # Installed on disposable hosted Linux CI, never owner's computer.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p17-7b-local-model]') }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 28
     steps:
@@ -237,6 +237,9 @@ jobs:
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_NO_CLOUD: '1'
           P14_LOCAL_MODEL: qwen2.5-coder:7b
+          # P18 deliberately changes ONLY owner-supplied goal semantics;
+          # original P14 public/hidden fixture bytes remain untouched.
+          P18_EXPLICIT_GOAL: ${{ contains(github.event.pull_request.body, '[run-p18-goal-7b]') && '1' || '0' }}
         run: python scripts/verify_actual_local_model.py
 
   live_public_source:
