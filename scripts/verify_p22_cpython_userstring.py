@@ -165,7 +165,11 @@ def check_independent_scope(root: Path, case: dict, raw: bytes) -> dict:
             "reason":"TWO_AFFIX_METHODS_ONLY" if okay else "OTHER_OR_ADAPTER_EDIT"}
 
 def main():
-    if MODEL != "qwen2.5-coder:7b" or os.getenv("P22_ISSUE_OPT_IN") != "1":
+    # Inexpensive independent original-source Docker reproduction MUST pass
+    # before installing or claiming any real 7B model competence.
+    baseline_only = os.getenv("P22_BASELINE_ONLY") == "1"
+    if not baseline_only and (MODEL != "qwen2.5-coder:7b" or
+                              os.getenv("P22_ISSUE_OPT_IN") != "1"):
         raise RuntimeError("P22 real local inference needs explicit one-time opt-in")
     raw = fetch_pinned_source()
     case = prepare_case(raw)
@@ -179,7 +183,11 @@ def main():
           "upstream_commit":UPSTREAM_COMMIT,"git_blob_sha1":UPSTREAM_GIT_BLOB,
           "case_manifest_sha256":manifest,"baseline_public_passes":2,
           "baseline_public_total":4,"acceptance":"REPORTER_PLUS_AGENT_DERIVED_NOT_PRIVATE_MAINTAINER",
-          "scope":"EXACT_UPSTREAM_CLASS_COPY_ONLY"},sort_keys=True),flush=True)
+          "scope":"EXACT_UPSTREAM_CLASS_COPY_ONLY",
+          "stage":"BASELINE_ONLY" if baseline_only else "BEFORE_REAL_7B"},
+          sort_keys=True),flush=True)
+    if baseline_only:
+        return
     installed = local_model._request("GET", "/api/tags", None, 10)
     if MODEL not in {x.get("name") for x in installed.get("models",[]) if isinstance(x,dict)}:
         raise RuntimeError("Installed local model missing; no implicit pull")
