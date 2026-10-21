@@ -28,6 +28,7 @@ from .pipeline_repair import validate_pipeline
 from .pipeline_oracle import audit_pipeline,review_pipeline
 from .container_lab import validate_task_spec
 from .repo_repair import audit_repo,review_repo
+from .repo_refinement import refine_repo_public
 from .outcome_attestation import verify_signed_outcome,prepare_unsigned_outcome
 from .signed_feedback import record_signed_feedback,bind_owner_review_trust
 
@@ -124,6 +125,11 @@ def main(argv=None) -> int:
     repo_review=sub.add_parser("repo-review",
         help="Run entire candidate only in a preinstalled no-network Docker container")
     repo_review.add_argument("--task-id",required=True)
+    refine=sub.add_parser("repo-refine-local",
+        help="Explicit local-model + offline Docker public feedback loop; creates new reviewable child")
+    refine.add_argument("--task-id",required=True)
+    refine.add_argument("--model",required=True)
+    refine.add_argument("--max-attempts",type=int,choices=(1,2,3),default=2)
     governance = sub.add_parser("conformance-audit",
         help="Inspect claims vs current evidence; --enforce quarantines confirmed contradictions")
     governance.add_argument("--max-cases",type=int,default=64)
@@ -188,6 +194,12 @@ def main(argv=None) -> int:
             expected_principal=args.principal)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"]=="SIGNATURE_AND_MECHANICAL_SCOPE_VERIFIED" else 4
+    if args.command == "repo-refine-local":
+        result=refine_repo_public(
+            args.db,args.workspace,args.fixtures,args.task_id,
+            model=args.model,max_attempts=args.max_attempts)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="REVISED_PUBLIC_CANDIDATE_FROZEN" else 4
     if args.command == "repo-audit":
         result=audit_repo(args.db,args.workspace,args.fixtures,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
