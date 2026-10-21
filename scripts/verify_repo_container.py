@@ -143,7 +143,6 @@ def main():
         fx.joinpath("proposal.json").write_bytes(json.dumps({
             "changes":[{"path":"rules.py","content":wrong}]
         }).encode())
-        next_id=create_task(connect_and_close(db),spec) if False else None
         connection=connect(db)
         next_id=create_task(connection,spec)
         connection.close()
