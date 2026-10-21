@@ -15,7 +15,7 @@ import json
 import re
 from pathlib import Path
 
-from .ledger import finalize
+from .ledger import finalize_observed
 from .runner import ArtifactConflict, store_once
 from .source import safe_fixture
 
@@ -182,13 +182,15 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
             raise RepairError("Unstable observed source")
         plan=propose_patch(spec,original,cases)
     except (RepairError,OSError,ValueError,TypeError,KeyError) as exc:
-        finalize(db,task,"UNKNOWN",error_code="REPAIR_SOURCE_UNAVAILABLE")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"REPAIR_SOURCE_UNAVAILABLE",
-                "diagnostic":type(exc).__name__}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code="REPAIR_SOURCE_UNAVAILABLE")
+        return ({**observed,"diagnostic":type(exc).__name__}
+                if observed["status"]=="UNKNOWN" else observed)
     if not plan["selected"]:
-        finalize(db,task,"UNKNOWN",error_code=plan["reason"])
-        return {"task_id":tid,"status":"UNKNOWN","reason":plan["reason"],
-                "hypotheses":plan["hypotheses"]}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code=plan["reason"])
+        return ({**observed,"hypotheses":plan["hypotheses"]}
+                if observed["status"]=="UNKNOWN" else observed)
     sh=hashlib.sha256(original).hexdigest()
     vh=hashlib.sha256(cases).hexdigest()
     # This is conservative *method feedback*, not leakage of withheld labels:
@@ -202,11 +204,12 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
           AND json_extract(details,'$.mechanism')=? LIMIT 1""",
         (sh,vh,spec["holdout_sha256"],plan["selected"]["mechanism"])).fetchone()
     if earlier:
-        finalize(db,task,"UNKNOWN",error_code="IDENTICAL_REPAIR_PREVIOUSLY_REFUTED")
-        return {"task_id":tid,"status":"UNKNOWN",
-                "reason":"IDENTICAL_REPAIR_PREVIOUSLY_REFUTED",
-                "method_action":"DO_NOT_REPLAY_FAILED_HYPOTHESIS",
-                "external_business_outcome_verified":False}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code="IDENTICAL_REPAIR_PREVIOUSLY_REFUTED")
+        return ({**observed,
+                 "method_action":"DO_NOT_REPLAY_FAILED_HYPOTHESIS",
+                 "external_business_outcome_verified":False}
+                if observed["status"]=="UNKNOWN" else observed)
     # Outcome correction from a genuinely signed, manually imported review
     # has a different provenance from a local holdout mismatch. Both are
     # exact-scope negatives. Never turn an externally signed ACCEPT into
@@ -221,17 +224,19 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
                   holdout_sha256=spec["holdout_sha256"],
                   candidate_sha256=candidate_sha,mechanism=method)
     except (HistoricalFeedbackUnverifiable,OSError,ValueError) as exc:
-        finalize(db,task,"UNKNOWN",error_code="SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
-        return {"task_id":tid,"status":"UNKNOWN",
-                "reason":"SIGNED_FEEDBACK_PROOF_UNVERIFIABLE",
-                "untrusted_memory_did_not_change_method":True,
-                "diagnostic":type(exc).__name__}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code="SIGNED_FEEDBACK_PROOF_UNVERIFIABLE")
+        return ({**observed,
+                 "untrusted_memory_did_not_change_method":True,
+                 "diagnostic":type(exc).__name__}
+                if observed["status"]=="UNKNOWN" else observed)
     if rejected:
-        finalize(db,task,"UNKNOWN",error_code="SIGNED_REVIEW_PREVIOUSLY_REJECTED")
-        return {"task_id":tid,"status":"UNKNOWN",
-                "reason":"SIGNED_REVIEW_PREVIOUSLY_REJECTED",
-                "method_action":"REJECT_EXACT_CRYPTOGRAPHICALLY_VERIFIED_PATCH",
-                "production_write_authorized":False}
+        observed=finalize_observed(db,task,"UNKNOWN",
+                                   error_code="SIGNED_REVIEW_PREVIOUSLY_REJECTED")
+        return ({**observed,
+                 "method_action":"REJECT_EXACT_CRYPTOGRAPHICALLY_VERIFIED_PATCH",
+                 "production_write_authorized":False}
+                if observed["status"]=="UNKNOWN" else observed)
     artifact={"task_id":tid,"goal_rev":task["goal_rev"],"source_spec":spec,
               "source_sha256":sh,"visible_sha256":vh,
               "selected":plan["selected"],"hypotheses":plan["hypotheses"],
@@ -256,13 +261,13 @@ def run_repair_case(db,task:dict,workspace:Path,fixtures:Path)->dict:
             raise RepairError("Signed external rejection arrived before commit")
         return store_once(workspace,tid,data)
     try:
-        ok=finalize(db,task,"NEEDS_REVIEW",decision="BOUNDED_CODE_PATCH_PROPOSAL",
-                    artifact_writer=write)
+        observed=finalize_observed(db,task,"NEEDS_REVIEW",
+                                   decision="BOUNDED_CODE_PATCH_PROPOSAL",
+                                   artifact_writer=write)
     except (ArtifactConflict,RepairError,OSError,ValueError):
-        finalize(db,task,"UNKNOWN",error_code="REPAIR_PROPOSAL_CONFLICT")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"REPAIR_PROPOSAL_CONFLICT"}
-    if not ok:return {"task_id":tid,"status":"STALE_WORKER"}
-    state=db.execute("SELECT state FROM tasks WHERE task_id=?",(tid,)).fetchone()[0]
-    return {"task_id":tid,"status":state,"mechanism":plan["selected"]["mechanism"],
+        return finalize_observed(db,task,"UNKNOWN",
+                                 error_code="REPAIR_PROPOSAL_CONFLICT")
+    if observed["status"]!="NEEDS_REVIEW":return observed
+    return {**observed,"mechanism":plan["selected"]["mechanism"],
             "alternatives_compared":len(plan["hypotheses"]),
             "holdout_seen_by_planner":False,"authorizes_code_application":False}
