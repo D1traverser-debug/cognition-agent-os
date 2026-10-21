@@ -28,6 +28,8 @@ class RealModelBenchmarkContractTests(unittest.TestCase):
         from cognition_agent_os import local_model
         source={"main.py":b"print(1)\\n",
                 "calculator.py":b"def calculate(x):\\n    return 0\\n"}
+        spec={"files":list(source),"goal_statement":
+              "Given an input number, produce the next number as total."}
         visible=json.dumps([{"input":{"x":3},"expected":{"total":4}}]).encode()
         requests=[]
         def fake_local_request(method,path,payload,timeout):
@@ -48,9 +50,9 @@ class RealModelBenchmarkContractTests(unittest.TestCase):
             }]})}
         with patch.object(local_model,"_request",side_effect=fake_local_request):
             result=_candidate_from_model(
-                {"files":list(source)},source,visible,"installed:local")
+                spec,source,visible,"installed:local")
             changed=_candidate_from_model(
-                {"files":list(source)},source,visible,"installed:local",
+                spec,source,visible,"installed:local",
                 feedback={"latest_rejection":{
                     "reason":"MODEL_REPEATED_PRIOR_HYPOTHESIS",
                     "must_propose_different_full_source":True}})
@@ -61,6 +63,35 @@ class RealModelBenchmarkContractTests(unittest.TestCase):
         self.assertEqual(requests[1][2]["options"]["temperature"],0)
         self.assertEqual(requests[3][2]["options"]["temperature"],0.35)
         self.assertIn("latest_rejection",requests[3][2]["prompt"])
+        for index in (1,3):
+            prompt=json.loads(requests[index][2]["prompt"])
+            self.assertEqual(prompt["goal_statement"],spec["goal_statement"])
+            self.assertNotIn("sealed",requests[index][2]["prompt"])
+        self.assertIn("goal",json.loads(requests[1][2]["prompt"])["task"])
+
+    def test_explicit_goal_statement_is_bounded_and_non_authoritative(self):
+        from cognition_agent_os.container_lab import validate_task_spec
+        contract={"kind":"repo_container_repair",
+                  "files":["main.py","worker.py"],"entrypoint":"main.py",
+                  "candidate":"candidate.json","visible":"public.json",
+                  "holdout":"sealed.json","holdout_sha256":"a"*64}
+        self.assertEqual(validate_task_spec(contract),contract)
+        statement="Count unique values strictly above threshold, once each."
+        with_goal={**contract,"goal_statement":statement}
+        self.assertEqual(validate_task_spec(with_goal),with_goal)
+        for invalid in ("", "  ", "a"*1201, "\\x00bad", 21, None):
+            with self.subTest(invalid=repr(invalid)), self.assertRaises(ValueError):
+                validate_task_spec({**contract,"goal_statement":invalid})
+        with self.assertRaises(ValueError):
+            validate_task_spec({**with_goal,"privileged_code":True})
+        # These two independent candidate semantics agree on public
+        # inputs with no threshold equality, yet diverge at the boundary.
+        public={"values":[2,8,8],"threshold":3}
+        above=lambda d:len({x for x in d["values"] if x>d["threshold"]})
+        above_or_equal=lambda d:len({x for x in d["values"] if x>=d["threshold"]})
+        self.assertEqual(above(public),above_or_equal(public))
+        counterexample={"values":[3,3,8],"threshold":3}
+        self.assertNotEqual(above(counterexample),above_or_equal(counterexample))
 
     def test_invoice_expected_reference_uses_subtract_discount(self):
         case=CASES[0]
