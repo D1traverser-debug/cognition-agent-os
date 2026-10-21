@@ -49,8 +49,18 @@ class RealModelBenchmarkContractTests(unittest.TestCase):
         with patch.object(local_model,"_request",side_effect=fake_local_request):
             result=_candidate_from_model(
                 {"files":list(source)},source,visible,"installed:local")
+            changed=_candidate_from_model(
+                {"files":list(source)},source,visible,"installed:local",
+                feedback={"latest_rejection":{
+                    "reason":"MODEL_REPEATED_PRIOR_HYPOTHESIS",
+                    "must_propose_different_full_source":True}})
         self.assertTrue(result.startswith(b'{"changes"'))
-        self.assertEqual([x[1] for x in requests],["/api/tags","/api/generate"])
+        self.assertEqual(changed,result)  # Fake response only; real model is unmocked in CI.
+        self.assertEqual([x[1] for x in requests],
+                         ["/api/tags","/api/generate","/api/tags","/api/generate"])
+        self.assertEqual(requests[1][2]["options"]["temperature"],0)
+        self.assertEqual(requests[3][2]["options"]["temperature"],0.35)
+        self.assertIn("latest_rejection",requests[3][2]["prompt"])
 
     def test_invoice_expected_reference_uses_subtract_discount(self):
         case=CASES[0]
