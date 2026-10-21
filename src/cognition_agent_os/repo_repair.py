@@ -108,6 +108,9 @@ def _candidate_from_model(spec,base,visible,model,*,feedback=None):
 def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
     from .local_model import LocalModelUnavailable
     tid=task["task_id"]
+    completed_model_generations=0
+    nochange_retry_attempted=False
+    nochange_rejection_fingerprint=None
     try:
         spec=validate_task_spec(json.loads(task["source_spec"]))
         original=_sources(spec,fixtures)
@@ -118,11 +121,32 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
             provenance="EXTERNALLY_SUPPLIED_UNVERIFIED"
         elif planner_mode=="ollama-local":
             proposal=_candidate_from_model(spec,original,visible,local_model)
+            completed_model_generations+=1
             provenance="UNTRUSTED_LOCAL_MODEL"
         else:raise ValueError("Unsupported repository proposal mode")
         edits=candidate_changes(proposal,spec["files"])
         if not any(original[p]!=content for p,content in edits.items()):
-            raise ValueError("Candidate makes no actual source change")
+            # A completed but no-change model generation is PUBLIC negative
+            # evidence. Exactly one P21 experimental retry can challenge it.
+            # This is NOT an infinite loop, host execution or review bypass.
+            retry_flag=os.environ.get("COGNITION_LOCAL_NOCHANGE_RETRY","0")
+            if retry_flag not in ("0","1"):
+                raise ValueError("Invalid bounded local no-change retry request")
+            if (planner_mode=="ollama-local" and local_model=="qwen2.5-coder:7b"
+                and retry_flag=="1"):
+                nochange_retry_attempted=True
+                nochange_rejection_fingerprint=sha(proposal)
+                feedback={"latest_rejection":{
+                    "reason":"MODEL_CANDIDATE_NO_CHANGE",
+                    "candidate_fingerprint":nochange_rejection_fingerprint,
+                    "retry_index":1,
+                    "must_propose_different_full_source":True}}
+                proposal=_candidate_from_model(spec,original,visible,local_model,
+                                               feedback=feedback)
+                completed_model_generations+=1
+                edits=candidate_changes(proposal,spec["files"])
+            if not any(original[p]!=content for p,content in edits.items()):
+                raise ValueError("Candidate makes no actual source change")
         if any(len(content)>16384 for content in original.values()):
             raise ValueError("Source file over size bound")
         frozen={"task_id":tid,"goal_rev":task["goal_rev"],
@@ -134,6 +158,12 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
                 "change_sha256":{p:sha(content) for p,content in edits.items()},
                 "holdout_status":"SEALED_NOT_READ_BY_PLANNER",
                 "state":"PROPOSAL_NOT_APPROVED"}
+        if nochange_retry_attempted:
+            frozen["initial_model_generations"]=completed_model_generations
+            frozen["initial_public_rejections"]=[{
+                "reason":"MODEL_CANDIDATE_NO_CHANGE",
+                "candidate_fingerprint":nochange_rejection_fingerprint,
+                "hidden_seen":False}]
         data=(json.dumps(frozen,sort_keys=True,indent=2)+"\n").encode()
         if len(data)>65536:raise ValueError("Artifact too large")
     except (OSError,ValueError,KeyError,TypeError,UnicodeError,LocalModelUnavailable) as exc:
@@ -154,7 +184,10 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
         return {"task_id":tid,"status":"UNKNOWN",
                 "reason":"REPOSITORY_PROPOSAL_UNAVAILABLE",
                 "diagnostic":type(exc).__name__,
-                "validation_failure":code}
+                "validation_failure":code,
+                "completed_model_generations":completed_model_generations,
+                "nochange_retry_attempted":nochange_retry_attempted,
+                "model_called":completed_model_generations>0}
     def write():
         if ({p:sha(b) for p,b in _sources(spec,fixtures).items()}!=frozen["source_sha256"]
             or sha(safe_fixture(fixtures,spec["visible"]))!=frozen["public_sha256"]):
@@ -174,6 +207,8 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
     row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(tid,)).fetchone()
     return {"task_id":tid,"status":row["state"],"reason":row["error_code"],
             "files":len(spec["files"]),"model_called":planner_mode=="ollama-local",
+            "completed_model_generations":completed_model_generations,
+            "nochange_retry_attempted":nochange_retry_attempted,
             "holdout_seen_by_planner":False,"production_write_authorized":False}
 
 
