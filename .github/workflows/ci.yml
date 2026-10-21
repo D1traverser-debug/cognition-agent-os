@@ -78,6 +78,11 @@ jobs:
         env:
           PYTHONPATH: src
         run: python scripts/verify_repo_container.py
+      - name: P22 preissue CPython original-source Docker baseline without model
+        env:
+          PYTHONPATH: src
+          P22_BASELINE_ONLY: '1'
+        run: python scripts/verify_p22_cpython_userstring.py
 
   experimental_real_local_model:
     # Explicit PR opt-in marker only. This is genuine CPU inference on an
