@@ -202,8 +202,10 @@ def preserves_scope(candidate:bytes,original:bytes)->bool:
             or not isinstance(new_fn,ast.FunctionDef)
             or old_fn.name!=new_fn.name
             or ast.dump(old_fn.args)!=ast.dump(new_fn.args)
-            or ast.dump(old_fn.returns)!=ast.dump(new_fn.returns)
-            or ast.dump(old_fn.decorator_list)!=ast.dump(new_fn.decorator_list)):
+            or (ast.dump(old_fn.returns) if old_fn.returns else None)
+                != (ast.dump(new_fn.returns) if new_fn.returns else None)
+            or [ast.dump(d) for d in old_fn.decorator_list]
+                != [ast.dump(d) for d in new_fn.decorator_list]):
             return False
         return ast.dump(old_fn)!=ast.dump(new_fn)
     except (SyntaxError,ValueError,UnicodeError,TypeError):
