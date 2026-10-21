@@ -1,5 +1,67 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## CURRENT P15 — Public semantic counterexamples for real local repair (2026-10-21)
+
+P14's genuine local Qwen2.5-Coder 0.5B/1.5B/3B experiment ended
+0/2 PUBLIC and 0/2 hidden acceptance for all three; code and OS test
+infrastructure was green. Do NOT treat 3B token generation as task
+success. User's goal is a genuinely goal-directed, authorized,
+independently validated self-correcting agent with ZERO paid/credit-limited
+cloud LLM tokens. No user Windows 11 access or deployment authorized.
+
+**Active** D1traverser-debug/cognition-agent-os,
+branch feat/p10-runtime-conformance-20261020,
+cumulative OPEN DRAFT PR #12 targeting main; UNMERGED.
+
+**Actual missing causal feedback found:** P13/P14 model correction
+prompt included failed PUBLIC input, expected result and SHA256 of
+observed wrong output, but *not the actual wrong result*. A hash
+cannot show whether a program produced 27 or 21. The model was not
+actually shown the semantic counterexample needed to revise a patch.
+
+**P15 implementation:**
+- `container_lab.run_suite(...,include_observed=False)` retains
+  historical default (including independent hidden gold reviewer)
+  of only public pass/fail and output SHA. Only P13 local-model
+  PUBLIC candidate tests opt in to `include_observed=True`.
+  Wrong outputs add `observed_value` if encoded <=512 bytes,
+  never unbounded stdout or stderr. Program crashes remain fixed
+  sanitized execution_error categories.
+- `repo_refinement._public_feedback` includes PUBLIC input,
+  PUBLIC expected and actual observed_value (when bounded). It
+  passes them and prior candidate source to installed-loopback-only
+  model while retaining two-stage user consent, original SQLite
+  authority, immutable proposal, three-attempt cap, duplicate
+  rejection, no host code execution, no hidden prompt data.
+- `tests/test_p14_candidate_execution_feedback.py` adds
+  specific tests for bounded wrong public values, hidden/default
+  response suppression, and too-large value suppression.
+  `tests/test_p13_public_refinement.py` mocks accept keyword
+  `include_observed`; `scripts/verify_repo_container.py`
+  checks ACTUAL Docker public wrong output arrives in the
+  scripted P13 model-feedback path and hidden category is absent.
+- `docs/26-PUBLIC-OBSERVED-OUTPUT-REPAIR.md` documents scope
+  and threat model.
+- New `.github/workflows/ci.yml` job
+  `experimental_public_feedback_model`: enabled only by
+  PR body marker `[run-p15-feedback-model]`, uses ONLY one
+  genuine installed qwen2.5-coder:3b on temporary CI Linux,
+  actual offline Docker, original unchanged P14 benchmarks,
+  no predetermined correct patch or model mocks. Missing model
+  fails; 0/2 quality is a legitimate measured result. After
+  genuine benchmark completes remove the opt-in marker to
+  avoid repetitive weight downloads.
+- P14 archived genuine reference run `39541759002` showed
+  3B 2/2 frozen candidates, 0/2 public, 0/2 hidden.
+  **P15 new CI still PENDING as of this checkpoint**; never
+  claim P15 model result or green final head until observed.
+
+**Limits**: PUBLIC output may be adversarial prompt injection
+data, so still only data, never tool instructions; use allowed
+file paths, hash checks and Docker isolated execution. Gold remains
+separate. User Windows 11 host not tested and independent
+business outcome is absent. Do not merge Draft #12.
+
 ## LATEST P14 — real local model failure measured, infrastructure and feedback fixed (2026-10-21)
 
 This is CURRENT. Previous P13/P12 checkpoints below remain historical,
