@@ -77,6 +77,20 @@ class CoupledRepairTest(unittest.TestCase):
         self.assertFalse(outcome["holdout_seen_by_planner"])
         return tid
 
+    def test_pipeline_failure_after_goal_rotation_must_not_claim_unknown(self):
+        from cognition_agent_os import pipeline_repair
+        tid=self.seed()
+        def rotate(*args,**kwargs):
+            db=connect(self.dbpath)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            raise ValueError("Injected candidate proposal failure")
+        with patch.object(pipeline_repair,"propose_pipeline",side_effect=rotate):
+            result=run_once(self.dbpath,self.ws,self.fx)
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"STALE_GOAL")
+        self.assertEqual(self.state(tid)["state"],"BLOCKED")
+
     def test_coupled_real_two_source_repair_and_hidden_independent_review(self):
         tid=self.prepare()
         item=json.loads((self.ws/"artifacts"/(tid+".json")).read_text())
