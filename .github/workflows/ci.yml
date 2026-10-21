@@ -231,7 +231,7 @@ jobs:
           fi
           timeout 600 ollama pull qwen2.5-coder:7b
           ollama list
-      - name: Genuine 7B local model code repair on identical P14 holdouts
+      - name: Genuine 7B local code repair on pinned known or prospective holdouts
         env:
           PYTHONPATH: src
           OLLAMA_HOST: 127.0.0.1:11434
