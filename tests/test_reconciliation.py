@@ -70,6 +70,24 @@ class ReconciliationTests(unittest.TestCase):
     def report(self,tid):
         return json.loads((self.workspace/"artifacts"/(tid+".json")).read_text())
 
+    def test_consistent_reconciliation_after_goal_rotation_cannot_claim_approved(self):
+        from cognition_agent_os import reconciliation
+        rows=[["A","PASS","10"],["B","FAIL","21"]]
+        tid=self.setup_pair(["test_id","status","cycles"],rows,list(reversed(rows)))
+        genuine=reconciliation.propose_reconciliation
+        def rotate(*args,**kwargs):
+            result=genuine(*args,**kwargs)
+            db=connect(self.db)
+            try:alter_authority(db,goal_change=True)
+            finally:db.close()
+            return result
+        with patch.object(reconciliation,"propose_reconciliation",side_effect=rotate):
+            answer=run_once(self.db,self.workspace,self.fixtures)
+        self.assertEqual(answer["status"],"BLOCKED")
+        self.assertEqual(answer["reason"],"STALE_GOAL")
+        self.assertNotEqual(answer.get("decision"),"RECORD_SETS_CONSISTENT")
+        self.assertEqual(self.task(tid)["state"],"BLOCKED")
+
     def test_dv_generated_unseen_cases_identify_exact_changes(self):
         rng=random.Random(78153)
         fields=["test_id","status","cycles"]
