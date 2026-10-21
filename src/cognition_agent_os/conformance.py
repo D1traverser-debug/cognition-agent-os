@@ -207,7 +207,11 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 "HOLDOUT_ACCEPTED","REPO_BYTES_MECHANICALLY_VALID")
                    else report.get("reason",report["status"]))
         elif state=="DECOMPOSED":
-            result=audit_intent_plan(db_path,tid)
+            if kind=="knowledge_intent":
+                from .knowledge_routing import audit_knowledge_intent_plan
+                result=audit_knowledge_intent_plan(db_path,fixtures,tid)
+            else:
+                result=audit_intent_plan(db_path,tid)
             proof=("MECHANICALLY_VALID" if result["status"]=="PLAN_MECHANICALLY_VALID"
                    else result.get("reason","PLAN_AUDIT_FAILED"))
         elif state=="NEEDS_REVIEW":
