@@ -85,6 +85,15 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
             return finalize_observed(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
         if not isinstance(source_spec,dict):
             return finalize_observed(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
+        # Evidence dependencies are stored in THIS authoritative ledger.
+        # Check before dispatch to any executor, not merely during routing.
+        from .knowledge_routing import check_child_dependency
+        if not check_child_dependency(db,task_id,fixture_root):
+            return finalize_observed(db,task,"UNKNOWN",
+                                     error_code="KNOWLEDGE_SOURCE_CHANGED")
+        if source_spec.get("kind")=="knowledge_intent":
+            from .knowledge_routing import run_knowledge_intent
+            return run_knowledge_intent(db,task,fixture_root)
         if source_spec.get("kind")=="repo_container_repair":
             from .repo_repair import run_repo_candidate
             return run_repo_candidate(db,task,workspace,fixture_root,
