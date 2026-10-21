@@ -5,6 +5,7 @@ native-Docker CI probe executes the proposed code in actual containers;
 nothing here proves a local Ollama model was installed or succeeded.
 """
 from __future__ import annotations
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -31,7 +32,7 @@ class PublicRevisionTests(unittest.TestCase):
         self.fx=self.root/"fixtures";self.fx.mkdir()
         self.ws=self.root/"workspace";self.ws.mkdir()
         self.db=self.root/"ledger.sqlite"
-        with connect(self.db) as c:initialize(c)
+        with closing(connect(self.db)) as c:initialize(c)
         self.fx.joinpath("main.py").write_bytes(
             b"import sys,json\nfrom rules import calc\n"
             b"print(json.dumps(calc(json.loads(sys.stdin.read()))))\n")
@@ -53,13 +54,13 @@ class PublicRevisionTests(unittest.TestCase):
                    "candidate":"candidate.json","visible":"visible.json",
                    "holdout":"hidden.json",
                    "holdout_sha256":hashlib.sha256(self.holdout_bytes).hexdigest()}
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             self.parent=create_task(db,self.spec)
         planned=run_once(self.db,self.ws,self.fx)
         self.assertEqual(planned["status"],"NEEDS_REVIEW")
 
     def task(self,tid):
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             return dict(db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone())
 
     def suite(self,base,changes,entrypoint,cases):
@@ -110,7 +111,7 @@ class PublicRevisionTests(unittest.TestCase):
                             and "hidden.json" not in json.dumps(c) for c in calls))
         self.assertEqual(docker.call_count,4) # baseline, prior, two attempts
         self.assertEqual(model_call.call_count,2)
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             observations=db.execute("""SELECT details FROM events WHERE task_id=?
                 AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL' ORDER BY event_id""",
                 (self.parent,)).fetchall()
@@ -135,7 +136,7 @@ class PublicRevisionTests(unittest.TestCase):
                    return_value=self.model_output(self.bad)):
             result=refine_repo_public(self.db,self.ws,self.fx,self.parent,model="installed:7b")
         self.assertEqual(result["status"],"MODEL_REPEATED_PRIOR_HYPOTHESIS")
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
 
     def test_bounded_failed_attempts_recorded_then_refused(self):
@@ -159,14 +160,14 @@ class PublicRevisionTests(unittest.TestCase):
                                        model="installed:7b",max_attempts=2)
         self.assertEqual(last["attempts"],1)
         self.assertEqual(no_more["status"],"REFINEMENT_BUDGET_EXHAUSTED")
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("""SELECT COUNT(*) FROM events WHERE task_id=?
                  AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",
                  (self.parent,)).fetchone()[0],3)
 
     def test_revocation_during_generation_blocks_child_commit(self):
         def revoke_then_propose(*args,**kwargs):
-            with connect(self.db) as db:alter_authority(db,revoke=True)
+            with closing(connect(self.db)) as db:alter_authority(db,revoke=True)
             return self.model_output(self.good)
         with patch("cognition_agent_os.repo_refinement.run_suite",
                    side_effect=self.suite),\
@@ -176,7 +177,7 @@ class PublicRevisionTests(unittest.TestCase):
                                       model="installed:7b")
         self.assertEqual(result["status"],"REVIEW_AUTHORITY_OR_BUDGET_CHANGED")
         self.assertEqual(self.task(self.parent)["state"],"NEEDS_REVIEW")
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
 
     def test_original_public_working_refuses_to_refine(self):
