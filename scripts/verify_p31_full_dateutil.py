@@ -231,7 +231,10 @@ def _scope_ok(base:str,patched:str)->bool:
                 if not isinstance(next_,ast.ClassDef) or next_.name!="rrule":
                     return False
                 if len(prev.body)!=len(next_.body):return False
-                if (prev.bases!=next_.bases or len(prev.decorator_list)!=len(next_.decorator_list)):
+                if ([__import__("ast").dump(n) for n in prev.bases]
+                    !=[__import__("ast").dump(n) for n in next_.bases]
+                    or [__import__("ast").dump(n) for n in prev.decorator_list]
+                    !=[__import__("ast").dump(n) for n in next_.decorator_list]):
                     return False
                 for prev_method,next_method in zip(prev.body,next_.body):
                     if (isinstance(prev_method,(ast.FunctionDef,ast.AsyncFunctionDef))
@@ -274,26 +277,47 @@ def _expand_one_compact(raw_response:str,source:str)->str:
 def _repack_only_rrule(wheel:bytes,new_rrule:bytes)->bytes:
     import io
     import zipfile
+    import base64
+    import csv
     target="dateutil/rrule.py"
-    original=io.BytesIO(wheel)
-    dest=io.BytesIO()
-    with zipfile.ZipFile(original) as incoming,zipfile.ZipFile(dest,"w") as outgoing:
+    with zipfile.ZipFile(io.BytesIO(wheel)) as incoming:
         names=incoming.namelist()
         if names.count(target)!=1:
             raise ValueError("Expected a single original rrule source")
-        for info in incoming.infolist():
-            data=new_rrule if info.filename==target else incoming.read(info)
-            outgoing.writestr(info,data)
-    repacked=dest.getvalue()
-    with zipfile.ZipFile(io.BytesIO(repacked)) as check:
-        if check.read(target)!=new_rrule:
-            raise RuntimeError("Patched module was not frozen")
-        for name in names:
-            if name!=target:
-                with zipfile.ZipFile(io.BytesIO(wheel)) as origin:
-                    if check.read(name)!=origin.read(name):
-                        raise RuntimeError("Unrelated upstream package source changed")
-    return repacked
+        record_names=[n for n in names if n.endswith(".dist-info/RECORD")]
+        if len(record_names)!=1:
+            raise ValueError("Wheel metadata identity missing")
+        record_name=record_names[0]
+        record_rows=list(csv.reader(io.StringIO(incoming.read(record_name).decode("utf-8"))))
+        checksum=base64.urlsafe_b64encode(hashlib.sha256(new_rrule).digest()).decode().rstrip("=")
+        updated=0
+        for row in record_rows:
+            if row and row[0]==target:
+                row[1]="sha256="+checksum
+                row[2]=str(len(new_rrule))
+                updated+=1
+        if updated!=1:
+            raise ValueError("Target wheel RECORD entry missing")
+        text=io.StringIO(newline="")
+        writer=csv.writer(text,lineterminator="\n")
+        writer.writerows(record_rows)
+        corrected_record=text.getvalue().encode("utf-8")
+        dest=io.BytesIO()
+        with zipfile.ZipFile(dest,"w") as outgoing:
+            for info in incoming.infolist():
+                data=(new_rrule if info.filename==target else
+                      corrected_record if info.filename==record_name else
+                      incoming.read(info))
+                outgoing.writestr(info,data)
+        repacked=dest.getvalue()
+        with zipfile.ZipFile(io.BytesIO(repacked)) as check:
+            if (check.read(target)!=new_rrule
+                or check.read(record_name)!=corrected_record):
+                raise RuntimeError("Wheel patch or RECORD write failed")
+            for name in names:
+                if name not in (target,record_name) and check.read(name)!=incoming.read(name):
+                    raise RuntimeError("Unrelated upstream package bytes changed")
+        return repacked
 
 def run_one_real_model()->None:
     """Exactly ONE 7B generation with verified full-wheel independent cases."""
