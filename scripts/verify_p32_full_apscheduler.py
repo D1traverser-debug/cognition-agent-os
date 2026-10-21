@@ -292,31 +292,48 @@ def _repack(wheel:bytes,changes:dict[str,bytes])->bytes:
     return out.getvalue()
 
 def _scope(original:dict[str,bytes],changes:dict[str,bytes])->bool:
-    """AST gate: source changes limited to reported original method bodies."""
+    """Only the specified method bodies may change, not their enclosing APIs."""
     import ast
+    import copy
     if set(original)!=set(changes):return False
-    target={"apscheduler/datastores/memory.py":"release_job",
-            "apscheduler/_schedulers/async_.py":"_run_job"}
+    target={"apscheduler/datastores/memory.py":("MemoryDataStore","release_job"),
+            "apscheduler/_schedulers/async_.py":("AsyncScheduler","_run_job")}
     for path in SOURCE_PATHS:
         try:
-            a=ast.parse(original[path].decode())
-            b=ast.parse(changes[path].decode())
-            if len(a.body)!=len(b.body):return False
-            target_class="MemoryDataStore" if path.endswith("memory.py") else "AsyncScheduler"
-            changed=False
-            for left,right in zip(a.body,b.body):
-                if isinstance(left,ast.ClassDef) and left.name==target_class:
-                    if not isinstance(right,ast.ClassDef) or right.name!=target_class:return False
-                    if len(left.body)!=len(right.body):return False
-                    for x,y in zip(left.body,right.body):
-                        if isinstance(x,ast.AsyncFunctionDef) and x.name==target[path]:
-                            if (not isinstance(y,ast.AsyncFunctionDef)
-                                or y.name!=x.name
-                                or ast.dump(x.args)!=ast.dump(y.args)):return False
-                            changed=changed or ast.dump(x)!=ast.dump(y)
-                        elif ast.dump(x)!=ast.dump(y):return False
-                elif ast.dump(left)!=ast.dump(right):return False
-            if not changed:return False
+            old=ast.parse(original[path].decode())
+            new=ast.parse(changes[path].decode())
+            classname,methodname=target[path]
+            old_classes=[n for n in old.body
+                         if isinstance(n,ast.ClassDef) and n.name==classname]
+            new_classes=[n for n in new.body
+                         if isinstance(n,ast.ClassDef) and n.name==classname]
+            if len(old_classes)!=1 or len(new_classes)!=1:return False
+            old_methods=[n for n in old_classes[0].body
+                         if isinstance(n,ast.AsyncFunctionDef) and n.name==methodname]
+            new_methods=[n for n in new_classes[0].body
+                         if isinstance(n,ast.AsyncFunctionDef) and n.name==methodname]
+            if len(old_methods)!=1 or len(new_methods)!=1:return False
+            prior,replacement=old_methods[0],new_methods[0]
+            if (ast.dump(prior.args)!=ast.dump(replacement.args)
+                or ast.dump(prior.returns)!=ast.dump(replacement.returns)
+                or [ast.dump(d) for d in prior.decorator_list]
+                   !=[ast.dump(d) for d in replacement.decorator_list]
+                or prior.type_comment!=replacement.type_comment
+                or ast.dump(prior)==ast.dump(replacement)):
+                return False
+            # Normalize ONLY the replacement method back to original before
+            # comparing entire full-module AST. This catches alterations to
+            # the class bases, decorators, type hints, other methods or imports.
+            adjusted=copy.deepcopy(new)
+            adjusted_classes=[n for n in adjusted.body
+                              if isinstance(n,ast.ClassDef) and n.name==classname]
+            adjusted_class=adjusted_classes[0]
+            for index,node in enumerate(adjusted_class.body):
+                if isinstance(node,ast.AsyncFunctionDef) and node.name==methodname:
+                    adjusted_class.body[index]=copy.deepcopy(prior)
+                    break
+            if ast.dump(adjusted)!=ast.dump(old):
+                return False
         except (SyntaxError,UnicodeError,ValueError,TypeError):
             return False
     return True
