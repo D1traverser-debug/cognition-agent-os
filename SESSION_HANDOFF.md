@@ -1,72 +1,74 @@
 # cognition-agent-os — durable continuation checkpoint
 
-## CURRENT P21 — real OPEN external Issue #1332 scoped code-repair experiment (2026-10-21)
+## CURRENT P21 — real OPEN external issue reproduced; local 7B timed out, bounded second experiment (2026-10-21)
 
-Continue on existing unmerged OPEN DRAFT PR #12 of
+Continue cumulative OPEN DRAFT PR #12 of
 `D1traverser-debug/cognition-agent-os`,
-branch `feat/p10-runtime-conformance-20261020`. P20 genuinely
-passed third-party QuixBugs original source and public official
-heldout tests 2/2 tasks but classic benchmark pretraining
-contamination cannot be ruled out. P21 moves to a recently
-reported actual GitHub Issue, without falsely claiming a
-complete autonomous discovery or accepted upstream patch.
+branch `feat/p10-runtime-conformance-20261020`.
+User wants genuine useful self-directed development and
+independent acceptance, not monitors, rote schemes or false
+green CI marketing.
 
-**External reporter and source:** Actual more-itertools
-[Issue #1332](https://github.com/more-itertools/more-itertools/issues/1332)
-created 2026-10-15, OPEN as read 2026-10-21, reporter
-`saadkhantareen`. The reported defect is that
-`list(set_partitions([]))` returns `[]` instead of `[[]]`;
-explicit `k=1` still yields none, `k=0` still raises ValueError,
-empty partition unaffected by size limits. Pinned UPSTREAM
-pre-issue source Git commit
-`4aeb4338ae1407d8da9723e86da99efeb446f719`,
-original `more_itertools/more.py` Git blob
-`9c56ab37558733ece94d676f71d502d8048bc1d5`.
-No actual upstream mutation or external maintainer review.
+P20 passed two historic public QuixBugs official hidden
+cases 2/2 under actual local Qwen2.5-Coder 7B, but could
+be memorized. P21 selected genuine recently OPEN
+[more-itertools/more-itertools Issue #1332](https://github.com/more-itertools/more-itertools/issues/1332),
+reported 2026-10-15, open as of 2026-10-21,
+external reporter `saadkhantareen`: `set_partitions([])`
+gives no partitions, whereas expected `[[]]`.
+Original full `more_itertools/more.py` from pre-report
+commit `4aeb4338ae1407d8da9723e86da99efeb446f719`,
+Git blob `9c56ab37558733ece94d676f71d502d8048bc1d5`.
+Experimental function-only extraction from ~175KB
+module because existing lab is limited to 16KB/file;
+THIS IS NOT WHOLE-PROJECT FIX.
 
-**Implementation:** `scripts/verify_p21_live_issue.py`,
-`tests/test_p21_real_issue.py` and
+Exact source, verified original function and Bell-number
+PUBLIC (2) and agent-derived HIDDEN (8) cases are in
+`scripts/verify_p21_live_issue.py`. Preservation and
+independent adapter scope tests in
+`tests/test_p21_real_issue.py`; evidence in
 `docs/32-LIVE-EXTERNAL-ISSUE-REPAIR-EXPERIMENT.md`.
-Because upstream module exceeds existing 16KB repo lab
-allowlist, extract only exact contiguous self-contained
-`def set_partitions` body from verified full Git blob,
-preserving it as original function code with a separate JSON
-adapter. The experiment therefore tests function-local
-repair in existing SQLite/real offline Docker, NOT a real
-complete upstream repository PR. Independent staged-candidate
-scope check refuses Docker-pass patches that rewrite the
-adapter or `main.py` in lieu of fixing original function.
-Actual reported old bug MUST fail a real baseline Docker
-PUBLIC case before local model runs.
+Potential model pretraining leakage and absence of external
+maintainer review remain hard acceptance limitations.
+No correct source patch authored or supplied to model.
 
-PUBLIC: reported empty case plus normal n=2 Bell count.
-HIDDEN: eight Agent-derived sanity/regression cases, including
-empty explicit k=1/k=0, size constraints, and Bell numbers up to
-n=5 validated with distinct Stirling recurrence. This is
-reporter-owned issue goal + Agent-derived tests, NOT private
-owner acceptance. Gold not sent to model in prompt but all
-mathematics is publicly inferable.
+**REAL P21 FIRST RUN #39578220154**:
+  actual source Git blob pinned and downloaded correctly;
+  source function sha256
+  `8133f98d95e9bfc4a413772940f7ee61e1ff35c5b2281f108c26801ac9eb27fd`;
+  source/test manifest SHA256
+  `2617fecb61f8442ec99d5503460117e2a2f9dd7ebe9348c847ec08935f477b69`.
+  Original code reproduced reporter issue: real Docker
+  PUBLIC baseline 1/2, including a working nonempty control.
+  Genuine Ollama 7B probe completed but full generation
+  timed out at 180.14s, the configured request timeout,
+  `LocalModelUnavailable`; `candidate_frozen=false`,
+  PUBLIC and HIDDEN pass FALSE, and function-only scope FALSE.
+  Thus this run is **NO CODE FIX and NO QUALITY PASS**.
+  Linux+Windows **302/302** each, Docker and Windows Scheduler
+  passed as infrastructure only. Original upstream untouched.
 
-**Actual real 7B model result NOT YET OBSERVED** at creation
-of this checkpoint. Preliminary ordinary Linux 302/302, Windows
-302/302 and real Docker succeeded; native Windows Scheduler check
-was still finishing when one-time P21 PR opt-in was activated.
-A new checkpoint-only branch commit triggers genuine Qwen2.5-Coder
-7B on hosted disposable Linux. Temporary PR body marker
-`[run-p21-issue-7b]` MUST be removed after experiment conclusion.
-No cloud paid model, finite credit/trial use, owner PC install,
-new autonomous monitoring/management subsystem or production
-merge. Remove marker after honest measurement and rerun final
-ordinary CI.
+A 300s bounded alternative compute budget now exists in
+`src/cognition_agent_os/repo_repair.py`
+(`COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS` accepts 180
+or 300 only); CI uses 300 only when explicit one-time
+`[run-p21-issue-7b]` marker is active. Default 7B remains 180s
+and other models 90s; no uncontrolled token model service
+or auto-pull, no owner PC operations. P21 original task/
+public/hidden/source all unchanged. This is a falsifiable
+resource-bound hypothesis, not a known source fix.
 
-Next exact actions: inspect P21 offline CI for tests and fix
-any actual regression. Trigger exactly one real 7B benchmark
-only after source and expected behaviors are preregistered.
-Record original source hash, real baseline failure, model
-candidate/PUBLIC/HIDDEN/scope results and reason if failed.
-No prewritten replacement; don't retune hidden cases to a
-model answer. Persist real result here and in P21 doc/PR
-body, then verify final DRAFT/unmerged head and common CI.
+Temporary first P21 PR opt-in marker already removed after
+observed first run; next actions: first verify new
+Linux/Windows/Docker/Scheduler CI, then briefly re-add P21
+one-time marker to trigger a single 300s local 7B run.
+Record whether new candidate actually freezes, PUBLIC/HIDDEN
+pass or fail, adapter source unchanged and exact manifest.
+Then remove marker and finish final ordinary head CI.
+If still no candidate, report actual blocker; DO NOT
+keep bumping timeout indefinitely or change hidden tests
+after inspecting model outcome. Remain DRAFT / unmerged.
 
 ## CURRENT P20 — genuine third-party QuixBugs defects + official holdout PASS (2026-10-21)
 
