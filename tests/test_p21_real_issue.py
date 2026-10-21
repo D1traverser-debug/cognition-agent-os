@@ -94,8 +94,8 @@ class ExternalLiveIssueTests(unittest.TestCase):
             self.assertNotIn("class time_limited",extracted)
             case=p21.prepare_case(upstream)
             self.assertIn("def calculate(data):",case["source"])
-            self.assertEqual(case["source"].split("\n\ndef calculate(data):")[0],
-                             extracted.rstrip("\n"))
+            self.assertTrue(case["source"].startswith(extracted))
+            self.assertEqual(case["source"].count("def calculate(data):"),1)
             self.assertEqual(len(case["public"]),2)
             self.assertEqual(len(case["hidden"]),8)
             with self.assertRaises(ValueError):
