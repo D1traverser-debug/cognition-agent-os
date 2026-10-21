@@ -128,6 +128,16 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
                 return _deny("REFINEMENT_BUDGET_EXHAUSTED")
             parent=dict(task)
         frozen=json.loads((workspace/"artifacts"/(tid+".json")).read_bytes())
+        # P21 may have spent TWO generations before initial freeze
+        # (first no-change, second differing). Do not silently exceed
+        # the 3-call model budget through subsequent PUBLIC refinement.
+        initial_generations=frozen.get("initial_model_generations",1)
+        if type(initial_generations) is not int or not 1<=initial_generations<=2:
+            return _deny("INVALID_INITIAL_MODEL_ATTEMPT_EVIDENCE")
+        if initial_generations>1:
+            remaining=min(remaining,MAX_ATTEMPTS_PER_LINEAGE-initial_generations-prior)
+            if remaining<=0:
+                return _deny("REFINEMENT_BUDGET_EXHAUSTED")
         spec=frozen["source_spec"]
         base=_sources(spec,fixtures)
         public_bytes=safe_fixture(fixtures,spec["visible"])
