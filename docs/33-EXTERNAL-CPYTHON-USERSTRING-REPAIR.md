@@ -29,3 +29,7 @@ One-time opt-in `[run-p22-issue-7b]` in the **existing Draft PR #12 body** runs 
 If the initial ordinary head CI fails, correct the concrete reproducible script/tests without changing frozen source/goal/public/heldout and rerun; do not opt into inference while infrastructure is red. Only after preflight verification activate one P22 real-model run, observe/log exact model score and remove the marker; repeat tuning on the same issue does not establish autonomous competence. Regardless of this one result, actual external maintainer acceptance, real owner-PC unattended runtime, and reliable unfamiliar issue generalization remain open.
 
 **Current state:** Frozen candidate preregistered in Draft branch; model experiment NOT YET EXECUTED; no pass score claimed.
+
+## One-time P22 launch evidence
+
+Prerequisite frozen-head ordinary GitHub Actions #39590121884: COMPLETED/SUCCESS (Linux, Windows, offline Docker, hosted Windows Scheduler). Real model job skipped on that preflight run. The temporary opt-in was placed on Draft PR #12 only **after** the regression gate passed. This documentation-only trigger commit changes no source, goal, PUBLIC or HELDOUT fixture or authority. Real experiment result is pending independent CI evidence.
