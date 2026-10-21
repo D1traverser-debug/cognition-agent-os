@@ -197,10 +197,10 @@ def verify_public_revision_docker():
         workspace=root/"workspace";workspace.mkdir()
         database=root/"state.sqlite"
         fixture.joinpath("main.py").write_bytes(
-            b"import sys,json\\nfrom rules import calculate\\n"
-            b"print(json.dumps(calculate(json.loads(sys.stdin.read()))))\\n")
+            b"import sys,json\nfrom rules import calculate\n"
+            b"print(json.dumps(calculate(json.loads(sys.stdin.read()))))\n")
         fixture.joinpath("rules.py").write_bytes(
-            b"def calculate(data):\\n    return {'net':0}\\n")
+            b"def calculate(data):\n    return {'net':0}\n")
         public_cases=[
             {"input":{"rows":[{"kind":"credit","amount":10,"group":"hardware"}]},
              "expected":{"by_group":{"hardware":10},"net":10}},
@@ -216,24 +216,24 @@ def verify_public_revision_docker():
         fixture.joinpath("visible.json").write_bytes(json.dumps(public_cases).encode())
         gold=json.dumps(secret_cases).encode()
         fixture.joinpath("sealed.json").write_bytes(gold)
-        base_candidate="def calculate(data):\\n    return {'by_group': {}, 'net': len(data['rows'])}\\n"
+        base_candidate="def calculate(data):\n    return {'by_group': {}, 'net': len(data['rows'])}\n"
         fixture.joinpath("proposal.json").write_bytes(json.dumps({
             "changes":[{"path":"rules.py","content":base_candidate}]}).encode())
         full=(
-            "def calculate(data):\\n"
-            "    totals = {}\\n"
-            "    for row in data['rows']:\\n"
-            "        value = row['amount']\\n"
-            "        if row['kind'] == 'debit':\\n"
-            "            value = -value\\n"
-            "        group = row['group']\\n"
-            "        totals[group] = totals.get(group, 0) + value\\n"
-            "    return {'by_group':totals,'net':sum(totals.values())}\\n"
+            "def calculate(data):\n"
+            "    totals = {}\n"
+            "    for row in data['rows']:\n"
+            "        value = row['amount']\n"
+            "        if row['kind'] == 'debit':\n"
+            "            value = -value\n"
+            "        group = row['group']\n"
+            "        totals[group] = totals.get(group, 0) + value\n"
+            "    return {'by_group':totals,'net':sum(totals.values())}\n"
         )
-        partial=full.replace("        value = row['amount']\\n",
-                             "        if row['group'] != 'hardware':\\n"
-                             "            continue\\n"
-                             "        value = row['amount']\\n")
+        partial=full.replace("        value = row['amount']\n",
+                             "        if row['group'] != 'hardware':\n"
+                             "            continue\n"
+                             "        value = row['amount']\n")
         spec={"kind":"repo_container_repair","files":["main.py","rules.py"],
               "entrypoint":"main.py","candidate":"proposal.json",
               "visible":"visible.json","holdout":"sealed.json",
@@ -272,7 +272,7 @@ def verify_public_revision_docker():
                 reviewed["holdout_passes"]==1,
                 f"Independent actual Docker sealed holdout did not pass: {reviewed}")
         require(fixture.joinpath("rules.py").read_bytes()==
-                b"def calculate(data):\\n    return {'net':0}\\n",
+                b"def calculate(data):\n    return {'net':0}\n",
                 "Original Python source was modified by iterative repair")
         print(json.dumps({
             "test":"real_docker_two_round_public_feedback_with_stub_proposer",
