@@ -2,6 +2,8 @@
 from __future__ import annotations
 import json
 import math
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 from scripts import verify_p24_financial_breakeven as p24
@@ -139,6 +141,37 @@ class FrozenOutsideFinanceTests(unittest.TestCase):
         with patch.object(p24,"UPSTREAM_GIT_BLOB",p24.git_blob_sha1(duplicate)):
             with self.assertRaises((ValueError,SyntaxError)):
                 p24.extract_unmodified_methods(duplicate)
+
+
+    def test_p24_zero_refinement_mode_is_actually_enforced(self):
+        from scripts.verify_actual_local_model import evaluate_one
+        case={"name":"p24_one_shot_enforcement",
+              "source":"def calculate(data):\n    return {'answer': 0}\n",
+              "public":[{"input":{"x":0},"expected":{"answer":1}}],
+              "hidden":[{"input":{"x":1},"expected":{"answer":2}}],
+              "goal_statement":"One actual candidate even if refuted.",
+              "candidate_format":"exact_replace"}
+        with tempfile.TemporaryDirectory(prefix="p24-single-candidate-test-") as tmp:
+            with (
+                patch("scripts.verify_actual_local_model.run_suite",
+                      return_value={"passes":0}),
+                patch("scripts.verify_actual_local_model.run_once",
+                      return_value={"status":"NEEDS_REVIEW","model_called":True}),
+                patch("scripts.verify_actual_local_model.audit_repo",
+                      return_value={"status":"REPO_BYTES_MECHANICALLY_VALID"}),
+                patch("scripts.verify_actual_local_model.review_repo",
+                      return_value={"status":"PUBLIC_REFUTED"}),
+                patch("scripts.verify_actual_local_model.refine_repo_public",
+                      side_effect=AssertionError("unexpected additional model request")),
+            ):
+                result=evaluate_one(Path(tmp),case,goal_statement=case["goal_statement"],
+                                    allow_public_refinement=False)
+                self.assertTrue(result["candidate_frozen"])
+                self.assertFalse(result["public_pass"])
+                self.assertFalse(result["holdout_pass"])
+                self.assertEqual(result["revision_attempts"],0)
+                self.assertTrue(result["source_unchanged"])
+                self.assertNotIn("refinement",result)
 
 if __name__=="__main__":
     unittest.main()
