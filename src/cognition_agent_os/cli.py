@@ -24,6 +24,8 @@ from .semantic_contract import load_pinned_relationship
 from .conformance import inspect_conformance
 from .repair_search import validate_repair_spec
 from .repair_oracle import audit_patch,review_patch
+from .pipeline_repair import validate_pipeline
+from .pipeline_oracle import audit_pipeline,review_pipeline
 from .outcome_attestation import verify_signed_outcome,prepare_unsigned_outcome
 from .signed_feedback import record_signed_feedback,bind_owner_review_trust
 
@@ -101,6 +103,16 @@ def main(argv=None) -> int:
     signed.add_argument("--allowed-signers",required=True,type=Path)
     signed.add_argument("--expected-allowed-sha256",required=True)
     signed.add_argument("--principal",required=True)
+    seed_pipeline=sub.add_parser("seed-pipeline-repair",
+       help="Queue bounded two-file coupled repair spec under current authority")
+    seed_pipeline.add_argument("--spec",type=Path,required=True)
+    pipeline_check=sub.add_parser("pipeline-audit",
+       help="Independent read-only verifier, hidden only after candidate frozen")
+    pipeline_check.add_argument("--task-id",required=True)
+    pipeline_check.add_argument("--include-holdout",action="store_true")
+    pipeline_review=sub.add_parser("pipeline-review",
+       help="Isolated coupled code effect under authority + independent holdout")
+    pipeline_review.add_argument("--task-id",required=True)
     governance = sub.add_parser("conformance-audit",
         help="Inspect claims vs current evidence; --enforce quarantines confirmed contradictions")
     governance.add_argument("--max-cases",type=int,default=64)
@@ -163,6 +175,16 @@ def main(argv=None) -> int:
             expected_principal=args.principal)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"]=="SIGNATURE_AND_MECHANICAL_SCOPE_VERIFIED" else 4
+    if args.command == "pipeline-audit":
+        result=audit_pipeline(args.db,args.workspace,args.fixtures,
+                  args.task_id,hidden=args.include_holdout)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"] in ("VISIBLE_PIPELINE_VERIFIED",
+                                        "HOLDOUT_ACCEPTED") else 4
+    if args.command == "pipeline-review":
+        result=review_pipeline(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="REPAIR_LAB_VERIFIED" else 4
     if args.command == "repair-audit":
         result=audit_patch(args.db,args.workspace,args.fixtures,args.task_id,
              reveal_holdout=args.include_holdout,
@@ -233,6 +255,16 @@ def main(argv=None) -> int:
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
             task_id = create_task(db, spec, interval_seconds=args.interval_seconds)
             result = {"task_id": task_id, "state": "PENDING"}
+        elif args.command == "seed-pipeline-repair":
+            if (args.spec.is_symlink() or not args.spec.is_file()
+                or args.spec.stat().st_size>4096):
+                raise ValueError("Unsafe coupled-pipeline input")
+            spec=validate_pipeline(json.loads(args.spec.read_text(encoding="utf-8")))
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner or not owner["write_allowed"]:
+                raise PermissionError("Pipeline repair disabled by authority")
+            result={"task_id":create_task(db,spec),"state":"PENDING",
+                    "scope":"isolated_two_file_ast_only"}
         elif args.command == "seed-code-repair":
             spec=validate_repair_spec({
                 "kind":"pure_code_repair","source":args.source,
