@@ -1,3 +1,15 @@
+# CURRENT P22 — authentic external CPython baseline reproduced; local 7B model acceptance still unmeasured (2026-10-21)
+
+Owner target: independently evidenced useful autonomous local code repair, no paid/finite-credit model services and no unapproved Windows PC install, upstream commits, PR merge, production release. Exact authority is Draft PR #12 and existing feat/p10-runtime-conformance-20261020 candidate branch. P21 more-itertools #1332 was a genuine NEGATIVE three-run model result; stop retuning P21.
+
+Selected new issue: python/cpython #159868. Immutable preissue source python/cpython@d220409a13b77de7a6c30abe16ea90db01528edc Lib/collections/__init__.py git blob 5dbcac19e7a92726fb9594f406177870db1c08bd. Four PUBLIC (original expected 2 passes), eight AGENT-DERIVED heldout, reporter-owned goal, scope-preserving two-method AST independent reviewer, original-adapter main guard preregistered BEFORE inference. See scripts/verify_p22_cpython_userstring.py, tests/test_p22_cpython_userstring.py and docs/33-EXTERNAL-CPYTHON-USERSTRING-REPAIR.md.
+
+One genuine [P22 CI #39590684936](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39590684936) installed actual offline local Qwen2.5-Coder 7B, then Docker original-source baseline TIMED OUT after 8 seconds BEFORE the model proposed any candidate. Experimental job FAILURE; ordinary infrastructure PASS; no model-quality inference, no P22 valid repair. PR one-time marker has been REMOVED (no repeat accidental 7B download). Independent baseline-only P22 execution [CI #39591455559](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39591455559) in repo_container_integration proved exact real source/PUBLIC baseline 2/4 PASS (manifest SHA256 a2da6ddd13e94c2285ee20673f13843080b796183910a344f8980b4c206dad71), WITHOUT Ollama. Other jobs of that whole run were cancelled by further pushes; do NOT call whole #39591455559 PASS.
+
+Current candidate includes P22-only pre-Ollama Docker baseline in the model job followed by post-Ollama baseline; same 8-second timeout, same golden tests, real error separation, no source repair substitution. NEXT: await head ordinary CI for source verification, Docker baseline, Windows, native Windows scheduler. If green, one bounded explicit P22 7B opt-in and inspect actual stdout; remove marker and record TRUE outcome, reverify final ordinary CI. No root cause attribution to model load until pre/post differential. No credential/owner hardware required. Main remains unmerged.
+
+---
+
 # CURRENT P22 — external CPython UserString repair preregistered; real inference NOT run (2026-10-21)
 
 Continuing the inherited objective: useful independent, bounded, cost-free local coding autonomy, not procedural green CI. Latest measured P21 concluded with 0 valid repairs on more-itertools #1332, despite green infrastructure CI #39584712368. Stop repeating P21.
