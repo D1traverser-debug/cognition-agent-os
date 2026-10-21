@@ -270,6 +270,17 @@ class RepoLabTest(unittest.TestCase):
                 (tid,"CONFORMANCE_CAPABILITY_DISABLED"))]
         self.assertEqual(len(events),1)
         self.assertEqual(events[0]["reason"],"HOLDOUT_PIN_MISMATCH")
+        # Governance is not merely a status label: even after the missing
+        # gold bytes are restored, another legitimate repair is refused
+        # until a separately authorized acceptance re-enables the circuit.
+        self.fx.joinpath("hidden.json").write_bytes(json.dumps(self.hidden).encode())
+        second=self.plan()
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=AssertionError("breaker must block Docker")) as executor:
+            blocked=review_repo(self.dbpath,self.ws,self.fx,second)
+        self.assertEqual(blocked["status"],"CAPABILITY_DISABLED")
+        executor.assert_not_called()
+        self.assertFalse((self.ws/"repo_lab"/second).exists())
 
     def test_postacceptance_missing_holdout_invalidates_receipt(self):
         tid=self.plan()
