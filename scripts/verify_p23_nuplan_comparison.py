@@ -154,6 +154,12 @@ def preserves_scope(candidate: bytes, original_method: str) -> bool:
             return False
         old_tree = ast.parse("class STRTreeOccupancyMap:\n" + original_method)
         new_tree = ast.parse("class STRTreeOccupancyMap:\n" + changed)
+        # A replacement must not smuggle extra top-level imports, classes
+        # or executable statements between the frozen prefix and adapter.
+        if (len(old_tree.body)!=1 or len(new_tree.body)!=1
+            or not isinstance(new_tree.body[0],ast.ClassDef)
+            or new_tree.body[0].name!="STRTreeOccupancyMap"):
+            return False
         a, b = old_tree.body[0].body, new_tree.body[0].body
         if len(a)!=1 or len(b)!=1:
             return False
@@ -163,6 +169,11 @@ def preserves_scope(candidate: bytes, original_method: str) -> bool:
         if old.name!=new.name or ast.dump(old.args)!=ast.dump(new.args):
             return False
         if ast.dump(old.returns)!=ast.dump(new.returns):
+            return False
+        if ([ast.dump(d) for d in old.decorator_list]
+            != [ast.dump(d) for d in new.decorator_list]):
+            return False
+        if old.type_comment!=new.type_comment:
             return False
         return ast.dump(old)!=ast.dump(new)
     except (ValueError, SyntaxError, UnicodeError, TypeError):
