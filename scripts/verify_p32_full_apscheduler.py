@@ -365,7 +365,7 @@ def _prompt(files:dict[str,bytes])->str:
         +GOAL+"\nPublic visible examples:\n"
         +json.dumps(PUBLIC,sort_keys=True)+"\n"
         +"Real original datastore release method:\n"+a[i:i+1600]+"\n"
-        +"Real original async scheduler run method:\n"+b[j:j+2650]
+        +"Real original async scheduler run method:\n"+b[j:j+4300]
     )
 
 def real_model()->None:
