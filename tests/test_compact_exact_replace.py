@@ -134,7 +134,8 @@ class CompactExactReplaceContractTests(unittest.TestCase):
         with patch("cognition_agent_os.local_model._request",
                    side_effect=fake_request):
             with self.assertRaises(CompletedCompactModelValidationRejected) as cm:
-                _candidate_from_model(spec,BASE,b"[]","qwen2.5-coder:7b")
+                _candidate_from_model(spec,BASE,json.dumps([{"input":{"value":1},
+                        "expected":{"answer":1}}]).encode(),"qwen2.5-coder:7b")
             self.assertEqual(str(cm.exception),
                              "Candidate makes no actual source change")
 
