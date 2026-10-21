@@ -182,6 +182,28 @@ class PublicRevisionTests(unittest.TestCase):
                 (self.parent,)).fetchone()[0],3)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
 
+    def test_malformed_model_outputs_also_consume_attempt_budget(self):
+        with patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite),\
+             patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   return_value=b"malformed-not-json") as gen:
+            first=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                     model="installed:7b",max_attempts=2)
+            second=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=2)
+            third=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                     model="installed:7b",max_attempts=2)
+        self.assertEqual(first["status"],"MODEL_CANDIDATE_INVALID")
+        self.assertEqual(first["attempts"],2)
+        self.assertEqual(second["attempts"],1)
+        self.assertEqual(third["status"],"REFINEMENT_BUDGET_EXHAUSTED")
+        self.assertEqual(gen.call_count,3)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
+            self.assertEqual(db.execute("""SELECT COUNT(*) FROM events
+                WHERE task_id=? AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",
+                (self.parent,)).fetchone()[0],3)
+
     def test_bounded_failed_attempts_recorded_then_refused(self):
         with patch("cognition_agent_os.repo_refinement.run_suite",
                    side_effect=self.suite),\
