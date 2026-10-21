@@ -1,5 +1,49 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## CURRENT P18 — task intent semantics and real model A/B awaiting measured CI
+
+Resumed `D1traverser-debug/cognition-agent-os` / cumulative open Draft PR #12
+on 2026-10-21. The last authentic P17 Qwen2.5-Coder 7B run
+`39562470066` failed PUBLIC and sealed HIDDEN acceptance 0/2.
+No source repair success, independent human review, owner-machine
+deployment, main merge or paid cloud token usage is claimed.
+
+Evidence-driven failure hypothesis: presenting the proposer with only
+buggy code and a few PUBLIC examples underdetermines the actual
+user outcome; multiple incompatible behaviors may satisfy visible
+examples. This competes with the hypothesis that 7B simply lacks
+the needed code-generation competence. Neither is proven from P17.
+
+P18 provides an **optional**, bounded `goal_statement` in the original
+`repo_container_repair` source_spec (max 1200 UTF-8 bytes; no NUL or
+unregistered fields), passed as untrusted intent data to initial and
+PUBLIC-failure local Ollama generation. Existing authority, allowlist,
+real Docker PUBLIC execution and independent sealed HIDDEN review remain
+unchanged; absent goal retains baseline behavior. Added regression
+against malformed goal, ambiguous PUBLIC-only semantics, and exact
+fixture preservation. See
+`docs/29-EXPLICIT-OUTCOME-AB-CHECK.md`.
+
+The baseline two task fixture SHA
+`0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf`
+is unchanged. The separate P18 goal descriptions were written AFTER
+seeing P17 failure: a positive A/B outcome on these known tasks would
+not establish generalization. Real P18 Qwen2.5-Coder 7B opt-in marker
+`[run-p18-goal-7b]` is temporarily present in Draft PR #12; final
+observed score and associated CI are not yet claimed. Real model
+weights are downloaded only on an ephemeral public Linux CI runner,
+never the owner's Windows machine, and no metered inference service
+is invoked. Remove the PR opt-in marker after observing this run.
+
+Current next step: read CI final HEAD Linux/Windows/Docker/Windows
+Scheduler and *actual* 7B model run, repair any genuine regression,
+record measured candidate/PUBLIC/HIDDEN outcomes, remove model
+opt-in, and recheck the final ordinary CI. Separate subsequent
+independently sourced unseen-repository tasks from this known-case
+test before claiming transferable model capability. Remain
+DRAFT/UNMERGED and no production patch rights.
+
+
 ## LATEST P17 — genuine 7B inference measured; autonomy capability still FAILED (2026-10-21)
 
 This is the CURRENT result after retrying a user request interrupted
