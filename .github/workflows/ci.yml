@@ -193,7 +193,7 @@ jobs:
   experimental_local_7b_capacity:
     # One explicitly requested nonmetered coder-capacity test only.
     # Installed on disposable hosted Linux CI, never owner's computer.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]')) }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 28
     steps:
@@ -243,16 +243,19 @@ jobs:
           P19_UNFAMILIAR_CORPUS: ${{ contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') && '1' || '0' }}
           P20_EXTERNAL_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p20-external-7b]') && '1' || '0' }}
           P21_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
+          P22_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p22-issue-7b]') && '1' || '0' }}
           # P21 observed an honest 180s local-generation timeout. Only
           # this explicitly opted-in disposable 7B experiment uses 300s.
-          COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '300' || '180' }}
+          COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS: ${{ (contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]')) && '300' || '180' }}
           # Only the same explicit P21 marker permits a SINGLE attempt
           # to regenerate after an unchanged initial model proposal.
           COGNITION_LOCAL_NOCHANGE_RETRY: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$P21_ISSUE_OPT_IN" = "1" ]; then
+          if [ "$P22_ISSUE_OPT_IN" = "1" ]; then
+            python scripts/verify_p22_cpython_userstring.py
+          elif [ "$P21_ISSUE_OPT_IN" = "1" ]; then
             python scripts/verify_p21_live_issue.py
           elif [ "$P20_EXTERNAL_OPT_IN" = "1" ]; then
             python scripts/verify_p20_external_quixbugs.py
