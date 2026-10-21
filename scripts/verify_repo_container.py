@@ -158,6 +158,28 @@ def main():
                           "status":"PASS","image":IMAGE,
                           "failed_candidate_not_staged":True},sort_keys=True))
 
+        # Positive candidate output alone is NOT proof a repair was needed.
+        # The original must visibly fail a public case in the same Docker
+        # environment; a whitespace/comment-only change is not a repair.
+        fx.joinpath("rules.py").write_bytes(fixed.encode())
+        fx.joinpath("proposal.json").write_bytes(json.dumps({
+            "changes":[{"path":"rules.py","content":fixed+"\n# no semantic change\n"}]
+        }).encode())
+        connection=connect(db)
+        no_failure_id=create_task(connection,spec)
+        connection.close()
+        queued=run_once(db,ws,fx)
+        require(queued["status"]=="NEEDS_REVIEW",
+                f"No-failure candidate intake should still freeze: {queued}")
+        no_failure=review_repo(db,ws,fx,no_failure_id)
+        require(no_failure["status"]=="NO_FAILURE_REPRODUCED",
+                f"Changed-but-already-correct code must not be claimed repaired: {no_failure}")
+        require(not (ws/"repo_lab"/no_failure_id).exists(),
+                "Already-correct original must never receive a staged fix")
+        print(json.dumps({"test":"real_original_failure_reproduction_gate",
+                          "status":"PASS","image":IMAGE,
+                          "already_correct_no_stage":True},sort_keys=True))
+
 
 if __name__=="__main__":
     main()
