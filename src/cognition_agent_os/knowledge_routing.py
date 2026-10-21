@@ -34,7 +34,9 @@ def _bound_id(value:object)->bool:
 
 def _checked_spec(spec:dict)->dict:
     if (not isinstance(spec,dict)
-        or set(spec)!={"kind","goal_key","knowledge","options"}
+        or set(spec) not in ({"kind","goal_key","knowledge","options"},
+                            {"kind","goal_key","knowledge","options","research_on_gap"})
+        or ("research_on_gap" in spec and spec["research_on_gap"] is not True)
         or spec["kind"]!="knowledge_intent"
         or not _bound_id(spec["goal_key"])):
         raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
@@ -138,6 +140,18 @@ def run_knowledge_intent(db:sqlite3.Connection,task:dict,fixtures:Path)->dict:
         spec=json.loads(task["source_spec"])
         chosen=resolve_knowledge_route(spec,fixtures)
     except KnowledgeRoutingError as exc:
+        # Only a *valid, pinned and structurally credible* but undecidable
+        # observation may generate research; malformed/missing evidence
+        # cannot be converted into fabricated knowledge.
+        if (isinstance(spec,dict) and spec.get("research_on_gap") is True
+            and exc.reason=="KNOWLEDGE_NOT_APPLICABLE"):
+            from .research_gap import classify_research_gap,enqueue_research_gap
+            try:
+                gap=classify_research_gap(spec,fixtures)
+                if gap is not None:
+                    return enqueue_research_gap(db,task,fixtures,spec,gap)
+            except KnowledgeRoutingError:
+                pass
         return finalize_observed(db,task,"UNKNOWN",error_code=exc.reason)
     except (ValueError,TypeError,KeyError):
         return finalize_observed(db,task,"UNKNOWN",error_code="KNOWLEDGE_NOT_APPLICABLE")
