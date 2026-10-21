@@ -1,3 +1,17 @@
+# CURRENT P26 — worker returned status now reconciles with authoritative finalization (2026-10-21)
+
+Authority: `D1traverser-debug/cognition-agent-os`, existing Draft PR #12 branch `feat/p10-runtime-conformance-20261020`, main unchanged, NO merge/release/owner Windows PC install/external source modification or paid/finite-credit model inference. This is still an independent experimental Agent and NOT a registered UAOS child.
+
+P25 discovered and corrected accepted repo-repair hidden gold drift/containment. P26 independently falsified a second class of false runtime claims: a worker used to return its intended status despite a different `finalize` result. Added four adversarial real-SQLite tests FIRST: two top-level fixture-worker concurrent goal rotations (NO_CHANGE falsely reports VERIFIED while durable row is BLOCKED; source failure falsely reports UNKNOWN while row is BLOCKED), one repo candidate rejection after lease token theft (falsely UNKNOWN while another worker holds RUNNING), one repo candidate rejection after goal rotation (falsely UNKNOWN while row is BLOCKED). Initial historical [CI #39607834192](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39607834192) showed **4/4 newly added tests FAIL** as expected, proving the actual contradiction.
+
+Fix: `ledger.finalize_observed` calls the original locked single-ledger `finalize` and reports only committed state+decision+error_code (or `STALE_WORKER` when the old claim was not committed). Applied to all top-level `runner.run_once` internal finalize branches and `repo_repair.run_repo_candidate` error/success branches. A false VERIFIED response after `STALE_GOAL` can no longer be returned on these pathways, and stale ownership is not confused with a task error. No extra monitor or alternative authority was added, no model prompt, public/holdout validation, Docker policy or original tests relaxed.
+
+Authentic [CI #39608518977](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39608518977) at pre-archive candidate SHA `77a040a36c4f423262bfe802d421bc8f607d8939` COMPLETED/SUCCESS: Linux 334/334 including four converted PASS, Windows offline, real Docker integration and hosted native Windows Scheduled Task all PASS, every optional 7B experiment SKIPPED. No new external model result. Full red/green causal record and remaining boundaries: `docs/37-WORKER-RETURN-LEDGER-CONFORMANCE.md`.
+
+**NEXT:** Check FINAL post-handoff HEAD CI after this checkpoint; record SUCCESS or failure with PR comment without another endless documentation push. Then investigate the *remaining specialized delegated handlers* (`run_goal_case`, `run_intent`, `run_reconciliation`, pipeline/pure repair) for similarly false result claims with isolated authority-revision and lease-takeover fault injection. Only claim completion for paths actually exercised, not universal system correctness. P21/P22/P24 model failures and P23 narrow success are unchanged. No automatic production merge.
+
+---
+
 # CURRENT P25 — accepted repair holdout gold drift now triggers durable governance containment (2026-10-21)
 
 Authority: `D1traverser-debug/cognition-agent-os`, Draft PR #12 on `feat/p10-runtime-conformance-20261020`, not merged or deployed. No paid/finite-credit model calls, owner Windows install, upstream changes or production authorization. This is NOT a registered UAOS child.
