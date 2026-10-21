@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from .ledger import connect, create_task, current_guard, event, finalize
+from .ledger import connect, create_task, current_guard, event, finalize_observed
 from .intent_planner import compile_intent, IntentError
 
 
@@ -19,11 +19,9 @@ def run_intent(db: sqlite3.Connection, task: dict) -> dict:
     try:
         plan=compile_intent(json.loads(task["source_spec"]))
     except (IntentError,TypeError,KeyError,ValueError):
-        finalize(db,task,"UNKNOWN",error_code="INTENT_NOT_ADMITTED")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"INTENT_NOT_ADMITTED"}
+        return finalize_observed(db,task,"UNKNOWN",error_code="INTENT_NOT_ADMITTED")
     if task["parent_task"] is not None:
-        finalize(db,task,"UNKNOWN",error_code="INTENT_RECURSION_REFUSED")
-        return {"task_id":tid,"status":"UNKNOWN","reason":"INTENT_RECURSION_REFUSED"}
+        return finalize_observed(db,task,"UNKNOWN",error_code="INTENT_RECURSION_REFUSED")
     db.execute("BEGIN IMMEDIATE")
     try:
         claimed=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
