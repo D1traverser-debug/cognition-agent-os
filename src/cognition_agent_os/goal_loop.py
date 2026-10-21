@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 import re
 
-from .ledger import finalize
+from .ledger import finalize_observed
 from .runner import ArtifactConflict, store_once
 from .source import safe_fixture, SourceUnavailable
 
@@ -185,18 +185,17 @@ def run_goal_case(db, task: dict, workspace: Path, fixture_root: Path,
         if first!=second:raise SourceUnavailable("Input changed during acquisition")
         plan=plan_goal(spec,first)
     except (ValueError,KeyError,TypeError,OSError,SourceUnavailable) as exc:
-        finalize(db,task,"UNKNOWN",error_code="GOAL_EVIDENCE_UNAVAILABLE")
-        return {"task_id":task["task_id"],"status":"UNKNOWN",
-                "reason":"GOAL_EVIDENCE_UNAVAILABLE","diagnostic":type(exc).__name__}
+        observed=finalize_observed(db,task,"UNKNOWN",error_code="GOAL_EVIDENCE_UNAVAILABLE")
+        return ({**observed,"diagnostic":type(exc).__name__}
+                if observed["status"]=="UNKNOWN" else observed)
     if plan["selection"] is None:
-        finalize(db,task,"UNKNOWN",error_code="NO_SAFE_GOAL_PLAN")
-        return {"task_id":task["task_id"],"status":"UNKNOWN",
-                "reason":"NO_SAFE_GOAL_PLAN","hypotheses":plan["hypotheses"]}
+        observed=finalize_observed(db,task,"UNKNOWN",error_code="NO_SAFE_GOAL_PLAN")
+        return ({**observed,"hypotheses":plan["hypotheses"]}
+                if observed["status"]=="UNKNOWN" else observed)
     if plan["selection"]["action"]=="NO_OP":
-        finalize(db,task,"VERIFIED",decision="GOAL_ALREADY_SATISFIED")
-        actual=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(task["task_id"],)).fetchone()
-        return {"task_id":task["task_id"],"status":actual["state"],
-                "reason":actual["error_code"],"decision":"GOAL_ALREADY_SATISFIED"}
+        observed=finalize_observed(db,task,"VERIFIED",decision="GOAL_ALREADY_SATISFIED")
+        return ({**observed,"reason":observed.get("reason")}
+                if observed["status"]=="VERIFIED" else observed)
     payload=plan["selection"]["payload"]
     source_sha=hashlib.sha256(first).hexdigest()
     artifact={
@@ -221,17 +220,14 @@ def run_goal_case(db, task: dict, workspace: Path, fixture_root: Path,
         return store_once(workspace,task["task_id"],output,
                           crash_after_write=fail_at=="after_artifact_before_commit")
     try:
-        accepted=finalize(db,task,"NEEDS_REVIEW",decision=plan["selection"]["action"],
-                          artifact_writer=guarded_writer)
+        observed=finalize_observed(db,task,"NEEDS_REVIEW",
+                           decision=plan["selection"]["action"],
+                           artifact_writer=guarded_writer)
     except (ArtifactConflict,GoalError,SourceUnavailable,ValueError,OSError):
-        finalize(db,task,"UNKNOWN",error_code="GOAL_CANDIDATE_OR_INPUT_CONFLICT")
-        return {"task_id":task["task_id"],"status":"UNKNOWN",
-                "reason":"GOAL_CANDIDATE_OR_INPUT_CONFLICT"}
-    if not accepted:
-        return {"task_id":task["task_id"],"status":"STALE_WORKER"}
-    actual=db.execute("SELECT state,decision,error_code FROM tasks WHERE task_id=?",
-                      (task["task_id"],)).fetchone()
-    return {"task_id":task["task_id"],"status":actual["state"],
-            "decision":actual["decision"],"reason":actual["error_code"],
-            "artifact":f"artifacts/{task['task_id']}.json" if actual["state"]=="NEEDS_REVIEW" else None,
+        return finalize_observed(db,task,"UNKNOWN",
+                                 error_code="GOAL_CANDIDATE_OR_INPUT_CONFLICT")
+    if observed["status"]!="NEEDS_REVIEW":
+        return observed
+    return {**observed,"reason":observed.get("reason"),
+            "artifact":f"artifacts/{task['task_id']}.json",
             "external_outcome_verified":False}
