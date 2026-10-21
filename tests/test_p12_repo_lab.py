@@ -235,6 +235,57 @@ class RepoLabTest(unittest.TestCase):
         self.assertEqual(found["status"],"CONFORMANCE_VIOLATIONS")
         self.assertTrue(capability_disabled(self.dbpath,REPAIR_LAB_CAPABILITY))
 
+    def test_postacceptance_holdout_tamper_quarantines_success_and_disables_repair(self):
+        tid=self.plan()
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=self._fake_suite):
+            self.assertEqual(review_repo(self.dbpath,self.ws,self.fx,tid)["status"],
+                             "REPAIR_LAB_VERIFIED")
+        self.assertEqual(audit_repo(self.dbpath,self.ws,self.fx,tid,
+                                   require_staged=True)["status"],
+                         "REPO_BYTES_MECHANICALLY_VALID")
+        # Corrupt sealed fixture AFTER a previously valid acceptance and
+        # unaltered historical receipt, so hash-to-receipt comparisons alone
+        # would still (incorrectly) approve the false success.
+        self.fx.joinpath("hidden.json").write_bytes(b'[{"input":{},"expected":{"net":999}}]')
+        self.assertEqual(audit_repo(self.dbpath,self.ws,self.fx,tid,
+                                   require_staged=True)["reason"],
+                         "HOLDOUT_PIN_MISMATCH")
+        # The planner-side pre-review audit still must NOT consume gold.
+        self.assertEqual(audit_repo(self.dbpath,self.ws,self.fx,tid)["status"],
+                         "REPO_BYTES_MECHANICALLY_VALID")
+        observed=inspect_conformance(self.dbpath,self.ws,self.fx,enforce=False)
+        self.assertEqual(observed["findings"][0]["proof"],"HOLDOUT_PIN_MISMATCH")
+        self.assertEqual(self.state(tid)["state"],"REPAIR_LAB_VERIFIED")
+        acted=inspect_conformance(self.dbpath,self.ws,self.fx,enforce=True)
+        self.assertEqual(acted["status"],"CONFORMANCE_VIOLATIONS")
+        self.assertEqual(acted["findings"][0]["enforcement"],"QUARANTINED")
+        self.assertEqual(self.state(tid)["state"],"UNKNOWN")
+        self.assertTrue(capability_disabled(self.dbpath,REPAIR_LAB_CAPABILITY))
+        self.assertEqual(inspect_conformance(self.dbpath,self.ws,self.fx,
+                                             enforce=True)["quarantined"],[])
+        with closing(connect(self.dbpath)) as db:
+            events=[json.loads(r[0]) for r in db.execute(
+                "SELECT details FROM events WHERE task_id=? AND kind=?",
+                (tid,"CONFORMANCE_CAPABILITY_DISABLED"))]
+        self.assertEqual(len(events),1)
+        self.assertEqual(events[0]["reason"],"HOLDOUT_PIN_MISMATCH")
+
+    def test_postacceptance_missing_holdout_invalidates_receipt(self):
+        tid=self.plan()
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=self._fake_suite):
+            self.assertEqual(review_repo(self.dbpath,self.ws,self.fx,tid)["status"],
+                             "REPAIR_LAB_VERIFIED")
+        self.fx.joinpath("hidden.json").unlink()
+        self.assertEqual(audit_repo(self.dbpath,self.ws,self.fx,tid,
+                                   require_staged=True)["reason"],
+                         "HOLDOUT_PIN_MISMATCH")
+        enforced=inspect_conformance(self.dbpath,self.ws,self.fx,enforce=True)
+        self.assertEqual(enforced["findings"][0]["proof"],"HOLDOUT_PIN_MISMATCH")
+        self.assertEqual(self.state(tid)["state"],"UNKNOWN")
+        self.assertTrue(capability_disabled(self.dbpath,REPAIR_LAB_CAPABILITY))
+
     def test_default_host_no_hidden_evaluation_and_explicit_optin(self):
         tid=self.seed()
         ordinary=run_tick(self.dbpath,self.ws,self.fx)
