@@ -105,7 +105,9 @@ def _docker_run(directory:Path,entrypoint:str,case_input)->dict:
     """
     cli=shutil.which("docker")
     if not cli:raise ContainerUnavailable("DOCKER_CLI_NOT_INSTALLED")
-    command=[cli,"run","--rm","--pull=never",
+    # -i is required: subprocess.run(input=...) otherwise sends JSON into
+    # Docker CLI stdin while the container receives EOF (not the testcase).
+    command=[cli,"run","--rm","-i","--pull=never",
              "--network=none","--read-only","--cap-drop=ALL",
              "--security-opt=no-new-privileges","--pids-limit=32",
              "--memory=128m","--cpus=0.5","--user=65534:65534",
