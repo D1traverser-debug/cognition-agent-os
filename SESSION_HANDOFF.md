@@ -1,3 +1,15 @@
+# CURRENT P22 — external CPython UserString repair preregistered; real inference NOT run (2026-10-21)
+
+Continuing the inherited objective: useful independent, bounded, cost-free local coding autonomy, not procedural green CI. Latest measured P21 concluded with 0 valid repairs on more-itertools #1332, despite green infrastructure CI #39584712368. Stop repeating P21.
+
+A distinct reporter-owned open issue `python/cpython#159868` was selected before model inference; issue opened 2026-10-20. **Pre-issue immutable source** `python/cpython@d220409a13b77de7a6c30abe16ea90db01528edc:Lib/collections/__init__.py` Git blob `5dbcac19e7a92726fb9594f406177870db1c08bd` was reread. Frozen unchanged original UserString class + adapter, 4 PUBLIC and 8 heldout rows, reporter goal, original baseline expected 2/4 and an independent two-affected-method AST-only staged-output gate live in `scripts/verify_p22_cpython_userstring.py` and `tests/test_p22_cpython_userstring.py`. Detailed preregistration: `docs/33-EXTERNAL-CPYTHON-USERSTRING-REPAIR.md`.
+
+The existing `.github/workflows/ci.yml` now exposes **one opt-in** `[run-p22-issue-7b]` for real ephemeral GitHub-hosted offline Docker + 7B Ollama, with a bounded 300s generation; P21 special no-change retry is OFF. **NO P22 real model run yet, no baseline or task success inferred from unit tests alone.** Existing Draft PR #12 remains unmerged, owner Windows PC untouched, no paid/finitely credited inference or upstream writes.
+
+Next operational action: check ordinary Linux/Windows/Docker/hosted Windows-Scheduler CI on the frozen P22 candidate HEAD; repair any real preflight failures without changing gold/source. Only after all standard checks pass, activate exactly one bounded P22 7B run, record actual observed score, remove temporary opt-in and re-verify final ordinary HEAD CI. If a test blocks, record reason and maintain resumable checkpoint. Even task success will not equal maintainer signoff, unknown issue generalization or production release. Upstream issue links its own PR #159869; not a blind private gold test and not consulted for a reference patch.
+
+---
+
 # cognition-agent-os — durable continuation checkpoint
 
 ## CURRENT P21 — real outside Issue #1332 reproduced; three authentic 7B attempts yielded ZERO valid repairs (2026-10-21)
