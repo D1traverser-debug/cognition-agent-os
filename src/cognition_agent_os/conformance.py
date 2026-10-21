@@ -254,7 +254,7 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
     # Holdout drift is inconclusive for an unreviewed proposal but is a
     # direct contradiction of a previously accepted repair's positive claim.
     # Do NOT let a generic "unproven" category suppress enforcement here.
-    accepted_gold_contradiction=(state=="REPAIR_LAB_VERIFIED"
+    accepted_gold_contradiction=(row["state"]=="REPAIR_LAB_VERIFIED"
                                  and proof=="HOLDOUT_PIN_MISMATCH")
     return {"task_id":tid,"state_at_observation":row["state"],
             "proof":proof,"mechanical_conformance":proof=="MECHANICALLY_VALID",
