@@ -43,6 +43,12 @@ def _local_generate_timeout(model):
     return int(raw)
 
 
+class CompletedCompactModelValidationRejected(ValueError):
+    """A genuine finished model response was rejected during deterministic
+    compact candidate expansion; count the inference, not a patch success.
+    """
+
+
 def _expand_exact_replace_response(raw,base,allowed_files):
     """Turn short, UNTRUSTED literal edits into existing whole-file proposal.
 
@@ -177,7 +183,12 @@ def _candidate_from_model(spec,base,visible,model,*,feedback=None):
         raise local_model.LocalModelUnavailable("No completed local candidate")
     raw=result["response"].encode("utf-8")
     if compact:
-        return _expand_exact_replace_response(raw,base,spec["files"])
+        try:
+            return _expand_exact_replace_response(raw,base,spec["files"])
+        except (ValueError,TypeError,UnicodeError) as exc:
+            # A completed Ollama response consumed local model capacity
+            # even when its untrusted edit representation is invalid.
+            raise CompletedCompactModelValidationRejected(str(exc)) from exc
     return raw
 
 
@@ -243,6 +254,11 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
         data=(json.dumps(frozen,sort_keys=True,indent=2)+"\n").encode()
         if len(data)>65536:raise ValueError("Artifact too large")
     except (OSError,ValueError,KeyError,TypeError,UnicodeError,LocalModelUnavailable) as exc:
+        if isinstance(exc,CompletedCompactModelValidationRejected):
+            # The response completed BEFORE short-patch validation failed.
+            # Previously this falsely reported model_called=False for P24.
+            # The second (P21 opt-in) generation must also be counted.
+            completed_model_generations+=1
         finalize(db,task,"UNKNOWN",error_code="REPOSITORY_PROPOSAL_UNAVAILABLE")
         # Distinguish invalid JSON structure from a weak hypothesis in
         # P14 experiments, without echoing untrusted model/source text.
