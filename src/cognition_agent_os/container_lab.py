@@ -44,10 +44,21 @@ def _json_bytes(value)->bytes:
 
 
 def validate_task_spec(spec):
-    keys={"kind","files","entrypoint","candidate","visible","holdout",
-          "holdout_sha256"}
-    if not isinstance(spec,dict) or set(spec)!=keys or spec["kind"]!="repo_container_repair":
+    required={"kind","files","entrypoint","candidate","visible","holdout",
+              "holdout_sha256"}
+    optional={"goal_statement"}
+    if (not isinstance(spec,dict) or not required.issubset(spec)
+        or set(spec)-required-optional
+        or spec["kind"]!="repo_container_repair"):
         raise ValueError("Unsupported repository experiment contract")
+    # An independently supplied outcome description is evidence for the
+    # proposer, not execution authority or a hidden evaluator answer.
+    if "goal_statement" in spec:
+        goal=spec["goal_statement"]
+        if (not isinstance(goal,str) or not goal.strip()
+            or len(goal.encode("utf-8"))>1200
+            or any(ord(ch)<32 and ch not in "\\n\\t" for ch in goal)):
+            raise ValueError("Invalid bounded task goal statement")
     files=spec["files"]
     if (not isinstance(files,list) or not 2<=len(files)<=6
         or any(not isinstance(p,str) or not _ALLOWED.fullmatch(p) for p in files)
