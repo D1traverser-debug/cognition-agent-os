@@ -79,6 +79,12 @@ class P23IndependentOutsideRepairTests(unittest.TestCase):
                 (p23.PREFIX+altered+p23.ADAPTER+"# attacker").encode(),method))
             self.assertFalse(p23.preserves_scope(
                 (p23.PREFIX+"    def evil(self):\n        return 1\n"+p23.ADAPTER).encode(),method))
+            # Other top-level code could have escaped the old single-method
+            # reviewer: it must never be considered an isolated method patch.
+            self.assertFalse(p23.preserves_scope(
+                (p23.PREFIX+altered+"\nimport math\n"+p23.ADAPTER).encode(),method))
+            self.assertFalse(p23.preserves_scope(
+                (p23.PREFIX+"    @staticmethod\n"+altered+p23.ADAPTER).encode(),method))
             self.assertFalse(p23.preserves_scope(b"\xff\xfe",method))
 
     def test_fail_closed_ambiguous_class_or_method(self):
