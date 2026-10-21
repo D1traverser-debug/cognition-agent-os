@@ -1,3 +1,19 @@
+# CURRENT P28 — committed finalization receipts cannot borrow later reviewer's state (2026-10-21)
+
+Authority: `D1traverser-debug/cognition-agent-os`, Draft PR #12 on `feat/p10-runtime-conformance-20261020`, NOT merged/released/installed on owner Windows PC and NOT a registered UAOS child. No cloud paid/finite-credit inference and no upstream repository writes.
+
+P27 completed five delegated-handler state/decision conformance fixes. P28 identified that `ledger.finalize_observed()` called `finalize()` COMMIT, then performed a separate SELECT of the **latest** task row. A valid concurrent reviewer could promote the just-frozen proposal from `NEEDS_REVIEW` to `REPAIR_LAB_VERIFIED` before the origin worker's SELECT, making the origin worker falsely claim the reviewer's decision/semantic acceptance as its own.
+
+Falsified with `tests/test_pure_repair.py::test_review_between_finalize_commit_and_result_read_cannot_be_misattributed`, using actual real SQLite + immutable proposal + independent `review_patch()` and a deterministic injected interleaving immediately after `finalize()` commits. Historical [RED #39616272265](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39616272265) ran 340 Linux tests and exactly this test FAILED: the original worker incorrectly returned `REPAIR_LAB_VERIFIED` rather than its own `NEEDS_REVIEW`; reviewer's promotion was legitimate. The RED was not just a hypothesized code smell.
+
+Fix in `src/cognition_agent_os/ledger.py` commit `61097c5c5d9e0a6917dda80113644e7f75baa5fa`: retain original `finalize(...)->bool` interface, transaction lock, lease/authority checks, artifact creation and events. Add optional internal `_committed_receipt` dict populated only after successful COMMIT with exactly that transaction's resolved `status`, `decision` and `reason`. `finalize_observed()` uses the supplied receipt instead of doing a later row SELECT. Failed lease still `STALE_WORKER`; missing receipt on purported success fails closed. The independent review can still advance the actual DB state; the old worker no longer impersonates it.
+
+[GREEN #39616816505](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39616816505) on pre-archive `61097c5c` COMPLETED/SUCCESS: Linux 340/340 including previously red test PASS, Windows offline regression, authentic Docker integration and hosted native Windows Scheduler all green, 7B and live-source opt-ins SKIPPED. Full causal evidence and limitations: `docs/39-TRANSACTION-OWNED-FINALIZATION-RECEIPT.md`. This does NOT establish all races fixed, code repair semantic success, or owner-host install authority.
+
+NEXT: verify FINAL candidate HEAD after THIS handoff commit with ordinary CI only, then record a final-head Actions witness in PR #12 comment without another self-triggering commit. P29 plausible next suspicion: `claim_one()` also COMMITs before independently SELECTing claimed task; investigate via genuine competing claim interleaving BEFORE changing that code, or prioritize any other true effect/claim contradiction; do not start another monitor or retune archived P21/P22/P23/P24 model experiments. Main remains unchanged.
+
+---
+
 # CURRENT P27 — delegated handler status reconciled with committed SQLite authority (2026-10-21)
 
 Authority: independent candidate `D1traverser-debug/cognition-agent-os`, Draft PR #12, branch `feat/p10-runtime-conformance-20261020`; not an official UAOS registered child; NOT merged, deployed or installed on owner Windows PC. No paid/finite-credit LLM calls, no upstream/production writes. This is continued existing runtime governance, not another standalone monitor.
