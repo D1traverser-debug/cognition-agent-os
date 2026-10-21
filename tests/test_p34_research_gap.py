@@ -4,6 +4,7 @@ This probes the original host, claim/grant DB, offline artifact writer and
 native independent conformance; no pretend scholarly researcher is involved.
 """
 import hashlib
+from contextlib import closing
 import json
 from pathlib import Path
 import tempfile
@@ -22,7 +23,7 @@ class ResearchGapHostTests(unittest.TestCase):
         self.fx=self.root/"fixtures";self.fx.mkdir()
         self.work=self.root/"workspace";self.work.mkdir()
         self.db=self.root/"task.sqlite"
-        with connect(self.db) as db:initialize(db)
+        with closing(connect(self.db)) as db:initialize(db)
         (self.fx/"structure.json").write_text('{"keep":42}')
         (self.fx/"before.csv").write_text("id,amount\nA,1\n")
         (self.fx/"after.csv").write_text("id,amount\nA,2\n")
@@ -50,11 +51,11 @@ class ResearchGapHostTests(unittest.TestCase):
         return value
 
     def enqueue(self,spec):
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             return create_task(db,spec)
 
     def inspect(self):
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             return [dict(x) for x in db.execute("SELECT * FROM tasks")]
 
     def test_no_matching_claim_autonomously_enqueues_single_reviewable_research_step(self):
@@ -176,7 +177,7 @@ class ResearchGapHostTests(unittest.TestCase):
         sha=self.put_knowledge([{"goal_key":"other-goal","route":"compare",
                                  "status":"active","source_ref":"atlas:q1"}])
         root=self.enqueue(self.spec(sha))
-        with connect(self.db) as db:alter_authority(db,goal_change=True)
+        with closing(connect(self.db)) as db:alter_authority(db,goal_change=True)
         got=run_once(self.db,self.work,self.fx)
         self.assertEqual(got["status"],"BLOCKED")
         self.assertFalse(any(r["parent_task"]==root for r in self.inspect()))
