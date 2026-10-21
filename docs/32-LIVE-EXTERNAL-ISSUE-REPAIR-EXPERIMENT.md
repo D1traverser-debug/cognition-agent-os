@@ -114,3 +114,50 @@ establish that stronger tier, and even that is project-specific.
 P21 is kept on cumulative `cognition-agent-os` Draft PR #12.
 Never merge main/production or change upstream project code.
 Record actual success, failure, skipped steps and next blocker.
+
+## P21 first actual run — reproduced defect, genuine 7B request timed out
+
+[GitHub Actions #39578220154](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39578220154)
+used the pinned upstream source bytes. Verified full upstream Git
+blob and extracted function SHA256
+`8133f98d95e9bfc4a413772940f7ee61e1ff35c5b2281f108c26801ac9eb27fd`.
+The frozen public/hidden adaptation manifest SHA256 was
+`2617fecb61f8442ec99d5503460117e2a2f9dd7ebe9348c847ec08935f477b69`.
+Real original-source Docker baseline: **1 of 2 PUBLIC failed** as
+reported, with a normal nonempty control passing. This is actual
+bug reproduction, not model opinion.
+
+Actual Ollama Qwen2.5-Coder 7B proof succeeded, but the initial full
+generation exhausted the P17/P20 180-second local request timeout:
+`LocalModelUnavailable`, `candidate_frozen=false`,
+`public_pass=false`, `heldout_pass=false`,
+`function_only_contract_pass=false`, `elapsed_seconds=180.14`.
+This is **no candidate / NOT FIXED**, and cannot be credited
+as a public or private acceptance failure of a candidate that
+was never generated. The job finished green because this research
+harness reports honest model quality/unavailability separately
+from infrastructure success. All Linux/Windows 302/302, native
+Docker and Windows Scheduler jobs passed. Upstream unchanged.
+
+**Bounded diagnosis/intervention:** 180.14s matches the configured
+180s generate timeout and `LocalModelUnavailable` is the observed
+failure. The precise root may also involve local 7B throughput,
+host CPU pressure or output length; a longer cap only tests
+the time-budget explanation. Candidate code quality remains
+unmeasured until complete generation.
+
+One narrow, explicit additional evaluation allows **300 seconds**
+for real locally installed `qwen2.5-coder:7b` ONLY with the
+CI-controlled one-time P21 opt-in. Historical unflagged local
+7B stays 180 seconds; all other local model calls stay 90s.
+`COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS` accepts ONLY
+`180` or `300`; malformed or unbounded input fails closed.
+The original source, issue goal, public and hidden fixtures
+are unchanged. This is not a model API billable-token usage
+or release authorization. Do not endlessly escalate timeout:
+if a completed 300s generation is absent, report capacity
+blocker, do not invent repair quality.
+
+Real second attempt results are NOT yet available at this
+checkpoint. Keep Draft, remove temporary model opt-in after
+observing the repeat; record exact run and limitations.
