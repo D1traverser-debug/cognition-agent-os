@@ -126,6 +126,33 @@ def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | 
         raise
 
 
+
+def finalize_observed(db: sqlite3.Connection, task: dict, state: str, *,
+                      decision: str | None = None, artifact_writer=None,
+                      error_code: str | None = None) -> dict:
+    """Report only the finalization actually committed by this lease owner.
+
+    The caller's intended state is never evidence. Goal changes and grant
+    revocation may convert a requested result to BLOCKED; lease takeover
+    may reject finalization altogether. No read of an unrelated worker's
+    mutable state is presented as our own successful task completion.
+    """
+    committed=finalize(db,task,state,decision=decision,
+                       artifact_writer=artifact_writer,error_code=error_code)
+    if not committed:
+        return {"task_id":task["task_id"],"status":"STALE_WORKER"}
+    row=db.execute("SELECT state,decision,error_code FROM tasks WHERE task_id=?",
+                   (task["task_id"],)).fetchone()
+    if row is None:
+        return {"task_id":task["task_id"],"status":"STALE_WORKER"}
+    result={"task_id":task["task_id"],"status":row["state"]}
+    if row["error_code"] is not None:
+        result["reason"]=row["error_code"]
+    if row["decision"] is not None:
+        result["decision"]=row["decision"]
+    return result
+
+
 def alter_authority(db: sqlite3.Connection, *, revoke: bool = False, goal_change: bool = False) -> None:
     if revoke:
         db.execute("UPDATE authority SET write_allowed=0,grant_rev=grant_rev+1 WHERE singleton=1")
