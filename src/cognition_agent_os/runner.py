@@ -94,6 +94,9 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         if source_spec.get("kind")=="knowledge_intent":
             from .knowledge_routing import run_knowledge_intent
             return run_knowledge_intent(db,task,fixture_root)
+        if source_spec.get("kind")=="research_gap":
+            from .research_gap import run_research_gap
+            return run_research_gap(db,task,workspace,fixture_root)
         if source_spec.get("kind")=="repo_container_repair":
             from .repo_repair import run_repo_candidate
             return run_repo_candidate(db,task,workspace,fixture_root,
