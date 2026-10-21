@@ -126,6 +126,7 @@ jobs:
           # A larger code-specialized model is independently measured,
           # not silently substituted if the 0.5B baseline has 0% success.
           timeout 420 ollama pull qwen2.5-coder:1.5b
+          timeout 420 ollama pull qwen2.5-coder:3b
           ollama list
       - name: Measure real model proposals with independent Docker tests
         env:
@@ -137,6 +138,7 @@ jobs:
           set -euo pipefail
           P14_LOCAL_MODEL=qwen2.5-coder:0.5b python scripts/verify_actual_local_model.py
           P14_LOCAL_MODEL=qwen2.5-coder:1.5b python scripts/verify_actual_local_model.py
+          P14_LOCAL_MODEL=qwen2.5-coder:3b python scripts/verify_actual_local_model.py
 
   live_public_source:
     # Explicit opt-in: third-party public API quota is separate from local correctness.
