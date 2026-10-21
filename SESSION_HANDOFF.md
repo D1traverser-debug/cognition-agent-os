@@ -1,48 +1,52 @@
 # cognition-agent-os — durable continuation checkpoint
 
-## CURRENT P18 — task intent semantics and real model A/B awaiting measured CI
+## CURRENT P18 — explicit intended outcome moved real 7B holdout score from 0/2 to 2/2 (2026-10-21)
 
-Resumed `D1traverser-debug/cognition-agent-os` / cumulative open Draft PR #12
-on 2026-10-21. The last authentic P17 Qwen2.5-Coder 7B run
-`39562470066` failed PUBLIC and sealed HIDDEN acceptance 0/2.
-No source repair success, independent human review, owner-machine
-deployment, main merge or paid cloud token usage is claimed.
+Repository `D1traverser-debug/cognition-agent-os`, cumulative open
+Draft PR #12, existing candidate branch
+`feat/p10-runtime-conformance-20261020`. No main merge, production
+code patch authorization, owner Windows 11 installation, cloud
+metered model API or limited-credit model service occurred.
 
-Evidence-driven failure hypothesis: presenting the proposer with only
-buggy code and a few PUBLIC examples underdetermines the actual
-user outcome; multiple incompatible behaviors may satisfy visible
-examples. This competes with the hypothesis that 7B simply lacks
-the needed code-generation competence. Neither is proven from P17.
+P17 unmocked Qwen2.5-Coder 7B + Docker experiment on two fixed task
+families froze only 1/2 candidates and accepted 0/2 PUBLIC and 0/2
+sealed HIDDEN cases. P18 challenged the *missing user outcome*
+mechanism independently of simply increasing model size: optional
+`goal_statement` is checked for bounded size/control characters,
+persisted in the EXISTING SQLite task spec, and passed as untrusted
+intent evidence to local-model initial generation/revision. No task
+owner schema expansion modifies granted file permissions, trusted
+reviewer rights, Docker policy or hidden test separation.
 
-P18 provides an **optional**, bounded `goal_statement` in the original
-`repo_container_repair` source_spec (max 1200 UTF-8 bytes; no NUL or
-unregistered fields), passed as untrusted intent data to initial and
-PUBLIC-failure local Ollama generation. Existing authority, allowlist,
-real Docker PUBLIC execution and independent sealed HIDDEN review remain
-unchanged; absent goal retains baseline behavior. Added regression
-against malformed goal, ambiguous PUBLIC-only semantics, and exact
-fixture preservation. See
+**Real P18 evidence:** [CI 39568633684](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39568633684),
+genuine installed local 7B on disposable public runner, identical P14
+source/public/hidden benchmark digest
+`0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf`.
+With two explicit Agent-authored task descriptions, independently
+executed Docker results improved to **2/2 initially frozen**,
+**2/2 PUBLIC** and **2/2 HIDDEN** fully accepted on first pass
+(no revisions). Both original sources stayed intact. Linux 285/285,
+Windows 285/285, real Docker and hosted Windows Scheduler passed;
+mutable external GitHub source job SKIPPED. One earlier code test
+NUL-literal mismatch caused red CI and was corrected before this green run.
+
+The descriptions were authored AFTER examining these two known failures;
+they were NOT submitted by an outside owner or independently tested on
+unseen task families. These data support a causal *candidate* that
+underspecified intent blocked effective generation, but cannot
+attribute all change uniquely, prove generalizable autonomy or
+external human-quality outcome. Real signatures/owner ACL and physical
+Windows deployment still absent. P18 study is in
 `docs/29-EXPLICIT-OUTCOME-AB-CHECK.md`.
 
-The baseline two task fixture SHA
-`0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf`
-is unchanged. The separate P18 goal descriptions were written AFTER
-seeing P17 failure: a positive A/B outcome on these known tasks would
-not establish generalization. Real P18 Qwen2.5-Coder 7B opt-in marker
-`[run-p18-goal-7b]` is temporarily present in Draft PR #12; final
-observed score and associated CI are not yet claimed. Real model
-weights are downloaded only on an ephemeral public Linux CI runner,
-never the owner's Windows machine, and no metered inference service
-is invoked. Remove the PR opt-in marker after observing this run.
-
-Current next step: read CI final HEAD Linux/Windows/Docker/Windows
-Scheduler and *actual* 7B model run, repair any genuine regression,
-record measured candidate/PUBLIC/HIDDEN outcomes, remove model
-opt-in, and recheck the final ordinary CI. Separate subsequent
-independently sourced unseen-repository tasks from this known-case
-test before claiming transferable model capability. Remain
-DRAFT/UNMERGED and no production patch rights.
-
+Actual temporary [P18 7B model] PR opt-in marker REMOVED after the
+verified run; next ordinary branch pushes will not download 7B.
+**Next highest-value step:** establish a prospectively pinned,
+distinct untrained/previously unseen task corpus (including business
+goal sentences and sealed external-oracle outcomes), test genuine
+model-generated code without leaked references, and compare success,
+failure, abstention and post-action semantics. Keep Draft until real
+independent acceptance.
 
 ## LATEST P17 — genuine 7B inference measured; autonomy capability still FAILED (2026-10-21)
 
