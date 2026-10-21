@@ -102,6 +102,29 @@ class ExternalLiveIssueTests(unittest.TestCase):
                 p21.extract_unmodified_function(upstream+b"\n# tampered")
         self.assertNotEqual(pinned,p21.UPSTREAM_GIT_BLOB)
 
+    def test_independent_patch_scope_disallows_adapter_rewriting(self):
+        original="def set_partitions(items):\n    yield [items]\n"
+        adapter=(
+            "\n\ndef calculate(data):\n"
+            "    return {'count':len(list(set_partitions(data['items'])))}\n"
+        )
+        genuine=(
+            "def set_partitions(items):\n"
+            "    if not items:\n        yield []\n        return\n"
+            "    yield [items]\n"+adapter
+        ).encode()
+        self.assertTrue(p21.candidate_preserves_adapter(
+            genuine,original,adapter))
+        self.assertFalse(p21.candidate_preserves_adapter(
+            (original+adapter).encode(),original,adapter))
+        self.assertFalse(p21.candidate_preserves_adapter(
+            (original+adapter.replace("count","fake")).encode(),
+            original,adapter))
+        self.assertFalse(p21.candidate_preserves_adapter(
+            b"import os\n"+genuine,original,adapter))
+        self.assertFalse(p21.candidate_preserves_adapter(
+            b"not valid utf8 \\xff",original,adapter))
+
     def test_no_actual_issue_access_or_inference_without_exact_opt_in(self):
         with tempfile.TemporaryDirectory() as directory:
             env=dict(os.environ)
