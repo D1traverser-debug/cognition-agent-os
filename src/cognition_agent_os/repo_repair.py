@@ -231,6 +231,15 @@ def review_repo(db_path,workspace,fixtures,tid):
         base=_sources(spec,fixtures)
         changes={p:s.encode() for p,s in doc["changes"].items()}
         public=cases_from_bytes(safe_fixture(fixtures,spec["visible"]))
+        # A repair requires an independently witnessed original failure.
+        # A different file with the same already-correct behavior is not
+        # grounds to claim an autonomous bug fix.
+        baseline=run_suite(base,{},spec["entrypoint"],public)
+        if baseline["passes"]==baseline["total"]:
+            return {"task_id":tid,"status":"NO_FAILURE_REPRODUCED",
+                    "baseline_public_passes":baseline["passes"],
+                    "baseline_public_total":baseline["total"],
+                    "production_write_authorized":False}
         visible=run_suite(base,changes,spec["entrypoint"],public)
         if visible["passes"]!=visible["total"]:
             return {"task_id":tid,"status":"PUBLIC_REFUTED",
@@ -303,6 +312,7 @@ def review_repo(db_path,workspace,fixtures,tid):
             "production_write_authorized":False})
         db.commit()
         return {"task_id":tid,"status":"REPAIR_LAB_VERIFIED",
+                "baseline_public_passes":baseline["passes"],
                 "public_passes":visible["passes"],"holdout_passes":result["passes"],
                 "holdout_total":result["total"],
                 "source_unmodified":True,
