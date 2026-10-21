@@ -236,7 +236,7 @@ class ExternalLiveIssueTests(unittest.TestCase):
                    }]}).encode()) as model:
             verdict=refine_repo_public(db,ws,fx,tid,
                                        model="qwen2.5-coder:7b",max_attempts=3)
-        self.assertEqual(verdict["status"],"MODEL_REPEATED_PRIOR_HYPOTHESIS")
+        self.assertEqual(verdict["status"],"PUBLIC_REFINEMENT_BUDGET_EXHAUSTED")
         self.assertEqual(verdict["attempts"],1)
         self.assertEqual(model.call_count,1)
         with closing(connect(db)) as con:
