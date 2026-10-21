@@ -29,7 +29,7 @@ def _sources(spec,fixtures):
     return {name:safe_fixture(fixtures,name) for name in spec["files"]}
 
 
-def _candidate_from_model(spec,base,visible,model):
+def _candidate_from_model(spec,base,visible,model,*,feedback=None):
     from . import local_model
     if (not isinstance(model,str) or not local_model._MODEL_RE.fullmatch(model)
         or "cloud" in model.lower() or model.startswith("/") or ".." in model):
@@ -47,6 +47,7 @@ def _candidate_from_model(spec,base,visible,model):
         "files":{name:content.decode("utf-8")
                  for name,content in base.items()},
         "public_examples":public,
+        "prior_public_feedback":feedback,
         "output_contract":{"changes":[{"path":"approved_name.py",
                                         "content":"complete file source text"}]}
     },sort_keys=True)
