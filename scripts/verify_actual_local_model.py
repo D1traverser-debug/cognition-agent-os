@@ -137,7 +137,7 @@ def only_status(output):
                      "model_candidates_tested")}
 
 
-def evaluate_one(parent,case,*,goal_statement=None):
+def evaluate_one(parent,case,*,goal_statement=None,allow_public_refinement=True):
     root=parent/case["name"]
     root.mkdir()
     fx,ws,db,tid=source_cases(root,case,goal_statement=goal_statement)
@@ -173,7 +173,7 @@ def evaluate_one(parent,case,*,goal_statement=None):
             output["holdout_pass"]=True
         elif verdict["status"]=="HOLDOUT_REFUTED":
             output["public_pass"]=True
-        elif verdict["status"]=="PUBLIC_REFUTED":
+        elif verdict["status"]=="PUBLIC_REFUTED" and allow_public_refinement:
             # One bounded genuine loopback model feedback experiment;
             # refusal/0 success is an honest result, no correct patch fallback.
             refined=refine_repo_public(db,ws,fx,tid,model=MODEL,max_attempts=2)
