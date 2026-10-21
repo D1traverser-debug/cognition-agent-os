@@ -1,5 +1,83 @@
 # cognition-agent-os — durable continuation checkpoint
 
+## LATEST P17 — genuine 7B inference measured; autonomy capability still FAILED (2026-10-21)
+
+This is the CURRENT result after retrying a user request interrupted
+by message timeout. User goal is a truly independent, goal-solving,
+self-correcting local Agent with external acceptance, zero paid remote
+LLM API charges and zero finite free-credit AI services. Never claim
+the system is complete when its true generated repairs fail.
+
+Repo `D1traverser-debug/cognition-agent-os`, original branch
+`feat/p10-runtime-conformance-20261020`, cumulative open Draft
+PR #12 to main; all unmerged and no owner's Windows 11 deployment.
+The user has not approved release or installation on their hardware.
+
+**P16 state already verified before this continuation:**
+- Same `repo_refinement.py` loop persists repeated, no-change and
+  malformed local-model generations as
+  `REPO_LOCAL_PUBLIC_REVISION_TRIAL` in the original SQLite ledger,
+  counts each against the total three parent attempts across calls,
+  reuses previous fingerprints, and may change Ollama temperature to
+  0.35 only after an observed rejection. No repeat bypass of authority,
+  public-only Docker checks or hidden independent gold.
+- `tests/test_p13_public_refinement.py` includes duplicate then
+  valid child progression, cross-invocation budget exhaustion,
+  malformed-proposal budget exhaustion. Baseline regression P16
+  283/283 on Linux and Windows; native Docker and hosted Windows
+  Scheduler passed. This is a bounded mechanism, not proof of
+  actual model reasoning.
+- P14/P15 actual Qwen2.5-Coder 0.5B/1.5B/3B attempts on fixed two
+  tasks had 0/2 PUBLIC and 0/2 HIDDEN. PUBLIC output is now actual
+  bounded observed JSON rather than an opaque hash, but real 3B still
+  repeated refuted solutions.
+
+**P17 actual 7B work done in this turn:**
+- New `docs/28-REAL-7B-LOCAL-CODER-EXPERIMENT.md` specifies an
+  independently digest-pinned unchanged two-task benchmark with
+  explicit CI-only Qwen2.5-Coder 7B inference and real Docker.
+- Triggered genuine [GitHub Actions #39562470066](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39562470066)
+  through existing PR body opt-in. Temporary hosted Linux runner
+  installed real Ollama, downloaded public 7B weights, and completed
+  real local tokens/inference; NO scripted model substitute and no
+  predetermined correct code. It used original unchanged P14 task
+  manifest SHA256
+  `0357e22e8b567939b5f9b05baddb4acde1619055e9ed2250d3c715515f1e2baf`.
+- **Actual result:** 7B frozen valid proposal **1/2**;
+  all PUBLIC suites passed **0/2**; independently sealed HIDDEN
+  suites passed **0/2**.
+  - Invoice discounts task produced source unchanged and was
+    refused with `Candidate makes no actual source change`;
+    roughly 59 s case time.
+  - Unique-count-above-threshold task generated a candidate,
+    but actual Docker PUBLIC 0/2 and TWO subsequent P16
+    corrections returned the same previously disproven hypothesis,
+    rejected with `MODEL_REPEATED_PRIOR_HYPOTHESIS`; roughly
+    208 s case time.
+  - The GitHub Actions run itself was SUCCESS **as experiment
+    execution**, NOT useful coding success. Original fixture source
+    unchanged, hidden reference not leaked or used for feedback.
+  - P17 same-run **Linux 283/283 PASS, Windows 283/283 PASS**,
+    real Docker integration PASS, genuine hosted Windows Scheduler
+    two ticks/two tasks/cleanup PASS; mutable external GitHub
+    source live smoke SKIPPED. No paid API or finite trial credits.
+- Removed `[run-p17-7b-local-model]` from PR body after measuring
+  the actual result so docs-only commits do NOT repull 7B weights.
+  The complete archived run is the capability evidence.
+- Updated P17 document with scorecard and candid limits.
+  New docs/handoff-only head requires its own basic Linux/Windows/
+  Docker/Scheduler CI before claiming final HEAD green.
+
+**Remaining blockers:** No reliable general code-repair model has
+passed an independent held-out problem in this fixed test; no real
+owner Windows host installation, independent human business outcome,
+external OS trust-root protection, broader unfamiliar task evaluation,
+or self-directed open-world task discovery. Do NOT automatically
+approve source writes/merge or broaden host sandbox permissions.
+Next actual engineering direction should improve new-hypothesis
+quality and independently sourced unseen tasks, not more monitors
+or static fixed recipes.
+
 ## LATEST P16 — failed local model hypotheses are durable negative evidence (2026-10-21)
 
 Current goal remains real self-governing local autonomy with actual
