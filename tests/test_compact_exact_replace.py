@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from cognition_agent_os.container_lab import candidate_changes,validate_task_spec
 from cognition_agent_os.repo_repair import (
-    _expand_exact_replace_response,_candidate_from_model
+    _expand_exact_replace_response,_candidate_from_model,
+    CompletedCompactModelValidationRejected
 )
 
 BASE={
@@ -116,6 +119,49 @@ class CompactExactReplaceContractTests(unittest.TestCase):
         self.assertEqual(prompt["output_contract"]["required"],["edits"])
         self.assertNotIn("hidden",json.dumps(prompt).lower())
         self.assertEqual(requests[1][3],180)
+
+
+    def test_real_completed_model_response_rejected_as_nochange_is_counted(self):
+        spec={"files":FILES,"candidate_format":"exact_replace",
+              "goal_statement":"Preserve prefix semantics"}
+        unmodified_patch=patch_doc([{"path":"rules.py",
+            "find":"return s.endswith(prefix)",
+            "replace":"return s.endswith(prefix)"}]).decode()
+        def fake_request(method,path,payload,timeout):
+            if method=="GET":
+                return {"models":[{"name":"qwen2.5-coder:7b"}]}
+            return {"done":True,"response":unmodified_patch}
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=fake_request):
+            with self.assertRaises(CompletedCompactModelValidationRejected) as cm:
+                _candidate_from_model(spec,BASE,b"[]","qwen2.5-coder:7b")
+            self.assertEqual(str(cm.exception),
+                             "Candidate makes no actual source change")
+
+    def test_completed_invalid_compact_candidate_cannot_claim_zero_model_calls(self):
+        from scripts.verify_actual_local_model import source_cases
+        from cognition_agent_os.runner import run_once
+        case={"name":"compact_completed_generation_telemetry",
+              "source":"def calculate(data):\n    return {'answer':0}\n",
+              "public":[{"input":{},"expected":{"answer":1}}],
+              "hidden":[{"input":{},"expected":{"answer":1}}],
+              "candidate_format":"exact_replace"}
+        with tempfile.TemporaryDirectory(prefix="compact-inference-telemetry-") as tmp:
+            root=Path(tmp)
+            fx,ws,db,tid=source_cases(root,case,goal_statement="Fix output")
+            with patch("cognition_agent_os.repo_repair._candidate_from_model",
+                       side_effect=CompletedCompactModelValidationRejected(
+                           "Candidate makes no actual source change")):
+                out=run_once(db,ws,fx,planner_mode="ollama-local",
+                             local_model="qwen2.5-coder:7b")
+            self.assertEqual(out["status"],"UNKNOWN")
+            self.assertEqual(out["reason"],"REPOSITORY_PROPOSAL_UNAVAILABLE")
+            self.assertEqual(out["validation_failure"],
+                             "Candidate makes no actual source change")
+            self.assertTrue(out["model_called"])
+            self.assertEqual(out["completed_model_generations"],1)
+            self.assertFalse(out["nochange_retry_attempted"])
+            self.assertFalse((ws/"artifacts"/(tid+".json")).exists())
 
 if __name__=="__main__":
     unittest.main()
