@@ -89,7 +89,8 @@ def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> t
 
 
 def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | None = None,
-             artifact_writer=None, error_code: str | None = None) -> bool:
+             artifact_writer=None, error_code: str | None = None,
+             _committed_receipt: dict | None = None) -> bool:
     """Hold SQLite write lock over authorization and local file effect.
 
     A crash between file creation and DB commit is reconciled by O_EXCL + same-content
@@ -120,6 +121,14 @@ def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | 
                  task["interval_seconds"], task["source_spec"], time.time(), task["task_id"]))
             event(db, new_task_id, "ENQUEUED", {"parent": task["task_id"]})
         db.commit()
+        if _committed_receipt is not None:
+            # These values are the very same values written under the
+            # original IMMEDIATE lock, NOT a later observer's task row.
+            # Populate only AFTER commit succeeds; never treat an
+            # uncommitted write, failed CAS or artifact exception as proof.
+            _committed_receipt.update({
+                "status":state,"decision":decision,"reason":error_code
+            })
         return True
     except BaseException:
         db.rollback()
@@ -137,19 +146,22 @@ def finalize_observed(db: sqlite3.Connection, task: dict, state: str, *,
     may reject finalization altogether. No read of an unrelated worker's
     mutable state is presented as our own successful task completion.
     """
+    receipt={}
     committed=finalize(db,task,state,decision=decision,
-                       artifact_writer=artifact_writer,error_code=error_code)
+                       artifact_writer=artifact_writer,error_code=error_code,
+                       _committed_receipt=receipt)
     if not committed:
         return {"task_id":task["task_id"],"status":"STALE_WORKER"}
-    row=db.execute("SELECT state,decision,error_code FROM tasks WHERE task_id=?",
-                   (task["task_id"],)).fetchone()
-    if row is None:
-        return {"task_id":task["task_id"],"status":"STALE_WORKER"}
-    result={"task_id":task["task_id"],"status":row["state"]}
-    if row["error_code"] is not None:
-        result["reason"]=row["error_code"]
-    if row["decision"] is not None:
-        result["decision"]=row["decision"]
+    # Only values captured by this worker's successful atomic finalize
+    # belong in its response. A distinct reviewer can legitimately advance
+    # the row as soon as our COMMIT releases the lock.
+    if set(receipt)!={"status","decision","reason"}:
+        raise RuntimeError("Committed finalize did not supply its result receipt")
+    result={"task_id":task["task_id"],"status":receipt["status"]}
+    if receipt["reason"] is not None:
+        result["reason"]=receipt["reason"]
+    if receipt["decision"] is not None:
+        result["decision"]=receipt["decision"]
     return result
 
 
