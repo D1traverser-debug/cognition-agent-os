@@ -215,3 +215,66 @@ unchanged. This is the third and final planned capacity-controlled
 P21 experiment, not open-ended benchmark tuning. Even a full
 success is a *function-extraction scoped* fix pending external
 maintainer acceptance, not a real upstream project merge.
+
+## Third and final P21 model trial — two no-change proposals, no repair
+
+Authentic disposable-host 7B run
+[GitHub Actions #39582273214](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39582273214)
+completed a third P21 attempt on the unchanged pinned
+`more-itertools/more-itertools#1332` source and fixture manifest
+`2617fecb61f8442ec99d5503460117e2a2f9dd7ebe9348c847ec08935f477b69`.
+
+The original external defect reproduced again in real Docker:
+**1/2 PUBLIC baseline passes**. Ollama completed full generation,
+received one bounded hash-only `MODEL_CANDIDATE_NO_CHANGE`
+negative-feedback retry and returned a second proposal, but neither
+candidate changed the source in the required allowlisted way.
+At **572.94s** elapsed for the task, the ledger refused to freeze
+a candidate with `Candidate makes no actual source change`.
+Experiment results: candidate_frozen **false**, PUBLIC pass **false**,
+HIDDEN pass **false**, function-only contract **false**, model
+completion genuine, original source unmodified, external repo
+untouched, maintainer review **absent**. A green model job means the
+research script reported this result successfully, NOT that the
+defect was repaired.
+
+Preceding P21 outcomes are distinct:
+(1) 180s generation timeout, (2) 283.65s successful model response
+but no code change, (3) bounded two-generation negative-evidence
+retry but still no code change. **Stop further trials on this issue**
+rather than unbounded generation timeout/feedback escalation. The
+data support a specific limitation of this whole-file local model
+proposal path for a ~4KB function extracted from a ~175KB library,
+not a claim of universal inability to fix Python.
+
+**Separate cross-platform issue:** the third-run CI also reported
+five Windows-only unit assertion failures because
+`tests/test_p21_real_issue.py` generated the purported LF
+"unchanged source" with platform-native `write_text`, which
+introduced CRLF bytes on Windows. Linux 306/306, actual Docker and
+real Windows Scheduled Task succeeded, but Windows unit tests were
+RED. Fixed the fixture with exact `write_bytes(source.encode())`,
+and corrected a refiner test expectation to the actual bounded
+`MODEL_REPEATED_PRIOR_HYPOTHESIS` refusal. No production source
+admission was loosened; raw bytes remain source authority.
+The follow-on ordinary Linux+Windows+Docker+Scheduler CI, rather
+than the failed third-run Windows job, is the acceptance check.
+
+**Interpretation:** P21 achieved true independent issue reporter
+provenance and real bug reproduction, but it did **not** achieve
+successful autonomous repair of that externally reported issue,
+independent maintainer acceptance, whole-repository repair, or a
+production patch. Third-party upstream continues untouched.
+A materially different future experiment should pre-register
+a NEW unrelated actual open issue and independently adjudicated
+requirements, or justify a truly different constrained generation
+representation in advance. Do not retroactively modify original
+issue gold to accommodate a weak local model and do not claim
+"green CI" as model success.
+
+P21's optional no-change retry is scoped to explicit local
+`COGNITION_LOCAL_NOCHANGE_RETRY=1`; ordinary deterministic
+and non-opted-in paths preserve their initial model call behavior.
+Historical 7B timeout remains 180s unless the explicitly permitted
+300s P21 experiment variable is set. Release stays DRAFT/UNMERGED,
+with no main, original upstream or user Windows machine modifications.
