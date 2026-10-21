@@ -114,6 +114,54 @@ class ResearchGapHostTests(unittest.TestCase):
         self.assertEqual(states[child],"UNKNOWN")
         self.assertFalse((self.work/"sandbox").exists())
 
+    def test_pin_changed_between_admission_and_research_blocks_old_child(self):
+        sha=self.put_knowledge([{"goal_key":"different-goal","route":"compare",
+                                 "status":"active","source_ref":"atlas:different"}])
+        root=self.enqueue(self.spec(sha))
+        first=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(first["tasks"][0]["status"],"RESEARCH_NEEDED")
+        child=first["tasks"][0]["research_task_id"]
+        self.put_knowledge([{"goal_key":"repair-goal","route":"compare",
+                            "status":"active","source_ref":"atlas:fresh"}])
+        another=self.enqueue({"kind":"fixture","old":"structure.json",
+                              "new":"structure.json"})
+        second=run_tick(self.db,self.work,self.fx,max_jobs=2)
+        self.assertEqual(second["tasks"][0]["status"],"UNKNOWN",second)
+        self.assertEqual(second["tasks"][1]["status"],"VERIFIED",second)
+        self.assertFalse((self.work/"artifacts"/(child+".json")).exists())
+        self.assertEqual({r["task_id"]:r["state"] for r in self.inspect()}[child],"UNKNOWN")
+
+    def test_unapproved_manual_research_child_never_writes_an_agenda(self):
+        sha=self.put_knowledge([{"goal_key":"other-goal","route":"compare",
+                                 "status":"active","source_ref":"atlas:q1"}])
+        arbitrary={"kind":"research_gap","parent_id":"0"*32,
+                   "goal_key":"repair-goal","gap_kind":"NO_EXACT_GOAL_CLAIM",
+                   "knowledge":{"path":"study.json","sha256":sha,
+                                "source_id":"reviewed-study"},
+                   "routes":{"structure":{"capability":"arbitrary-shell",
+                                          "plan_sha256":"0"*64}}}
+        self.enqueue(arbitrary)
+        result=run_once(self.db,self.work,self.fx)
+        self.assertEqual(result["status"],"UNKNOWN",result)
+        self.assertFalse((self.work/"artifacts").exists())
+
+    def test_tampered_research_output_is_revoked_without_new_user_task(self):
+        sha=self.put_knowledge([{"goal_key":"other-goal","route":"compare",
+                                 "status":"active","source_ref":"atlas:study"}])
+        self.enqueue(self.spec(sha))
+        first=run_tick(self.db,self.work,self.fx,max_jobs=2)
+        child=first["tasks"][0]["research_task_id"]
+        artifact=self.work/"artifacts"/(child+".json")
+        self.assertTrue(artifact.is_file(),first)
+        artifact.write_text('{"status":"RESEARCH_COMPLETED"}')
+        tick=run_tick(self.db,self.work,self.fx,max_jobs=4)
+        self.assertEqual(tick["processed"],0)
+        self.assertTrue(tick["conformance"]["quarantined"],tick)
+        states={r["task_id"]:r["state"] for r in self.inspect()}
+        self.assertEqual(states[child],"UNKNOWN")
+        self.assertEqual(json.loads((self.fx/"structure.json").read_text()),
+                         {"keep":42})
+
     def test_no_research_optin_keeps_original_policy_and_legal_neighbor(self):
         sha=self.put_knowledge([{"goal_key":"other-goal","route":"compare",
                                  "status":"active","source_ref":"atlas:q1"}])
