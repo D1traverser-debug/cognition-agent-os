@@ -187,9 +187,14 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
         if state=="SANDBOX_VERIFIED":
             proof=_verify_staged(db,row,workspace,fixtures)
         elif state=="REPAIR_LAB_VERIFIED":
-            from .repair_oracle import audit_patch
-            report=audit_patch(db_path,workspace,fixtures,tid,
-                               reveal_holdout=True,require_staged=True)
+            if kind=="pipeline_code_repair":
+                from .pipeline_oracle import audit_pipeline
+                report=audit_pipeline(db_path,workspace,fixtures,tid,
+                                     hidden=True,staged=True)
+            else:
+                from .repair_oracle import audit_patch
+                report=audit_patch(db_path,workspace,fixtures,tid,
+                                   reveal_holdout=True,require_staged=True)
             proof=("MECHANICALLY_VALID" if report["status"]=="HOLDOUT_ACCEPTED"
                    else report.get("reason",report["status"]))
         elif state=="DECOMPOSED":
@@ -197,7 +202,13 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             proof=("MECHANICALLY_VALID" if result["status"]=="PLAN_MECHANICALLY_VALID"
                    else result.get("reason","PLAN_AUDIT_FAILED"))
         elif state=="NEEDS_REVIEW":
-            if kind=="pure_code_repair":
+            if kind=="pipeline_code_repair":
+                from .pipeline_oracle import audit_pipeline
+                report=audit_pipeline(db_path,workspace,fixtures,tid)
+                proof=("MECHANICALLY_VALID" if
+                       report["status"]=="VISIBLE_PIPELINE_VERIFIED"
+                       else report.get("reason",report["status"]))
+            elif kind=="pure_code_repair":
                 from .repair_oracle import audit_patch
                 report=audit_patch(db_path,workspace,fixtures,tid)
                 proof=("MECHANICALLY_VALID" if
