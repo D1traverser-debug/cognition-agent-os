@@ -34,7 +34,9 @@ CRITICAL_REPAIR_LAB_BREACHES=frozenset((
     "ACCEPTANCE_RECEIPT_MISMATCH","ACCEPTANCE_RECEIPT_MISSING",
     "ARTIFACT_HASH_MISMATCH","NON_MINIMAL_SOURCE_PATCH",
     "STAGED_PATCH_MISMATCH","PIPELINE_RECEIPT_MISSING",
-    "PIPELINE_RECEIPT_CONFLICT","PROPOSAL_HASH_CHANGED"
+    "PIPELINE_RECEIPT_CONFLICT","PROPOSAL_HASH_CHANGED",
+    "STAGED_REPO_PATCH_MISMATCH","REPO_RECEIPT_MISSING",
+    "REPO_RECEIPT_CONFLICT"
 ))
 CRITICAL_SANDBOX_BREACHES=frozenset((
     "STAGED_ARTIFACT_HASH_MISMATCH","STAGED_EFFECT_BYTES_MISMATCH",
@@ -189,7 +191,10 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
         if state=="SANDBOX_VERIFIED":
             proof=_verify_staged(db,row,workspace,fixtures)
         elif state=="REPAIR_LAB_VERIFIED":
-            if kind=="pipeline_code_repair":
+            if kind=="repo_container_repair":
+                from .repo_repair import audit_repo
+                report=audit_repo(db_path,workspace,fixtures,tid,require_staged=True)
+            elif kind=="pipeline_code_repair":
                 from .pipeline_oracle import audit_pipeline
                 report=audit_pipeline(db_path,workspace,fixtures,tid,
                                      hidden=True,staged=True)
@@ -204,7 +209,12 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             proof=("MECHANICALLY_VALID" if result["status"]=="PLAN_MECHANICALLY_VALID"
                    else result.get("reason","PLAN_AUDIT_FAILED"))
         elif state=="NEEDS_REVIEW":
-            if kind=="pipeline_code_repair":
+            if kind=="repo_container_repair":
+                from .repo_repair import audit_repo
+                report=audit_repo(db_path,workspace,fixtures,tid)
+                proof=("MECHANICALLY_VALID" if report["status"]=="REPO_BYTES_MECHANICALLY_VALID"
+                       else report.get("reason",report["status"]))
+            elif kind=="pipeline_code_repair":
                 from .pipeline_oracle import audit_pipeline
                 report=audit_pipeline(db_path,workspace,fixtures,tid)
                 proof=("MECHANICALLY_VALID" if
