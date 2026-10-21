@@ -105,6 +105,10 @@ def prepare_case(raw: bytes) -> dict:
         "name": "external_cpython_159868_userstring_affixes",
         "source": PREFIX + extract_unmodified_class(raw) + ADAPTER,
         "goal_statement": GOAL_STATEMENT,
+        # P22b representation intervention, NOT a changed external goal/gold.
+        # A short exact-replacement proposal is expanded mechanically and
+        # still judged by the original full-file SQLite/Docker acceptance.
+        "candidate_format": "exact_replace",
         "public": PUBLIC,
         "hidden": HIDDEN,
     }
