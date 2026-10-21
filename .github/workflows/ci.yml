@@ -246,6 +246,9 @@ jobs:
           # P21 observed an honest 180s local-generation timeout. Only
           # this explicitly opted-in disposable 7B experiment uses 300s.
           COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '300' || '180' }}
+          # Only the same explicit P21 marker permits a SINGLE attempt
+          # to regenerate after an unchanged initial model proposal.
+          COGNITION_LOCAL_NOCHANGE_RETRY: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
         shell: bash
         run: |
           set -euo pipefail
