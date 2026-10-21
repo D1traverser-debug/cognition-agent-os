@@ -101,8 +101,10 @@ def source_cases(root,case,*,goal_statement=None):
     fx=root/"fixtures";fx.mkdir()
     ws=root/"workspace";ws.mkdir()
     db=root/"state.sqlite"
-    fx.joinpath("main.py").write_text(ENTRY,encoding="utf-8")
-    fx.joinpath("calculator.py").write_text(case["source"],encoding="utf-8")
+    # Preserve exact source LF bytes on Linux and Windows: text writes can
+    # introduce CRLF and fabricate model changes during byte-identity checks.
+    fx.joinpath("main.py").write_bytes(ENTRY.encode("utf-8"))
+    fx.joinpath("calculator.py").write_bytes(case["source"].encode("utf-8"))
     public=json.dumps(case["public"],sort_keys=True).encode()
     hidden=json.dumps(case["hidden"],sort_keys=True).encode()
     fx.joinpath("visible.json").write_bytes(public)
