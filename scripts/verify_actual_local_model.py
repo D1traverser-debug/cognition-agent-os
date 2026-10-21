@@ -28,7 +28,11 @@ from cognition_agent_os.repo_repair import audit_repo,review_repo
 from cognition_agent_os.repo_refinement import refine_repo_public
 from cognition_agent_os.container_lab import run_suite,cases_from_bytes,ContainerUnavailable
 
-MODEL="qwen2.5-coder:0.5b"
+# The hosted benchmark tests two independently installed non-metered
+# coder weights; accepting an arbitrary model name is deliberately disallowed.
+MODEL=os.environ.get("P14_LOCAL_MODEL","qwen2.5-coder:0.5b")
+if MODEL not in ("qwen2.5-coder:0.5b","qwen2.5-coder:1.5b"):
+    raise ValueError("P14 benchmark model is not on explicit local allowlist")
 ENTRY=(
     "import json,sys\n"
     "from calculator import calculate\n"
@@ -107,7 +111,7 @@ def source_cases(root,case):
 def only_status(output):
     return {k:v for k,v in output.items()
             if k in ("status","reason","model_called","passes","total",
-                     "public_passes","holdout_passes","holdout_total",
+                     "public_passes","holdout_passes","holdout_total","diagnostic",
                      "model_candidates_tested")}
 
 
