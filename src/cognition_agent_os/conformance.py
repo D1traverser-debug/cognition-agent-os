@@ -251,10 +251,16 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
               "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
               "SOURCE_CHANGED_SINCE_PROPOSAL","SOURCE_HAS_CHANGED"}
+    # Holdout drift is inconclusive for an unreviewed proposal but is a
+    # direct contradiction of a previously accepted repair's positive claim.
+    # Do NOT let a generic "unproven" category suppress enforcement here.
+    accepted_gold_contradiction=(state=="REPAIR_LAB_VERIFIED"
+                                 and proof=="HOLDOUT_PIN_MISMATCH")
     return {"task_id":tid,"state_at_observation":row["state"],
             "proof":proof,"mechanical_conformance":proof=="MECHANICALLY_VALID",
             "disposition":("PASS" if proof=="MECHANICALLY_VALID" else
-                           "INSUFFICIENT_EVIDENCE" if proof in unproven else
+                           "CONFIRMED_INCONSISTENCY" if accepted_gold_contradiction
+                           else "INSUFFICIENT_EVIDENCE" if proof in unproven else
                            "CONFIRMED_INCONSISTENCY")}
 
 
