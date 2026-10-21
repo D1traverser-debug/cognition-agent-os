@@ -243,6 +243,9 @@ jobs:
           P19_UNFAMILIAR_CORPUS: ${{ contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') && '1' || '0' }}
           P20_EXTERNAL_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p20-external-7b]') && '1' || '0' }}
           P21_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
+          # P21 observed an honest 180s local-generation timeout. Only
+          # this explicitly opted-in disposable 7B experiment uses 300s.
+          COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '300' || '180' }}
         shell: bash
         run: |
           set -euo pipefail
