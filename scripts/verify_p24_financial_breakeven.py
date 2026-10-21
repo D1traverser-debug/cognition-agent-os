@@ -263,7 +263,8 @@ def main():
         raise RuntimeError("No genuine 7B generation probe")
     with tempfile.TemporaryDirectory(prefix="cognition-p24-finance-") as tmp:
         root=Path(tmp)
-        result=evaluate_one(root,case,goal_statement=GOAL)
+        result=evaluate_one(root,case,goal_statement=GOAL,
+                            allow_public_refinement=False)
         scope=independent_scope_review(root,case,raw,result)
         print(json.dumps({"test":"p24_real_financial_7b_result",
             "issue":ISSUE,"source_blob":UPSTREAM_GIT_BLOB,
