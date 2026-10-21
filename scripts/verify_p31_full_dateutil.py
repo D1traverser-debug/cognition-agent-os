@@ -308,7 +308,11 @@ def _repack_only_rrule(wheel:bytes,new_rrule:bytes)->bytes:
                 data=(new_rrule if info.filename==target else
                       corrected_record if info.filename==record_name else
                       incoming.read(info))
-                outgoing.writestr(info,data)
+                # zipfile.writestr mutates ZipInfo.header_offset in place.
+                # Never hand it incoming archive metadata: subsequent
+                # verification must still read the unmodified original.
+                import copy
+                outgoing.writestr(copy.copy(info),data)
         repacked=dest.getvalue()
         with zipfile.ZipFile(io.BytesIO(repacked)) as check:
             if (check.read(target)!=new_rrule
