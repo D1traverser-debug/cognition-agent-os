@@ -81,7 +81,7 @@ def _candidate_from_model(spec,base,visible,model,*,feedback=None):
     result=local_model._request("POST","/api/generate",{
         "model":model,"prompt":prompt,"stream":False,"format":contract,
         "options":{"temperature":0.35 if retry else 0,"num_predict":3500},
-        "keep_alive":"0"},90)
+        "keep_alive":"0"},180 if model=="qwen2.5-coder:7b" else 90)
     if result.get("done") is not True or not isinstance(result.get("response"),str):
         raise local_model.LocalModelUnavailable("No completed local candidate")
     return result["response"].encode("utf-8")
