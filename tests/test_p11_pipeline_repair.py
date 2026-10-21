@@ -18,7 +18,8 @@ from cognition_agent_os.ledger import connect,initialize,create_task,alter_autho
 from cognition_agent_os.runner import run_once
 from cognition_agent_os.pipeline_repair import validate_pipeline,propose_pipeline
 from cognition_agent_os.pipeline_oracle import audit_pipeline,review_pipeline
-from cognition_agent_os.conformance import inspect_conformance
+from cognition_agent_os.conformance import inspect_conformance,capability_disabled,REPAIR_LAB_CAPABILITY
+from cognition_agent_os.host import run_tick
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -164,6 +165,50 @@ class CoupledRepairTest(unittest.TestCase):
         found=inspect_conformance(self.dbpath,self.ws,self.fx,enforce=True)
         self.assertEqual(found["status"],"CONFORMANCE_VIOLATIONS")
         self.assertEqual(self.state(tid)["state"],"UNKNOWN")
+
+    def test_opt_in_windows_compatible_host_tick_completes_coupled_review(self):
+        tid=self.seed()
+        result=run_tick(self.dbpath,self.ws,self.fx,auto_stage_goals=True)
+        self.assertEqual(result["tasks"][0]["status"],"NEEDS_REVIEW")
+        self.assertEqual(result["repair_lab_reviews"][0]["status"],"REPAIR_LAB_VERIFIED")
+        self.assertEqual(self.state(tid)["state"],"REPAIR_LAB_VERIFIED")
+
+    def test_default_host_never_reads_holdout_or_stages_repair(self):
+        tid=self.seed()
+        result=run_tick(self.dbpath,self.ws,self.fx)
+        self.assertEqual(result["tasks"][0]["status"],"NEEDS_REVIEW")
+        self.assertEqual(result["repair_lab_reviews"],[])
+        self.assertFalse((self.ws/"pipeline_lab").exists())
+
+    def test_tampered_verified_pipeline_opens_existing_capability_breaker(self):
+        tid=self.prepare()
+        self.assertEqual(review_pipeline(self.dbpath,self.ws,self.fx,tid)["status"],
+                         "REPAIR_LAB_VERIFIED")
+        (self.ws/"pipeline_lab"/tid/"scale.py").write_bytes(b"forged")
+        inspect_conformance(self.dbpath,self.ws,self.fx,enforce=True)
+        self.assertTrue(capability_disabled(self.dbpath,REPAIR_LAB_CAPABILITY))
+        nxt=self.seed()
+        self.assertEqual(run_once(self.dbpath,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        self.assertEqual(review_pipeline(self.dbpath,self.ws,self.fx,nxt)["status"],
+                         "CAPABILITY_DISABLED")
+
+    def test_post_effect_original_source_mutation_never_records_success(self):
+        tid=self.prepare()
+        from cognition_agent_os import pipeline_oracle as oracle
+        real_stage=oracle._stage
+        def stage_then_change(workspace,task_id,names,patches):
+            real_stage(workspace,task_id,names,patches)
+            self.fx.joinpath("net.py").write_bytes(
+                b"def net(total, consumed):\\n    return total * consumed\\n")
+        with patch.object(oracle,"_stage",side_effect=stage_then_change):
+            result=review_pipeline(self.dbpath,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"POST_EFFECT_REJECTED",result)
+        self.assertEqual(self.state(tid)["state"],"UNKNOWN")
+        db=connect(self.dbpath)
+        events=db.execute("""SELECT kind FROM events WHERE task_id=?
+                AND kind='PIPELINE_HOLDOUT_ACCEPTED'""",(tid,)).fetchall()
+        self.assertEqual(events,[])
+        db.close()
 
     def test_cli_real_queue_worker_audit_and_review_without_cloud(self):
         fixture=self.root/"task.json"
