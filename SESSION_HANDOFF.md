@@ -1,75 +1,76 @@
 # cognition-agent-os — durable continuation checkpoint
 
-## CURRENT P21 — real live issue baseline proven, 300s generation returned no-change; one bounded regeneration (2026-10-21)
+## CURRENT P21 — real outside Issue #1332 reproduced; three authentic 7B attempts yielded ZERO valid repairs (2026-10-21)
 
-Authority: `D1traverser-debug/cognition-agent-os` candidate
-`feat/p10-runtime-conformance-20261020`, OPEN DRAFT PR #12, base
-main. No production merge, upstream repo write, owner Windows 11
-installation, paid/credit-limited remote inference API or autonomous
-watcher escalation permitted.
+Authority: `D1traverser-debug/cognition-agent-os`,
+`feat/p10-runtime-conformance-20261020`, OPEN DRAFT PR #12,
+base main, NOT merged, NOT deployed. No paid/credit-limited
+model service, owner Windows installation, external GitHub
+upstream write or production permission.
 
-P21 reads real still-OPEN (2026-10-21) external
-[more-itertools Issue #1332](https://github.com/more-itertools/more-itertools/issues/1332):
-`set_partitions([])` returns zero partitions instead of one
-empty partition. Reporter `saadkhantareen` created 2026-10-15.
-Exact pre-issue upstream code
-`more-itertools/more-itertools@4aeb4338ae1407d8da9723e86da99efeb446f719`,
-Git blob `9c56ab37558733ece94d676f71d502d8048bc1d5`,
-function SHA256
+External issue:
+[more-itertools #1332](https://github.com/more-itertools/more-itertools/issues/1332),
+opened 2026-10-15 by `saadkhantareen`, OPEN when inspected
+2026-10-21. Original pre-issue `more_itertools/more.py` at
+`4aeb4338ae1407d8da9723e86da99efeb446f719`,
+Git blob `9c56ab37558733ece94d676f71d502d8048bc1d5`;
+unmodified function SHA256
 `8133f98d95e9bfc4a413772940f7ee61e1ff35c5b2281f108c26801ac9eb27fd`.
-Original 175KB code is TOO LARGE for existing max16KB lab:
-experiment extracts exactly the original function plus a distinct
-unchanged JSON adapter. This is NOT full-repo accepted code.
+The full project file is ~175KB, exceeds existing 16KB lab
+input, so P21 operates only on original exact function extraction
++ separately immutable JSON adapter (not whole-repo repair).
+PUBLIC 2 and agent-derived HIDDEN 8 tests never changed; manifest
+SHA256 `2617fecb61f8442ec99d5503460117e2a2f9dd7ebe9348c847ec08935f477b69`.
+Real Docker repeatedly reproduced original reporter's empty
+partition failure (1/2 PUBLIC baseline passes) while nonempty
+control passed. No maintainer-signed private acceptance or merge.
 
-Frozen source/goal/PUBLIC(2)/heldout(8) manifest SHA256
-`2617fecb61f8442ec99d5503460117e2a2f9dd7ebe9348c847ec08935f477b69`.
-Both genuine P21 runs witnessed **real Docker reproduction of the
-externally reported bug (baseline PUBLIC 1/2)**; normal n=2 control passed.
-Hidden tests are Agent-derived mathematical/edge cases, NOT external
-maintainer-private acceptance. Proposed candidate's adapter must
-remain byte-identical or independent scope check FAILS.
+Authentic unmocked loopback `qwen2.5-coder:7b` runs:
+- [#39578220154](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39578220154):
+  request exceeded 180s, no complete proposal, no repair.
+- [#39579650252](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39579650252):
+  bounded 300s request completed at 283.65s; emitted
+  UNCHANGED source, refused before freeze, no repair.
+- [#39582273214](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39582273214):
+  one bounded 300s negative-feedback regeneration after a no-change
+  model hypothesis, total 572.94s; STILL NO effective source edit,
+  `candidate_frozen=false`, PUBLIC/HIDDEN/scope all false.
+  This was no code fix, though CI's model research step reported
+  the failure correctly and completed successfully.
 
-- **First real [CI #39578220154](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39578220154)**:
-  local Qwen2.5-Coder 7B generation timed out at **180.14s**;
-  no valid proposal, no code repaired, PUBLIC/HIDDEN/scope FALSE.
-  Host CI Linux+Windows 302/302, Docker, hosted Windows scheduler passed.
-- **Second genuine [CI #39579650252](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39579650252)**:
-  strictly capped 300s local request completed at **283.65s** but
-  candidate was a byte-unchanged source; ledger
-  `REPOSITORY_PROPOSAL_UNAVAILABLE`, no frozen patch, PUBLIC/HIDDEN
-  and scope all FALSE. No external repo write. Infra passed.
-  This isolates incomplete-generation vs no-change proposal failures.
-- **Third/final focused intervention IN DEVELOPMENT**:
-  core `src/cognition_agent_os/repo_repair.py` now supports exactly ONE
-  extra local `qwen2.5-coder:7b` generation when first candidate
-  is unchanged, only when `COGNITION_LOCAL_NOCHANGE_RETRY=1`
-  explicitly set in temporary P21 CI. Feed fingerprinted public
-  `MODEL_CANDIDATE_NO_CHANGE` negative evidence, not hidden values.
-  Successful second result is independently admitted and hashed;
-  invalid/unchanged second result is UNKNOWN, no host code execution.
-  Evidence contains `initial_model_generations` and one rejection
-  fingerprint, and `repo_refinement.py` subtracts the consumed
-  attempts to avoid exceeding THREE total model generations.
-  Normal 7B/default non-P21/deterministic behavior unchanged.
-  New offline cases assert recovered code, refusals and budget.
-  Original source/problem/hidden fixture **unchanged**.
+Root-cause observations are therefore distinct: 180s capacity
+bound and later a real no-change model proposal failure. Do not
+retry this task again by extending model time or changing hidden
+expectations. The P21 one-time retry stays off by default,
+requires `COGNITION_LOCAL_NOCHANGE_RETRY=1`, records
+negative public evidence, and uses at most 3 model calls in
+a lineage including existing public refinement. Two strictly
+bounded time choices remain 180/300s. No host untrusted execution
+or external writes.
 
-Files:
-`scripts/verify_p21_live_issue.py`,
-`tests/test_p21_real_issue.py`,
+Important cross-platform regression from third experiment:
+Windows standard-library tests failed 5 new assertions because
+the test fixture `write_text` converted LF -> CRLF, making an
+"unchanged" candidate differ bytewise. Linux 306/306,
+Docker and real hosted Windows scheduler passed, but
+Windows runner was RED. Fixed this TEST fixture to byte-accurate
+`write_bytes(source.encode())`, plus corrected rejection
+status expectation. This did NOT relax byte-exact production
+source checking. Final all-platform ordinary CI after that
+fix is the gate. Details in
 `docs/32-LIVE-EXTERNAL-ISSUE-REPAIR-EXPERIMENT.md`.
-Follow-up must check current HEAD Linux, Windows, real Docker and hosted
-Windows Scheduler CI. Only after verified regression should
-one-time PR marker `[run-p21-issue-7b]` WAS set and this
-checkpoint commit TRIGGERS the real disposable Linux Qwen2.5-Coder
-7B experiment, bounded to two 300s generations. Actual third
-experiment outcome is NOT YET OBSERVED; do not infer success. Remove marker after genuine evidence.
-Record frozen candidate/PUBLIC/HIDDEN/adapter-scope counts honestly,
-especially if second candidate is still no-change or model times out.
-Never retune hidden cases or invent external maintainer acceptance.
-Never merge Draft or alter upstream source. If no success, stop
-looping this known issue and seek genuinely new evidence/alternative
-mechanism rather than unlimited retries.
+
+Current next: verify the last head's Linux/Windows/Docker/
+Windows Scheduler CI. Record both PASS and failure honestly;
+the 7B model experiment should be SKIPPED on final head
+because temporary PR opt-in was REMOVED.
+Stop P21 as negative model-quality evidence (baseline proven
+but repair not achieved). To move P22, select a genuinely NEW
+external open defect / source and distinct non-retrospectively
+selected acceptance, or a pre-justified smaller patch-output
+representation with independent real tests. Avoid monitoring
+layers, endless tuning of #1332, unwarranted autonomy
+or production-readiness claims.
 
 ## CURRENT P20 — genuine third-party QuixBugs defects + official holdout PASS (2026-10-21)
 
