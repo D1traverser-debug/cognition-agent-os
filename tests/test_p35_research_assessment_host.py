@@ -128,7 +128,11 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(len(receipts),1)
         receipt=json.loads(receipts[0]["details"])
         self.assertEqual(receipt["action"],"FIND_DISTINCT_ORIGINAL_PUBLISHER")
-        visible=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        pinned={(a["repo"],a["path"],a["ref"]):(self.fx/"independent_a.json").read_bytes(),
+                (b["repo"],b["path"],b["ref"]):(self.fx/"independent_b.json").read_bytes()}
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=lambda repo,path,ref:pinned[(repo,path,ref)]):
+            visible=run_tick(self.db,self.work,self.fx,max_jobs=1)
         self.assertEqual(len(visible["pending_research_actions"]),1)
         self.assertEqual(visible["pending_research_actions"][0]["task_id"],task)
         self.assertFalse(visible["pending_research_actions"][0]["action_authorized"])
