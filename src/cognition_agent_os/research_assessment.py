@@ -7,6 +7,7 @@ are untrusted even if content-addressed. No network or model API is invoked.
 from __future__ import annotations
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 from .ledger import finalize_observed
 from .runner import store_once, ArtifactConflict
@@ -144,7 +145,7 @@ def run_assessment(db, task, db_path: Path, workspace: Path, fixtures: Path):
                                    decision="RESEARCH_NOT_SEMANTICALLY_APPROVED", artifact_writer=write)
         return {**result, "business_outcome_verified": False,
                 "production_effect_authorized": False}
-    except (ValueError, OSError, TypeError, KeyError, ArtifactConflict):
+    except (ValueError, UnicodeError, OSError, TypeError, KeyError, sqlite3.Error, ArtifactConflict):
         return finalize_observed(db, task, "UNKNOWN", error_code="RESEARCH_ASSESSMENT_UNVERIFIABLE")
 
 def audit_assessment(db_path: Path, workspace: Path, fixtures: Path, task_id: str) -> dict:
@@ -180,5 +181,5 @@ def audit_assessment(db_path: Path, workspace: Path, fixtures: Path, task_id: st
             return {"status": "ASSESSMENT_MECHANICALLY_VALID",
                     "business_outcome_verified": False,
                     "production_effect_authorized": False}
-    except (ValueError, KeyError, TypeError, OSError, sqlite3.Error):
+    except (ValueError, UnicodeError, KeyError, TypeError, OSError, sqlite3.Error):
         return bad
