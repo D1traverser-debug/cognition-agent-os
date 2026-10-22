@@ -120,6 +120,22 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(report["reason"],"SAME_REPOSITORY_NOT_INDEPENDENT")
         self.assertIsNone(report["candidate_route_for_review"])
 
+    def test_public_source_transport_failure_does_not_crash_host(self):
+        from cognition_agent_os.source import SourceUnavailable
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        for item,repo in ((a,"org-one/repo"),(b,"org-two/repo")):
+            item.update({"kind":"github","repo":repo,"ref":"a"*40})
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=SourceUnavailable("temporary public API failure")):
+            task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"UNKNOWN",result)
+        self.assertFalse((self.work/"artifacts"/(task+".json")).exists())
+        after=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(after["processed"],0,after)
+
     def test_public_source_hash_mismatch_fails_closed(self):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
