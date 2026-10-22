@@ -102,6 +102,66 @@ def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -
     return items
 
 
+
+def _goal_progress(path: Path, *, max_tasks: int = 512) -> dict:
+    """Cross-capability goal lineage, with no inferred semantic success.
+
+    A deterministic observation of the ONE task ledger, not a planner,
+    authorization authority, or business-outcome oracle.
+    """
+    with closing(sqlite3.connect(path.resolve(strict=True).as_uri()+"?mode=ro",
+                                 uri=True, timeout=5)) as db:
+        db.row_factory=sqlite3.Row
+        authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+        count=db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        rows=db.execute("""SELECT task_id,parent_task,state,goal_rev,grant_rev,
+                                  due_at,error_code FROM tasks
+                           ORDER BY created_at,task_id LIMIT ?""",
+                        (max_tasks,)).fetchall()
+    by_id={row["task_id"]:row for row in rows}
+    roots={}
+    for row in rows:
+        visited=set()
+        node=row
+        while node["parent_task"] in by_id and node["task_id"] not in visited:
+            visited.add(node["task_id"])
+            node=by_id[node["parent_task"]]
+        root_id=node["task_id"]
+        group=roots.setdefault(root_id,{"root_task_id":root_id,"states":{},
+                                       "runnable":0,"awaiting_review":0,
+                                       "blocked":0,"unknown":0,
+                                       "stale_authority":0})
+        state=row["state"]
+        group["states"][state]=group["states"].get(state,0)+1
+        valid=bool(authority and row["goal_rev"]==authority["goal_rev"]
+                   and row["grant_rev"]==authority["grant_rev"]
+                   and authority["write_allowed"]==1)
+        if not valid:
+            group["stale_authority"]+=1
+        elif state in ("PENDING","RUNNING"):
+            group["runnable"]+=1
+        elif state in ("NEEDS_REVIEW","RESEARCH_NEEDED","NEEDS_REPLAN"):
+            group["awaiting_review"]+=1
+        elif state=="BLOCKED":
+            group["blocked"]+=1
+        elif state=="UNKNOWN":
+            group["unknown"]+=1
+    summary=[]
+    for root_id in sorted(roots):
+        item=roots[root_id]
+        item["next_control_action"]=(
+            "REAUTHORIZE_OR_SUPERSEDE" if item["stale_authority"] else
+            "CONTINUE_ADMITTED_WORK" if item["runnable"] else
+            "REVIEW_UNRESOLVED_EVIDENCE" if item["awaiting_review"] else
+            "DIAGNOSE_BLOCKER" if item["blocked"] or item["unknown"] else
+            "REQUIRE_INDEPENDENT_OUTCOME_CHECK")
+        item["semantic_outcome_verified"]=False
+        summary.append(item)
+    return {"goals":summary,"scanned_tasks":len(rows),
+            "truncated":count>max_tasks,
+            "semantic_outcome_verified":False}
+
+
 def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: int = 16,
              planner_mode: str = "deterministic", local_model: str | None = None,
              auto_stage_goals: bool = False, auto_review_repos: bool = False) -> dict:
@@ -159,6 +219,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             "repair_lab_reviews": repair_reviews,
             "diagnostic_followups": recoveries,
             "pending_research_actions": _pending_research_actions(db_path,workspace),
+            "goal_progress": _goal_progress(db_path),
             "conformance": conformance,
             "preflight": preflight,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
