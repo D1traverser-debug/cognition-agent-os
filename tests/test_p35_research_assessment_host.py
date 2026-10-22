@@ -81,6 +81,9 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
         self.assertFalse(report["production_effect_authorized"])
         self.assertEqual(report["candidate_route_for_review"],"structure")
+        self.assertEqual(report["knowledge_proposal"]["route"],"structure")
+        self.assertEqual(report["knowledge_proposal"]["status"],"PENDING_REVIEW")
+        self.assertFalse(report["knowledge_proposal"]["approved"])
         self.assertEqual(report["next_research_action"],"INDEPENDENT_SEMANTIC_AND_OUTCOME_REVIEW")
         self.assertFalse(report["next_action_authorized"])
 
@@ -120,6 +123,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(result["status"],"NEEDS_REVIEW")
         report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
         self.assertEqual(report["reason"],"SAME_REPOSITORY_NOT_INDEPENDENT")
+        self.assertIsNone(report["knowledge_proposal"])
         self.assertEqual(report["next_research_action"],"FIND_DISTINCT_ORIGINAL_PUBLISHER")
         with closing(connect(self.db)) as db:
             receipts=db.execute("""SELECT details FROM events
