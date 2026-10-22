@@ -62,6 +62,11 @@ def _contract(goal_id:str,target:dict,alternatives:list,fixtures:Path)->dict:
         if (set(original)|set(spec["desired"])!=set(target)
             or any(k not in target for k in original)):
             raise ValueError("SOURCE_NOT_SAME_GOAL")
+        # Only explicitly requested fields may conflict. A changed identity
+        # field would make this a DIFFERENT owner goal, not a fallback.
+        if any(k not in spec["desired"] and target[k]!=v
+               for k,v in original.items()):
+            raise ValueError("SOURCE_IDENTITY_MISMATCH")
         packed.append({"task_spec":spec,"input_sha256":hashlib.sha256(raw).hexdigest()})
     if types!={"json_keys","csv_columns"}:
         raise ValueError("UNREGISTERED_METHOD_PAIR")
