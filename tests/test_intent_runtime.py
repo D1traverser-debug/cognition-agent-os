@@ -95,6 +95,9 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(actual,{"critical":"keep","owner":"ops","retry":3})
         self.assertEqual(self.fixtures.joinpath("settings.json").read_text(),'{"critical":"keep"}')
         self.assertFalse(tick["semantic_outcome_verified"])
+        checks=tick["goal_progress"]["goals"][0]["independent_checks"]
+        self.assertTrue(any(c["capability"]=="goal_case" and c["mechanically_verified"] for c in checks), checks)
+        self.assertTrue(all(not c["business_outcome_verified"] for c in checks))
 
     def test_comparison_intent_generates_full_sql_verifiable_report(self):
         self.fixtures.joinpath("old.csv").write_text("invoice_id,amount\nI1,100\nI2,200\n")
@@ -112,6 +115,8 @@ class IntentRuntimeTests(unittest.TestCase):
                          "REPORT_MECHANICALLY_VERIFIED")
         self.assertEqual(audit_intent_plan(self.db_path,tid)["status"],"PLAN_MECHANICALLY_VALID")
         self.assertEqual(self.task(child)["state"],"NEEDS_REVIEW")
+        progress=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)["goal_progress"]
+        self.assertTrue(any(c["capability"]=="record_reconciliation" and c["mechanically_verified"] for g in progress["goals"] for c in g["independent_checks"]))
 
     def test_composed_comparison_uses_reviewer_pinned_key_and_sql(self):
         self.fixtures.joinpath("old.csv").write_text(
