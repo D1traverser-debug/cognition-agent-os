@@ -132,7 +132,8 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                                        "runnable":0,"awaiting_review":0,
                                        "blocked":0,"unknown":0,
                                        "stale_authority":0,
-                                       "independent_checks":[]})
+                                       "independent_checks":[],
+                                       "failed_independent_checks":0})
         if (workspace is not None and fixtures is not None
             and row["state"]=="NEEDS_REVIEW"):
             try:
@@ -149,12 +150,15 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                 else:
                     kind=None
                 if kind is not None:
+                    if not check:
+                        group["failed_independent_checks"]+=1
                     group["independent_checks"].append({
                         "task_id":row["task_id"],"capability":kind,
                         "mechanically_verified":check,
                         "verdict":audit["status"],
                         "business_outcome_verified":False})
             except (ValueError,TypeError,KeyError,OSError):
+                group["failed_independent_checks"]+=1
                 group["independent_checks"].append({
                     "task_id":row["task_id"],
                     "mechanically_verified":False,
@@ -181,6 +185,7 @@ def _goal_progress(path: Path, workspace: Path | None = None,
         item["next_control_action"]=(
             "REAUTHORIZE_OR_SUPERSEDE" if item["stale_authority"] else
             "CONTINUE_ADMITTED_WORK" if item["runnable"] else
+            "REPLAN_AFTER_FAILED_INDEPENDENT_CHECK" if item["failed_independent_checks"] else
             "REVIEW_UNRESOLVED_EVIDENCE" if item["awaiting_review"] else
             "DIAGNOSE_BLOCKER" if item["blocked"] or item["unknown"] else
             "REQUIRE_INDEPENDENT_OUTCOME_CHECK")
