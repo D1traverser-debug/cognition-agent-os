@@ -152,6 +152,30 @@ class IntentRuntimeTests(unittest.TestCase):
         second=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
         self.assertEqual(second["local_evidence_retries"],[])
 
+    def test_changed_audit_verdict_at_commit_refuses_retry(self):
+        from cognition_agent_os import local_retry
+        self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
+        self.seed(self.structured())
+        first=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
+        original=first["tasks"][0]["child_task_id"]
+        artifact=self.workspace/"artifacts"/(original+".json")
+        artifact.write_bytes(artifact.read_bytes()+b" ")
+        original_audit=local_retry.audit_goal
+        observations=[0]
+        def source_changed_between_checks(*args,**kwargs):
+            observations[0]+=1
+            if observations[0]==2:
+                return {"status":"SOURCE_CHANGED_SINCE_PROPOSAL"}
+            return original_audit(*args,**kwargs)
+        with patch.object(local_retry,"audit_goal",side_effect=source_changed_between_checks):
+            result=local_retry.schedule_failed_local_evidence(
+                self.db_path,self.workspace,self.fixtures)
+        self.assertEqual(result,[])
+        self.assertEqual(observations[0],2)
+        with closing(connect(self.db_path)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE kind='BOUNDED_LOCAL_RETRY'").fetchone()[0],0)
+
     def test_revoke_prevents_failed_local_artifact_retry(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         self.seed(self.structured())
