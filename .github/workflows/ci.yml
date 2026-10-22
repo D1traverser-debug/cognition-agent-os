@@ -398,3 +398,45 @@ jobs:
         env:
           PYTHONPATH: src
         run: python scripts/verify_p36_live_research.py
+
+
+  graphify_official_code_inventory:
+    # Official third-party CLI on a clean temporary Linux runner.
+    # Code-only AST extraction: no model API keys or production mutation.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install official Graphify in isolated runner
+        run: python -m pip install --disable-pip-version-check graphifyy
+      - name: Extract code graph and prove real artifact exists
+        shell: bash
+        env:
+          GRAPHIFY_QUERY_LOG_DISABLE: '1'
+        run: |
+          set -euo pipefail
+          graphify --version
+          graphify extract . --code-only
+          test -s graphify-out/graph.json
+          test -s graphify-out/GRAPH_REPORT.md
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          graph=json.loads(Path("graphify-out/graph.json").read_text(encoding="utf-8"))
+          assert isinstance(graph,dict) and graph, "Empty graph artifact"
+          print("Official Graphify JSON top-level fields:",sorted(graph)[:15])
+          print("Graph bytes:",Path("graphify-out/graph.json").stat().st_size)
+          PY
+      - name: Retain actual graph and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphify-official-code-inventory
+          path: |
+            graphify-out/graph.json
+            graphify-out/GRAPH_REPORT.md
+            graphify-out/graph.html
+          if-no-files-found: warn
