@@ -64,7 +64,7 @@ class GoalFeedbackAlternativeBaseline(unittest.TestCase):
             # quarantine the invalid leaf. Conformance has rotating
             # coverage, so a host tick may invalidate the leaf first.
             progress=_goal_progress(dbpath,workspace,fixtures)["goals"][0]
-            self.assertEqual(progress["failed_independent_checks"],1,observed)
+            self.assertEqual(progress["failed_independent_checks"],1,progress)
             self.assertEqual(progress["independent_checks"][0]["verdict"],
                              "ARTIFACT_HASH_MISMATCH")
             self.assertEqual(progress["next_control_action"],
