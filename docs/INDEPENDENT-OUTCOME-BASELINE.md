@@ -24,6 +24,23 @@ A local postcondition match is deliberately called
 The result always has `business_outcome_verified=false` and
 `authorizes_mutation=false`.
 
+## Positive shared-outcome reference
+
+A further test pins **one canonical record** before either execution:
+`{ "id": "A", "owner": "ops" }`. The live worker then executes two
+registered goal families: `json_keys` on a JSON source and `csv_columns`
+on a CSV source. Their distinct output bytes are separately checked by the
+same **format-normalizing** reference oracle, which ignores their planner
+status. Both match the bounded canonical record. Independent negative inputs
+that change the record ID or source bytes are rejected.
+
+This proves that two *different existing mechanisms* can in principle
+produce the **same narrow synthetic deliverable**. It does **not** mean the
+knowledge-routing controller knows how to register, select or switch between
+them; its current compiled intent registry is more limited. The test offers
+a correct positive reference for evaluating future eligible alternatives,
+not a claimed autonomous fallback.
+
 ## Route-equivalence counterexample
 
 A decision engine MUST NOT treat two different labels as two different
