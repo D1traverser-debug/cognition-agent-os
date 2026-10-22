@@ -85,6 +85,16 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
             return finalize_observed(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
         if not isinstance(source_spec,dict):
             return finalize_observed(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
+        # Reject stale descendant work before invoking ANY capability. A parent
+        # that has been blocked or invalidated cannot authorize further work.
+        if task["parent_task"] is not None:
+            parent = db.execute("SELECT state,goal_rev,grant_rev FROM tasks WHERE task_id=?",
+                                (task["parent_task"],)).fetchone()
+            if (parent is None or parent["state"] in ("BLOCKED", "UNKNOWN")
+                or parent["goal_rev"] != task["goal_rev"]
+                or parent["grant_rev"] != task["grant_rev"]):
+                return finalize_observed(db,task,"BLOCKED",
+                                         error_code="UPSTREAM_TASK_INVALID")
         # Evidence dependencies are stored in THIS authoritative ledger.
         # Check before dispatch to any executor, not merely during routing.
         from .knowledge_routing import check_child_dependency
