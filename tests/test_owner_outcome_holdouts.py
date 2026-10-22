@@ -14,7 +14,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"evaluation"))
-from owner_outcome_oracle import assess_route_fitness,evaluate_outcome
+from owner_outcome_oracle import assess_route_fitness,evaluate_outcome,evaluate_shared_record_goal
 from cognition_agent_os.ledger import connect,create_task,initialize
 from cognition_agent_os.runner import run_once
 
@@ -112,6 +112,43 @@ class OwnerPinnedBlackboxHoldouts(unittest.TestCase):
                                         {"route":"compare","intent":dict(one)}])
         self.assertEqual(duplicated["reason"],"DUPLICATE_METHOD")
         self.assertFalse(duplicated["safe_to_autoswitch"])
+
+
+    def test_two_actual_capabilities_satisfy_same_pinned_record_outcome(self):
+        # A canonical user-level result is fixed BEFORE either method runs.
+        # Separate JSON and CSV runtimes produce different bytes; the oracle
+        # independently normalizes their results to the SAME intended record.
+        original_json=b'{"id":"A"}'
+        original_csv=b"id\nA\n"
+        contract={"schema_version":1,"goal_id":"deliver-owner-record",
+                  "canonical_record":{"id":"A","owner":"ops"},
+                  "source_sha256":{
+                      "json_keys":hashlib.sha256(original_json).hexdigest(),
+                      "csv_columns":hashlib.sha256(original_csv).hexdigest()},
+                  "allowed_effect":"LOCAL_CANDIDATE_ONLY"}
+        json_candidate=self.observe_live_candidate("record.json",original_json,
+                                                   "json_keys",{"owner":"ops"})
+        csv_candidate=self.observe_live_candidate("record.csv",original_csv,
+                                                  "csv_columns",{"owner":"ops"})
+        for kind,before,candidate in (
+            ("json_keys",original_json,json_candidate),
+            ("csv_columns",original_csv,csv_candidate)):
+            result=evaluate_shared_record_goal(contract,kind,before,candidate)
+            self.assertEqual(result["status"],"SYNTHETIC_SHARED_GOAL_MET",result)
+            self.assertFalse(result["business_outcome_verified"])
+            self.assertFalse(result["authorizes_mutation"])
+        # The same independent oracle rejects a wrong-result method even when
+        # its output superficially contains the requested column/key.
+        bad_json=b'{"id":"B","owner":"ops"}'
+        bad_csv=b"id,owner\nB,ops\n"
+        self.assertEqual(evaluate_shared_record_goal(
+            contract,"json_keys",original_json,bad_json)["status"],"NOT_ACCEPTED")
+        self.assertEqual(evaluate_shared_record_goal(
+            contract,"csv_columns",original_csv,bad_csv)["status"],"NOT_ACCEPTED")
+        self.assertEqual(evaluate_shared_record_goal(
+            contract,"csv_columns",b"id\nB\n",csv_candidate)["status"],"NOT_ACCEPTED")
+        self.assertEqual(self.fixtures.joinpath("record.json").read_bytes(),original_json)
+        self.assertEqual(self.fixtures.joinpath("record.csv").read_bytes(),original_csv)
 
     def test_local_contract_cannot_claim_real_world_result(self):
         original=b'{"port":1}'
