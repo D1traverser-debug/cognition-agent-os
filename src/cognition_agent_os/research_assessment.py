@@ -128,7 +128,17 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         else:
             reason = "CONSENSUS_PENDING_EXTERNAL_SEMANTIC_REVIEW"
             candidate = next(r for r in sorted(routes) if a[r] == "supports")
+        # Feedback is a bounded review instruction, never an authorization.
+        next_steps = {
+            "SAME_REPOSITORY_NOT_INDEPENDENT": "FIND_DISTINCT_ORIGINAL_PUBLISHER",
+            "SHARED_UNDERLYING_EVIDENCE": "TRACE_PRIMARY_EVIDENCE_AND_FIND_INDEPENDENT_TEST",
+            "CONFLICTING_SOURCE_CLAIMS": "TEST_COMPETING_HYPOTHESES",
+            "INSUFFICIENT_CAUSAL_DISCRIMINATION": "COLLECT_DISCONFIRMING_OBSERVATIONS",
+            "CONSENSUS_PENDING_EXTERNAL_SEMANTIC_REVIEW": "INDEPENDENT_SEMANTIC_AND_OUTCOME_REVIEW",
+        }
         return {"status": "RESEARCH_EVIDENCE_NOT_APPROVED", "reason": reason,
+                "next_research_action": next_steps[reason],
+                "next_action_authorized": False,
                 "candidate_route_for_review": candidate,
                 "research_task_id": tid, "goal_key": orig["goal_key"],
                 "source_hashes": [s["sha256"] for s in sources],
