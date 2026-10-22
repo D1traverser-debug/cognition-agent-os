@@ -74,7 +74,7 @@ def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -
               AND t.goal_rev=a.goal_rev AND t.grant_rev=a.grant_rev
               AND a.write_allowed=1
               AND e.kind='RESEARCH_NEXT_ACTION_IDENTIFIED'
-            ORDER BY e.event_id DESC LIMIT ?""",(min(limit*8,512),)).fetchall()
+            ORDER BY e.event_id DESC LIMIT ?""",(min(max(limit*8,64),512),)).fetchall()
     items=[]
     for row in rows:
         try:
