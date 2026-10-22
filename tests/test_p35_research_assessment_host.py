@@ -88,5 +88,22 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         _,result=self.review(child,a,b)
         self.assertEqual(result["status"],"UNKNOWN",result)
 
+    def test_next_host_audit_keeps_valid_then_quarantines_tamper(self):
+        child=self.setup_research()
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        assessment,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        next_tick=run_tick(self.db,self.work,self.fx,max_jobs=2)
+        self.assertEqual(next_tick["processed"],0,next_tick)
+        self.assertEqual(next_tick["conformance"]["quarantined"],0,next_tick)
+        (self.fx/"independent_b.json").write_bytes(b"{}")
+        after=run_tick(self.db,self.work,self.fx,max_jobs=2)
+        self.assertTrue(after["conformance"]["quarantined"],after)
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT state FROM tasks WHERE task_id=?",(assessment,)).fetchone()
+            self.assertEqual(row["state"],"UNKNOWN")
+
 if __name__=="__main__":
     unittest.main()
