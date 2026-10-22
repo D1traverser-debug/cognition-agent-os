@@ -82,6 +82,25 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertFalse(report["production_effect_authorized"])
         self.assertEqual(report["candidate_route_for_review"],"structure")
 
+    def test_nested_public_paths_and_same_filename_from_distinct_repositories(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        source_a=(self.fx/a["path"]).read_bytes()
+        source_b=(self.fx/b["path"]).read_bytes()
+        sha="a"*40
+        a.update({"kind":"github","repo":"org-one/repo","path":"reports/evidence.json","ref":sha})
+        b.update({"kind":"github","repo":"org-two/repo","path":"reports/evidence.json","ref":sha})
+        pinned={(a["repo"],a["path"],sha):source_a,(b["repo"],b["path"],sha):source_b}
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=lambda repo,path,ref:pinned[(repo,path,ref)]):
+            task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
+        self.assertEqual(report["candidate_route_for_review"],"structure")
+        self.assertFalse(report["production_effect_authorized"])
+
     def test_public_source_hash_mismatch_fails_closed(self):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
