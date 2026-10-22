@@ -103,7 +103,10 @@ def audit_controlled_candidate(db_path:Path,workspace:Path,
                         artifact=workspace/"artifacts"/(child["task_id"]+".json")
                         if artifact.is_symlink():
                             return {**fail,"reason":"ARTIFACT_SYMLINK"}
-                        candidate=json.loads(artifact.read_bytes())["candidate_text"].encode("utf-8")
+                        independently_read=artifact.read_bytes()
+                        if hashlib.sha256(independently_read).hexdigest()!=child["artifact_hash"]:
+                            return {**fail,"reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
+                        candidate=json.loads(independently_read)["candidate_text"].encode("utf-8")
                     elif child["state"]=="VERIFIED" and child["decision"]=="GOAL_ALREADY_SATISFIED":
                         candidate=original
                     else:
