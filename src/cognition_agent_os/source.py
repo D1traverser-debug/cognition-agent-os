@@ -20,6 +20,9 @@ _BRANCH_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\Z")
 class SourceUnavailable(Exception):
     """No credible upstream evidence was obtained."""
 
+class SourceTransportUnavailable(SourceUnavailable):
+    """Retryable transport failure, not an invalid content or missing path."""
+
 
 def git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
@@ -58,8 +61,13 @@ def github_public_snapshot(repo: str, path: str, ref: str) -> bytes:
         if len(content) > MAX_SOURCE_BYTES or git_blob_sha(content) != doc.get("sha"):
             raise SourceUnavailable("Invalid content size or GitHub blob SHA")
         return content
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
-        raise SourceUnavailable(f"GitHub source unavailable: {type(exc).__name__}") from exc
+    except HTTPError as exc:
+        error_type = SourceTransportUnavailable if exc.code in (408, 429, 500, 502, 503, 504) else SourceUnavailable
+        raise error_type(f"GitHub HTTP failure: {exc.code}") from exc
+    except (URLError, TimeoutError, OSError) as exc:
+        raise SourceTransportUnavailable(f"GitHub transport unavailable: {type(exc).__name__}") from exc
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        raise SourceUnavailable(f"GitHub response invalid: {type(exc).__name__}") from exc
 
 
 def get_pair(spec: dict, fixture_root: Path) -> tuple[bytes, bytes, dict]:
