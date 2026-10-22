@@ -14,6 +14,10 @@ from .runner import store_once, ArtifactConflict
 from .research_gap import audit_gap
 from .source import safe_fixture, github_public_snapshot, SourceUnavailable
 
+class ResearchTransportUnavailable(Exception):
+    """Only an upstream read failure; not invalid or changed evidence."""
+
+
 def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
     if not isinstance(contract, dict) or set(contract) not in ({"path", "sha256", "source_id", "publisher_id"}, {"kind", "repo", "path", "ref", "sha256", "source_id", "publisher_id"}):
         raise ValueError("BAD_CONTRACT")
@@ -29,7 +33,7 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
         try:
             raw = github_public_snapshot(contract["repo"], name, contract["ref"])
         except (SourceUnavailable, OSError) as exc:
-            raise ValueError("BAD_GITHUB_SOURCE") from exc
+            raise ResearchTransportUnavailable("PUBLIC_SOURCE_UNAVAILABLE") from exc
     else:
         if root.is_symlink() or (root / name).is_symlink():
             raise ValueError("BAD_FILE")
@@ -145,6 +149,8 @@ def run_assessment(db, task, db_path: Path, workspace: Path, fixtures: Path):
                                    decision="RESEARCH_NOT_SEMANTICALLY_APPROVED", artifact_writer=write)
         return {**result, "business_outcome_verified": False,
                 "production_effect_authorized": False}
+    except ResearchTransportUnavailable:
+        return finalize_observed(db, task, "UNKNOWN", error_code="RESEARCH_TRANSPORT_UNAVAILABLE")
     except (ValueError, UnicodeError, OSError, TypeError, KeyError, sqlite3.Error, ArtifactConflict):
         return finalize_observed(db, task, "UNKNOWN", error_code="RESEARCH_ASSESSMENT_UNVERIFIABLE")
 
@@ -181,5 +187,5 @@ def audit_assessment(db_path: Path, workspace: Path, fixtures: Path, task_id: st
             return {"status": "ASSESSMENT_MECHANICALLY_VALID",
                     "business_outcome_verified": False,
                     "production_effect_authorized": False}
-    except (ValueError, UnicodeError, KeyError, TypeError, OSError, sqlite3.Error):
+    except (ResearchTransportUnavailable, ValueError, UnicodeError, KeyError, TypeError, OSError, sqlite3.Error):
         return bad
