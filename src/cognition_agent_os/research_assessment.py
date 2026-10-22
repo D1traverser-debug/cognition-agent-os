@@ -138,7 +138,12 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
             "INSUFFICIENT_CAUSAL_DISCRIMINATION": "COLLECT_DISCONFIRMING_OBSERVATIONS",
             "CONSENSUS_PENDING_EXTERNAL_SEMANTIC_REVIEW": "INDEPENDENT_SEMANTIC_AND_OUTCOME_REVIEW",
         }
+        proposal = ({"goal_key": orig["goal_key"], "route": candidate,
+                     "status": "PENDING_REVIEW", "approved": False,
+                     "evidence_sha256": [x["sha256"] for x in sources]}
+                    if candidate is not None else None)
         return {"status": "RESEARCH_EVIDENCE_NOT_APPROVED", "reason": reason,
+                "knowledge_proposal": proposal,
                 "next_research_action": next_steps[reason],
                 "next_action_authorized": False,
                 "candidate_route_for_review": candidate,
