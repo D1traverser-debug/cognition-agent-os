@@ -50,7 +50,9 @@ def _checked_spec(spec:dict)->dict:
         sources=spec["research_sources"]
         if (spec.get("research_on_gap") is not True or not isinstance(sources,list)
             or len(sources)!=2 or not all(isinstance(s,dict) and
-            set(s)=={"path","sha256","source_id","publisher_id"} for s in sources)):
+            (set(s)=={"path","sha256","source_id","publisher_id"} or
+             set(s)=={"kind","repo","path","ref","sha256","source_id","publisher_id"}
+             and s.get("kind")=="github") for s in sources)):
             raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
         for item in sources:
             if (not isinstance(item["path"],str) or not item["path"].endswith(".json")
@@ -59,6 +61,14 @@ def _checked_spec(spec:dict)->dict:
                 or not isinstance(item["sha256"],str) or not _SHA.fullmatch(item["sha256"])
                 or not _bound_id(item["source_id"]) or not _bound_id(item["publisher_id"])):
                 raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
+        from .source import _REPO_RE, _SHA_RE
+        for item in sources:
+            if "kind" in item:
+                if (not isinstance(item["repo"],str) or not _REPO_RE.fullmatch(item["repo"])
+                    or not isinstance(item["ref"],str) or not _SHA_RE.fullmatch(item["ref"])
+                    or item["path"].startswith("/") or ".." in item["path"].split("/")
+                    or not item["path"].endswith(".json")):
+                    raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
         if (sources[0]["source_id"]==sources[1]["source_id"] or
             sources[0]["publisher_id"]==sources[1]["publisher_id"] or
             sources[0]["path"]==sources[1]["path"]):
