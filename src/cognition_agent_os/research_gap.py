@@ -72,18 +72,24 @@ def classify_research_gap(spec:dict,fixtures:Path)->dict|None:
         kind="UNREGISTERED_ROUTE"
     else:
         return None
-    return {
+    result={
         "goal_key":spec["goal_key"],"gap_kind":kind,
         "knowledge":dict(contract),
         "routes":{route:{"capability":plan["capability"],
                          "plan_sha256":plan["plan_sha256"]}
                   for route,plan in sorted(options.items())},
     }
+    if "research_sources" in spec:
+        result["research_sources"]=[dict(x) for x in spec["research_sources"]]
+    return result
 
 def _child_spec(parent_id:str,gap:dict)->dict:
-    return {"kind":"research_gap","parent_id":parent_id,
+    result={"kind":"research_gap","parent_id":parent_id,
             "goal_key":gap["goal_key"],"gap_kind":gap["gap_kind"],
             "knowledge":gap["knowledge"],"routes":gap["routes"]}
+    if "research_sources" in gap:
+        result["research_sources"]=gap["research_sources"]
+    return result
 
 def _agenda(spec:dict)->dict:
     return {"status":"RESEARCH_REQUEST_NOT_ANSWER",
@@ -202,6 +208,20 @@ def run_research_gap(db:sqlite3.Connection,task:dict,workspace:Path,fixtures:Pat
         current,reason=_readback(db,parent_id,tid,fixtures)
         if reason!="MECHANICALLY_VALID" or current!=spec:
             raise KnowledgeRoutingError("RESEARCH_SOURCE_UNAVAILABLE")
+        # Same authoritative transaction: agenda and explicitly consented
+        # bounded read-only evidence review are admitted together. No external
+        # tools, grant or autonomous business effect is added.
+        if "research_sources" in spec:
+            existing=db.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=?",
+                                (tid,)).fetchone()[0]
+            if existing!=0:
+                raise ValueError("RESEARCH_REVIEW_DUPLICATED")
+            review_spec={"kind":"research_assessment","research_task_id":tid,
+                         "sources":spec["research_sources"]}
+            create_task(db,review_spec,parent=tid,commit=False)
+            event(db,tid,"RESEARCH_REVIEW_ENQUEUED",{
+                "source_hashes":[x["sha256"] for x in spec["research_sources"]],
+                "production_effect_authorized":False})
         return effect
     try:
         result=finalize_observed(db,task,"NEEDS_REVIEW",
