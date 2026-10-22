@@ -25,7 +25,7 @@
         "proposed_oracle": "external stored state plus continuation run",
         "limit": "AUTOMATED_PARTIAL"
       },
-      "stakeholder_approved": false,
+      "stakeholder_approved": true,
       "verification_status": "NOT_VERIFIED",
       "validation_status": "NOT_VALIDATED",
       "verification_evidence": [],
