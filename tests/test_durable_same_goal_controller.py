@@ -367,6 +367,18 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertEqual(len(self.attempts(unadmitted)),1,
                          "Repeatedly waiting roots starved an independent goal")
 
+
+    def test_concurrent_fair_allocators_do_not_claim_same_queue_window(self):
+        roots=[self.register() for _ in range(3)]
+        # The cursor reservation is a DB transaction, not in-memory
+        # round-robin state. Parallel hosts should admit three different
+        # local children without duplicate effects.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            outcomes=list(pool.map(lambda _:advance_local_goals(
+                self.db,self.work,self.fx,limit=1),range(3)))
+        self.assertEqual([len(self.attempts(x)) for x in roots],[1,1,1],outcomes)
+        self.assertEqual(sum(len(result) for result in outcomes),3,outcomes)
+
     def test_control_transition_directly_refuses_tampered_contract(self):
         root=self.register()
         with closing(connect(self.db)) as db:
