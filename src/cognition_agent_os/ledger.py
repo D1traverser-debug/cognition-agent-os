@@ -67,9 +67,16 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
     now = time.time() if now is None else now
     db.execute("BEGIN IMMEDIATE")
     try:
-        row = db.execute("""SELECT * FROM tasks WHERE due_at<=? AND
-                       (state='PENDING' OR (state='RUNNING' AND lease_until<=?))
-                       ORDER BY due_at,created_at LIMIT 1""", (now, now)).fetchone()
+        # Admit useful work first: stale-goal tasks are still eventually
+        # claimed and fenced, but cannot consume the last slot ahead of
+        # legitimate work from the current goal revision.
+        row = db.execute("""SELECT t.* FROM tasks t
+                       JOIN authority a ON a.singleton=1
+                       WHERE t.due_at<=? AND
+                       (t.state='PENDING' OR (t.state='RUNNING' AND t.lease_until<=?))
+                       ORDER BY CASE WHEN t.goal_rev=a.goal_rev THEN 0 ELSE 1 END,
+                                t.due_at,t.created_at,t.task_id LIMIT 1""",
+                         (now, now)).fetchone()
         if row is None:
             db.commit()
             return None
