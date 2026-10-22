@@ -73,7 +73,8 @@ def _checked_spec(spec:dict)->dict:
                     raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
         if (sources[0]["source_id"]==sources[1]["source_id"] or
             sources[0]["publisher_id"]==sources[1]["publisher_id"] or
-            sources[0]["path"]==sources[1]["path"]):
+            (sources[0]["path"]==sources[1]["path"]
+             and sources[0].get("repo")==sources[1].get("repo"))):
             raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
     knowledge=spec["knowledge"]
     if (not isinstance(knowledge,dict)
