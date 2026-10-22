@@ -17,10 +17,14 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
     if not isinstance(contract, dict) or set(contract) not in ({"path", "sha256", "source_id", "publisher_id"}, {"kind", "repo", "path", "ref", "sha256", "source_id", "publisher_id"}):
         raise ValueError("BAD_CONTRACT")
     name = contract["path"]
-    if not isinstance(name, str) or not name.endswith(".json") or "/" in name or "\\" in name or name.startswith("."):
+    if (not isinstance(name, str) or not name.endswith(".json") or "\\" in name
+        or name.startswith(".") or ("kind" not in contract and "/" in name)
+        or any(part in ("", ".", "..") for part in name.split("/"))):
         raise ValueError("BAD_PATH")
     # Reuse existing source adapters; owner specifies immutable source IDs.
     if contract.get("kind") == "github":
+        if not isinstance(contract.get("repo"),str) or not isinstance(contract.get("ref"),str):
+            raise ValueError("BAD_GITHUB_CONTRACT")
         try:
             raw = github_public_snapshot(contract["repo"], name, contract["ref"])
         except (SourceUnavailable, OSError) as exc:
