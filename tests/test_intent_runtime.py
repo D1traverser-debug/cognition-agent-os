@@ -142,6 +142,16 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(fourth["local_evidence_retries"],[])
         self.assertFalse(fourth["semantic_outcome_verified"])
 
+    def test_source_drift_is_not_blindly_retried(self):
+        self.fixtures.joinpath("old.csv").write_text("invoice_id,amount\nI1,100\n")
+        self.fixtures.joinpath("new.csv").write_text("invoice_id,amount\nI1,90\n")
+        self.seed(self.comparison())
+        first=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
+        self.assertEqual(first["tasks"][1]["status"],"NEEDS_REVIEW")
+        self.fixtures.joinpath("new.csv").write_text("invoice_id,amount\nI1,70\n")
+        second=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(second["local_evidence_retries"],[])
+
     def test_revoke_prevents_failed_local_artifact_retry(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         self.seed(self.structured())
