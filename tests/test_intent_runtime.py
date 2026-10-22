@@ -80,6 +80,16 @@ class IntentRuntimeTests(unittest.TestCase):
             self.assertEqual(self.task(child)["error_code"],"UPSTREAM_TASK_INVALID")
             self.assertFalse((self.workspace/"artifacts"/(child+".json")).exists())
 
+    def test_goal_feedback_independently_checks_structure_before_sandbox_promotion(self):
+        self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
+        self.seed(self.structured())
+        tick=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
+        checks=[c for g in tick["goal_progress"]["goals"]
+                for c in g["independent_checks"]]
+        self.assertTrue(any(c["capability"]=="goal_case" and
+                            c["mechanically_verified"] for c in checks),checks)
+        self.assertTrue(all(not c["business_outcome_verified"] for c in checks))
+
     def test_json_intent_generates_child_and_actual_sandbox(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         tid=self.seed(self.structured())
@@ -95,9 +105,6 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(actual,{"critical":"keep","owner":"ops","retry":3})
         self.assertEqual(self.fixtures.joinpath("settings.json").read_text(),'{"critical":"keep"}')
         self.assertFalse(tick["semantic_outcome_verified"])
-        checks=tick["goal_progress"]["goals"][0]["independent_checks"]
-        self.assertTrue(any(c["capability"]=="goal_case" and c["mechanically_verified"] for c in checks), checks)
-        self.assertTrue(all(not c["business_outcome_verified"] for c in checks))
 
     def test_comparison_intent_generates_full_sql_verifiable_report(self):
         self.fixtures.joinpath("old.csv").write_text("invoice_id,amount\nI1,100\nI2,200\n")
