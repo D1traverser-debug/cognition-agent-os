@@ -53,17 +53,19 @@ class ResearchAssessmentHostTests(unittest.TestCase):
 
     def review(self,child,sa,sb):
         with closing(connect(self.db)) as db:
-            task=create_task(db,{"kind":"research_assessment","research_task_id":child,
-                                 "sources":[sa,sb]},parent=child)
+            rows=db.execute("SELECT * FROM tasks WHERE parent_task=?",(child,)).fetchall()
+            self.assertEqual(len(rows),1)
+            task=rows[0]["task_id"]
+            self.assertEqual(json.loads(rows[0]["source_spec"])["sources"],[sa,sb])
         report=run_tick(self.db,self.work,self.fx,max_jobs=1)
         self.assertEqual(len(report["tasks"]),1,report)
         return task,report["tasks"][0]
 
     def test_agreement_never_grants_authority(self):
-        child=self.setup_research()
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
         b=self.put_evidence("independent_b","publisher_two",stances)
+        child=self.setup_research([a,b])
         task,result=self.review(child,a,b)
         self.assertEqual(result["status"],"NEEDS_REVIEW",result)
         artifact=json.loads((self.work/"artifacts"/(task+".json")).read_text())
@@ -73,9 +75,9 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertFalse((self.work/"sandbox").exists())
 
     def test_conflict_abstains_without_selected_route(self):
-        child=self.setup_research()
         a=self.put_evidence("independent_a","publisher_one",{"structure":"supports","compare":"refutes"})
         b=self.put_evidence("independent_b","publisher_two",{"structure":"refutes","compare":"supports"})
+        child=self.setup_research([a,b])
         task,result=self.review(child,a,b)
         self.assertEqual(result["status"],"NEEDS_REVIEW",result)
         artifact=json.loads((self.work/"artifacts"/(task+".json")).read_text())
@@ -83,18 +85,18 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertIsNone(artifact["candidate_route_for_review"])
 
     def test_changed_source_fails_closed(self):
-        child=self.setup_research()
         a=self.put_evidence("independent_a","publisher_one",{"structure":"supports","compare":"refutes"})
         b=self.put_evidence("independent_b","publisher_two",{"structure":"supports","compare":"refutes"})
+        child=self.setup_research([a,b])
         (self.fx/"independent_b.json").write_bytes(b"{}")
         _,result=self.review(child,a,b)
         self.assertEqual(result["status"],"UNKNOWN",result)
 
     def test_next_host_audit_keeps_valid_then_quarantines_tamper(self):
-        child=self.setup_research()
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
         b=self.put_evidence("independent_b","publisher_two",stances)
+        child=self.setup_research([a,b])
         assessment,result=self.review(child,a,b)
         self.assertEqual(result["status"],"NEEDS_REVIEW",result)
         next_tick=run_tick(self.db,self.work,self.fx,max_jobs=2)
@@ -128,6 +130,18 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             count=db.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=?",(child,)).fetchone()[0]
             self.assertEqual(count,1)
 
+
+    def test_manually_attached_child_without_source_grant_is_refused(self):
+        child=self.setup_research()
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        with closing(connect(self.db)) as db:
+            rogue=create_task(db,{"kind":"research_assessment",
+                "research_task_id":child,"sources":[a,b]},parent=child)
+        got=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(got["tasks"][0]["status"],"UNKNOWN",got)
+        self.assertFalse((self.work/"artifacts"/(rogue+".json")).exists())
 
     def test_orphan_assessment_cannot_claim_lineage(self):
         child=self.setup_research()
