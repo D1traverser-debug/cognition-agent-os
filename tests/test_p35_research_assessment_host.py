@@ -164,6 +164,34 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             retries=db.execute("SELECT COUNT(*) FROM events WHERE task_id=? AND kind='RESEARCH_TRANSPORT_RETRY_QUEUED'",(task,)).fetchone()[0]
             self.assertEqual(retries,1)
 
+    def test_transport_retry_invalid_parent_is_blocked_once(self):
+        from cognition_agent_os.source import SourceUnavailable
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        for item,repo in ((a,"org-one/repo"),(b,"org-two/repo")):
+            item.update({"kind":"github","repo":repo,"ref":"a"*40})
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=SourceUnavailable("outage")):
+            task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"UNKNOWN")
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(child,))
+            db.commit()
+        after=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(after["processed"],0,after)
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(task,)).fetchone()
+            self.assertEqual((row["state"],row["error_code"]),
+                             ("BLOCKED","RESEARCH_RETRY_LINEAGE_INVALID"))
+            receipts=db.execute("SELECT COUNT(*) FROM events WHERE task_id=? AND kind='RESEARCH_TRANSPORT_RETRY_BLOCKED'",(task,)).fetchone()[0]
+        self.assertEqual(receipts,1)
+        run_tick(self.db,self.work,self.fx,max_jobs=1)
+        with closing(connect(self.db)) as db:
+            later=db.execute("SELECT COUNT(*) FROM events WHERE task_id=? AND kind='RESEARCH_TRANSPORT_RETRY_BLOCKED'",(task,)).fetchone()[0]
+        self.assertEqual(later,1)
+
     def test_research_transport_retry_budget_exhausts(self):
         from cognition_agent_os.source import SourceUnavailable
         stances={"structure":"supports","compare":"refutes"}
