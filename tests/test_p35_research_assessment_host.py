@@ -241,6 +241,28 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(task,)).fetchone()
             self.assertEqual((row["state"],row["error_code"]),("UNKNOWN","RESEARCH_RETRY_EXHAUSTED"))
 
+    def test_host_projection_skips_invalid_newest_events_without_starvation(self):
+        from cognition_agent_os.host import _pending_research_actions
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        child=self.setup_research([a,b])
+        task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        with closing(connect(self.db)) as db:
+            # Newer unrelated/untrusted event receipts must not consume the
+            # valid projection capacity.
+            for index in range(17):
+                db.execute("""INSERT INTO events(task_id,kind,details,happened_at)
+                    VALUES(?,'RESEARCH_NEXT_ACTION_IDENTIFIED',?,0)""",
+                    (task,json.dumps({"action":"UNTRUSTED","reason":"FAKE",
+                                       "artifact_sha256":"0"*64,"authorized":False})))
+            db.commit()
+        projected=_pending_research_actions(self.db,self.work,limit=1)
+        self.assertEqual(len(projected),1,projected)
+        self.assertEqual(projected[0]["task_id"],task)
+        self.assertNotEqual(projected[0]["next_research_action"],"UNTRUSTED")
+
     def test_host_does_not_surface_tampered_or_revoked_research_feedback(self):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
