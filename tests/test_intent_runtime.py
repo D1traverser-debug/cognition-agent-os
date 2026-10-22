@@ -80,6 +80,23 @@ class IntentRuntimeTests(unittest.TestCase):
             self.assertEqual(self.task(child)["error_code"],"UPSTREAM_TASK_INVALID")
             self.assertFalse((self.workspace/"artifacts"/(child+".json")).exists())
 
+    def test_independent_audit_failure_changes_goal_control_decision(self):
+        from cognition_agent_os.host import _goal_progress
+        self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
+        root=self.seed(self.structured())
+        tick=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
+        child=tick["tasks"][0]["child_task_id"]
+        before=_goal_progress(self.db_path,self.workspace,self.fixtures)
+        goal=next(g for g in before["goals"] if g["root_task_id"]==root)
+        self.assertEqual(goal["failed_independent_checks"],0)
+        artifact=self.workspace/"artifacts"/(child+".json")
+        artifact.write_bytes(artifact.read_bytes()+b" ")
+        after=_goal_progress(self.db_path,self.workspace,self.fixtures)
+        goal=next(g for g in after["goals"] if g["root_task_id"]==root)
+        self.assertEqual(goal["failed_independent_checks"],1)
+        self.assertEqual(goal["next_control_action"],"REPLAN_AFTER_FAILED_INDEPENDENT_CHECK")
+        self.assertFalse(goal["semantic_outcome_verified"])
+
     def test_goal_feedback_independently_checks_structure_before_sandbox_promotion(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         self.seed(self.structured())
