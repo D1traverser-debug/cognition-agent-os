@@ -34,7 +34,7 @@ def schedule_failed_local_evidence(db_path: Path, workspace: Path, fixtures: Pat
             except (ValueError,TypeError):continue
             if root.get("kind")!="goal_intent":continue
             # A retry root must not retry again; linkage lives in events.
-            if db.execute("SELECT 1 FROM events WHERE task_id=? AND kind='RETRY_ROOT_FROM_FAILED' LIMIT 1",
+            if db.execute("SELECT 1 FROM events WHERE task_id=? AND kind IN ('RETRY_ROOT_FROM_FAILED','BOUNDED_LOCAL_RETRY') LIMIT 1",
                           (row["parent_task"],)).fetchone():
                 continue
             kind=spec.get("kind")
@@ -58,7 +58,9 @@ def schedule_failed_local_evidence(db_path: Path, workspace: Path, fixtures: Pat
                     or parent["grant_rev"]!=authority["grant_rev"]
                     or current["goal_rev"]!=authority["goal_rev"]
                     or current["grant_rev"]!=authority["grant_rev"]
-                    or siblings!=1):
+                    or siblings!=1 or db.execute(
+                        "SELECT 1 FROM events WHERE task_id=? AND kind='BOUNDED_LOCAL_RETRY' LIMIT 1",
+                        (row["parent_task"],)).fetchone()):
                     db.commit()
                     continue
                 # Keep exactly one child per intent root. The next Host tick
