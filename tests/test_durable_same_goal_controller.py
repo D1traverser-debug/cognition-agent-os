@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 import tempfile
 import unittest
@@ -306,6 +307,46 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertIn(root,[item["task_id"] for item in scan["quarantined"]],scan)
         self.assertEqual(self.root_state(root)[0],"UNKNOWN")
 
+
+
+    def test_registered_active_contract_mutation_never_admits_child(self):
+        root=self.register()
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT source_spec FROM tasks WHERE task_id=?",(root,)).fetchone()
+            modified=json.loads(row["source_spec"])
+            modified["target"]["owner"]="forged"
+            db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?",
+                       (json.dumps(modified,sort_keys=True),root))
+            db.commit()
+        result=self.tick()
+        self.assertEqual(self.root_state(root),
+                         ("CONTROL_UNVERIFIABLE","REGISTRATION_PROOF_INVALID"),result)
+        self.assertEqual(self.attempts(root),[])
+
+    def test_corrupted_alternative_intake_is_blocked_before_child_creation(self):
+        root=self.register()
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT source_spec FROM tasks WHERE task_id=?",(root,)).fetchone()
+            modified=json.loads(row["source_spec"])
+            modified["alternatives"][0]["task_spec"]["desired"]["owner"]="forged"
+            db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?",
+                       (json.dumps(modified,sort_keys=True),root))
+            db.commit()
+        result=self.tick()
+        self.assertEqual(self.root_state(root),
+                         ("CONTROL_UNVERIFIABLE","REGISTRATION_PROOF_INVALID"),result)
+        self.assertEqual(self.attempts(root),[])
+
+    def test_expired_active_goal_stops_without_admitting_more_work(self):
+        root=self.register()
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET created_at=? WHERE task_id=?",
+                       (time.time()-90000,root))
+            db.commit()
+        result=self.tick()
+        self.assertEqual(self.root_state(root),
+                         ("CONTROL_STOPPED","LOCAL_CONTROL_TIME_BUDGET_EXHAUSTED"),result)
+        self.assertEqual(self.attempts(root),[])
 
 
 if __name__=="__main__":
