@@ -111,7 +111,10 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         if len(routes) != 2:
             raise ValueError("BAD_ROUTES")
         (a, refs_a), (b, refs_b) = (_evidence(fixtures, src, orig["goal_key"], routes) for src in sources)
-        if refs_a & refs_b:
+        if (sources[0].get("kind") == "github" and sources[1].get("kind") == "github"
+            and sources[0]["repo"].lower() == sources[1]["repo"].lower()):
+            reason, candidate = "SAME_REPOSITORY_NOT_INDEPENDENT", None
+        elif refs_a & refs_b:
             reason, candidate = "SHARED_UNDERLYING_EVIDENCE", None
         elif a != b:
             reason, candidate = "CONFLICTING_SOURCE_CLAIMS", None
