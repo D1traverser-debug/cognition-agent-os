@@ -24,8 +24,8 @@ class GoalFeedbackAlternativeBaseline(unittest.TestCase):
             workspace.mkdir()
             dbpath=root/"ledger.sqlite"
             fixtures.joinpath("settings.json").write_text('{"keep":42}')
-            fixtures.joinpath("before.csv").write_text("id,amount\\nA,1\\n")
-            fixtures.joinpath("after.csv").write_text("id,amount\\nA,2\\n")
+            fixtures.joinpath("before.csv").write_text("id,amount\nA,1\n")
+            fixtures.joinpath("after.csv").write_text("id,amount\nA,2\n")
             claims={"schema_version":1,"source_id":"baseline",
                     "claims":[{"goal_key":"restore-goal","route":"structure",
                                "status":"active","source_ref":"baseline:1"}]}
