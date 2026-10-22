@@ -11,22 +11,27 @@ from pathlib import Path
 from .ledger import finalize_observed
 from .runner import store_once, ArtifactConflict
 from .research_gap import audit_gap
-from .source import safe_fixture, SourceUnavailable
+from .source import safe_fixture, github_public_snapshot, SourceUnavailable
 
 def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
-    if not isinstance(contract, dict) or set(contract) != {"path", "sha256", "source_id", "publisher_id"}:
+    if not isinstance(contract, dict) or set(contract) not in ({"path", "sha256", "source_id", "publisher_id"}, {"kind", "repo", "path", "ref", "sha256", "source_id", "publisher_id"}):
         raise ValueError("BAD_CONTRACT")
     name = contract["path"]
     if not isinstance(name, str) or not name.endswith(".json") or "/" in name or "\\" in name or name.startswith("."):
         raise ValueError("BAD_PATH")
-    # Reuse the project's single bounded/path-contained source adapter.
-    # The research contract adds stricter 16 KiB and SHA256 constraints.
-    if root.is_symlink() or (root / name).is_symlink():
-        raise ValueError("BAD_FILE")
-    try:
-        raw = safe_fixture(root, name)
-    except (SourceUnavailable, OSError) as exc:
-        raise ValueError("BAD_FILE") from exc
+    # Reuse existing source adapters; owner specifies immutable source IDs.
+    if contract.get("kind") == "github":
+        try:
+            raw = github_public_snapshot(contract["repo"], name, contract["ref"])
+        except (SourceUnavailable, OSError) as exc:
+            raise ValueError("BAD_GITHUB_SOURCE") from exc
+    else:
+        if root.is_symlink() or (root / name).is_symlink():
+            raise ValueError("BAD_FILE")
+        try:
+            raw = safe_fixture(root, name)
+        except (SourceUnavailable, OSError) as exc:
+            raise ValueError("BAD_FILE") from exc
     if len(raw) > 16384 or hashlib.sha256(raw).hexdigest() != contract["sha256"]:
         raise ValueError("BAD_HASH")
     data = json.loads(raw)
