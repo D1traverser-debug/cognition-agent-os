@@ -241,6 +241,27 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(task,)).fetchone()
             self.assertEqual((row["state"],row["error_code"]),("UNKNOWN","RESEARCH_RETRY_EXHAUSTED"))
 
+    def test_host_does_not_surface_tampered_or_revoked_research_feedback(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        child=self.setup_research([a,b])
+        task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        initial=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(len(initial["pending_research_actions"]),1,initial)
+        artifact=self.work/"artifacts"/(task+".json")
+        artifact.write_bytes(artifact.read_bytes()+b" ")
+        invalid=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(invalid["pending_research_actions"],[],invalid)
+        # A changed grant must also suppress suggestions, even if the bytes
+        # are restored: old review receipts do not authorize a new goal.
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE authority SET grant_rev=grant_rev+1")
+            db.commit()
+        revoked=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(revoked["pending_research_actions"],[],revoked)
+
     def test_public_source_hash_mismatch_fails_closed(self):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
