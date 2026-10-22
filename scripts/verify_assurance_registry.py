@@ -148,10 +148,10 @@ def main(argv=None):
     opts = p.parse_args(argv)
     try:
         root = opts.root
-        reg = json.loads((root / 'evaluation/assurance_registry_v1.json').read_text())
+        reg = json.loads((root / 'evaluation/assurance_registry_v1.json').read_text(encoding='utf-8'))
         result = check(reg,
-                       (root / 'docs/00-PRODUCT-CONOPS.md').read_text(),
-                       (root / 'docs/PRODUCT-READINESS-GATE.md').read_text())
+                       (root / 'docs/00-PRODUCT-CONOPS.md').read_text(encoding='utf-8'),
+                       (root / 'docs/PRODUCT-READINESS-GATE.md').read_text(encoding='utf-8'))
         result['original_source_content_verified'] = (
             verify_archived_sources(reg, opts.archive_dir)
             if opts.archive_dir else 'NOT_CHECKED_CI_HAS_NO_PRIVATE_ARCHIVES')
