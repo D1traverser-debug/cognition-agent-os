@@ -61,8 +61,8 @@ def main():
         result=run_tick(db_path,workspace,fixtures,max_jobs=1)
         assert [t["status"] for t in result["tasks"]]==["NEEDS_REVIEW"],result
         report=json.loads((workspace/"artifacts"/(assessment_id+".json")).read_text())
-        assert report["reason"]=="CONSENSUS_PENDING_EXTERNAL_SEMANTIC_REVIEW",report
-        assert report["candidate_route_for_review"]=="structure",report
+        assert report["reason"]=="SAME_REPOSITORY_NOT_INDEPENDENT",report
+        assert report["candidate_route_for_review"] is None,report
         assert not report["source_independence_verified"] and not report["production_effect_authorized"]
         assert not report["business_outcome_verified"]
         from cognition_agent_os.research_assessment import audit_assessment
