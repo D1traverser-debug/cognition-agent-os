@@ -128,6 +128,10 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(len(receipts),1)
         receipt=json.loads(receipts[0]["details"])
         self.assertEqual(receipt["action"],"FIND_DISTINCT_ORIGINAL_PUBLISHER")
+        visible=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(len(visible["pending_research_actions"]),1)
+        self.assertEqual(visible["pending_research_actions"][0]["task_id"],task)
+        self.assertFalse(visible["pending_research_actions"][0]["action_authorized"])
         self.assertFalse(receipt["authorized"])
         self.assertEqual(receipt["artifact_sha256"],
                          hashlib.sha256((self.work/"artifacts"/(task+".json")).read_bytes()).hexdigest())
