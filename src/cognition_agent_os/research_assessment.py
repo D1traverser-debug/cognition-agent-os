@@ -106,3 +106,39 @@ def run_assessment(db, task, db_path: Path, workspace: Path, fixtures: Path):
                 "production_effect_authorized": False}
     except (ValueError, OSError, TypeError, KeyError, ArtifactConflict):
         return finalize_observed(db, task, "UNKNOWN", error_code="RESEARCH_ASSESSMENT_UNVERIFIABLE")
+
+def audit_assessment(db_path: Path, workspace: Path, fixtures: Path, task_id: str) -> dict:
+    """Independent native conformance replays the original pinned evidence.
+
+    Checks the actual committed candidate bytes; no source's claims can grant
+    authority. A changed evidence source invalidates the prior review state.
+    """
+    import sqlite3
+    from contextlib import closing
+    bad = {"status": "UNVERIFIABLE", "reason": "ASSESSMENT_UNVERIFIABLE"}
+    if not isinstance(task_id, str) or len(task_id) != 32 or any(x not in "0123456789abcdef" for x in task_id):
+        return bad
+    if not db_path.is_file() or db_path.is_symlink() or workspace.is_symlink():
+        return bad
+    try:
+        with closing(sqlite3.connect(db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as db:
+            db.row_factory = sqlite3.Row
+            row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
+            if row is None or row["state"] != "NEEDS_REVIEW":
+                return bad
+            spec = json.loads(row["source_spec"])
+            if spec.get("kind") != "research_assessment":
+                return bad
+            from .runner import verify_artifact
+            if not verify_artifact(workspace, dict(row)):
+                return bad
+            expected = (json.dumps(assess(db_path, workspace, fixtures, spec),
+                                   ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+            path = workspace / "artifacts" / (task_id + ".json")
+            if path.is_symlink() or path.read_bytes() != expected:
+                return bad
+            return {"status": "ASSESSMENT_MECHANICALLY_VALID",
+                    "business_outcome_verified": False,
+                    "production_effect_authorized": False}
+    except (ValueError, KeyError, TypeError, OSError, sqlite3.Error):
+        return bad
