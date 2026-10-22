@@ -178,6 +178,21 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(artifact["reason"],"CONFLICTING_SOURCE_CLAIMS")
         self.assertIsNone(artifact["candidate_route_for_review"])
 
+    def test_invalid_utf8_research_source_is_isolated_as_unknown(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        invalid=b"\\xff\\xfe\\xfa"
+        (self.fx/b["path"]).write_bytes(invalid)
+        b["sha256"]=hashlib.sha256(invalid).hexdigest()
+        child=self.setup_research([a,b])
+        task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"UNKNOWN",result)
+        self.assertFalse((self.work/"artifacts"/(task+".json")).exists())
+        # The scheduler must remain usable after malformed untrusted bytes.
+        followup=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(followup["processed"],0,followup)
+
     def test_changed_source_fails_closed(self):
         a=self.put_evidence("independent_a","publisher_one",{"structure":"supports","compare":"refutes"})
         b=self.put_evidence("independent_b","publisher_two",{"structure":"supports","compare":"refutes"})
