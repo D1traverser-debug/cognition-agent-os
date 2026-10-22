@@ -134,7 +134,7 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                                        "stale_authority":0,
                                        "independent_checks":[]})
         if (workspace is not None and fixtures is not None
-            and row["state"] in ("NEEDS_REVIEW", "SANDBOX_VERIFIED")):
+            and row["state"]=="NEEDS_REVIEW"):
             try:
                 import json
                 kind=json.loads(row["source_spec"]).get("kind")
