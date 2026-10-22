@@ -45,6 +45,7 @@ class AssuranceRegistryTests(unittest.TestCase):
 
     def test_missing_oracle_and_automation_limits_killed(self):
         self.rejected(lambda x: x['requirements'][0]['verification_design'].pop('method'))
+        self.rejected(lambda x: x['requirements'][0]['verification_design'].pop('proposed_oracle'))
         self.rejected(lambda x: x['requirements'][0]['verification_design'].__setitem__('limit', 'AUTOMATED_FULL'))
 
     def test_legacy_ot06_cold_resume_is_not_worker_restart(self):
@@ -73,6 +74,10 @@ class AssuranceRegistryTests(unittest.TestCase):
     def test_ci_cannot_claim_private_original_source_was_verified(self):
         self.rejected(lambda x: x['source_registry']['legacy_conops'].__setitem__(
             'source_bytes_checked_in_ci', True))
+
+    def test_archive_path_traversal_rejected(self):
+        self.rejected(lambda x: x['source_registry']['legacy_conops'].__setitem__(
+            'archived_basename', '../untrusted.json'))
 
     def test_changed_original_archive_bytes_are_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
