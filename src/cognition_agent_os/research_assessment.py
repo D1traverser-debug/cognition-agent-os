@@ -2,7 +2,7 @@
 
 Review work is a separate explicitly queued task in the existing task ledger.
 It never grants a route or starts production work. External source statements
-are untrusted even if content-addressed. No network or model API is invoked.
+are untrusted even if content-addressed. Only explicitly pinned public GitHub\nreads are permitted; no model API or production effect is invoked.
 """
 from __future__ import annotations
 import hashlib
