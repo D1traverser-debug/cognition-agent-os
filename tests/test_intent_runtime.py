@@ -106,15 +106,19 @@ class IntentRuntimeTests(unittest.TestCase):
         artifact.write_bytes(artifact.read_bytes()+b" ")
         retry_tick=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
         self.assertEqual(len(retry_tick["local_evidence_retries"]),1)
-        retry=retry_tick["local_evidence_retries"][0]["retry_task_id"]
-        self.assertNotEqual(retry,original)
+        retry=retry_tick["local_evidence_retries"][0]["retry_root_id"]
+        self.assertNotEqual(retry,root)
         self.assertEqual(self.task(retry)["state"],"PENDING")
         third=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
         self.assertEqual(third["tasks"][0]["task_id"],retry)
-        self.assertEqual(third["tasks"][0]["status"],"NEEDS_REVIEW")
-        self.assertEqual(third["local_evidence_retries"],[])
-        self.assertTrue((self.workspace/"artifacts"/(retry+".json")).is_file())
-        self.assertFalse(third["semantic_outcome_verified"])
+        self.assertEqual(third["tasks"][0]["status"],"DECOMPOSED")
+        new_child=third["tasks"][0]["child_task_id"]
+        fourth=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(fourth["tasks"][0]["task_id"],new_child)
+        self.assertEqual(fourth["tasks"][0]["status"],"NEEDS_REVIEW")
+        self.assertEqual(fourth["local_evidence_retries"],[])
+        self.assertTrue((self.workspace/"artifacts"/(new_child+".json")).is_file())
+        self.assertFalse(fourth["semantic_outcome_verified"])
 
     def test_revoke_prevents_failed_local_artifact_retry(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
