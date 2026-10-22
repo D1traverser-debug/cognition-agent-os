@@ -64,6 +64,22 @@ class LocalHostTests(unittest.TestCase):
         self.assertTrue(all(g["next_control_action"]=="REAUTHORIZE_OR_SUPERSEDE"
                             for g in revoked["goals"]))
 
+    def test_host_prioritizes_current_goal_over_older_stale_task(self):
+        with closing(connect(self.db)) as db:
+            initialize(db)
+            stale=create_task(db,{"kind":"fixture","old":"old.txt","new":"new.txt"},
+                              due_at=1)
+            db.execute("UPDATE authority SET goal_rev=goal_rev+1")
+            valid=create_task(db,{"kind":"fixture","old":"old.txt","new":"new.txt"},
+                              due_at=2)
+            db.commit()
+        first=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(first["tasks"][0]["task_id"],valid,first)
+        self.assertEqual(first["tasks"][0]["status"],"NEEDS_REVIEW",first)
+        second=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(second["tasks"][0]["task_id"],stale,second)
+        self.assertEqual(second["tasks"][0]["status"],"BLOCKED",second)
+
     def cli(self):
         env = os.environ.copy()
         env["PYTHONPATH"] = str(ROOT / "src")
