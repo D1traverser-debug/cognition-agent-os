@@ -22,7 +22,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         (self.fx/"before.csv").write_bytes(b"id,amount\nA,1\n")
         (self.fx/"after.csv").write_bytes(b"id,amount\nA,2\n")
 
-    def setup_research(self):
+    def setup_research(self, sources=None):
         raw=json.dumps({"schema_version":1,"source_id":"seeded",
             "claims":[{"goal_key":"other","route":"structure","status":"active","source_ref":"initial:1"}]},
             sort_keys=True).encode()
@@ -36,6 +36,8 @@ class ResearchAssessmentHostTests(unittest.TestCase):
                 {"route":"compare","intent":{"kind":"goal_intent","objective":"compare_records",
                 "resources":[{"role":"reference","path":"before.csv"},
                              {"role":"observed","path":"after.csv"}]}}]}
+        if sources is not None:
+            root_spec["research_sources"]=sources
         with closing(connect(self.db)) as db:root=create_task(db,root_spec)
         tick=run_tick(self.db,self.work,self.fx,max_jobs=2)
         self.assertEqual([t["status"] for t in tick["tasks"]],["RESEARCH_NEEDED","NEEDS_REVIEW"],tick)
@@ -104,6 +106,27 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         with closing(connect(self.db)) as db:
             row=db.execute("SELECT state FROM tasks WHERE task_id=?",(assessment,)).fetchone()
             self.assertEqual(row["state"],"UNKNOWN")
+
+    def test_original_host_self_enqueues_consented_review_without_second_user_task(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        child=self.setup_research([a,b])
+        with closing(connect(self.db)) as db:
+            queued=db.execute("SELECT * FROM tasks WHERE parent_task=?",(child,)).fetchall()
+            self.assertEqual(len(queued),1)
+            self.assertEqual(json.loads(queued[0]["source_spec"])["kind"],"research_assessment")
+            auto_id=queued[0]["task_id"]
+        next_tick=run_tick(self.db,self.work,self.fx,max_jobs=2)
+        self.assertEqual(next_tick["tasks"][0]["status"],"NEEDS_REVIEW",next_tick)
+        report=json.loads((self.work/"artifacts"/(auto_id+".json")).read_text())
+        self.assertEqual(report["candidate_route_for_review"],"structure")
+        self.assertFalse(report["production_effect_authorized"])
+        for _ in range(4):
+            tick=run_tick(self.db,self.work,self.fx,max_jobs=2)
+        with closing(connect(self.db)) as db:
+            count=db.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=?",(child,)).fetchone()[0]
+            self.assertEqual(count,1)
 
 if __name__=="__main__":
     unittest.main()
