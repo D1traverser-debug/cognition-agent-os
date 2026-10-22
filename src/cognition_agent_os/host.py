@@ -57,6 +57,26 @@ def _record_tick(path: Path, *, processed: int, finished_at: float) -> None:
         db.close()
 
 
+def _pending_research_actions(path: Path, *, limit: int = 16) -> list[dict]:
+    """Project committed, review-only recommendations from the one ledger."""
+    import json
+    with closing(sqlite3.connect(path.resolve(strict=True).as_uri()+"?mode=ro",
+                                 uri=True, timeout=5)) as db:
+        rows=db.execute("""SELECT t.task_id,e.details FROM tasks t
+            JOIN events e ON e.task_id=t.task_id
+            WHERE t.state='NEEDS_REVIEW'
+              AND e.kind='RESEARCH_NEXT_ACTION_IDENTIFIED'
+            ORDER BY e.event_id DESC LIMIT ?""",(limit,)).fetchall()
+    items=[]
+    for task_id,details in rows:
+        receipt=json.loads(details)
+        if receipt.get("authorized") is not False:
+            continue
+        items.append({"task_id":task_id,"next_research_action":receipt["action"],
+                      "reason":receipt["reason"],"action_authorized":False})
+    return items
+
+
 def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: int = 16,
              planner_mode: str = "deterministic", local_model: str | None = None,
              auto_stage_goals: bool = False, auto_review_repos: bool = False) -> dict:
@@ -113,6 +133,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             "sandbox_reviews": reviews,
             "repair_lab_reviews": repair_reviews,
             "diagnostic_followups": recoveries,
+            "pending_research_actions": _pending_research_actions(db_path),
             "conformance": conformance,
             "preflight": preflight,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
