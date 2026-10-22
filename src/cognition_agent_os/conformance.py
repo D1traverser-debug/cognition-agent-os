@@ -228,6 +228,11 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 r=audit_gap(db_path,fixtures,workspace,row["parent_task"],tid)
                 proof=("MECHANICALLY_VALID" if r["status"]=="PLAN_MECHANICALLY_VALID"
                        else r.get("reason","RESEARCH_ARTIFACT_INVALID"))
+            elif kind=="research_assessment":
+                from .research_assessment import audit_assessment
+                r=audit_assessment(db_path,workspace,fixtures,tid)
+                proof=("MECHANICALLY_VALID" if r["status"]=="ASSESSMENT_MECHANICALLY_VALID"
+                       else r.get("reason","ASSESSMENT_UNVERIFIABLE"))
             elif kind=="repo_container_repair":
                 from .repo_repair import audit_repo
                 report=audit_repo(db_path,workspace,fixtures,tid)
