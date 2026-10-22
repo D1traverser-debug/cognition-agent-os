@@ -87,7 +87,7 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
             return finalize_observed(db,task,"UNKNOWN",error_code="INVALID_TASK_SPEC")
         # Reject stale descendant work before invoking ANY capability. A parent
         # that has been blocked or invalidated cannot authorize further work.
-        if task["parent_task"] is not None:
+        if task["parent_task"] is not None and source_spec.get("kind") != "goal_intent":
             parent = db.execute("SELECT state,goal_rev,grant_rev FROM tasks WHERE task_id=?",
                                 (task["parent_task"],)).fetchone()
             if (parent is None or parent["state"] in ("BLOCKED", "UNKNOWN")
