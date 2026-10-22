@@ -10,7 +10,7 @@ from .ledger import connect
 from .runner import run_once
 from .watch import poll_due_watches
 from .sandbox_effect import advance_due_reviews
-from .diagnostics import recover_due_unknowns
+from .diagnostics import recover_due_unknowns, recover_research_transport
 from .repair_oracle import review_due_repairs
 from .conformance import inspect_conformance, effect_preflight
 
@@ -100,6 +100,8 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
                       if auto_stage_goals and preflight["admitted"] else [])
     recoveries = (recover_due_unknowns(db_path,fixture_root)
                   if auto_stage_goals else [])
+    # Read-only research transport recovery has its own finite attempt budget.
+    recoveries.extend(recover_research_transport(db_path))
     # Independent conformance is a default post-tick enforcement path.
     # It quarantines only confirmed mechanical contradictions, never
     # interprets missing semantic evidence as a proven code compromise.
