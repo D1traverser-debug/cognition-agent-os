@@ -203,6 +203,28 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertEqual(self.root_state(root)[0],"CONTROL_CANDIDATE_MATCHED")
 
 
+
+    def test_narrow_csv_verified_is_not_owner_record_goal_success(self):
+        # csv_columns verifies column EXISTENCE: existing 'owner' column
+        # need not equal its default. The canonical-record oracle has
+        # stronger owner-required semantics and must reject false closure.
+        methods=self.methods(json_conflict=False,csv_conflict=True)
+        root=register_local_goal(self.db,self.fx,goal_id="csv-first-owner",
+                 target={"id":"A","owner":"ops"},alternatives=[methods[1],methods[0]])
+        first=self.tick()
+        self.assertEqual(first["local_goal_control"][0]["ordinal"],0,first)
+        second=self.tick()
+        self.assertEqual(second["tasks"][0]["status"],"VERIFIED",second)
+        self.assertEqual(second["tasks"][0]["decision"],"GOAL_ALREADY_SATISFIED")
+        self.assertEqual(second["local_goal_control"][0]["ordinal"],1,second)
+        third=self.tick()
+        self.assertEqual(self.root_state(root)[0],"CONTROL_CANDIDATE_MATCHED",third)
+        self.assertEqual(third["tasks"][0]["status"],"NEEDS_REVIEW",third)
+        from cognition_agent_os.bounded_control_audit import audit_controlled_candidate
+        proof=audit_controlled_candidate(self.db,self.work,self.fx,root)
+        self.assertEqual(proof["status"],"CONTROL_LOCAL_RECEIPT_VERIFIED",proof)
+        self.assertFalse(proof["business_outcome_verified"])
+
     def test_independent_controller_receipt_and_conformance_scan(self):
         root=self.register()
         self.tick();self.tick();self.tick()
