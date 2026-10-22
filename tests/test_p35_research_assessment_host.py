@@ -121,6 +121,16 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
         self.assertEqual(report["reason"],"SAME_REPOSITORY_NOT_INDEPENDENT")
         self.assertEqual(report["next_research_action"],"FIND_DISTINCT_ORIGINAL_PUBLISHER")
+        with closing(connect(self.db)) as db:
+            receipts=db.execute("""SELECT details FROM events
+                WHERE task_id=? AND kind='RESEARCH_NEXT_ACTION_IDENTIFIED'""",
+                (task,)).fetchall()
+        self.assertEqual(len(receipts),1)
+        receipt=json.loads(receipts[0]["details"])
+        self.assertEqual(receipt["action"],"FIND_DISTINCT_ORIGINAL_PUBLISHER")
+        self.assertFalse(receipt["authorized"])
+        self.assertEqual(receipt["artifact_sha256"],
+                         hashlib.sha256((self.work/"artifacts"/(task+".json")).read_bytes()).hexdigest())
         self.assertIs(report["next_action_authorized"],False)
         self.assertIsNone(report["candidate_route_for_review"])
 
