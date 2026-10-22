@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 import tempfile
 import unittest
 
@@ -339,11 +340,12 @@ class DurableSameGoalControllerTests(unittest.TestCase):
 
     def test_expired_active_goal_stops_without_admitting_more_work(self):
         root=self.register()
-        with closing(connect(self.db)) as db:
-            db.execute("UPDATE tasks SET created_at=? WHERE task_id=?",
-                       (time.time()-90000,root))
-            db.commit()
-        result=self.tick()
+        # Advance only the wall clock. Altering created_at in SQLite would
+        # be a forged registration timestamp and must independently fail.
+        future=time.time()+90000
+        with patch("cognition_agent_os.bounded_goal_control.time.time",
+                   return_value=future):
+            result=advance_local_goals(self.db,self.work,self.fx,limit=3)
         self.assertEqual(self.root_state(root),
                          ("CONTROL_STOPPED","LOCAL_CONTROL_TIME_BUDGET_EXHAUSTED"),result)
         self.assertEqual(self.attempts(root),[])
