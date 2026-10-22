@@ -143,7 +143,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertIsNone(report["candidate_route_for_review"])
 
     def test_public_source_transport_failure_does_not_crash_host(self):
-        from cognition_agent_os.source import SourceUnavailable
+        from cognition_agent_os.source import SourceTransportUnavailable
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
         b=self.put_evidence("independent_b","publisher_two",stances)
@@ -151,7 +151,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             item.update({"kind":"github","repo":repo,"ref":"a"*40})
         child=self.setup_research([a,b])
         with patch("cognition_agent_os.research_assessment.github_public_snapshot",
-                   side_effect=SourceUnavailable("temporary public API failure")):
+                   side_effect=SourceTransportUnavailable("temporary public API failure")):
             task,result=self.review(child,a,b)
         self.assertEqual(result["status"],"UNKNOWN",result)
         self.assertFalse((self.work/"artifacts"/(task+".json")).exists())
@@ -159,7 +159,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(after["processed"],0,after)
 
     def test_research_transport_recovers_after_cooldown_without_new_authority(self):
-        from cognition_agent_os.source import SourceUnavailable
+        from cognition_agent_os.source import SourceTransportUnavailable
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
         b=self.put_evidence("independent_b","publisher_two",stances)
@@ -169,7 +169,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             pinned[(repo,item["path"],item["ref"])]=(self.fx/item["path"]).read_bytes()
         child=self.setup_research([a,b])
         with patch("cognition_agent_os.research_assessment.github_public_snapshot",
-                   side_effect=SourceUnavailable("outage")):
+                   side_effect=SourceTransportUnavailable("outage")):
             task,result=self.review(child,a,b)
         self.assertEqual(result["status"],"UNKNOWN",result)
         with closing(connect(self.db)) as db:
@@ -187,7 +187,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             self.assertEqual(retries,1)
 
     def test_transport_retry_invalid_parent_is_blocked_once(self):
-        from cognition_agent_os.source import SourceUnavailable
+        from cognition_agent_os.source import SourceTransportUnavailable
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
         b=self.put_evidence("independent_b","publisher_two",stances)
@@ -195,7 +195,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             item.update({"kind":"github","repo":repo,"ref":"a"*40})
         child=self.setup_research([a,b])
         with patch("cognition_agent_os.research_assessment.github_public_snapshot",
-                   side_effect=SourceUnavailable("outage")):
+                   side_effect=SourceTransportUnavailable("outage")):
             task,result=self.review(child,a,b)
         self.assertEqual(result["status"],"UNKNOWN")
         with closing(connect(self.db)) as db:
@@ -220,7 +220,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(later,1)
 
     def test_research_transport_retry_budget_exhausts(self):
-        from cognition_agent_os.source import SourceUnavailable
+        from cognition_agent_os.source import SourceTransportUnavailable
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
         b=self.put_evidence("independent_b","publisher_two",stances)
@@ -228,7 +228,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             item.update({"kind":"github","repo":repo,"ref":"a"*40})
         child=self.setup_research([a,b])
         with patch("cognition_agent_os.research_assessment.github_public_snapshot",
-                   side_effect=SourceUnavailable("outage")):
+                   side_effect=SourceTransportUnavailable("outage")):
             task,first=self.review(child,a,b)
             self.assertEqual(first["status"],"UNKNOWN")
             for attempt in range(2):
