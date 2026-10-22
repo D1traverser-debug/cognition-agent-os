@@ -182,7 +182,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
         b=self.put_evidence("independent_b","publisher_two",stances)
-        invalid=b"\\xff\\xfe\\xfa"
+        invalid=bytes([255,254,250])
         (self.fx/b["path"]).write_bytes(invalid)
         b["sha256"]=hashlib.sha256(invalid).hexdigest()
         child=self.setup_research([a,b])
