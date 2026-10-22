@@ -3,6 +3,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+from contextlib import closing
 import subprocess
 import sys
 import tempfile
@@ -70,7 +71,7 @@ class IntentRuntimeTests(unittest.TestCase):
             admitted=run_once(self.db_path,self.workspace,self.fixtures)
             self.assertEqual(admitted["status"],"DECOMPOSED",admitted)
             child=admitted["child_task_id"]
-            with connect(self.db_path) as db:
+            with closing(connect(self.db_path)) as db:
                 db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(parent,))
                 db.commit()
             observed=run_once(self.db_path,self.workspace,self.fixtures)
