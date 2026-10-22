@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 import re
 import sqlite3
+import time
 
 from .bounded_outcome_oracle import assess_local_record, record_from_bytes
 from .goal_audit import audit_goal
@@ -26,6 +27,7 @@ _ACTIVE="CONTROL_ACTIVE"
 _MET="CONTROL_CANDIDATE_MATCHED"
 _STOP="CONTROL_STOPPED"
 _UNVERIFIABLE="CONTROL_UNVERIFIABLE"
+MAX_CONTROL_AGE_SECONDS=24*60*60
 
 
 def _ensure(db:sqlite3.Connection)->None:
@@ -99,8 +101,19 @@ def register_local_goal(db_path:Path,fixtures:Path,*,goal_id:str,target:dict,
         _ensure(db)
         tid=create_task(db,spec,commit=False)
         db.execute("UPDATE tasks SET state=? WHERE task_id=?",(_ACTIVE,tid))
+        registered=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
+        # Independently replayable, durable intake anchor. This detects
+        # single-record corruption, not a privileged writer forging BOTH
+        # the contract and its same-database receipt.
+        canonical=json.dumps(spec,sort_keys=True,ensure_ascii=False,
+                             separators=(",",":")).encode("utf-8")
         event(db,tid,"BOUNDED_CONTROLLER_REGISTERED",{
             "goal_id":goal_id,"methods":2,"max_attempts":2,
+            "root_task_id":tid,"goal_rev":registered["goal_rev"],
+            "grant_rev":registered["grant_rev"],
+            "registered_created_at":registered["created_at"],
+            "contract_sha256":hashlib.sha256(canonical).hexdigest(),
+            "max_age_seconds":MAX_CONTROL_AGE_SECONDS,
             "business_outcome_verified":False,"owner_approval_inferred":False})
         db.commit()
         return tid
@@ -114,6 +127,19 @@ def register_local_goal(db_path:Path,fixtures:Path,*,goal_id:str,target:dict,
 def _finish(db,root_id:str,state:str,reason:str,details:dict|None=None)->dict:
     db.execute("UPDATE tasks SET state=?,error_code=?,state_version=state_version+1 WHERE task_id=?",
                (state,reason,root_id))
+    # A stopped root must not leave a dormant admitted child that can later
+    # be claimed independently. Fence any outstanding local child in the
+    # same authority transaction. A competing lease can no longer finalize.
+    if state in (_STOP,_UNVERIFIABLE):
+        active=db.execute("""SELECT task_id FROM tasks WHERE parent_task=?
+                 AND state IN ('PENDING','RUNNING')""",(root_id,)).fetchall()
+        for pending in active:
+            db.execute("""UPDATE tasks SET state='BLOCKED',
+                error_code='CONTROLLER_CLOSED',claim_token=NULL,
+                lease_until=NULL,state_version=state_version+1
+                WHERE task_id=?""",(pending["task_id"],))
+            event(db,pending["task_id"],"BOUNDED_CONTROLLER_CHILD_FENCED",{
+                "root_task_id":root_id,"reason":reason})
     event(db,root_id,"BOUNDED_CONTROLLER_DECIDED",{
         "state":state,"reason":reason,
         "business_outcome_verified":False,"authorizes_mutation":False,
@@ -222,26 +248,39 @@ def advance_local_goals(db_path:Path,workspace:Path,fixtures:Path,
                 if not allowed:
                     result=_finish(db,tid,_STOP,reason)
                 else:
-                    contract=json.loads(root["source_spec"])
-                    if (contract.get("kind")!="bounded_local_controller"
-                        or contract.get("schema_version")!=1
-                        or contract.get("allowed_effect")!="LOCAL_CANDIDATE_ONLY"
-                        or contract.get("max_attempts")!=2
-                        or not isinstance(contract.get("alternatives"),list)
-                        or len(contract["alternatives"])!=2):
-                        result=_finish(db,tid,_UNVERIFIABLE,"INVALID_CONTROL_SPEC")
+                    from .bounded_control_audit import verify_registered_control
+                    registered=verify_registered_control(db,root)
+                    if not registered["valid"]:
+                        result=_finish(db,tid,_UNVERIFIABLE,
+                                       "REGISTRATION_PROOF_INVALID",
+                                       {"intake_reason":registered["reason"]})
+                    elif (root["created_at"]>time.time()+300
+                          or time.time()-root["created_at"]>MAX_CONTROL_AGE_SECONDS):
+                        result=_finish(db,tid,_STOP,
+                                       "LOCAL_CONTROL_TIME_BUDGET_EXHAUSTED")
                     else:
-                        attempts=db.execute("""SELECT ordinal,child_task_id
-                          FROM bounded_goal_attempts WHERE root_task_id=?
-                          ORDER BY ordinal""",(tid,)).fetchall()
-                        if not attempts:
-                            result=_admit(db,root,contract,0,fixtures)
-                        elif (len(attempts)>2 or
-                              [x["ordinal"] for x in attempts]!=list(range(len(attempts)))):
-                            result=_finish(db,tid,_UNVERIFIABLE,"BROKEN_ATTEMPT_LINEAGE")
+                        result=None
+                    if result is None:
+                        contract=json.loads(root["source_spec"])
+                        if (contract.get("kind")!="bounded_local_controller"
+                            or contract.get("schema_version")!=1
+                            or contract.get("allowed_effect")!="LOCAL_CANDIDATE_ONLY"
+                            or contract.get("max_attempts")!=2
+                            or not isinstance(contract.get("alternatives"),list)
+                            or len(contract["alternatives"])!=2):
+                            result=_finish(db,tid,_UNVERIFIABLE,"INVALID_CONTROL_SPEC")
                         else:
-                            result=_observe(db,root,contract,attempts[-1],
-                                            db_path,workspace,fixtures)
+                            attempts=db.execute("""SELECT ordinal,child_task_id
+                              FROM bounded_goal_attempts WHERE root_task_id=?
+                              ORDER BY ordinal""",(tid,)).fetchall()
+                            if not attempts:
+                                result=_admit(db,root,contract,0,fixtures)
+                            elif (len(attempts)>2 or
+                                  [x["ordinal"] for x in attempts]!=list(range(len(attempts)))):
+                                result=_finish(db,tid,_UNVERIFIABLE,"BROKEN_ATTEMPT_LINEAGE")
+                            else:
+                                result=_observe(db,root,contract,attempts[-1],
+                                                db_path,workspace,fixtures)
                 db.commit()
                 if result["status"]!="AWAITING_CHILD":
                     results.append(result)
