@@ -87,8 +87,16 @@ def audit_controlled_candidate(db_path:Path,workspace:Path,
                 if digest!=c["input_sha256"]:
                     return {**fail,"reason":"SOURCE_PIN_MISMATCH"}
                 if index<len(attempts)-1:
-                    if (child["state"]!="UNKNOWN"
-                        or child["error_code"]!="NO_SAFE_GOAL_PLAN"):
+                    # A narrower capability can report VERIFIED (e.g. a CSV
+                    # column exists) while the pinned owner-level VALUE goal
+                    # remains impossible under preservation-only semantics.
+                    # Never adopt the child self-verdict as the goal oracle.
+                    legitimate_failure=(
+                        (child["state"]=="UNKNOWN" and
+                         child["error_code"]=="NO_SAFE_GOAL_PLAN") or
+                        (child["state"]=="VERIFIED" and
+                         child["decision"]=="GOAL_ALREADY_SATISFIED"))
+                    if not legitimate_failure:
                         return {**fail,"reason":"UNSUPPORTED_SWITCH_CAUSE"}
                     result=assess_local_record(kind=proposal["goal_type"],
                         original=original,current_sha256=digest,pinned_sha256=digest,
