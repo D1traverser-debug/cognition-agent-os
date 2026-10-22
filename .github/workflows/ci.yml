@@ -394,3 +394,7 @@ jobs:
         env:
           PYTHONPATH: src
         run: python scripts/verify_public_source.py
+      - name: P36 full original Host research lineage over real public HTTPS (synthetic sources)
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_p36_live_research.py
