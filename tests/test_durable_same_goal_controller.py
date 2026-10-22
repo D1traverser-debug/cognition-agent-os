@@ -8,6 +8,9 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import hashlib
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -203,6 +206,43 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertEqual(self.root_state(root)[0],"CONTROL_CANDIDATE_MATCHED")
 
 
+
+
+    def test_real_cli_requires_explicit_seed_and_opt_in(self):
+        methods=self.methods()
+        spec=self.root/"control.json"
+        spec.write_text(json.dumps({"goal_id":"cli-record",
+             "target":{"id":"A","owner":"ops"},"alternatives":methods}),
+             encoding="utf-8")
+        env=os.environ.copy()
+        env["PYTHONPATH"]=str(Path(__file__).resolve().parents[1]/"src")
+        def cli(*parts,db=None):
+            command=[sys.executable,"-m","cognition_agent_os.cli",
+                "--db",str(db or self.db),"--workspace",str(self.work),
+                "--fixtures",str(self.fx),*parts]
+            return subprocess.run(command,env=env,capture_output=True,
+                                  text=True,encoding="utf-8",timeout=30)
+        missing=self.root/"not-initialized.sqlite"
+        refused=cli("seed-bounded-local-goal","--spec",str(spec),db=missing)
+        self.assertEqual(refused.returncode,2,refused.stderr)
+        self.assertFalse(missing.exists())
+        seeded=cli("seed-bounded-local-goal","--spec",str(spec))
+        self.assertEqual(seeded.returncode,0,seeded.stderr)
+        root=json.loads(seeded.stdout)["task_id"]
+        self.assertEqual(self.root_state(root)[0],"CONTROL_ACTIVE")
+        disabled=cli("host-tick","--max-jobs","3")
+        self.assertEqual(disabled.returncode,0,disabled.stderr)
+        self.assertEqual(self.attempts(root),[])
+        first=cli("host-tick","--max-jobs","3","--auto-local-goal-control")
+        self.assertEqual(first.returncode,0,first.stderr)
+        self.assertEqual(json.loads(first.stdout)["local_goal_control"][0]["ordinal"],0)
+        second=cli("host-tick","--max-jobs","3","--auto-local-goal-control")
+        self.assertEqual(second.returncode,0,second.stderr)
+        self.assertEqual(json.loads(second.stdout)["local_goal_control"][0]["ordinal"],1)
+        third=cli("host-tick","--max-jobs","3","--auto-local-goal-control")
+        self.assertEqual(third.returncode,0,third.stderr)
+        self.assertEqual(self.root_state(root)[0],"CONTROL_CANDIDATE_MATCHED")
+        self.assertFalse(json.loads(third.stdout)["semantic_outcome_verified"])
 
     def test_narrow_csv_verified_is_not_owner_record_goal_success(self):
         # csv_columns verifies column EXISTENCE: existing 'owner' column
