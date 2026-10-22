@@ -81,6 +81,8 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
         self.assertFalse(report["production_effect_authorized"])
         self.assertEqual(report["candidate_route_for_review"],"structure")
+        self.assertEqual(report["next_research_action"],"INDEPENDENT_SEMANTIC_AND_OUTCOME_REVIEW")
+        self.assertFalse(report["next_action_authorized"])
 
     def test_nested_public_paths_and_same_filename_from_distinct_repositories(self):
         stances={"structure":"supports","compare":"refutes"}
@@ -118,6 +120,8 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(result["status"],"NEEDS_REVIEW")
         report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
         self.assertEqual(report["reason"],"SAME_REPOSITORY_NOT_INDEPENDENT")
+        self.assertEqual(report["next_research_action"],"FIND_DISTINCT_ORIGINAL_PUBLISHER")
+        self.assertIs(report["next_action_authorized"],False)
         self.assertIsNone(report["candidate_route_for_review"])
 
     def test_public_source_transport_failure_does_not_crash_host(self):
