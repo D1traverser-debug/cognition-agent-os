@@ -199,7 +199,8 @@ def _goal_progress(path: Path, workspace: Path | None = None,
 
 def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: int = 16,
              planner_mode: str = "deterministic", local_model: str | None = None,
-             auto_stage_goals: bool = False, auto_review_repos: bool = False) -> dict:
+             auto_stage_goals: bool = False, auto_review_repos: bool = False,
+             auto_local_goal_control: bool = False) -> dict:
     """Drain a bounded set of due jobs. Reruns/reboots reuse the same local DB.
 
     Scheduling is external (Windows Task Scheduler, cron, systemd); missed ticks
@@ -251,14 +252,24 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     # interprets missing semantic evidence as a proven code compromise.
     conformance = inspect_conformance(db_path,workspace,fixture_root,
                                      enforce=True,max_cases=min(max_jobs,16))
+    # Explicit opt-in only. A separate bounded controller may enqueue a
+    # LOCAL candidate for the NEXT tick, after ordinary evidence enforcement.
+    # It cannot grant permissions or claim an external business outcome.
+    if auto_local_goal_control:
+        from .bounded_goal_control import advance_local_goals
+        controlled=advance_local_goals(db_path,workspace,fixture_root,
+                                       limit=min(max_jobs,4))
+    else:
+        controlled=[]
     _record_tick(db_path, processed=len(results), finished_at=time.time())
-    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
             "watch_observations": watches,
             "sandbox_reviews": reviews,
             "repair_lab_reviews": repair_reviews,
             "diagnostic_followups": recoveries,
             "local_evidence_retries": local_retries,
             "pending_research_actions": _pending_research_actions(db_path,workspace),
+            "local_goal_control": controlled,
             "goal_progress": _goal_progress(db_path,workspace,fixture_root),
             "conformance": conformance,
             "preflight": preflight,
