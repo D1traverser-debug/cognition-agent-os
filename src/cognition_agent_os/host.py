@@ -57,23 +57,44 @@ def _record_tick(path: Path, *, processed: int, finished_at: float) -> None:
         db.close()
 
 
-def _pending_research_actions(path: Path, *, limit: int = 16) -> list[dict]:
-    """Project committed, review-only recommendations from the one ledger."""
+def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -> list[dict]:
+    """Only project review suggestions with a live grant and intact artifact."""
+    import hashlib
     import json
+    from .runner import verify_artifact
     with closing(sqlite3.connect(path.resolve(strict=True).as_uri()+"?mode=ro",
                                  uri=True, timeout=5)) as db:
-        rows=db.execute("""SELECT t.task_id,e.details FROM tasks t
+        db.row_factory=sqlite3.Row
+        rows=db.execute("""SELECT t.*,e.details FROM tasks t
             JOIN events e ON e.task_id=t.task_id
+            JOIN authority a ON a.singleton=1
             WHERE t.state='NEEDS_REVIEW'
+              AND t.goal_rev=a.goal_rev AND t.grant_rev=a.grant_rev
+              AND a.write_allowed=1
               AND e.kind='RESEARCH_NEXT_ACTION_IDENTIFIED'
             ORDER BY e.event_id DESC LIMIT ?""",(limit,)).fetchall()
     items=[]
-    for task_id,details in rows:
-        receipt=json.loads(details)
-        if receipt.get("authorized") is not False:
+    for row in rows:
+        try:
+            receipt=json.loads(row["details"])
+            task_id=row["task_id"]
+            if receipt.get("authorized") is not False or not verify_artifact(workspace,dict(row)):
+                continue
+            artifact=workspace/"artifacts"/(task_id+".json")
+            if artifact.is_symlink():
+                continue
+            raw=artifact.read_bytes()
+            if hashlib.sha256(raw).hexdigest()!=receipt.get("artifact_sha256"):
+                continue
+            payload=json.loads(raw)
+            if (payload.get("next_research_action")!=receipt.get("action")
+                or payload.get("reason")!=receipt.get("reason")
+                or payload.get("next_action_authorized") is not False):
+                continue
+            items.append({"task_id":task_id,"next_research_action":receipt["action"],
+                          "reason":receipt["reason"],"action_authorized":False})
+        except (ValueError,TypeError,KeyError,OSError,UnicodeError):
             continue
-        items.append({"task_id":task_id,"next_research_action":receipt["action"],
-                      "reason":receipt["reason"],"action_authorized":False})
     return items
 
 
@@ -133,7 +154,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             "sandbox_reviews": reviews,
             "repair_lab_reviews": repair_reviews,
             "diagnostic_followups": recoveries,
-            "pending_research_actions": _pending_research_actions(db_path),
+            "pending_research_actions": _pending_research_actions(db_path,workspace),
             "conformance": conformance,
             "preflight": preflight,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
