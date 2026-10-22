@@ -7,6 +7,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -14,6 +15,8 @@ import unittest
 from cognition_agent_os.bounded_goal_control import (
     advance_local_goals, register_local_goal)
 from cognition_agent_os.bounded_outcome_oracle import assess_local_record
+from cognition_agent_os.bounded_control_audit import audit_controlled_candidate
+from cognition_agent_os.conformance import inspect_conformance
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect,initialize,alter_authority
 
@@ -198,6 +201,49 @@ class DurableSameGoalControllerTests(unittest.TestCase):
                  target={"ticket":"T01","owner":"ops"},alternatives=methods)
         self.tick();self.tick();self.tick()
         self.assertEqual(self.root_state(root)[0],"CONTROL_CANDIDATE_MATCHED")
+
+
+    def test_independent_controller_receipt_and_conformance_scan(self):
+        root=self.register()
+        self.tick();self.tick();self.tick()
+        proof=audit_controlled_candidate(self.db,self.work,self.fx,root)
+        self.assertEqual(proof["status"],"CONTROL_LOCAL_RECEIPT_VERIFIED",proof)
+        self.assertEqual(proof["attempts"],2,proof)
+        self.assertFalse(proof["business_outcome_verified"])
+        scan=inspect_conformance(self.db,self.work,self.fx,enforce=False,max_cases=64)
+        matches=[f for f in scan["findings"] if f["task_id"]==root]
+        self.assertEqual(len(matches),1,scan)
+        self.assertEqual(matches[0]["proof"],"MECHANICALLY_VALID",matches)
+
+    def test_forged_controller_receipt_detected_and_quarantined(self):
+        root=self.register()
+        self.tick();self.tick();self.tick()
+        with closing(connect(self.db)) as db:
+            r=db.execute("""SELECT event_id,details FROM events WHERE task_id=?
+                    AND kind='BOUNDED_CONTROLLER_DECIDED'""",(root,)).fetchone()
+            forged=json.loads(r["details"])
+            forged["candidate_sha256"]="0"*64
+            db.execute("UPDATE events SET details=? WHERE event_id=?",
+                       (json.dumps(forged),r["event_id"]))
+            db.commit()
+        bad=audit_controlled_candidate(self.db,self.work,self.fx,root)
+        self.assertEqual(bad["reason"],"FINAL_POSTCONDITION_MISMATCH",bad)
+        scan=inspect_conformance(self.db,self.work,self.fx,enforce=True,max_cases=64)
+        self.assertIn(root,scan["quarantined"],scan)
+        self.assertEqual(self.root_state(root)[0],"UNKNOWN")
+
+    def test_corrupted_artifact_after_positive_claim_rejected(self):
+        root=self.register(json_conflict=False)
+        self.tick();self.tick()
+        child=self.attempts(root)[0]["child_task_id"]
+        artifact=self.work/"artifacts"/(child+".json")
+        artifact.write_bytes(artifact.read_bytes()+b" malicious")
+        proof=audit_controlled_candidate(self.db,self.work,self.fx,root)
+        self.assertEqual(proof["reason"],"CHILD_ARTIFACT_REJECTED",proof)
+        scan=inspect_conformance(self.db,self.work,self.fx,enforce=True,max_cases=64)
+        self.assertIn(root,scan["quarantined"],scan)
+        self.assertEqual(self.root_state(root)[0],"UNKNOWN")
+
 
 
 if __name__=="__main__":
