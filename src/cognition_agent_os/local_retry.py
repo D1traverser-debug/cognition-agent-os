@@ -33,6 +33,10 @@ def schedule_failed_local_evidence(db_path: Path, workspace: Path, fixtures: Pat
                 spec=json.loads(row["source_spec"])
             except (ValueError,TypeError):continue
             if root.get("kind")!="goal_intent":continue
+            # A retry root must not retry again; linkage lives in events.
+            if db.execute("SELECT 1 FROM events WHERE task_id=? AND kind='RETRY_ROOT_FROM_FAILED' LIMIT 1",
+                          (row["parent_task"],)).fetchone():
+                continue
             kind=spec.get("kind")
             if kind=="goal_case":
                 verdict=audit_goal(db_path,workspace,fixtures,row["task_id"])["status"]
@@ -57,13 +61,18 @@ def schedule_failed_local_evidence(db_path: Path, workspace: Path, fixtures: Pat
                     or siblings!=1):
                     db.commit()
                     continue
-                new_id=create_task(db,spec,parent=row["parent_task"],commit=False)
+                # Keep exactly one child per intent root. The next Host tick
+                # decomposes a new authorized root using the registered planner.
+                new_id=create_task(db,root,commit=False)
+                event(db,new_id,"RETRY_ROOT_FROM_FAILED",{
+                    "original_root":row["parent_task"],
+                    "failed_task_id":row["task_id"],"max_attempts":1})
                 event(db,row["parent_task"],"BOUNDED_LOCAL_RETRY",{
-                    "failed_task_id":row["task_id"],"retry_task_id":new_id,
-                    "verdict":verdict,"max_retry_children":1,
+                    "failed_task_id":row["task_id"],"retry_root_id":new_id,
+                    "verdict":verdict,"max_retry_roots":1,
                     "semantic_outcome_verified":False})
                 db.commit()
-                scheduled.append({"failed_task_id":row["task_id"],"retry_task_id":new_id,
+                scheduled.append({"failed_task_id":row["task_id"],"retry_root_id":new_id,
                                   "reason":verdict,"business_outcome_verified":False})
             except BaseException:
                 db.rollback()
