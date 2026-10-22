@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import os
 from pathlib import Path
 import subprocess
@@ -37,6 +38,31 @@ class LocalHostTests(unittest.TestCase):
                                interval_seconds=interval, due_at=due_at)
         finally:
             db.close()
+
+    def test_goal_progress_tracks_unrelated_roots_without_claiming_success(self):
+        from cognition_agent_os.host import _goal_progress
+        with closing(connect(self.db)) as db:
+            initialize(db)
+            root_a=create_task(db,{"kind":"fixture","old":"old.txt","new":"new.txt"})
+            root_b=create_task(db,{"kind":"fixture","old":"old.txt","new":"new.txt"})
+            child=create_task(db,{"kind":"fixture","old":"old.txt","new":"new.txt"},parent=root_a)
+            db.execute("UPDATE tasks SET state='NEEDS_REVIEW' WHERE task_id=?",(child,))
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(root_b,))
+            db.commit()
+        report=_goal_progress(self.db)
+        self.assertEqual(len(report["goals"]),2)
+        by_root={g["root_task_id"]:g for g in report["goals"]}
+        self.assertEqual(by_root[root_a]["runnable"],1)
+        self.assertEqual(by_root[root_a]["awaiting_review"],1)
+        self.assertEqual(by_root[root_a]["next_control_action"],"CONTINUE_ADMITTED_WORK")
+        self.assertEqual(by_root[root_b]["next_control_action"],"DIAGNOSE_BLOCKER")
+        self.assertFalse(report["semantic_outcome_verified"])
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE authority SET grant_rev=grant_rev+1")
+            db.commit()
+        revoked=_goal_progress(self.db)
+        self.assertTrue(all(g["next_control_action"]=="REAUTHORIZE_OR_SUPERSEDE"
+                            for g in revoked["goals"]))
 
     def cli(self):
         env = os.environ.copy()
