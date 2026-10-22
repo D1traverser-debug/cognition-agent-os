@@ -319,9 +319,14 @@ class DurableSameGoalControllerTests(unittest.TestCase):
             db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?",
                        (json.dumps(modified,sort_keys=True),root))
             db.commit()
-        result=self.tick()
-        self.assertEqual(self.root_state(root),
-                         ("CONTROL_UNVERIFIABLE","REGISTRATION_PROOF_INVALID"),result)
+        result=self.tick(enabled=False)
+        # The default conformance guardian must detect a corrupted ACTIVE
+        # admission even without permission to advance the controller.
+        self.assertEqual(self.root_state(root)[0],"UNKNOWN",result)
+        self.assertTrue(self.root_state(root)[1].startswith(
+            "CONFORMANCE_CONTROL_"),result)
+        self.assertIn(root,[x["task_id"] for x in
+                           result["conformance"]["quarantined"]],result)
         self.assertEqual(self.attempts(root),[])
 
     def test_corrupted_alternative_intake_is_blocked_before_child_creation(self):
@@ -333,9 +338,67 @@ class DurableSameGoalControllerTests(unittest.TestCase):
             db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?",
                        (json.dumps(modified,sort_keys=True),root))
             db.commit()
-        result=self.tick()
+        result=self.tick(enabled=False)
+        # The default conformance guardian must detect a corrupted ACTIVE
+        # admission even without permission to advance the controller.
+        self.assertEqual(self.root_state(root)[0],"UNKNOWN",result)
+        self.assertTrue(self.root_state(root)[1].startswith(
+            "CONFORMANCE_CONTROL_"),result)
+        self.assertIn(root,[x["task_id"] for x in
+                           result["conformance"]["quarantined"]],result)
+        self.assertEqual(self.attempts(root),[])
+
+
+    def test_control_transition_directly_refuses_tampered_contract(self):
+        root=self.register()
+        with closing(connect(self.db)) as db:
+            original=json.loads(db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=?",(root,)
+            ).fetchone()[0])
+            original["target"]["owner"]="counterfeit"
+            db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?",
+                       (json.dumps(original,sort_keys=True),root))
+            db.commit()
+        result=advance_local_goals(self.db,self.work,self.fx,limit=3)
         self.assertEqual(self.root_state(root),
                          ("CONTROL_UNVERIFIABLE","REGISTRATION_PROOF_INVALID"),result)
+        self.assertEqual(self.attempts(root),[])
+
+    def test_budget_stop_fences_pending_child_in_same_ledger(self):
+        root=self.register()
+        self.tick()
+        child=self.attempts(root)[0]["child_task_id"]
+        with closing(connect(self.db)) as db:
+            state=db.execute("SELECT state FROM tasks WHERE task_id=?",
+                             (child,)).fetchone()[0]
+        self.assertEqual(state,"PENDING")
+        with patch("cognition_agent_os.bounded_goal_control.time.time",
+                   return_value=time.time()+90000):
+            outcome=advance_local_goals(self.db,self.work,self.fx,limit=3)
+        self.assertEqual(self.root_state(root),
+                         ("CONTROL_STOPPED","LOCAL_CONTROL_TIME_BUDGET_EXHAUSTED"),outcome)
+        with closing(connect(self.db)) as db:
+            blocked=db.execute(
+                "SELECT state,claim_token,lease_until FROM tasks WHERE task_id=?",
+                (child,)).fetchone()
+            self.assertEqual(blocked["state"],"BLOCKED")
+            self.assertIsNone(blocked["claim_token"])
+            self.assertIsNone(blocked["lease_until"])
+        self.assertEqual(self.tick(enabled=False)["processed"],0)
+
+    def test_forged_registration_event_is_detected_before_admission(self):
+        root=self.register()
+        with closing(connect(self.db)) as db:
+            event_row=db.execute("""SELECT event_id,details FROM events
+              WHERE task_id=? AND kind='BOUNDED_CONTROLLER_REGISTERED'""",
+              (root,)).fetchone()
+            forged=json.loads(event_row["details"])
+            forged["contract_sha256"]="0"*64
+            db.execute("UPDATE events SET details=? WHERE event_id=?",
+                       (json.dumps(forged),event_row["event_id"]))
+            db.commit()
+        report=self.tick(enabled=False)
+        self.assertEqual(self.root_state(root)[0],"UNKNOWN",report)
         self.assertEqual(self.attempts(root),[])
 
     def test_expired_active_goal_stops_without_admitting_more_work(self):
