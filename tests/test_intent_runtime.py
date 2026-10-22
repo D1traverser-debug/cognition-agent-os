@@ -121,8 +121,8 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertFalse(fourth["semantic_outcome_verified"])
 
     def test_same_bounded_recovery_works_for_csv_reconciliation(self):
-        self.fixtures.joinpath("old.csv").write_text("invoice_id,amount\\nI1,100\\nI2,20\\n")
-        self.fixtures.joinpath("new.csv").write_text("invoice_id,amount\\nI1,80\\nI2,20\\n")
+        self.fixtures.joinpath("old.csv").write_text("invoice_id,amount\nI1,100\nI2,20\n")
+        self.fixtures.joinpath("new.csv").write_text("invoice_id,amount\nI1,80\nI2,20\n")
         self.seed(self.comparison())
         first=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
         original=first["tasks"][0]["child_task_id"]
