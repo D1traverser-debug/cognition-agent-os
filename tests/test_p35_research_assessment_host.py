@@ -5,6 +5,7 @@ from contextlib import closing
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect,create_task,initialize
@@ -60,6 +61,39 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         report=run_tick(self.db,self.work,self.fx,max_jobs=1)
         self.assertEqual(len(report["tasks"]),1,report)
         return task,report["tasks"][0]
+
+    def test_immutable_public_source_is_read_by_real_host_without_fixture_duplication(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        sha="a"*40
+        a.update({"kind":"github","repo":"example-org/project-a","ref":sha})
+        b.update({"kind":"github","repo":"example-org/project-b","ref":sha})
+        pinned={(a["repo"],a["path"],sha):(self.fx/a["path"]).read_bytes(),
+                (b["repo"],b["path"],sha):(self.fx/b["path"]).read_bytes()}
+        child=self.setup_research([a,b])
+        # Genuine original host lifecycle; network boundary replaced only in test.
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=lambda repo,path,ref:pinned[(repo,path,ref)]) as fetch:
+            task,result=self.review(child,a,b)
+        self.assertGreaterEqual(fetch.call_count,4)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
+        self.assertFalse(report["production_effect_authorized"])
+        self.assertEqual(report["candidate_route_for_review"],"structure")
+
+    def test_public_source_hash_mismatch_fails_closed(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        for s,name in ((a,"project-a"),(b,"project-b")):
+            s.update({"kind":"github","repo":"example-org/"+name,"ref":"a"*40})
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   return_value=b'{"changed":true}'):
+            task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"UNKNOWN",result)
+        self.assertFalse((self.work/"artifacts"/(task+".json")).exists())
 
     def test_agreement_never_grants_authority(self):
         stances={"structure":"supports","compare":"refutes"}
