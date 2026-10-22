@@ -23,7 +23,7 @@ from .runner import verify_artifact
 from .ledger import event, connect
 
 TASK_ID=re.compile(r"[0-9a-f]{32}\Z")
-EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED","CONTROL_CANDIDATE_MATCHED")
+EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED","CONTROL_CANDIDATE_MATCHED","CONTROL_ACTIVE")
 MAX_SCAN=512
 MAX_DEPENDENCIES=256
 
@@ -263,6 +263,11 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                        else "PROPOSAL_ARTIFACT_INVALID")
             else:
                 proof="UNREGISTERED_REVIEW_FAMILY"
+        elif state=="CONTROL_ACTIVE":
+            from .bounded_control_audit import verify_registered_control
+            result=verify_registered_control(db,row)
+            proof=("MECHANICALLY_VALID" if result["valid"] else
+                   "CONTROL_"+result.get("reason","INTAKE_INVALID"))
         elif state=="CONTROL_CANDIDATE_MATCHED":
             from .bounded_control_audit import audit_controlled_candidate
             checked=audit_controlled_candidate(db_path,workspace,fixtures,tid)
@@ -439,13 +444,13 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
         else:
             last=""
         total=db.execute("""SELECT COUNT(*) FROM tasks
-                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED')""").fetchone()[0]
+                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE')""").fetchone()[0]
         selected=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE')
                    AND task_id>? ORDER BY task_id LIMIT ?""",(last,max_cases)).fetchall()
         if enforce and len(selected)<max_cases and last:
             selected+=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE')
                    AND task_id<=? ORDER BY task_id LIMIT ?""",
                  (last,max_cases-len(selected))).fetchall()
         findings=[]
