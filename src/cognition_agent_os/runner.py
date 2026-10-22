@@ -91,15 +91,19 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         if not check_child_dependency(db,task_id,fixture_root):
             return finalize_observed(db,task,"UNKNOWN",
                                      error_code="KNOWLEDGE_SOURCE_CHANGED")
-        if source_spec.get("kind")=="knowledge_intent":
+        # Research is one task family on the existing ledger. Keep business
+        # handlers separate without giving the main worker another lifecycle.
+        if source_spec.get("kind") in ("knowledge_intent", "research_gap", "research_assessment"):
             from .knowledge_routing import run_knowledge_intent
-            return run_knowledge_intent(db,task,fixture_root)
-        if source_spec.get("kind")=="research_assessment":
-            from .research_assessment import run_assessment
-            return run_assessment(db,task,db_path,workspace,fixture_root)
-        if source_spec.get("kind")=="research_gap":
             from .research_gap import run_research_gap
-            return run_research_gap(db,task,workspace,fixture_root)
+            from .research_assessment import run_assessment
+            research_handlers = {
+                "knowledge_intent": lambda: run_knowledge_intent(db, task, fixture_root),
+                "research_gap": lambda: run_research_gap(db, task, workspace, fixture_root),
+                "research_assessment": lambda: run_assessment(
+                    db, task, db_path, workspace, fixture_root),
+            }
+            return research_handlers[source_spec["kind"]]()
         if source_spec.get("kind")=="repo_container_repair":
             from .repo_repair import run_repo_candidate
             return run_repo_candidate(db,task,workspace,fixture_root,
