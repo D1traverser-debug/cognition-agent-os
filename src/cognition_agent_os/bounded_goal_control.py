@@ -169,7 +169,10 @@ def _observe(db,root,contract,attempt,db_path:Path,workspace:Path,fixtures:Path)
         artifact=workspace/"artifacts"/(child["task_id"]+".json")
         if artifact.is_symlink():
             return _finish(db,root["task_id"],_UNVERIFIABLE,"UNSAFE_ARTIFACT")
-        doc=json.loads(artifact.read_bytes())
+        checked_bytes=artifact.read_bytes()
+        if hashlib.sha256(checked_bytes).hexdigest()!=child["artifact_hash"]:
+            return _finish(db,root["task_id"],_UNVERIFIABLE,"ARTIFACT_CHANGED_AFTER_AUDIT")
+        doc=json.loads(checked_bytes)
         candidate=doc["candidate_text"].encode("utf-8")
     elif child["state"]=="VERIFIED" and child["decision"]=="GOAL_ALREADY_SATISFIED":
         candidate=raw
