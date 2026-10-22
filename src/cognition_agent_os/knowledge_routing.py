@@ -57,7 +57,8 @@ def _checked_spec(spec:dict)->dict:
         for item in sources:
             if (not isinstance(item["path"],str) or not item["path"].endswith(".json")
                 or len(item["path"])>180 or item["path"].startswith(".")
-                or "/" in item["path"] or "\\" in item["path"]
+                or ("kind" not in item and "/" in item["path"])
+                or "\\" in item["path"]
                 or not isinstance(item["sha256"],str) or not _SHA.fullmatch(item["sha256"])
                 or not _bound_id(item["source_id"]) or not _bound_id(item["publisher_id"])):
                 raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
@@ -67,6 +68,7 @@ def _checked_spec(spec:dict)->dict:
                 if (not isinstance(item["repo"],str) or not _REPO_RE.fullmatch(item["repo"])
                     or not isinstance(item["ref"],str) or not _SHA_RE.fullmatch(item["ref"])
                     or item["path"].startswith("/") or ".." in item["path"].split("/")
+                    or any(not segment or segment=="." for segment in item["path"].split("/"))
                     or not item["path"].endswith(".json")):
                     raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
         if (sources[0]["source_id"]==sources[1]["source_id"] or
