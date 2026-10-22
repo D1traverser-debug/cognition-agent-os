@@ -12,9 +12,9 @@ from verify_assurance_registry import check, RegistryError
 class AssuranceRegistryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.registry = json.loads((ROOT / 'evaluation/assurance_registry_v1.json').read_text())
-        cls.conops = (ROOT / 'docs/00-PRODUCT-CONOPS.md').read_text()
-        cls.readiness = (ROOT / 'docs/PRODUCT-READINESS-GATE.md').read_text()
+        cls.registry = json.loads((ROOT / 'evaluation/assurance_registry_v1.json').read_text(encoding='utf-8'))
+        cls.conops = (ROOT / 'docs/00-PRODUCT-CONOPS.md').read_text(encoding='utf-8')
+        cls.readiness = (ROOT / 'docs/PRODUCT-READINESS-GATE.md').read_text(encoding='utf-8')
 
     def rejected(self, edit):
         reg = copy.deepcopy(self.registry)
