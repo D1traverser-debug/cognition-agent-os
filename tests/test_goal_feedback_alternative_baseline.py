@@ -15,7 +15,7 @@ from cognition_agent_os.ledger import connect, create_task, initialize
 
 
 class GoalFeedbackAlternativeBaseline(unittest.TestCase):
-    def test_independent_failure_retries_same_method_not_registered_alternative(self):
+    def test_evidence_tamper_is_quarantined_without_alternative_route(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             fixtures=root/"fixtures"
@@ -61,7 +61,9 @@ class GoalFeedbackAlternativeBaseline(unittest.TestCase):
             self.assertTrue(artifact.is_file(),initial)
             artifact.write_bytes(artifact.read_bytes()+b" tampered")
             observed=run_tick(dbpath,workspace,fixtures,max_jobs=1)
-            self.assertEqual(len(observed["local_evidence_retries"]),1,observed)
+            self.assertEqual(observed["conformance"]["status"],"CONFORMANCE_VIOLATIONS",observed)
+            self.assertEqual(observed["conformance"]["findings"][0]["proof"],"ARTIFACT_HASH_MISMATCH")
+            self.assertEqual(observed["local_evidence_retries"],[])
             self.assertFalse(observed["semantic_outcome_verified"])
             with closing(connect(dbpath)) as db:
                 specs=[json.loads(row[0]) for row in
