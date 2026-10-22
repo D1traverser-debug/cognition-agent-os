@@ -79,8 +79,18 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         audit = audit_gap(db_path, fixtures, workspace, child["parent_task"], tid)
         if audit.get("status") != "PLAN_MECHANICALLY_VALID":
             raise ValueError("PROVENANCE_NOT_VERIFIED")
-        if "research_sources" in orig and orig["research_sources"]!=sources:
-            raise ValueError("RESEARCH_SOURCES_CHANGED")
+        if orig.get("research_sources") != sources:
+            raise ValueError("RESEARCH_SOURCES_NOT_AUTHORIZED")
+        receipts=check.execute("SELECT details FROM events WHERE task_id=? AND kind='RESEARCH_REVIEW_ENQUEUED'",(tid,)).fetchall()
+        if len(receipts)!=1:
+            raise ValueError("REVIEW_ADMISSION_NOT_PROVEN")
+        receipt=json.loads(receipts[0]["details"])
+        if receipt!={"source_hashes":[s["sha256"] for s in sources],
+                     "production_effect_authorized":False}:
+            raise ValueError("REVIEW_RECEIPT_MISMATCH")
+        siblings=check.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=?",(tid,)).fetchone()[0]
+        if siblings!=1:
+            raise ValueError("DUPLICATE_REVIEW_NOT_ALLOWED")
         routes = set(orig["routes"])
         if len(routes) != 2:
             raise ValueError("BAD_ROUTES")
