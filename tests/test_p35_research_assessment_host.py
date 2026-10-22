@@ -136,6 +136,56 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         after=run_tick(self.db,self.work,self.fx,max_jobs=1)
         self.assertEqual(after["processed"],0,after)
 
+    def test_research_transport_recovers_after_cooldown_without_new_authority(self):
+        from cognition_agent_os.source import SourceUnavailable
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        pinned={}
+        for item,repo in ((a,"org-one/repo"),(b,"org-two/repo")):
+            item.update({"kind":"github","repo":repo,"ref":"a"*40})
+            pinned[(repo,item["path"],item["ref"])]=(self.fx/item["path"]).read_bytes()
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=SourceUnavailable("outage")):
+            task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"UNKNOWN",result)
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT state,due_at FROM tasks WHERE task_id=?",(task,)).fetchone()
+            self.assertEqual(row["state"],"PENDING")
+            self.assertGreater(row["due_at"],0)
+            db.execute("UPDATE tasks SET due_at=0 WHERE task_id=?",(task,))
+            db.commit()
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=lambda repo,path,ref:pinned[(repo,path,ref)]):
+            next_tick=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(next_tick["tasks"][0]["status"],"NEEDS_REVIEW",next_tick)
+        with closing(connect(self.db)) as db:
+            retries=db.execute("SELECT COUNT(*) FROM events WHERE task_id=? AND kind='RESEARCH_TRANSPORT_RETRY_QUEUED'",(task,)).fetchone()[0]
+            self.assertEqual(retries,1)
+
+    def test_research_transport_retry_budget_exhausts(self):
+        from cognition_agent_os.source import SourceUnavailable
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        for item,repo in ((a,"org-one/repo"),(b,"org-two/repo")):
+            item.update({"kind":"github","repo":repo,"ref":"a"*40})
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=SourceUnavailable("outage")):
+            task,first=self.review(child,a,b)
+            self.assertEqual(first["status"],"UNKNOWN")
+            for attempt in range(2):
+                with closing(connect(self.db)) as db:
+                    db.execute("UPDATE tasks SET due_at=0 WHERE task_id=?",(task,))
+                    db.commit()
+                result=run_tick(self.db,self.work,self.fx,max_jobs=1)
+                self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(task,)).fetchone()
+            self.assertEqual((row["state"],row["error_code"]),("UNKNOWN","RESEARCH_RETRY_EXHAUSTED"))
+
     def test_public_source_hash_mismatch_fails_closed(self):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
