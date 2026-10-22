@@ -49,7 +49,7 @@ class GoalFeedbackAlternativeBaseline(unittest.TestCase):
                 initialize(db)
                 top=create_task(db,source)
             initial=run_tick(dbpath,workspace,fixtures,
-                             max_jobs=3,auto_stage_goals=True)
+                             max_jobs=3,auto_stage_goals=False)
             self.assertEqual(initial["tasks"][0]["route"],"structure",initial)
             with closing(connect(dbpath)) as db:
                 descendants=db.execute(
