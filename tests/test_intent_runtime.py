@@ -120,6 +120,28 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertTrue((self.workspace/"artifacts"/(new_child+".json")).is_file())
         self.assertFalse(fourth["semantic_outcome_verified"])
 
+    def test_same_bounded_recovery_works_for_csv_reconciliation(self):
+        self.fixtures.joinpath("old.csv").write_text("invoice_id,amount\\nI1,100\\nI2,20\\n")
+        self.fixtures.joinpath("new.csv").write_text("invoice_id,amount\\nI1,80\\nI2,20\\n")
+        self.seed(self.comparison())
+        first=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
+        original=first["tasks"][0]["child_task_id"]
+        artifact=self.workspace/"artifacts"/(original+".json")
+        self.assertTrue(artifact.is_file())
+        artifact.write_bytes(artifact.read_bytes()+b" ")
+        second=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(len(second["local_evidence_retries"]),1)
+        root=second["local_evidence_retries"][0]["retry_root_id"]
+        third=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(third["tasks"][0]["task_id"],root)
+        self.assertEqual(third["tasks"][0]["status"],"DECOMPOSED")
+        new_child=third["tasks"][0]["child_task_id"]
+        fourth=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(fourth["tasks"][0]["task_id"],new_child)
+        self.assertEqual(fourth["tasks"][0]["status"],"NEEDS_REVIEW")
+        self.assertEqual(fourth["local_evidence_retries"],[])
+        self.assertFalse(fourth["semantic_outcome_verified"])
+
     def test_revoke_prevents_failed_local_artifact_retry(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         self.seed(self.structured())
