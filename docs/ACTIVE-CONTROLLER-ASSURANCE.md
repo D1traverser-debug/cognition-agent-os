@@ -6,7 +6,7 @@ Status: **DRAFT EXPERIMENT; NOT a production authorization or product release**.
 
 The previous 443-test green CI established mechanics for the opt-in JSON/CSV
 controller but did not actively try to modify an admitted ACTIVE root or
-simulate stalled task age. Three prospective mutations failed against PR #19:
+simulate stalled task age and fixed-prefix starvation. Four prospective failures were exercised against PR #19, including:
 changing the registered owner-target string, changing its first method's
 desired value, and advancing elapsed runtime beyond 24 hours. That is
 direct evidence of test/implementation omissions.
@@ -27,6 +27,12 @@ further classes without relying on user prompts.
 - The default conformance scanner also checks ACTIVE roots, including when
   local control is disabled. A contradiction triggers the existing quarantine
   mechanism with dependent-task containment.
+- A bounded, durable SQLite round-robin cursor schedules ACTIVE roots;
+  it is advanced under an IMMEDIATE transaction and survives process
+  restarts. An old root repeatedly awaiting a child cannot indefinitely
+  starve a newly registered root when the per-tick scan limit is small.
+  Fairness is eventual within a finite active set, not strict latency SLA
+  or task-priority scheduling.
 - A 24-hour total wall-clock budget, alongside the original two-method
   attempt bound, prevents unlimited waiting across process restarts.
   Timeout and failed control fences outstanding PENDING/RUNNING children in
