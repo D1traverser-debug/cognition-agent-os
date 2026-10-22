@@ -121,3 +121,60 @@ def assess_route_fitness(route_entries: list[dict]) -> dict:
     if x.get("resources") != y.get("resources") or x.get("requirements") != y.get("requirements"):
         return {**result, "reason": "DIFFERENT_BOUND_TARGETS"}
     return {**result, "reason": "NO_INDEPENDENT_EQUIVALENCE_EVIDENCE"}
+
+
+def evaluate_shared_record_goal(contract: dict, source_kind: str,
+                                original: bytes, candidate: bytes) -> dict:
+    """Different file families can satisfy one pinned record-level outcome.
+
+    A reference acceptance decision, not an admission/switch decision.
+    The owner contract is fixed before execution; planner status is ignored.
+    """
+    fail = {"status": "NOT_ACCEPTED", "business_outcome_verified": False,
+            "authorizes_mutation": False, "evidence_class": "SYNTHETIC_SHARED_RECORD"}
+    try:
+        if (not isinstance(contract, dict) or set(contract) != {
+            "schema_version", "goal_id", "canonical_record", "source_sha256",
+            "allowed_effect"} or contract.get("schema_version") != 1
+            or contract.get("allowed_effect") != "LOCAL_CANDIDATE_ONLY"):
+            raise ValueError("BAD_SHARED_CONTRACT")
+        if (not isinstance(contract.get("goal_id"), str)
+            or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", contract["goal_id"])):
+            raise ValueError("BAD_GOAL_ID")
+        canonical = contract["canonical_record"]
+        if (not isinstance(canonical, dict) or not 1 <= len(canonical) <= 16
+            or any(not isinstance(k, str) or not _FIELD.fullmatch(k)
+                   or not isinstance(v, str) or len(v) > 256
+                   for k, v in canonical.items())
+            or not isinstance(original, bytes) or not isinstance(candidate, bytes)
+            or len(original) > _LIMIT or len(candidate) > _LIMIT):
+            raise ValueError("INVALID_RECORD")
+        pins = contract["source_sha256"]
+        if (not isinstance(pins, dict)
+            or set(pins) != {"json_keys", "csv_columns"}
+            or any(not isinstance(s, str) or not re.fullmatch(r"[0-9a-f]{64}", s)
+                   for s in pins.values())
+            or source_kind not in pins):
+            raise ValueError("BAD_SOURCE_PINS")
+        if hashlib.sha256(original).hexdigest() != pins[source_kind]:
+            raise ValueError("ORIGINAL_DRIFT")
+        if source_kind == "json_keys":
+            old = _json_object(original)
+            new = _json_object(candidate)
+            if any(not isinstance(v, str) for v in old.values()):
+                raise ValueError("SOURCE_NOT_STRING_RECORD")
+        else:
+            old_rows = _csv_rows(original)
+            new_rows = _csv_rows(candidate)
+            if len(old_rows) != 2 or len(new_rows) != 2:
+                raise ValueError("NOT_SINGLE_RECORD")
+            old = dict(zip(old_rows[0], old_rows[1]))
+            new = dict(zip(new_rows[0], new_rows[1]))
+        if (not all(k in new and new[k] == v for k, v in old.items())
+            or new != canonical):
+            raise ValueError("SHARED_GOAL_MISSED")
+        return {**fail, "status": "SYNTHETIC_SHARED_GOAL_MET",
+                "goal_id": contract["goal_id"], "source_kind": source_kind,
+                "candidate_sha256": hashlib.sha256(candidate).hexdigest()}
+    except (ValueError, TypeError, KeyError, UnicodeError, csv.Error) as exc:
+        return {**fail, "reason": str(exc)[:90}
