@@ -42,6 +42,10 @@ def check(registry, conops_text, readiness_text):
     for key in ('legacy_conops', 'legacy_extension'):
         s = sources.get(key, {})
         require(SHA256.fullmatch(str(s.get('sha256', ''))), f'{key}: no source SHA')
+        name = s.get('archived_basename', '')
+        require(isinstance(name, str) and bool(name) and name not in ('.','..')
+                and '/' not in name and '\\' not in name,
+                f'{key}: archive ref must be a basename')
         require(s.get('source_bytes_checked_in_ci') is False,
                 f'{key}: CI does not have private source bytes')
     unique_ids(registry.get('requirements'), 'historical candidates', REQ_IDS)
