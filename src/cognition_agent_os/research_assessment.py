@@ -9,7 +9,7 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
-from .ledger import finalize_observed
+from .ledger import finalize_observed, event
 from .runner import store_once, ArtifactConflict
 from .research_gap import audit_gap
 from .source import safe_fixture, github_public_snapshot, SourceUnavailable
@@ -154,7 +154,16 @@ def run_assessment(db, task, db_path: Path, workspace: Path, fixtures: Path):
             second = assess(db_path, workspace, fixtures, spec, task["task_id"])
             if second != first:
                 raise ValueError("EVIDENCE_CHANGED")
-            return store_once(workspace, task["task_id"], raw)
+            artifact_hash = store_once(workspace, task["task_id"], raw)
+            # This receipt shares finalize()'s transaction and lease check.
+            # It is a work suggestion, never a delegated grant.
+            event(db, task["task_id"], "RESEARCH_NEXT_ACTION_IDENTIFIED", {
+                "action": first["next_research_action"],
+                "reason": first["reason"],
+                "artifact_sha256": hashlib.sha256(raw).hexdigest(),
+                "authorized": False,
+            })
+            return artifact_hash
         result = finalize_observed(db, task, "NEEDS_REVIEW",
                                    decision="RESEARCH_NOT_SEMANTICALLY_APPROVED", artifact_writer=write)
         return {**result, "business_outcome_verified": False,
