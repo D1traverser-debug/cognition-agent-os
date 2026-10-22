@@ -229,7 +229,7 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         bad=audit_controlled_candidate(self.db,self.work,self.fx,root)
         self.assertEqual(bad["reason"],"FINAL_POSTCONDITION_MISMATCH",bad)
         scan=inspect_conformance(self.db,self.work,self.fx,enforce=True,max_cases=64)
-        self.assertIn(root,scan["quarantined"],scan)
+        self.assertIn(root,[item["task_id"] for item in scan["quarantined"]],scan)
         self.assertEqual(self.root_state(root)[0],"UNKNOWN")
 
     def test_corrupted_artifact_after_positive_claim_rejected(self):
@@ -241,7 +241,7 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         proof=audit_controlled_candidate(self.db,self.work,self.fx,root)
         self.assertEqual(proof["reason"],"CHILD_ARTIFACT_REJECTED",proof)
         scan=inspect_conformance(self.db,self.work,self.fx,enforce=True,max_cases=64)
-        self.assertIn(root,scan["quarantined"],scan)
+        self.assertIn(root,[item["task_id"] for item in scan["quarantined"]],scan)
         self.assertEqual(self.root_state(root)[0],"UNKNOWN")
 
 
