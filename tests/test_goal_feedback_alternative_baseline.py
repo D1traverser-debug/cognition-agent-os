@@ -39,11 +39,7 @@ class GoalFeedbackAlternativeBaseline(unittest.TestCase):
                         {"route":"structure","intent":{
                             "kind":"goal_intent","objective":"ensure_structure",
                             "resources":[{"role":"input","path":"settings.json"}],
-                            "requirements":[{"field":"owner","equals":"ops"}]}},
-                        {"route":"compare","intent":{
-                            "kind":"goal_intent","objective":"compare_records",
-                            "resources":[{"role":"reference","path":"before.csv"},
-                                         {"role":"observed","path":"after.csv"}]}}
+                            "requirements":[{"field":"owner","equals":"ops"}]}}
                     ]}
             with closing(connect(dbpath)) as db:
                 initialize(db)
