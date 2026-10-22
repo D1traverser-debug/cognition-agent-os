@@ -158,6 +158,26 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         after=run_tick(self.db,self.work,self.fx,max_jobs=1)
         self.assertEqual(after["processed"],0,after)
 
+    def test_nonretryable_public_source_failure_does_not_requeue(self):
+        from cognition_agent_os.source import SourceUnavailable
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        for item,repo in ((a,"org-one/repo"),(b,"org-two/repo")):
+            item.update({"kind":"github","repo":repo,"ref":"a"*40})
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=SourceUnavailable("missing immutable source")):
+            task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"UNKNOWN",result)
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",(task,)).fetchone()
+            retries=db.execute("""SELECT COUNT(*) FROM events WHERE task_id=?
+                AND kind='RESEARCH_TRANSPORT_RETRY_QUEUED'""",(task,)).fetchone()[0]
+        self.assertEqual((row["state"],row["error_code"]),
+                         ("UNKNOWN","RESEARCH_ASSESSMENT_UNVERIFIABLE"))
+        self.assertEqual(retries,0)
+
     def test_research_transport_recovers_after_cooldown_without_new_authority(self):
         from cognition_agent_os.source import SourceTransportUnavailable
         stances={"structure":"supports","compare":"refutes"}
