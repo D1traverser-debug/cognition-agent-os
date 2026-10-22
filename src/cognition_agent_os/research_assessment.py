@@ -45,7 +45,7 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
         raise ValueError("INCOMPLETE")
     return result
 
-def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict) -> dict:
+def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessment_id: str) -> dict:
     from contextlib import closing
     import sqlite3
     tid = spec.get("research_task_id")
@@ -60,18 +60,27 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict) -> dict:
         raise ValueError("NO_LEDGER")
     with closing(sqlite3.connect(db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as check:
         check.row_factory = sqlite3.Row
+        assessment=check.execute("SELECT * FROM tasks WHERE task_id=?", (assessment_id,)).fetchone()
+        if (assessment is None or assessment["parent_task"]!=tid
+            or json.loads(assessment["source_spec"])!=spec):
+            raise ValueError("ASSESSMENT_LINEAGE_INVALID")
         child = check.execute("SELECT * FROM tasks WHERE task_id=?", (tid,)).fetchone()
         if child is None or child["state"] != "NEEDS_REVIEW" or not child["parent_task"]:
             raise ValueError("UNREVIEWABLE")
         parent = check.execute("SELECT * FROM tasks WHERE task_id=?", (child["parent_task"],)).fetchone()
         if not parent or parent["state"] != "RESEARCH_NEEDED" or parent["goal_rev"] != child["goal_rev"] or parent["grant_rev"] != child["grant_rev"]:
             raise ValueError("STALE_PARENT")
+        if (assessment["goal_rev"]!=child["goal_rev"]
+            or assessment["grant_rev"]!=child["grant_rev"]):
+            raise ValueError("ASSESSMENT_AUTHORITY_STALE")
         orig = json.loads(child["source_spec"])
         if orig.get("kind") != "research_gap":
             raise ValueError("BAD_PARENT")
         audit = audit_gap(db_path, fixtures, workspace, child["parent_task"], tid)
         if audit.get("status") != "PLAN_MECHANICALLY_VALID":
             raise ValueError("PROVENANCE_NOT_VERIFIED")
+        if "research_sources" in orig and orig["research_sources"]!=sources:
+            raise ValueError("RESEARCH_SOURCES_CHANGED")
         routes = set(orig["routes"])
         if len(routes) != 2:
             raise ValueError("BAD_ROUTES")
@@ -93,7 +102,7 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict) -> dict:
 def run_assessment(db, task, db_path: Path, workspace: Path, fixtures: Path):
     try:
         spec = json.loads(task["source_spec"])
-        first = assess(db_path, workspace, fixtures, spec)
+        first = assess(db_path, workspace, fixtures, spec, task["task_id"])
         raw = (json.dumps(first, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
         def write():
             second = assess(db_path, workspace, fixtures, spec)
@@ -132,7 +141,7 @@ def audit_assessment(db_path: Path, workspace: Path, fixtures: Path, task_id: st
             from .runner import verify_artifact
             if not verify_artifact(workspace, dict(row)):
                 return bad
-            expected = (json.dumps(assess(db_path, workspace, fixtures, spec),
+            expected = (json.dumps(assess(db_path, workspace, fixtures, spec, task_id),
                                    ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
             path = workspace / "artifacts" / (task_id + ".json")
             if path.is_symlink() or path.read_bytes() != expected:
