@@ -349,6 +349,20 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertEqual(self.attempts(root),[])
 
 
+
+    def test_waiting_roots_cannot_starve_new_actionable_root(self):
+        # All three have valid independent registered goals. The first two
+        # have pending children that the external worker has not finished;
+        # repeatedly polling them must not exclude the third forever.
+        roots=[self.register() for _ in range(3)]
+        first=advance_local_goals(self.db,self.work,self.fx,limit=2)
+        self.assertEqual(len(first),2,first)
+        self.assertEqual([len(self.attempts(x)) for x in roots],[1,1,0])
+        for _ in range(3):
+            advance_local_goals(self.db,self.work,self.fx,limit=2)
+        self.assertEqual(len(self.attempts(roots[2])),1,
+                         "A pending older goal starved an independent new goal")
+
     def test_control_transition_directly_refuses_tampered_contract(self):
         root=self.register()
         with closing(connect(self.db)) as db:
