@@ -3,11 +3,12 @@ import copy
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from verify_assurance_registry import check, RegistryError
+from verify_assurance_registry import check, RegistryError, verify_archived_sources
 
 class AssuranceRegistryTests(unittest.TestCase):
     @classmethod
@@ -72,6 +73,13 @@ class AssuranceRegistryTests(unittest.TestCase):
     def test_ci_cannot_claim_private_original_source_was_verified(self):
         self.rejected(lambda x: x['source_registry']['legacy_conops'].__setitem__(
             'source_bytes_checked_in_ci', True))
+
+    def test_changed_original_archive_bytes_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self.registry['source_registry']['legacy_conops']
+            Path(tmp, source['archived_basename']).write_bytes(b'altered source')
+            with self.assertRaises(RegistryError):
+                verify_archived_sources(self.registry, Path(tmp))
 
 if __name__ == '__main__':
     unittest.main()
