@@ -97,6 +97,37 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(goal["next_control_action"],"REPLAN_AFTER_FAILED_INDEPENDENT_CHECK")
         self.assertFalse(goal["semantic_outcome_verified"])
 
+    def test_host_automatically_reexecutes_failed_local_artifact_once(self):
+        self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
+        root=self.seed(self.structured())
+        first=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
+        original=first["tasks"][0]["child_task_id"]
+        artifact=self.workspace/"artifacts"/(original+".json")
+        artifact.write_bytes(artifact.read_bytes()+b" ")
+        retry_tick=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(len(retry_tick["local_evidence_retries"]),1)
+        retry=retry_tick["local_evidence_retries"][0]["retry_task_id"]
+        self.assertNotEqual(retry,original)
+        self.assertEqual(self.task(retry)["state"],"PENDING")
+        third=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(third["tasks"][0]["task_id"],retry)
+        self.assertEqual(third["tasks"][0]["status"],"NEEDS_REVIEW")
+        self.assertEqual(third["local_evidence_retries"],[])
+        self.assertTrue((self.workspace/"artifacts"/(retry+".json")).is_file())
+        self.assertFalse(third["semantic_outcome_verified"])
+
+    def test_revoke_prevents_failed_local_artifact_retry(self):
+        self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
+        self.seed(self.structured())
+        first=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=2)
+        original=first["tasks"][0]["child_task_id"]
+        artifact=self.workspace/"artifacts"/(original+".json")
+        artifact.write_bytes(artifact.read_bytes()+b" ")
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db,write_allowed=False)
+        tick=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(tick["local_evidence_retries"],[])
+
     def test_goal_feedback_independently_checks_structure_before_sandbox_promotion(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         self.seed(self.structured())
