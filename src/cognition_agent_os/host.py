@@ -103,7 +103,8 @@ def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -
 
 
 
-def _goal_progress(path: Path, *, max_tasks: int = 512) -> dict:
+def _goal_progress(path: Path, workspace: Path | None = None,
+                   fixtures: Path | None = None, *, max_tasks: int = 512) -> dict:
     """Cross-capability goal lineage, with no inferred semantic success.
 
     A deterministic observation of the ONE task ledger, not a planner,
@@ -115,7 +116,7 @@ def _goal_progress(path: Path, *, max_tasks: int = 512) -> dict:
         authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
         count=db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
         rows=db.execute("""SELECT task_id,parent_task,state,goal_rev,grant_rev,
-                                  due_at,error_code FROM tasks
+                                  due_at,error_code,source_spec FROM tasks
                            ORDER BY created_at,task_id LIMIT ?""",
                         (max_tasks,)).fetchall()
     by_id={row["task_id"]:row for row in rows}
@@ -130,7 +131,35 @@ def _goal_progress(path: Path, *, max_tasks: int = 512) -> dict:
         group=roots.setdefault(root_id,{"root_task_id":root_id,"states":{},
                                        "runnable":0,"awaiting_review":0,
                                        "blocked":0,"unknown":0,
-                                       "stale_authority":0})
+                                       "stale_authority":0,
+                                       "independent_checks":[]})
+        if (workspace is not None and fixtures is not None
+            and row["state"] in ("NEEDS_REVIEW", "SANDBOX_VERIFIED")):
+            try:
+                import json
+                kind=json.loads(row["source_spec"]).get("kind")
+                if kind=="goal_case":
+                    from .goal_audit import audit_goal
+                    audit=audit_goal(path,workspace,fixtures,row["task_id"])
+                    check=audit["status"]=="CANDIDATE_MECHANICALLY_VALID"
+                elif kind=="record_reconciliation":
+                    from .reconciliation_oracle import audit_stored_report
+                    audit=audit_stored_report(path,workspace,fixtures,row["task_id"])
+                    check=audit["status"]=="REPORT_MECHANICALLY_VERIFIED"
+                else:
+                    kind=None
+                if kind is not None:
+                    group["independent_checks"].append({
+                        "task_id":row["task_id"],"capability":kind,
+                        "mechanically_verified":check,
+                        "verdict":audit["status"],
+                        "business_outcome_verified":False})
+            except (ValueError,TypeError,KeyError,OSError):
+                group["independent_checks"].append({
+                    "task_id":row["task_id"],
+                    "mechanically_verified":False,
+                    "verdict":"INDEPENDENT_CHECK_UNAVAILABLE",
+                    "business_outcome_verified":False})
         state=row["state"]
         group["states"][state]=group["states"].get(state,0)+1
         valid=bool(authority and row["goal_rev"]==authority["goal_rev"]
@@ -219,7 +248,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             "repair_lab_reviews": repair_reviews,
             "diagnostic_followups": recoveries,
             "pending_research_actions": _pending_research_actions(db_path,workspace),
-            "goal_progress": _goal_progress(db_path),
+            "goal_progress": _goal_progress(db_path,workspace,fixture_root),
             "conformance": conformance,
             "preflight": preflight,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
