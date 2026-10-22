@@ -38,6 +38,7 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
     if not isinstance(statements, list) or len(statements) != 2:
         raise ValueError("BAD_COVERAGE")
     result = {}
+    references = set()
     for s in statements:
         if not isinstance(s, dict) or set(s) != {"route", "stance", "evidence_ref"}:
             raise ValueError("BAD_STATEMENT")
@@ -46,9 +47,10 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
         if not isinstance(s["evidence_ref"], str) or not 1 <= len(s["evidence_ref"]) <= 128:
             raise ValueError("BAD_REFERENCE")
         result[s["route"]] = s["stance"]
+        references.add(s["evidence_ref"])
     if set(result) != routes:
         raise ValueError("INCOMPLETE")
-    return result
+    return result, references
 
 def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessment_id: str) -> dict:
     from contextlib import closing
@@ -99,8 +101,10 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         routes = set(orig["routes"])
         if len(routes) != 2:
             raise ValueError("BAD_ROUTES")
-        a, b = (_evidence(fixtures, src, orig["goal_key"], routes) for src in sources)
-        if a != b:
+        (a, refs_a), (b, refs_b) = (_evidence(fixtures, src, orig["goal_key"], routes) for src in sources)
+        if refs_a & refs_b:
+            reason, candidate = "SHARED_UNDERLYING_EVIDENCE", None
+        elif a != b:
             reason, candidate = "CONFLICTING_SOURCE_CLAIMS", None
         elif sorted(a.values()) != ["refutes", "supports"]:
             reason, candidate = "INSUFFICIENT_CAUSAL_DISCRIMINATION", None
