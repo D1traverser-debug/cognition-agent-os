@@ -423,6 +423,7 @@ jobs:
           graphify cluster-only .
           test -s graphify-out/graph.json
           test -s graphify-out/GRAPH_REPORT.md
+          python scripts/verify_graphify_control_paths.py graphify-out/graph.json
           python - <<'PY'
           import json
           from pathlib import Path
