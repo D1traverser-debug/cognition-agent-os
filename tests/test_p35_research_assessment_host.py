@@ -101,6 +101,25 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(report["candidate_route_for_review"],"structure")
         self.assertFalse(report["production_effect_authorized"])
 
+    def test_distinct_publisher_labels_same_repo_must_abstain(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        pinned={}
+        for item in (a,b):
+            data=(self.fx/item["path"]).read_bytes()
+            item.update({"kind":"github","repo":"one-operator/same-origin",
+                         "ref":"a"*40})
+            pinned[(item["repo"],item["path"],item["ref"])]=data
+        child=self.setup_research([a,b])
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=lambda repo,path,ref:pinned[(repo,path,ref)]):
+            task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
+        self.assertEqual(report["reason"],"SAME_REPOSITORY_NOT_INDEPENDENT")
+        self.assertIsNone(report["candidate_route_for_review"])
+
     def test_public_source_hash_mismatch_fails_closed(self):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
