@@ -1,0 +1,586 @@
+{
+  "schema_version": 1,
+  "classification": "DRAFT_INVENTORY_NOT_RELEASE_EVIDENCE",
+  "release_ready": false,
+  "stakeholder_requirements_complete": false,
+  "source_registry": {
+    "legacy_conops": {
+      "archived_basename": "CONOPS_OPERATING_THREADS_AND_TRACE.json",
+      "sha256": "f7e17fd1e414dbc229cc831a5ec4e756f9b22eddbbfd5e1973b6a5aebcadc3f4",
+      "source_bytes_checked_in_ci": false
+    },
+    "legacy_extension": {
+      "archived_basename": "CONOPS_K04_Q05_EXTENSION.json",
+      "sha256": "c688af09237874ae06898715a41bf21949e29257ccb09e6bcd5d6a730e965d23",
+      "source_bytes_checked_in_ci": false
+    }
+  },
+  "requirements": [
+    {
+      "id": "R01",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "d8339f509fc29d3a102d24925f1e99deae0c440b54dec63463122af494bd7986",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "external stored state plus continuation run",
+        "limit": "AUTOMATED_PARTIAL"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R02",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "366b6799ffb306104e3667e6a50bd1d4ef7bab20f17117a52d57931780582f1c",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "real scheduled or event-triggered operation",
+        "limit": "REAL_HOST_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R03",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "6f197087810cc6e2bcfa786f830e9bc9e2da39c5d3c23a2841468d2faee256ac",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "provider sandbox with revoked/changed permission",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R04",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "31cb2ee476c6a3287633d2b85a6e3209165b98323a48fe582cb6ca83bb5ecd04",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "lost acknowledgement real provider sandbox",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R05",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "f5436482491c47b27fba9baa005d8049c4c57a2938e385ea4fdedc33a4897e32",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "version change and dependency replay",
+        "limit": "AUTOMATED_PARTIAL"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R06",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "434d3754049ec44c68d7dcba52ae3cd8acd00ecf1289a00729f0d9acd8d65246",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "hidden shared failure case independently evaluated",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R07",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "fc8eede7bfa5f3deeda75809869d4c456da149fb33a44ed992694437e7cc4ce9",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "indirect prompt injection holdout",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R08",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "5f2121654e5be33033fffddd4d4fb4646f41842ca4ad6621c668dcf4d93d4a92",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "business oracle reads vs controller reports",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R09",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "59ec976909b40a40812f202b6e1bc99ce42a54c449f5f99e4318817708269410",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "permission cancellation while parallel task runnable",
+        "limit": "AUTOMATED_PARTIAL"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R10",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "60a940ad36b3ce4b0b553998393c1a6f612e4f591b067e857bca08df8e40c093",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "user intervention counter and safety eval",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R11",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "bb836e53c4944f0f40c947356e042bd4a8e90d654b98aaa24ee2185c0cc1a148",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "unseen negative-transfer tasks and source update",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R12",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "d41fd4bb2f9354ca49bf628b07714d542844d7866d74f1ade294574116e9ac79",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "remote state reconciliation test",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R13",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "9f0d3ae0b79713021d915b46245cc604407758f8e09ccecd2a4d3005e3c8f5be",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "real billing vs ledger/provider quotas",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R14",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "48d440e2f7ff27ae2b65560b9c403bbbbd063d3ca15a7ae23e65cbb920600544",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "network/tool outage resilience test",
+        "limit": "REAL_HOST_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R15",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "7154f2de4820edc8a1a2f25ba6b46c5182bef1aecedfe89aa06df5786e54beb2",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "upgrade/replay with old tasks",
+        "limit": "REAL_HOST_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R16",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "cd812fdc12766732f118d4bf3866779d3bb2e3e32fc78107559aaf470f027590",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "data deletion audit",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R17",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "687ecc55c8d1e0d224b3d800f7af5a8768351d5c2638ebe61986af89882e4916",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "external result, user effort, risk, cost measurements",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R18",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "f7fc1813288c46113a8efbe258e1f5fb933e09dfa565cb93e2448cbbfa3ae99d",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "handoff and race condition trace",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R19",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "dab409c6b8f32868cb56935ad0186643660394654e341420cda7c419483a64d3",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "independent business oracle and negative controls",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R20",
+      "origin": "legacy_conops",
+      "draft_text_sha256": "0492929e35a36c7bc87027f87f95a2e7abfce9a233276530a81e4216d7dbc512",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "hidden ambiguous-fault benchmark",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R21",
+      "origin": "legacy_extension",
+      "draft_text_sha256": "3ce2e4c5448a5db74ecbb8b2e61f14a5585487d288c44cde9e09a403d4f40923",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "host-driven unfamiliar research episodes with independent task outcome",
+        "limit": "REAL_HOST_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R22",
+      "origin": "legacy_extension",
+      "draft_text_sha256": "b85ad2a077a2233a0d9db7320cc20b5c9bf01f3b2fb89ada00abb6bf3cf78f94",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "independent fault injection through each entry point including valid operations",
+        "limit": "EXTERNAL_ORACLE_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R23",
+      "origin": "legacy_extension",
+      "draft_text_sha256": "d11c5de05b1be35102ca699f3190c80a19b0eb1b6a0da95e3c96fa8f6d44c625",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "spoofed approvals, stale goal/plan and concurrent promotion tests",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    },
+    {
+      "id": "R24",
+      "origin": "legacy_extension",
+      "draft_text_sha256": "c4dcb710ffe1feeab36146dc009a89b4dad082a6c421a7a81878c1106a9ded6a",
+      "verification_design": {
+        "method": "TEST",
+        "proposed_oracle": "real canary outcomes, insufficient-evidence hold and fail/rollback cases",
+        "limit": "HUMAN_JUDGMENT_REQUIRED"
+      },
+      "stakeholder_approved": false,
+      "verification_status": "NOT_VERIFIED",
+      "validation_status": "NOT_VALIDATED",
+      "verification_evidence": [],
+      "validation_evidence": []
+    }
+  ],
+  "legacy_scenarios": [
+    {
+      "id": "OT01",
+      "archived_title_sha256": "bd361b06546a3f29d1ce4c230c1f0ca0b10708d751181cdcdb7958c7c3a2bf94",
+      "relation": "UNREVIEWED",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT02",
+      "archived_title_sha256": "cd4881b8a5f68b1f7a713091100dab409eff7946fd7f08e56d95e488e23675fa",
+      "relation": "UNREVIEWED",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT03",
+      "archived_title_sha256": "ffa3796546404393303a858c1afa72b10f867d341818da86b4f171c8aac744ed",
+      "relation": "UNREVIEWED",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT04",
+      "archived_title_sha256": "17754830b1f53604a46a9c0fae519faee1cd803a7575aded971fe38f813f4c62",
+      "relation": "PARTIAL_NOT_ACCEPTED",
+      "current_refs": [
+        "OT05"
+      ],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT05",
+      "archived_title_sha256": "1acf973875b4a3a367f07ca670c741afc0fa66d9cd98c51b46e4084171bee1db",
+      "relation": "UNREVIEWED",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT06",
+      "archived_title_sha256": "511c7a7f7ef0f6636eb62cb5bc8efd1aeafa6d825660f64c71e693f39a2ee7a5",
+      "relation": "MISSING_EXPLICIT_SCENARIO",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT07",
+      "archived_title_sha256": "6febf2b2f181f51f9d774d85a4d33d8dce9ba4fb9ab252b37ad0ea32c3c38dc2",
+      "relation": "MISSING_EXPLICIT_SCENARIO",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT08",
+      "archived_title_sha256": "8c6ad1632269459f2d6820b12ae8c930a55d1bf83d95d2cf15514d818bf2933f",
+      "relation": "PARTIAL_NOT_ACCEPTED",
+      "current_refs": [
+        "OT10"
+      ],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT09",
+      "archived_title_sha256": "67ca437c16da2518fee65e09bdd104f21736972d6a7c4b89743d9315831c69ea",
+      "relation": "UNREVIEWED",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT10",
+      "archived_title_sha256": "2cdd00b3f16b29953158375fd0083aa26fd62803e21e934b151cd2e794a47e57",
+      "relation": "UNREVIEWED",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT11",
+      "archived_title_sha256": "7019c429b922388cb2822b048c5f223a991f4ae1adab41fee5918ae97ed8ec88",
+      "relation": "UNREVIEWED",
+      "current_refs": [],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT12",
+      "archived_title_sha256": "d343536bb5e34a148fc2130be27a435bd06c400045e12f5e060f7c532378bb81",
+      "relation": "PARTIAL_NOT_ACCEPTED",
+      "current_refs": [
+        "OT12"
+      ],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT13",
+      "archived_title_sha256": "aeae94e90655216f605c300acd2a73c906b19638e86cfbdcf7c6ad27851287c7",
+      "relation": "PARTIAL_NOT_ACCEPTED",
+      "current_refs": [
+        "OT13"
+      ],
+      "semantic_review_status": "UNREVIEWED"
+    },
+    {
+      "id": "OT14",
+      "archived_title_sha256": "891c83330cc3d775a1d429fd9f14bf133a1b1a74f5376fe0cab22ec40e974175",
+      "relation": "PARTIAL_NOT_ACCEPTED",
+      "current_refs": [
+        "OT14"
+      ],
+      "semantic_review_status": "UNREVIEWED"
+    }
+  ],
+  "current_scenarios": [
+    {
+      "id": "OT01",
+      "description": "用户新增或修订目标"
+    },
+    {
+      "id": "OT02",
+      "description": "到期且用户未再发消息"
+    },
+    {
+      "id": "OT03",
+      "description": "系统发现未事先标注的新风险"
+    },
+    {
+      "id": "OT04",
+      "description": "通过多个入口暴露同一失效"
+    },
+    {
+      "id": "OT05",
+      "description": "外部请求成功但确认丢失"
+    },
+    {
+      "id": "OT06",
+      "description": "长任务宕机或到期触发丢失"
+    },
+    {
+      "id": "OT07",
+      "description": "权限在排队或等待审批期间被撤销"
+    },
+    {
+      "id": "OT08",
+      "description": "证据源撤回、冲突或过期"
+    },
+    {
+      "id": "OT09",
+      "description": "新模型/工作流/协议上线"
+    },
+    {
+      "id": "OT10",
+      "description": "紧急任务挤占队列或预算不足"
+    },
+    {
+      "id": "OT11",
+      "description": "任务完成声明与外部事实冲突"
+    },
+    {
+      "id": "OT12",
+      "description": "用户请求停止、删除或退役"
+    },
+    {
+      "id": "OT13",
+      "description": "研究任务长期偏离原始目标"
+    },
+    {
+      "id": "OT14",
+      "description": "系统提出修复或新方法"
+    }
+  ],
+  "product_gates": [
+    {
+      "id": "G1",
+      "status": "NOT_ACCEPTED",
+      "validation_design": "Semantic equivalent bounded plans for one goal with independent outcome",
+      "independent_evidence": []
+    },
+    {
+      "id": "G2",
+      "status": "NOT_ACCEPTED",
+      "validation_design": "Durable alternative task and independently audited next tick",
+      "independent_evidence": []
+    },
+    {
+      "id": "G3",
+      "status": "NOT_ACCEPTED",
+      "validation_design": "Real unattended host, restart and deduplication",
+      "independent_evidence": []
+    },
+    {
+      "id": "G4",
+      "status": "NOT_ACCEPTED",
+      "validation_design": "Authorized scope and sibling failure class, promotion independence",
+      "independent_evidence": []
+    },
+    {
+      "id": "G5",
+      "status": "NOT_ACCEPTED",
+      "validation_design": "Independent held-out domains and no domain-specific logic",
+      "independent_evidence": []
+    },
+    {
+      "id": "G6",
+      "status": "NOT_ACCEPTED",
+      "validation_design": "Attributable source/execution/authority/evaluator evidence",
+      "independent_evidence": []
+    }
+  ]
+}
