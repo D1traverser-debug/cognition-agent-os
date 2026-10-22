@@ -177,4 +177,4 @@ def evaluate_shared_record_goal(contract: dict, source_kind: str,
                 "goal_id": contract["goal_id"], "source_kind": source_kind,
                 "candidate_sha256": hashlib.sha256(candidate).hexdigest()}
     except (ValueError, TypeError, KeyError, UnicodeError, csv.Error) as exc:
-        return {**fail, "reason": str(exc)[:90}
+        return {**fail, "reason": str(exc)[:90]}
