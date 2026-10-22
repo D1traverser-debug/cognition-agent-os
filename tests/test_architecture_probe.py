@@ -25,6 +25,18 @@ class ArchitectureProbeTests(unittest.TestCase):
             self.assertEqual(a["dynamic_import_lines"], [3])
             self.assertFalse(report["parse_errors"])
 
+    def test_current_repository_is_fully_parsed(self):
+        root = Path(__file__).resolve().parents[1]
+        report = probe.inspect(root)
+        expected = list((root / "src" / "cognition_agent_os").glob("*.py"))
+        self.assertEqual(report["file_count"], len(expected))
+        self.assertEqual(report["parsed_count"], len(expected))
+        self.assertFalse(report["parse_errors"], report["parse_errors"])
+        names = {item["name"] for item in report["modules"]}
+        self.assertIn("host", names)
+        self.assertIn("runner", names)
+        self.assertIn("ledger", names)
+
     def test_unparseable_source_is_not_silently_omitted(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
