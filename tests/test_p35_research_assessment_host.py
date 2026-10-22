@@ -54,7 +54,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
     def review(self,child,sa,sb):
         with closing(connect(self.db)) as db:
             task=create_task(db,{"kind":"research_assessment","research_task_id":child,
-                                 "sources":[sa,sb]})
+                                 "sources":[sa,sb]},parent=child)
         report=run_tick(self.db,self.work,self.fx,max_jobs=1)
         self.assertEqual(len(report["tasks"]),1,report)
         return task,report["tasks"][0]
@@ -127,6 +127,19 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         with closing(connect(self.db)) as db:
             count=db.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=?",(child,)).fetchone()[0]
             self.assertEqual(count,1)
+
+
+    def test_orphan_assessment_cannot_claim_lineage(self):
+        child=self.setup_research()
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        with closing(connect(self.db)) as db:
+            rogue=create_task(db,{"kind":"research_assessment",
+                "research_task_id":child,"sources":[a,b]})
+        result=run_tick(self.db,self.work,self.fx,max_jobs=1)
+        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertFalse((self.work/"artifacts"/(rogue+".json")).exists())
 
 if __name__=="__main__":
     unittest.main()
