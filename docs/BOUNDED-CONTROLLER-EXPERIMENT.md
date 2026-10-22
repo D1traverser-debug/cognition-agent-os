@@ -31,10 +31,15 @@ the same database. Host executes this only with
 `run_tick(...,auto_local_goal_control=True)`. It enqueues one local child
 for the next tick and never recursively invokes workers.
 
-A first method is switched ONLY if it actually ended `UNKNOWN` with the
-registered `NO_SAFE_GOAL_PLAN` error AND an independent source-readback
-shows an explicit field preservation conflict with the same pinned canonical
-goal. If the alternate can produce a valid local candidate, the root becomes
+A first method is switched ONLY if an independent source-readback proves
+an explicit field-preservation conflict with the SAME pinned canonical goal,
+and the child is in an eligible completed state. An `UNKNOWN` child must
+also have the registered `NO_SAFE_GOAL_PLAN` reason. A narrower registered
+method can return `VERIFIED/GOAL_ALREADY_SATISFIED` for column existence
+while the owner-pinned record still has the wrong value; the controller
+must independently reject that as owner-goal success and can consider the
+pre-registered alternative. An untrustworthy artifact, missing evidence,
+or unrelated `UNKNOWN` may NOT trigger a switch. If the alternate can produce a valid local candidate, the root becomes
 `CONTROL_CANDIDATE_MATCHED`. **It does not mutate source bytes, grant new
 permissions, attest an external outcome or declare owner acceptance.**
 
@@ -55,11 +60,12 @@ arbitrary capability registration, external service writes/ACK-loss recovery,
 heterogeneous provider grants, independent promotion and full failure-class
 closure, fairness and actual cost, or general open-domain planning.
 
-Governance caveat: controller root has a new status and a dedicated attempt
-table. Generic conformance currently inspects its **local attempt artifacts**,
-not full controller decision/event lineage; therefore a separate read-only
-controller-transition auditor and hostile ledger mutation checks remain
-mandatory BEFORE any non-synthetic use. Do not label the root fully
-successfully verified or merge this experiment as an autonomous OS.
+Governance: controller root uses a dedicated attempt table. A separate
+read-only auditor now recomputes attempt lineage, admitted events, source
+hashes and candidate bytes. Generic conformance scans
+`CONTROL_CANDIDATE_MATCHED` and quarantines inconsistent claims and
+descendants. This does not cover **all** controller ACTIVE-state tampering,
+full effect-boundary enforcement, external business truth or organizational
+IV&V. Do not mark this as a deployable autonomous OS.
 
 Original goal authority always outranks retrieval and inferred plans.
