@@ -196,3 +196,72 @@ def recover_due_unknowns(db_path: Path, fixtures: Path,
     finally:
         db.close()
     return [recover_one_unknown(db_path,fixtures,tid) for tid in ids]
+
+# Research retries share the existing task ledger and host, not a second scheduler.
+RESEARCH_RETRY_SECONDS = 300
+MAX_RESEARCH_RETRIES = 2
+
+def recover_research_transport(db_path: Path, *, now: float | None = None,
+                               max_cases: int = 4) -> list[dict]:
+    """Bounded, cooldown-gated requeue of strictly read-only GitHub transport errors.
+
+    No other UNKNOWN cause is retried. Existing task ID/lineage is preserved;
+    authority revisions and parent state are rechecked under the same write lock.
+    """
+    if not 1 <= max_cases <= 4:
+        raise ValueError("Recovery batch out of bounds")
+    now = time.time() if now is None else now
+    db = connect(db_path)
+    outcomes = []
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        rows = db.execute("""SELECT * FROM tasks WHERE state='UNKNOWN'
+            AND error_code='RESEARCH_TRANSPORT_UNAVAILABLE' AND due_at<=?
+            ORDER BY due_at,created_at LIMIT ?""", (now,max_cases)).fetchall()
+        owner = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+        for row in rows:
+            tid=row["task_id"]
+            try:
+                spec=json.loads(row["source_spec"])
+            except (ValueError,TypeError):
+                spec={}
+            parent=db.execute("SELECT * FROM tasks WHERE task_id=?",
+                              (row["parent_task"],)).fetchone()
+            safe=(spec.get("kind")=="research_assessment"
+                  and isinstance(spec.get("sources"),list)
+                  and len(spec["sources"])==2
+                  and all(isinstance(s,dict) and s.get("kind")=="github"
+                          for s in spec["sources"])
+                  and parent is not None and parent["state"]=="NEEDS_REVIEW"
+                  and owner is not None and owner["write_allowed"]==1
+                  and row["goal_rev"]==owner["goal_rev"]
+                  and row["grant_rev"]==owner["grant_rev"]
+                  and row["goal_rev"]==parent["goal_rev"]
+                  and row["grant_rev"]==parent["grant_rev"])
+            attempts=db.execute("""SELECT COUNT(*) FROM events WHERE task_id=?
+                                   AND kind='RESEARCH_TRANSPORT_RETRY_QUEUED'""",
+                                (tid,)).fetchone()[0]
+            if not safe or attempts>=MAX_RESEARCH_RETRIES:
+                if attempts>=MAX_RESEARCH_RETRIES:
+                    db.execute("UPDATE tasks SET error_code='RESEARCH_RETRY_EXHAUSTED',state_version=state_version+1 WHERE task_id=?", (tid,))
+                    event(db,tid,"RESEARCH_TRANSPORT_RETRY_EXHAUSTED",{"attempts":attempts})
+                elif parent is None or owner is None or owner["write_allowed"]!=1 or row["goal_rev"]!=owner["goal_rev"] or row["grant_rev"]!=owner["grant_rev"]:
+                    db.execute("UPDATE tasks SET state='BLOCKED',error_code='STALE_RECOVERY_AUTHORITY',state_version=state_version+1 WHERE task_id=?", (tid,))
+                outcomes.append({"task_id":tid,"status":"RETRY_NOT_ADMITTED"})
+                continue
+            # No side effect in the failed attempt: no artifact, no provider write.
+            db.execute("""UPDATE tasks SET state='PENDING',error_code=NULL,
+                due_at=?,state_version=state_version+1
+                WHERE task_id=? AND state='UNKNOWN'""",
+                (now+RESEARCH_RETRY_SECONDS,tid))
+            event(db,tid,"RESEARCH_TRANSPORT_RETRY_QUEUED",
+                  {"attempt":attempts+1,"next_check_at":now+RESEARCH_RETRY_SECONDS})
+            outcomes.append({"task_id":tid,"status":"RETRY_QUEUED",
+                             "attempt":attempts+1})
+        db.commit()
+        return outcomes
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db.close()
