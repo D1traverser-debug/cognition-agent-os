@@ -35,7 +35,8 @@ def _bound_id(value:object)->bool:
 def _checked_spec(spec:dict)->dict:
     if (not isinstance(spec,dict)
         or set(spec) not in ({"kind","goal_key","knowledge","options"},
-                            {"kind","goal_key","knowledge","options","research_on_gap"})
+                            {"kind","goal_key","knowledge","options","research_on_gap"},
+                            {"kind","goal_key","knowledge","options","research_on_gap","research_sources"})
         or ("research_on_gap" in spec and spec["research_on_gap"] is not True)
         or spec["kind"]!="knowledge_intent"
         or not _bound_id(spec["goal_key"])):
@@ -45,6 +46,23 @@ def _checked_spec(spec:dict)->dict:
             raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
     except (TypeError,ValueError,OverflowError):
         raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
+    if "research_sources" in spec:
+        sources=spec["research_sources"]
+        if (spec.get("research_on_gap") is not True or not isinstance(sources,list)
+            or len(sources)!=2 or not all(isinstance(s,dict) and
+            set(s)=={"path","sha256","source_id","publisher_id"} for s in sources)):
+            raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
+        for item in sources:
+            if (not isinstance(item["path"],str) or not item["path"].endswith(".json")
+                or len(item["path"])>180 or item["path"].startswith(".")
+                or "/" in item["path"] or "\\" in item["path"]
+                or not isinstance(item["sha256"],str) or not _SHA.fullmatch(item["sha256"])
+                or not _bound_id(item["source_id"]) or not _bound_id(item["publisher_id"])):
+                raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
+        if (sources[0]["source_id"]==sources[1]["source_id"] or
+            sources[0]["publisher_id"]==sources[1]["publisher_id"] or
+            sources[0]["path"]==sources[1]["path"]):
+            raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
     knowledge=spec["knowledge"]
     if (not isinstance(knowledge,dict)
         or set(knowledge)!={"path","sha256","source_id"}
