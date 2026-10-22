@@ -13,6 +13,7 @@ from .sandbox_effect import advance_due_reviews
 from .diagnostics import recover_due_unknowns, recover_research_transport
 from .repair_oracle import review_due_repairs
 from .conformance import inspect_conformance, effect_preflight
+from .local_retry import schedule_failed_local_evidence
 
 
 class HostNotConfigured(RuntimeError):
@@ -241,17 +242,22 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
                   if auto_stage_goals else [])
     # Read-only research transport recovery has its own finite attempt budget.
     recoveries.extend(recover_research_transport(db_path))
+    # A failed independent LOCAL review may schedule one authorized same-capability
+    # follow-up for the next host tick, never a recursive/remote retry.
+    local_retries = schedule_failed_local_evidence(db_path,workspace,fixture_root,
+                                                    limit=min(max_jobs,4))
     # Independent conformance is a default post-tick enforcement path.
     # It quarantines only confirmed mechanical contradictions, never
     # interprets missing semantic evidence as a proven code compromise.
     conformance = inspect_conformance(db_path,workspace,fixture_root,
                                      enforce=True,max_cases=min(max_jobs,16))
     _record_tick(db_path, processed=len(results), finished_at=time.time())
-    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or conformance["quarantined"] or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
             "watch_observations": watches,
             "sandbox_reviews": reviews,
             "repair_lab_reviews": repair_reviews,
             "diagnostic_followups": recoveries,
+            "local_evidence_retries": local_retries,
             "pending_research_actions": _pending_research_actions(db_path,workspace),
             "goal_progress": _goal_progress(db_path,workspace,fixture_root),
             "conformance": conformance,
