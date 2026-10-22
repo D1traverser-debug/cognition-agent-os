@@ -61,6 +61,8 @@ def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -
     """Only project review suggestions with a live grant and intact artifact."""
     import hashlib
     import json
+    if not 1 <= limit <= 64:
+        raise ValueError("Research projection limit out of bounds")
     from .runner import verify_artifact
     with closing(sqlite3.connect(path.resolve(strict=True).as_uri()+"?mode=ro",
                                  uri=True, timeout=5)) as db:
@@ -72,7 +74,7 @@ def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -
               AND t.goal_rev=a.goal_rev AND t.grant_rev=a.grant_rev
               AND a.write_allowed=1
               AND e.kind='RESEARCH_NEXT_ACTION_IDENTIFIED'
-            ORDER BY e.event_id DESC LIMIT ?""",(limit,)).fetchall()
+            ORDER BY e.event_id DESC LIMIT ?""",(min(limit*8,512),)).fetchall()
     items=[]
     for row in rows:
         try:
@@ -93,6 +95,8 @@ def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -
                 continue
             items.append({"task_id":task_id,"next_research_action":receipt["action"],
                           "reason":receipt["reason"],"action_authorized":False})
+            if len(items)>=limit:
+                break
         except (ValueError,TypeError,KeyError,OSError,UnicodeError):
             continue
     return items
