@@ -23,7 +23,7 @@ from .runner import verify_artifact
 from .ledger import event, connect
 
 TASK_ID=re.compile(r"[0-9a-f]{32}\Z")
-EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED")
+EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED","CONTROL_CANDIDATE_MATCHED")
 MAX_SCAN=512
 MAX_DEPENDENCIES=256
 
@@ -263,6 +263,11 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                        else "PROPOSAL_ARTIFACT_INVALID")
             else:
                 proof="UNREGISTERED_REVIEW_FAMILY"
+        elif state=="CONTROL_CANDIDATE_MATCHED":
+            from .bounded_control_audit import audit_controlled_candidate
+            checked=audit_controlled_candidate(db_path,workspace,fixtures,tid)
+            proof=("MECHANICALLY_VALID" if checked["status"]=="CONTROL_LOCAL_RECEIPT_VERIFIED"
+                   else "CONTROL_"+checked.get("reason","EVIDENCE_INVALID"))
         elif state=="VERIFIED":
             proof=_verify_consistent(row,fixtures)
         else:
