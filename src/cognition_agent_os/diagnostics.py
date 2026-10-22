@@ -245,8 +245,18 @@ def recover_research_transport(db_path: Path, *, now: float | None = None,
                 if attempts>=MAX_RESEARCH_RETRIES:
                     db.execute("UPDATE tasks SET error_code='RESEARCH_RETRY_EXHAUSTED',state_version=state_version+1 WHERE task_id=?", (tid,))
                     event(db,tid,"RESEARCH_TRANSPORT_RETRY_EXHAUSTED",{"attempts":attempts})
-                elif parent is None or owner is None or owner["write_allowed"]!=1 or row["goal_rev"]!=owner["goal_rev"] or row["grant_rev"]!=owner["grant_rev"]:
-                    db.execute("UPDATE tasks SET state='BLOCKED',error_code='STALE_RECOVERY_AUTHORITY',state_version=state_version+1 WHERE task_id=?", (tid,))
+                else:
+                    # Invalid lineage/authorization must not be re-scanned as a
+                    # recoverable network error on every unattended host tick.
+                    reason = ("STALE_RECOVERY_AUTHORITY"
+                              if owner is None or owner["write_allowed"]!=1
+                              or row["goal_rev"]!=owner["goal_rev"]
+                              or row["grant_rev"]!=owner["grant_rev"]
+                              else "RESEARCH_RETRY_LINEAGE_INVALID")
+                    db.execute("""UPDATE tasks SET state='BLOCKED',error_code=?,
+                        state_version=state_version+1 WHERE task_id=?""", (reason,tid))
+                    event(db,tid,"RESEARCH_TRANSPORT_RETRY_BLOCKED",
+                          {"reason":reason})
                 outcomes.append({"task_id":tid,"status":"RETRY_NOT_ADMITTED"})
                 continue
             # No side effect in the failed attempt: no artifact, no provider write.
