@@ -1,0 +1,108 @@
+"""P35: bounded read-only evidence decision from a *real* P34 child.
+
+Review work is a separate explicitly queued task in the existing task ledger.
+It never grants a route or starts production work. External source statements
+are untrusted even if content-addressed. No network or model API is invoked.
+"""
+from __future__ import annotations
+import hashlib
+import json
+from pathlib import Path
+from .ledger import finalize_observed
+from .runner import store_once, ArtifactConflict
+from .research_gap import audit_gap
+
+def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
+    if not isinstance(contract, dict) or set(contract) != {"path", "sha256", "source_id", "publisher_id"}:
+        raise ValueError("BAD_CONTRACT")
+    name = contract["path"]
+    if not isinstance(name, str) or not name.endswith(".json") or "/" in name or "\\" in name or name.startswith("."):
+        raise ValueError("BAD_PATH")
+    target = root / name
+    if root.is_symlink() or target.is_symlink() or not target.is_file():
+        raise ValueError("BAD_FILE")
+    raw = target.read_bytes()
+    if len(raw) > 16384 or hashlib.sha256(raw).hexdigest() != contract["sha256"]:
+        raise ValueError("BAD_HASH")
+    data = json.loads(raw)
+    if not isinstance(data, dict) or set(data) != {"source_id", "publisher_id", "goal_key", "assertions"}:
+        raise ValueError("BAD_SCHEMA")
+    if data["source_id"] != contract["source_id"] or data["publisher_id"] != contract["publisher_id"] or data["goal_key"] != goal:
+        raise ValueError("BAD_IDENTITY")
+    statements = data["assertions"]
+    if not isinstance(statements, list) or len(statements) != 2:
+        raise ValueError("BAD_COVERAGE")
+    result = {}
+    for s in statements:
+        if not isinstance(s, dict) or set(s) != {"route", "stance", "evidence_ref"}:
+            raise ValueError("BAD_STATEMENT")
+        if s["route"] not in routes or s["route"] in result or s["stance"] not in {"supports", "refutes", "inconclusive"}:
+            raise ValueError("BAD_STANCE")
+        if not isinstance(s["evidence_ref"], str) or not 1 <= len(s["evidence_ref"]) <= 128:
+            raise ValueError("BAD_REFERENCE")
+        result[s["route"]] = s["stance"]
+    if set(result) != routes:
+        raise ValueError("INCOMPLETE")
+    return result
+
+def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict) -> dict:
+    from contextlib import closing
+    import sqlite3
+    tid = spec.get("research_task_id")
+    sources = spec.get("sources")
+    if not isinstance(tid, str) or len(tid) != 32 or any(c not in "0123456789abcdef" for c in tid):
+        raise ValueError("BAD_TASK")
+    if not isinstance(sources, list) or len(sources) != 2 or not all(isinstance(s, dict) for s in sources):
+        raise ValueError("BAD_SOURCES")
+    if sources[0].get("source_id") == sources[1].get("source_id") or sources[0].get("publisher_id") == sources[1].get("publisher_id"):
+        raise ValueError("INDEPENDENCE_UNKNOWN")
+    if not db_path.is_file() or db_path.is_symlink():
+        raise ValueError("NO_LEDGER")
+    with closing(sqlite3.connect(db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as check:
+        check.row_factory = sqlite3.Row
+        child = check.execute("SELECT * FROM tasks WHERE task_id=?", (tid,)).fetchone()
+        if child is None or child["state"] != "NEEDS_REVIEW" or not child["parent_task"]:
+            raise ValueError("UNREVIEWABLE")
+        parent = check.execute("SELECT * FROM tasks WHERE task_id=?", (child["parent_task"],)).fetchone()
+        if not parent or parent["state"] != "RESEARCH_NEEDED" or parent["goal_rev"] != child["goal_rev"] or parent["grant_rev"] != child["grant_rev"]:
+            raise ValueError("STALE_PARENT")
+        orig = json.loads(child["source_spec"])
+        if orig.get("kind") != "research_gap":
+            raise ValueError("BAD_PARENT")
+        audit = audit_gap(db_path, fixtures, workspace, child["parent_task"], tid)
+        if audit.get("status") != "PLAN_MECHANICALLY_VALID":
+            raise ValueError("PROVENANCE_NOT_VERIFIED")
+        routes = set(orig["routes"])
+        if len(routes) != 2:
+            raise ValueError("BAD_ROUTES")
+        a, b = (_evidence(fixtures, src, orig["goal_key"], routes) for src in sources)
+        if a != b:
+            reason, candidate = "CONFLICTING_SOURCE_CLAIMS", None
+        elif sorted(a.values()) != ["refutes", "supports"]:
+            reason, candidate = "INSUFFICIENT_CAUSAL_DISCRIMINATION", None
+        else:
+            reason = "CONSENSUS_PENDING_EXTERNAL_SEMANTIC_REVIEW"
+            candidate = next(r for r in sorted(routes) if a[r] == "supports")
+        return {"status": "RESEARCH_EVIDENCE_NOT_APPROVED", "reason": reason,
+                "candidate_route_for_review": candidate,
+                "research_task_id": tid, "goal_key": orig["goal_key"],
+                "source_hashes": [s["sha256"] for s in sources],
+                "source_independence_verified": False,
+                "business_outcome_verified": False, "production_effect_authorized": False}
+
+def run_assessment(db, task, db_path: Path, workspace: Path, fixtures: Path):
+    try:
+        spec = json.loads(task["source_spec"])
+        first = assess(db_path, workspace, fixtures, spec)
+        raw = (json.dumps(first, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+        def write():
+            second = assess(db_path, workspace, fixtures, spec)
+            if second != first:
+                raise ValueError("EVIDENCE_CHANGED")
+            return store_once(workspace, task["task_id"], raw)
+        result = finalize_observed(db, task, "NEEDS_REVIEW",
+                                   decision="RESEARCH_NOT_SEMANTICALLY_APPROVED", artifact_writer=write)
+        return {**result, "business_outcome_verified": False,
+                "production_effect_authorized": False}
+    except (ValueError, OSError, TypeError, KeyError, ArtifactConflict):
+        return finalize_observed(db, task, "UNKNOWN", error_code="RESEARCH_ASSESSMENT_UNVERIFIABLE")
