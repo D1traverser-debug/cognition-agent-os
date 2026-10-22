@@ -164,7 +164,10 @@ class DurableSameGoalControllerTests(unittest.TestCase):
             register_local_goal(self.db,self.fx,goal_id="owner-record",
                                 target={"id":"A","owner":"ops"},
                                 alternatives=[methods[0],methods[0]])
-        self.assertEqual(self.attempts("nobody"),[])
+        # Both registrations failed before the optional table existed.
+        # Assert the actual authoritative ledger remains unchanged.
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],0)
 
     def test_independent_observation_does_not_use_planner_verdict(self):
         raw=b'{"id":"A","owner":"wrong"}'
