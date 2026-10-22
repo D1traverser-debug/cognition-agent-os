@@ -47,6 +47,24 @@ After revoked/stale goal/permission, unsupported task state, unreliable
 artifact, changed source or invalid oracle, the controller stops or records
 `CONTROL_UNVERIFIABLE`, and DOES NOT blindly try another method.
 
+## Explicit command-line entrypoint (no scheduled deployment)
+
+An EXISTING initialized SQLite ledger and allowed local grant are prerequisites.
+Provide a small, locally authored JSON file containing only
+`goal_id`, `target`, and exactly two `alternatives`, where alternatives
+are registered `goal_case` specifications for two distinct fixture files:
+
+```bash
+python scripts/host_tick.py --db state.sqlite --workspace workspace --fixtures fixtures seed-bounded-local-goal --spec control.json
+python scripts/host_tick.py --db state.sqlite --workspace workspace --fixtures fixtures host-tick --auto-local-goal-control --max-jobs 3
+```
+
+Each invocation runs ONE bounded tick. A real external scheduler must invoke
+later ticks if unattended progress is desired; **nothing is scheduled here**.
+Without `--auto-local-goal-control`, the Host does not advance this class of
+root task. The command refuses a missing ledger rather than minting new
+authority. Candidate outputs remain local and unapproved.
+
 ## Actual test evidence and remaining holes
 
 The prospective tests exercise distinct tick invocations, real SQLite worker
