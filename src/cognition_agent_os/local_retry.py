@@ -40,12 +40,14 @@ def schedule_failed_local_evidence(db_path: Path, workspace: Path, fixtures: Pat
             kind=spec.get("kind")
             if kind=="goal_case":
                 verdict=audit_goal(db_path,workspace,fixtures,row["task_id"])["status"]
-                valid=verdict=="CANDIDATE_MECHANICALLY_VALID"
+                recoverable=verdict=="ARTIFACT_HASH_MISMATCH"
             elif kind=="record_reconciliation":
-                verdict=audit_stored_report(db_path,workspace,fixtures,row["task_id"])["status"]
-                valid=verdict=="REPORT_MECHANICALLY_VERIFIED"
+                audit=audit_stored_report(db_path,workspace,fixtures,row["task_id"])
+                verdict=audit["status"]
+                recoverable=(verdict=="UNVERIFIABLE" and
+                             audit.get("reason")=="ARTIFACT_HASH_MISMATCH")
             else:continue
-            if valid:continue
+            if not recoverable:continue
             db.execute("BEGIN IMMEDIATE")
             try:
                 authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
