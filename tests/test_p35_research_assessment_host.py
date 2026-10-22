@@ -74,6 +74,28 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertFalse(artifact["source_independence_verified"])
         self.assertFalse((self.work/"sandbox").exists())
 
+    def test_two_publishers_citing_one_underlying_item_cannot_create_consensus(self):
+        stances={"structure":"supports","compare":"refutes"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        for name in ("independent_a","independent_b"):
+            p=self.fx/(name+".json")
+            obj=json.loads(p.read_text())
+            for statement in obj["assertions"]:
+                statement["evidence_ref"]="shared:original-document-1"
+            raw=json.dumps(obj,sort_keys=True).encode()
+            p.write_bytes(raw)
+            if name=="independent_a":
+                a["sha256"]=hashlib.sha256(raw).hexdigest()
+            else:
+                b["sha256"]=hashlib.sha256(raw).hexdigest()
+        child=self.setup_research([a,b])
+        task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
+        self.assertEqual(report["reason"],"SHARED_UNDERLYING_EVIDENCE")
+        self.assertIsNone(report["candidate_route_for_review"])
+
     def test_conflict_abstains_without_selected_route(self):
         a=self.put_evidence("independent_a","publisher_one",{"structure":"supports","compare":"refutes"})
         b=self.put_evidence("independent_b","publisher_two",{"structure":"refutes","compare":"supports"})
