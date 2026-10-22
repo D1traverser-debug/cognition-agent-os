@@ -124,7 +124,7 @@ class IntentRuntimeTests(unittest.TestCase):
         artifact=self.workspace/"artifacts"/(original+".json")
         artifact.write_bytes(artifact.read_bytes()+b" ")
         with closing(connect(self.db_path)) as db:
-            alter_authority(db,write_allowed=False)
+            alter_authority(db,revoke=True)
         tick=run_tick(self.db_path,self.workspace,self.fixtures,max_jobs=1)
         self.assertEqual(tick["local_evidence_retries"],[])
 
