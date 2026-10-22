@@ -11,6 +11,7 @@ from pathlib import Path
 from .ledger import finalize_observed
 from .runner import store_once, ArtifactConflict
 from .research_gap import audit_gap
+from .source import safe_fixture, SourceUnavailable
 
 def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
     if not isinstance(contract, dict) or set(contract) != {"path", "sha256", "source_id", "publisher_id"}:
@@ -18,10 +19,14 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
     name = contract["path"]
     if not isinstance(name, str) or not name.endswith(".json") or "/" in name or "\\" in name or name.startswith("."):
         raise ValueError("BAD_PATH")
-    target = root / name
-    if root.is_symlink() or target.is_symlink() or not target.is_file():
+    # Reuse the project's single bounded/path-contained source adapter.
+    # The research contract adds stricter 16 KiB and SHA256 constraints.
+    if root.is_symlink() or (root / name).is_symlink():
         raise ValueError("BAD_FILE")
-    raw = target.read_bytes()
+    try:
+        raw = safe_fixture(root, name)
+    except (SourceUnavailable, OSError) as exc:
+        raise ValueError("BAD_FILE") from exc
     if len(raw) > 16384 or hashlib.sha256(raw).hexdigest() != contract["sha256"]:
         raise ValueError("BAD_HASH")
     data = json.loads(raw)
