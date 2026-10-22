@@ -63,6 +63,22 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["reason"],"STALE_GOAL")
         self.assertEqual(self.task(tid)["state"],"BLOCKED")
 
+    def test_blocked_upstream_prevents_cross_capability_child_execution(self):
+        self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
+        for intent in (self.structured(),self.comparison()):
+            parent=self.seed(intent)
+            admitted=run_once(self.db_path,self.workspace,self.fixtures)
+            self.assertEqual(admitted["status"],"DECOMPOSED",admitted)
+            child=admitted["child_task_id"]
+            with connect(self.db_path) as db:
+                db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(parent,))
+                db.commit()
+            observed=run_once(self.db_path,self.workspace,self.fixtures)
+            self.assertEqual(observed["task_id"],child,observed)
+            self.assertEqual(observed["status"],"BLOCKED",observed)
+            self.assertEqual(self.task(child)["error_code"],"UPSTREAM_TASK_INVALID")
+            self.assertFalse((self.workspace/"artifacts"/(child+".json")).exists())
+
     def test_json_intent_generates_child_and_actual_sandbox(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         tid=self.seed(self.structured())
