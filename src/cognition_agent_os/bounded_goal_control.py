@@ -36,6 +36,11 @@ def _ensure(db:sqlite3.Connection)->None:
         ordinal INTEGER NOT NULL CHECK(ordinal IN (0,1)),
         child_task_id TEXT NOT NULL UNIQUE REFERENCES tasks(task_id),
         PRIMARY KEY(root_task_id,ordinal))""")
+    db.execute("""CREATE TABLE IF NOT EXISTS bounded_control_scan_cursor(
+        singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+        last_task_id TEXT NOT NULL)""")
+    db.execute("INSERT OR IGNORE INTO bounded_control_scan_cursor VALUES(1,'')")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_control_state_id ON tasks(state,task_id)")
 
 
 def _contract(goal_id:str,target:dict,alternatives:list,fixtures:Path)->dict:
@@ -232,11 +237,28 @@ def advance_local_goals(db_path:Path,workspace:Path,fixtures:Path,
     db=connect(db_path)
     results=[]
     try:
-        _ensure(db)
-        db.commit()
-        ids=[r["task_id"] for r in db.execute(
-            "SELECT task_id FROM tasks WHERE state=? ORDER BY created_at,task_id LIMIT ?",
-            (_ACTIVE,limit)).fetchall()]
+        # Allocate a fair, durable scan window under the same SQLite
+        # write lock. Repeatedly AWAITING children must not permanently
+        # occupy the first N slots and starve independent new goals.
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            _ensure(db)
+            cursor=db.execute("""SELECT last_task_id FROM bounded_control_scan_cursor
+                                 WHERE singleton=1""").fetchone()[0]
+            ids=[r["task_id"] for r in db.execute(
+                """SELECT task_id FROM tasks WHERE state=? AND task_id>?
+                   ORDER BY task_id LIMIT ?""",(_ACTIVE,cursor,limit)).fetchall()]
+            if len(ids)<limit:
+                ids.extend(r["task_id"] for r in db.execute(
+                    """SELECT task_id FROM tasks WHERE state=? AND task_id<=?
+                       ORDER BY task_id LIMIT ?""",(_ACTIVE,cursor,limit-len(ids))).fetchall())
+            if ids:
+                db.execute("""UPDATE bounded_control_scan_cursor
+                           SET last_task_id=? WHERE singleton=1""",(ids[-1],))
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
         for tid in ids:
             db.execute("BEGIN IMMEDIATE")
             try:
