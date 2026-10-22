@@ -12,7 +12,7 @@ from pathlib import Path
 from .ledger import finalize_observed, event
 from .runner import store_once, ArtifactConflict
 from .research_gap import audit_gap
-from .source import safe_fixture, github_public_snapshot, SourceUnavailable
+from .source import safe_fixture, github_public_snapshot, SourceUnavailable, SourceTransportUnavailable
 
 class ResearchTransportUnavailable(Exception):
     """Only an upstream read failure; not invalid or changed evidence."""
@@ -32,8 +32,10 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
             raise ValueError("BAD_GITHUB_CONTRACT")
         try:
             raw = github_public_snapshot(contract["repo"], name, contract["ref"])
-        except (SourceUnavailable, OSError) as exc:
+        except SourceTransportUnavailable as exc:
             raise ResearchTransportUnavailable("PUBLIC_SOURCE_UNAVAILABLE") from exc
+        except (SourceUnavailable, OSError) as exc:
+            raise ValueError("BAD_GITHUB_SOURCE") from exc
     else:
         if root.is_symlink() or (root / name).is_symlink():
             raise ValueError("BAD_FILE")
