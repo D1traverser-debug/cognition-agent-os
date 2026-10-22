@@ -65,6 +65,19 @@ def schedule_failed_local_evidence(db_path: Path, workspace: Path, fixtures: Pat
                         (row["parent_task"],)).fetchone()):
                     db.commit()
                     continue
+                # Evidence must still have the SAME recoverable failure at
+                # admission time. The first audit is only discovery evidence;
+                # SQLite locking does not freeze external fixture files.
+                if kind=="goal_case":
+                    fresh=audit_goal(db_path,workspace,fixtures,row["task_id"])
+                    same_failure=fresh["status"]=="ARTIFACT_HASH_MISMATCH"
+                else:
+                    fresh=audit_stored_report(db_path,workspace,fixtures,row["task_id"])
+                    same_failure=(fresh["status"]=="UNVERIFIABLE" and
+                                  fresh.get("reason")=="ARTIFACT_HASH_MISMATCH")
+                if not same_failure:
+                    db.commit()
+                    continue
                 # Keep exactly one child per intent root. The next Host tick
                 # decomposes a new authorized root using the registered planner.
                 new_id=create_task(db,root,commit=False)
