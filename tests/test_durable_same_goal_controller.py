@@ -357,11 +357,15 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         roots=[self.register() for _ in range(3)]
         first=advance_local_goals(self.db,self.work,self.fx,limit=2)
         self.assertEqual(len(first),2,first)
-        self.assertEqual([len(self.attempts(x)) for x in roots],[1,1,0])
+        admitted=[len(self.attempts(x)) for x in roots]
+        self.assertEqual(sum(admitted),2,admitted)
+        # A fair allocator may choose by task ID rather than creation time.
+        # The never-admitted root still must make progress after a few ticks.
+        unadmitted=next(root for root,count in zip(roots,admitted) if count==0)
         for _ in range(3):
             advance_local_goals(self.db,self.work,self.fx,limit=2)
-        self.assertEqual(len(self.attempts(roots[2])),1,
-                         "A pending older goal starved an independent new goal")
+        self.assertEqual(len(self.attempts(unadmitted)),1,
+                         "Repeatedly waiting roots starved an independent goal")
 
     def test_control_transition_directly_refuses_tampered_contract(self):
         root=self.register()
