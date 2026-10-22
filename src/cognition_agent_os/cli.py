@@ -67,6 +67,9 @@ def main(argv=None) -> int:
     intent.add_argument("--spec",type=Path,required=True)
     plan_audit = sub.add_parser("intent-audit",help="Read-only check of durable goal decomposition")
     plan_audit.add_argument("--task-id",required=True)
+    bounded = sub.add_parser("seed-bounded-local-goal",
+        help="Explicitly register two pinned local methods; no production mutation")
+    bounded.add_argument("--spec",type=Path,required=True)
     goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
     goal.add_argument("--spec", type=Path, required=True)
     intake_repair = sub.add_parser("seed-code-repair",
@@ -149,6 +152,8 @@ def main(argv=None) -> int:
                       help="Explicitly opt in to local sandbox-only follow-up")
     host.add_argument("--auto-review-repos", action="store_true",
                       help="Separately opt in to untrusted whole-file Python execution IN Docker; also requires --auto-stage-goals")
+    host.add_argument("--auto-local-goal-control", action="store_true",
+                      help="Opt in to bounded LOCAL candidate follow-ups, never external effects")
     host.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
     host.add_argument("--local-model", default=None)
     export = sub.add_parser("reference-export", help="Export model-visible cases without reference gold")
@@ -261,7 +266,8 @@ def main(argv=None) -> int:
             result = run_tick(args.db, args.workspace, args.fixtures, max_jobs=args.max_jobs,
                               planner_mode=args.planner_mode, local_model=args.local_model,
                               auto_stage_goals=args.auto_stage_goals,
-                              auto_review_repos=args.auto_review_repos)
+                              auto_review_repos=args.auto_review_repos,
+                              auto_local_goal_control=args.auto_local_goal_control)
         except HostNotConfigured as exc:
             print(json.dumps({"status":"HOST_NOT_CONFIGURED", "error":str(exc)}))
             return 2
@@ -281,6 +287,31 @@ def main(argv=None) -> int:
             return 3
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if args.command != "reference-evaluate" or result["status"] == "REFERENCE_MATCH" else 4
+    if args.command == "seed-bounded-local-goal":
+        # This command NEVER creates a fresh grant or ledger automatically.
+        if not args.db.is_file() or args.db.is_symlink():
+            print(json.dumps({"status":"HOST_NOT_CONFIGURED"},sort_keys=True))
+            return 2
+        if (args.spec.is_symlink() or not args.spec.is_file()
+            or args.spec.stat().st_size>16384):
+            print(json.dumps({"status":"INVALID_LOCAL_GOAL_FILE"},sort_keys=True))
+            return 3
+        try:
+            from .bounded_goal_control import register_local_goal
+            payload=json.loads(args.spec.read_text(encoding="utf-8"))
+            if not isinstance(payload,dict) or set(payload)!={"goal_id","target","alternatives"}:
+                raise ValueError("INVALID_SEED_FIELDS")
+            tid=register_local_goal(args.db,args.fixtures,
+                goal_id=payload["goal_id"],target=payload["target"],
+                alternatives=payload["alternatives"])
+        except (ValueError,TypeError,KeyError,sqlite3.Error,OSError) as exc:
+            print(json.dumps({"status":"LOCAL_GOAL_NOT_ADMITTED",
+                              "reason":str(exc)[:120]},sort_keys=True))
+            return 4
+        print(json.dumps({"task_id":tid,"state":"CONTROL_ACTIVE",
+                          "business_outcome_verified":False,
+                          "scope":"LOCAL_CANDIDATE_ONLY"},sort_keys=True))
+        return 0
     db = connect(args.db)
     try:
         initialize(db)
