@@ -379,7 +379,7 @@ jobs:
   live_public_source:
     # Explicit opt-in: third-party public API quota is separate from local correctness.
     # GitHub workflow_dispatch UI becomes usable when the workflow is on the default branch.
-    if: ${{ github.event.repository.private == false && github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p36-live-source]'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
