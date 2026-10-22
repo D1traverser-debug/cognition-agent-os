@@ -15,7 +15,7 @@ from cognition_agent_os.ledger import connect, create_task, initialize
 
 
 class GoalFeedbackAlternativeBaseline(unittest.TestCase):
-    def test_evidence_tamper_is_quarantined_without_alternative_route(self):
+    def test_independent_goal_feedback_does_not_schedule_alternative(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             fixtures=root/"fixtures"
@@ -61,8 +61,14 @@ class GoalFeedbackAlternativeBaseline(unittest.TestCase):
             self.assertTrue(artifact.is_file(),initial)
             artifact.write_bytes(artifact.read_bytes()+b" tampered")
             observed=run_tick(dbpath,workspace,fixtures,max_jobs=1)
-            self.assertEqual(observed["conformance"]["status"],"CONFORMANCE_VIOLATIONS",observed)
-            self.assertEqual(observed["conformance"]["findings"][0]["proof"],"ARTIFACT_HASH_MISMATCH")
+            # The goal readback sees the failed proof directly; the
+            # bounded conformance scanner can examine a different row.
+            progress=observed["goal_progress"]["goals"][0]
+            self.assertEqual(progress["failed_independent_checks"],1,observed)
+            self.assertEqual(progress["independent_checks"][0]["verdict"],
+                             "ARTIFACT_HASH_MISMATCH")
+            self.assertEqual(progress["next_control_action"],
+                             "REPLAN_AFTER_FAILED_INDEPENDENT_CHECK")
             self.assertEqual(observed["local_evidence_retries"],[])
             self.assertFalse(observed["semantic_outcome_verified"])
             with closing(connect(dbpath)) as db:
