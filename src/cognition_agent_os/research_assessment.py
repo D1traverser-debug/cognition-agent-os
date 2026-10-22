@@ -105,7 +105,7 @@ def run_assessment(db, task, db_path: Path, workspace: Path, fixtures: Path):
         first = assess(db_path, workspace, fixtures, spec, task["task_id"])
         raw = (json.dumps(first, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
         def write():
-            second = assess(db_path, workspace, fixtures, spec)
+            second = assess(db_path, workspace, fixtures, spec, task["task_id"])
             if second != first:
                 raise ValueError("EVIDENCE_CHANGED")
             return store_once(workspace, task["task_id"], raw)
