@@ -178,6 +178,11 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         self.assertEqual(result["status"],"UNKNOWN")
         with closing(connect(self.db)) as db:
             db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(child,))
+            # Replay the same transport UNKNOWN at its due recovery boundary,
+            # after the legitimate parent has ceased to be reviewable.
+            db.execute("""UPDATE tasks SET state='UNKNOWN',
+                error_code='RESEARCH_TRANSPORT_UNAVAILABLE',due_at=0
+                WHERE task_id=?""",(task,))
             db.commit()
         after=run_tick(self.db,self.work,self.fx,max_jobs=1)
         self.assertEqual(after["processed"],0,after)
