@@ -164,6 +164,39 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
              not _SHA.fullmatch(observed_head_sha)))
         or not _db_exists(db_path)):
         raise ValueError("INVALID_CHECKPOINT")
+    # Public source resolution is network I/O. Do it strictly outside the
+    # shared SQLite write transaction; a stale result can only be submitted
+    # through the digest/version compare-and-set below. A subsequent resume
+    # performs an independent fresh HEAD observation.
+    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as probe:
+        probe.row_factory = sqlite3.Row
+        observed_row = probe.execute(
+            "SELECT * FROM goal_continuity WHERE goal_id=?", (goal_id,)).fetchone()
+        observed_authority = probe.execute(
+            "SELECT * FROM authority WHERE singleton=1").fetchone()
+        if observed_row is None or observed_row["contract_sha256"] != expected_digest:
+            raise ValueError("STALE_CHECKPOINT")
+        if (not observed_authority or not observed_authority["write_allowed"]
+            or observed_row["goal_rev"] != observed_authority["goal_rev"]
+            or observed_row["grant_rev"] != observed_authority["grant_rev"]):
+            raise PermissionError("CHECKPOINT_AUTHORITY_STALE")
+        observed_contract = json.loads(observed_row["contract"])
+        if hashlib.sha256(_canonical(_validate(observed_contract))).hexdigest() != expected_digest:
+            raise ValueError("CHECKPOINT_INTEGRITY_BROKEN")
+        observed_source = observed_contract["source"]
+        if observed_head_sha is not None and observed_source is None:
+            raise ValueError("NO_REMOTE_SOURCE_TO_REATTEST")
+    if observed_source is not None:
+        resolver = resolve_head or github_public_branch_head
+        try:
+            live = resolver(observed_source["repo"], observed_source["branch"])
+        except Exception as exc:
+            raise ValueError("SOURCE_REVALIDATION_UNAVAILABLE") from exc
+        if not isinstance(live, str) or not _SHA.fullmatch(live):
+            raise ValueError("SOURCE_REVALIDATION_UNAVAILABLE")
+        if live != (observed_head_sha or observed_source["head_sha"]):
+            raise ValueError("SOURCE_REVALIDATION_REQUIRED")
     with closing(connect(db_path)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
@@ -182,23 +215,12 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
             if hashlib.sha256(_canonical(_validate(spec))).hexdigest() != expected_digest:
                 raise ValueError("CHECKPOINT_INTEGRITY_BROKEN")
             source = spec["source"]
-            if observed_head_sha is not None and source is None:
-                raise ValueError("NO_REMOTE_SOURCE_TO_REATTEST")
-            if source is not None:
-                resolver = resolve_head or github_public_branch_head
-                try:
-                    live = resolver(source["repo"], source["branch"])
-                except Exception as exc:
-                    raise ValueError("SOURCE_REVALIDATION_UNAVAILABLE") from exc
-                if not isinstance(live, str) or not _SHA.fullmatch(live):
-                    raise ValueError("SOURCE_REVALIDATION_UNAVAILABLE")
-                expected_live = observed_head_sha or source["head_sha"]
-                if live != expected_live:
-                    raise ValueError("SOURCE_REVALIDATION_REQUIRED")
-                if observed_head_sha is not None:
-                    # Explicitly observed, current public HEAD. A new SHA is
-                    # not an automatic business-outcome endorsement.
-                    source["head_sha"] = observed_head_sha
+            if source != observed_source:
+                raise ValueError("SOURCE_REFERENCE_CHANGED")
+            if observed_head_sha is not None:
+                # A fresh public HEAD is a source observation, not an
+                # independently accepted owner/business outcome.
+                source["head_sha"] = observed_head_sha
             spec["next_task_id"] = next_task_id
             _guard(db, spec, authority)
             raw = _canonical(spec)
