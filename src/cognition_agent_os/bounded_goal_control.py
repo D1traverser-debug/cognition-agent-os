@@ -45,12 +45,13 @@ def _ensure(db:sqlite3.Connection)->None:
 def _contract(goal_id:str,target:dict,alternatives:list,fixtures:Path)->dict:
     if (not isinstance(goal_id,str) or not _ID.fullmatch(goal_id)
         or not isinstance(target,dict) or not 1<=len(target)<=16
-        or any(not isinstance(k,str)
-               or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]{0,63}",k)
-               or not isinstance(v,str) or len(v)>256
-               for k,v in target.items())
         or not isinstance(alternatives,list) or len(alternatives)!=2):
         raise ValueError("INVALID_CONTROL_CONTRACT")
+    if any(not isinstance(k,str)
+           or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]{0,63}",k)
+           or not isinstance(v,str) or len(v)>256
+           for k,v in target.items()):
+        raise ValueError("INVALID_TARGET")
     # The reference oracle validates the exact canonical record independently.
     packed=[]
     types=set()
