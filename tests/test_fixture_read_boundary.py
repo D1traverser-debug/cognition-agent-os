@@ -38,10 +38,17 @@ class FixtureReadBoundaryTests(unittest.TestCase):
                     swapped = True
                 return result
 
+            observed = None
+            rejected = False
             with patch.object(Path, "is_file", swap_after_file_check):
-                with self.assertRaises((ValueError, SourceUnavailable, OSError)):
-                    safe_fixture(approved, "source.txt")
+                try:
+                    observed = safe_fixture(approved, "source.txt")
+                except (ValueError, SourceUnavailable, OSError):
+                    rejected = True
             self.assertTrue(swapped, "race injection must actually execute")
+            self.assertTrue(rejected,
+                f"cross-root read accepted after swap: returned={observed!r}, "
+                f"actual_resolved={inside.resolve(strict=True)!s}")
 
     def test_stable_internal_symlink_retains_existing_read_semantics(self):
         with tempfile.TemporaryDirectory() as temp:
