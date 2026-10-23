@@ -29,6 +29,8 @@ _ALLOWED_STATES = {
     "NEEDS_REPLAN", "RESEARCH_NEEDED", "VERIFIED", "DECOMPOSED",
     "CONTROL_ACTIVE", "CONTROL_UNVERIFIABLE", "CONTROL_STOPPED",
     "CONTROL_CANDIDATE_MATCHED", "STAGED", "REJECTED",
+    "FEEDBACK_ACTIVE", "FEEDBACK_EVIDENCE_READY",
+    "FEEDBACK_STOPPED", "FEEDBACK_UNVERIFIABLE",
 }
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS goal_continuity (
@@ -356,6 +358,10 @@ def resume_goal(db_path: Path, *, resolve_head=None) -> dict:
                 "RESEARCH_NEEDED": "NEEDS_RESEARCH_REVIEW",
                 "CONTROL_UNVERIFIABLE": "NEEDS_REPLAN",
                 "CONTROL_STOPPED": "NEEDS_REPLAN",
+                "FEEDBACK_ACTIVE": "READY_TO_TICK",
+                "FEEDBACK_EVIDENCE_READY": "NEEDS_OWNER_OUTCOME_REVIEW",
+                "FEEDBACK_STOPPED": "NEEDS_REPLAN",
+                "FEEDBACK_UNVERIFIABLE": "NEEDS_REPLAN",
             }.get(state, "NEEDS_RECONCILIATION")
             result = _no_action(
                 next_action, goal_id=row["goal_id"],
