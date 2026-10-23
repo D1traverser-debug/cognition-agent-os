@@ -85,6 +85,11 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertFalse(artifact["business_outcome_verified"])
         self.assertEqual(artifact["status"], "MODEL_RESEARCH_NOT_APPROVED")
         self.assertEqual(len([x for x in calls if x[0] == "POST"]), 2)
+        requests = [x[2] for x in calls if x[0] == "POST"]
+        self.assertEqual(requests[0]["format"]["properties"]["sources"]["items"]["enum"],
+                         ["authority.md", "verification.md"])
+        self.assertEqual(requests[1]["format"]["properties"]["findings"]["minItems"], 2)
+        self.assertEqual(requests[1]["format"]["properties"]["findings"]["maxItems"], 2)
         self.assertEqual({p.name: p.read_bytes() for p in self.sources.iterdir()}, self.before)
         # Conformance must not falsely quarantine an unapproved grounded candidate.
         self.assertEqual(result["conformance"]["quarantined"], [], result)
@@ -332,6 +337,20 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             self.dbpath, self.workspace, self.sources, tid)["status"],
             "SOURCE_GROUNDED_UNREVIEWED")
         self.assertEqual(len([r for r in calls if r[0] == "POST"]), 2)
+
+
+    def test_full_document_preview_recovers_evidence_beyond_prefix(self):
+        """Identical initial excerpts must not hide a late decisive fact."""
+        from cognition_agent_os.investigation import _evidence_excerpt
+        prefix = "Archived shift report without measurements. " * 35
+        late = "The compressor minimum safe pressure is 42 kilopascals."
+        source = prefix + late
+        decoy = prefix + "The canteen opens at eleven."
+        question = "What is the compressor minimum safe pressure?"
+        self.assertNotIn("compressor", source[:650])
+        self.assertIn(late, _evidence_excerpt(source, question))
+        self.assertNotIn(late, _evidence_excerpt(decoy, question))
+        self.assertLessEqual(len(_evidence_excerpt(source, question)), 650)
 
 
 
