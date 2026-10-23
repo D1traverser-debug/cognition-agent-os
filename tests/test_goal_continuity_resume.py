@@ -266,5 +266,19 @@ class GoalContinuityColdResume(unittest.TestCase):
         self.assertEqual(committed["status"], "CHECKPOINT_COMMITTED")
 
 
+    def test_recovered_task_implementation_must_equal_pinned_registration(self):
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            db.execute(
+                "UPDATE tasks SET source_spec=? WHERE task_id=?",
+                (json.dumps({"kind":"github","repo":"injected/other",
+                             "path":"README.md","old_ref":"a"*40,
+                             "new_ref":"b"*40}), self.first_task))
+            db.commit()
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "TASK_LINEAGE_UNVERIFIABLE", result)
+        self.assertNotIn("next_task_id", result)
+
+
 if __name__ == "__main__":
     unittest.main()
