@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS goal_continuity (
   grant_rev INTEGER NOT NULL,
   contract TEXT NOT NULL,
   contract_sha256 TEXT NOT NULL,
+  task_spec_sha256 TEXT NOT NULL,
   checkpoint_version INTEGER NOT NULL,
   registered_at REAL NOT NULL
 )
@@ -47,6 +48,19 @@ def _canonical(spec: dict) -> bytes:
     return json.dumps(
         spec, sort_keys=True, ensure_ascii=False,
         separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def _task_fingerprint(task: sqlite3.Row) -> str:
+    """Bind the action bytes and parent linkage, never mutable task status."""
+    frozen = {
+        "task_id": task["task_id"],
+        "source_spec": task["source_spec"],
+        "parent_task": task["parent_task"],
+        "goal_rev": task["goal_rev"],
+        "grant_rev": task["grant_rev"],
+        "created_at": task["created_at"],
+    }
+    return hashlib.sha256(_canonical(frozen)).hexdigest()
 
 
 def _validate(spec: dict) -> dict:
@@ -100,7 +114,7 @@ def _db_exists(db_path: Path) -> bool:
 
 
 def _guard(db: sqlite3.Connection, spec: dict,
-           authority: sqlite3.Row) -> None:
+           authority: sqlite3.Row) -> sqlite3.Row:
     if not authority or not authority["write_allowed"]:
         raise PermissionError("NO_CURRENT_GRANT")
     task = db.execute("SELECT * FROM tasks WHERE task_id=?",
@@ -111,6 +125,7 @@ def _guard(db: sqlite3.Connection, spec: dict,
         or task["grant_rev"] != authority["grant_rev"]
         or task["state"] not in _ALLOWED_STATES):
         raise ValueError("STALE_OR_UNSUPPORTED_TASK")
+    return task
 
 
 def register_goal(db_path: Path, spec: dict) -> dict:
@@ -125,18 +140,18 @@ def register_goal(db_path: Path, spec: dict) -> dict:
         try:
             authority = db.execute(
                 "SELECT * FROM authority WHERE singleton=1").fetchone()
-            _guard(db, spec, authority)
+            task = _guard(db, spec, authority)
             db.execute(_SCHEMA)
             if db.execute("SELECT 1 FROM goal_continuity WHERE goal_id=?",
                           (spec["goal_id"],)).fetchone():
                 raise ValueError("GOAL_ALREADY_REGISTERED")
             db.execute("""INSERT INTO goal_continuity(
                 goal_id, goal_rev, grant_rev, contract, contract_sha256,
-                checkpoint_version, registered_at)
-                VALUES(?,?,?,?,?,0,?)""",
+                task_spec_sha256, checkpoint_version, registered_at)
+                VALUES(?,?,?,?,?,?,0,?)""",
                 (spec["goal_id"], authority["goal_rev"],
                  authority["grant_rev"], raw.decode("utf-8"),
-                 digest, time.time()))
+                 digest, _task_fingerprint(task), time.time()))
             db.commit()
         except BaseException:
             db.rollback()
@@ -222,16 +237,18 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
                 # independently accepted owner/business outcome.
                 source["head_sha"] = observed_head_sha
             spec["next_task_id"] = next_task_id
-            _guard(db, spec, authority)
+            task = _guard(db, spec, authority)
+            task_fingerprint = _task_fingerprint(task)
             raw = _canonical(spec)
             digest = hashlib.sha256(raw).hexdigest()
             if digest == expected_digest:
                 raise ValueError("UNCHANGED_CHECKPOINT")
             updated = db.execute("""UPDATE goal_continuity
-                SET contract=?, contract_sha256=?,
+                SET contract=?, contract_sha256=?, task_spec_sha256=?,
                     checkpoint_version=checkpoint_version+1
                 WHERE goal_id=? AND contract_sha256=?""",
-                (raw.decode("utf-8"), digest, goal_id, expected_digest))
+                (raw.decode("utf-8"), digest, task_fingerprint,
+                 goal_id, expected_digest))
             if updated.rowcount != 1:
                 raise ValueError("CHECKPOINT_CAS_LOST")
             db.commit()
@@ -294,7 +311,8 @@ def resume_goal(db_path: Path, *, resolve_head=None) -> dict:
                 "SELECT * FROM tasks WHERE task_id=?",
                 (spec["next_task_id"],)).fetchone()
             if (task is None or task["goal_rev"] != row["goal_rev"]
-                or task["grant_rev"] != row["grant_rev"]):
+                or task["grant_rev"] != row["grant_rev"]
+                or _task_fingerprint(task) != row["task_spec_sha256"]):
                 return _no_action("TASK_LINEAGE_UNVERIFIABLE",
                                   goal_id=row["goal_id"])
             if spec["source"] is not None:
