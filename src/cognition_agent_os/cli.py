@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from .ledger import alter_authority, connect, create_task, initialize
+from .continuity import register_goal, resume_goal, checkpoint_goal
 from .host import HostNotConfigured, run_tick
 from .runner import run_once
 from .watch import create_watch
@@ -170,7 +171,47 @@ def main(argv=None) -> int:
     sub.add_parser("revoke-write")
     sub.add_parser("bump-goal")
     sub.add_parser("status")
+    continuity_seed = sub.add_parser("seed-continuity",
+        help="Explicitly anchor owner objective to an existing task; never grants authority")
+    continuity_seed.add_argument("--spec", type=Path, required=True)
+    sub.add_parser("goal-resume",
+        help="Read-only cold-resume from SQLite goal and task authority; no task execution")
+    continuity_advance = sub.add_parser("goal-checkpoint",
+        help="Compare-and-set active goal's next existing task; no new grant")
+    continuity_advance.add_argument("--goal-id", required=True)
+    continuity_advance.add_argument("--expected-digest", required=True)
+    continuity_advance.add_argument("--next-task-id", required=True)
+    continuity_advance.add_argument("--observed-head-sha", default=None,
+        help="Explicit GitHub HEAD reattestation; runtime independently re-reads it")
     args = p.parse_args(argv)
+    if args.command == "goal-resume":
+        result = resume_goal(args.db)
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0 if result["status"] in (
+            "READY_TO_TICK", "READY_TO_RECOVER",
+            "AWAITING_WORKER", "NEEDS_INDEPENDENT_REVIEW",
+            "NEEDS_OWNER_OUTCOME_REVIEW") else 4
+    if args.command in ("seed-continuity", "goal-checkpoint"):
+        try:
+            if args.command == "seed-continuity":
+                if (args.spec.is_symlink() or not args.spec.is_file()
+                    or args.spec.stat().st_size > 8192):
+                    raise ValueError("UNSAFE_CONTINUITY_INPUT")
+                payload = json.loads(args.spec.read_text(encoding="utf-8"))
+                result = register_goal(args.db, payload)
+            else:
+                result = checkpoint_goal(
+                    args.db, args.goal_id,
+                    expected_digest=args.expected_digest,
+                    next_task_id=args.next_task_id,
+                    observed_head_sha=args.observed_head_sha)
+        except (ValueError, TypeError, KeyError, PermissionError,
+                sqlite3.Error, OSError) as exc:
+            print(json.dumps({"status":"CONTINUITY_NOT_ADMITTED",
+                "reason":str(exc)[:120]}, sort_keys=True))
+            return 4
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0
     if args.command == "attestation-subject":
         result=prepare_unsigned_outcome(
             args.db,args.workspace,args.fixtures,args.task_id,

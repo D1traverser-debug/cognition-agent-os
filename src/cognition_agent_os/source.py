@@ -111,3 +111,41 @@ def github_public_branch_head(repo: str, branch: str) -> str:
         return sha
     except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError, KeyError) as exc:
         raise SourceUnavailable("Public branch head unavailable or invalid") from exc
+
+
+def github_public_branch_head_nested(repo: str, branch: str) -> str:
+    """Read-only public Git ref of a safe multi-segment branch.
+
+    Kept distinct from the original single-segment watcher adapter so this
+    broader name syntax does not silently expand watch-source permissions.
+    """
+    if (not isinstance(repo, str) or not _REPO_RE.fullmatch(repo)
+        or not isinstance(branch, str) or not 1 <= len(branch) <= 128
+        or branch.startswith("/") or branch.endswith("/")
+        or "\\" in branch or "//" in branch
+        or any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", part)
+               or part in (".", "..") or part.endswith(".lock")
+               for part in branch.split("/"))):
+        raise ValueError("Invalid nested public GitHub branch")
+    safe_branch = "/".join(quote(part, safe="") for part in branch.split("/"))
+    url = f"https://api.github.com/repos/{repo}/git/ref/heads/{safe_branch}"
+    request = Request(url, headers={
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "cognition-agent-os-continuity/0.0.1"})
+    try:
+        with urlopen(request, timeout=12) as response:
+            raw = response.read(32769)
+        if len(raw) > 32768:
+            raise SourceUnavailable("Branch ref metadata exceeds limit")
+        obj = json.loads(raw)
+        expected = "refs/heads/" + branch
+        sha = obj.get("object", {}).get("sha") if isinstance(obj, dict) else None
+        kind = obj.get("object", {}).get("type") if isinstance(obj, dict) else None
+        if (not isinstance(obj, dict) or obj.get("ref") != expected
+            or kind != "commit" or not isinstance(sha, str)
+            or not _SHA_RE.fullmatch(sha)):
+            raise SourceUnavailable("Branch ref identity mismatch")
+        return sha
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError,
+            TypeError, KeyError) as exc:
+        raise SourceUnavailable("Public nested branch head unavailable") from exc
