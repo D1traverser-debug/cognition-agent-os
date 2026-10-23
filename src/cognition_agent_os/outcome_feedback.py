@@ -317,9 +317,10 @@ def advance_evidence_goals(db_path:Path,workspace:Path,fixtures:Path,
         raise ValueError("INVALID_FEEDBACK_LIMIT")
     from .control_kernel import drive_active_controller
 
-    def transition(db,root,allowed,why):
-        if not allowed:
-            return _finish(db,root,_STOP,why)
+    def on_denied(db,root,reason):
+        return _finish(db,root,_STOP,reason)
+
+    def transition(db,root):
         valid,reason,contract,attempts=_verify(db,root)
         if not valid:
             return _finish(db,root,_UNVERIFIABLE,reason)
@@ -354,4 +355,4 @@ def advance_evidence_goals(db_path:Path,workspace:Path,fixtures:Path,
     return drive_active_controller(
         db_path,active_state=_ACTIVE,
         cursor_table="evidence_feedback_cursor",limit=limit,
-        setup=_ensure,step=transition)
+        setup=_ensure,step=transition,on_denied=on_denied)
