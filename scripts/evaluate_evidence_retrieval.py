@@ -30,6 +30,17 @@ DEV_RELEVANCE_OVERRIDE = {
 CUTOFFS = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0)
 
 
+def canonical_manifest_sha256(dataset: dict) -> str:
+    """Hash versioned JSON semantics, independent of checkout CRLF/UTF-8 defaults.
+
+    This is NOT a cryptographic proof of reviewer labels. Git blob SHA and
+    checkout-byte hash remain separate, independently inspectable values.
+    """
+    normalized = json.dumps(dataset, ensure_ascii=False, sort_keys=True,
+                            separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(normalized).hexdigest()
+
+
 def _evaluate_one(row: dict, *, method: str, cutoff: float) -> dict:
     docs = row["docs"]
     start = time.perf_counter()
@@ -136,7 +147,9 @@ def run(*, output: Path = OUT) -> dict:
     result = {
         "status": "INDEPENDENT_SYNTHETIC_RETRIEVAL_EXPERIMENT_NOT_PRODUCT_APPROVAL",
         "protocol": "v2-dev-relevance-calibrate-on-8, v2-holdout-relevance-evaluate-on-16",
-        "source_manifest_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+        "source_manifest_sha256": canonical_manifest_sha256(dataset),
+        "checkout_bytes_sha256": hashlib.sha256(payload_bytes).hexdigest(),
+        "source_manifest_digest_semantics": "canonical_json_UTF8_sorted_keys_compact",
         "source_registry": dataset["external_upstream"],
         "training_gold_visible_to_methods": False,
         "holdout_gold_visible_to_methods": False,

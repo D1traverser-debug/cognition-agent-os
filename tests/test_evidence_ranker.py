@@ -43,6 +43,16 @@ class EvidenceMethodTests(unittest.TestCase):
         self.assertIn("证", tokens("验证变更必须批准"))
         self.assertIn("批", tokens("验证变更必须批准"))
 
+    def test_canonical_dataset_digest_ignores_checkout_newline_style(self):
+        """Same parsed JSON cannot acquire a different dataset identity on Windows."""
+        from scripts.evaluate_evidence_retrieval import canonical_manifest_sha256
+        sample = {"question": "中文批准？", "relevant_sources": ["规则.md"]}
+        unix = json.dumps(sample, ensure_ascii=False, indent=2) + "\n"
+        windows = unix.replace("\n", "\r\n")
+        self.assertNotEqual(unix.encode("utf-8"), windows.encode("utf-8"))
+        self.assertEqual(canonical_manifest_sha256(json.loads(unix)),
+                         canonical_manifest_sha256(json.loads(windows)))
+
     def test_unanswerable_does_not_mean_no_relevant_evidence(self):
         from scripts.evaluate_evidence_retrieval import HOLDOUT
         corpus = json.loads(HOLDOUT.read_text(encoding="utf-8"))
@@ -64,7 +74,7 @@ class EvidenceMethodTests(unittest.TestCase):
             out = Path(root) / "experiment.json"
             report = run(output=out)
             self.assertTrue(out.is_file())
-            self.assertEqual(len(json.loads(out.read_text())["methods"]), 2)
+            self.assertEqual(len(json.loads(out.read_text(encoding="utf-8"))["methods"]), 2)
             self.assertFalse(report["release_authorized"])
             self.assertFalse(report["model_inference_executed"])
             for method in report["methods"].values():
