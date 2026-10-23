@@ -151,6 +151,18 @@ def run(*, output: Path = OUT) -> dict:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, ensure_ascii=False,
                                  sort_keys=True) + "\n", encoding="utf-8")
+    # Publish errors case-by-case, not only a convenient aggregate. Do not
+    # silently drop contradictory and injection cases when choosing methods.
+    print("HOLDOUT_ERRORS " + json.dumps({
+        method: [
+            {"id": row["id"], "family": row["family"],
+             "selected": row["selected"], "gold": row["gold"],
+             "false_source_count": row["false_source_count"],
+             "missed_source_count": row["missed_source_count"]}
+            for row in report["holdout"]["case_results"] if not row["exact"]
+        ]
+        for method, report in methods.items()
+    }, ensure_ascii=False, sort_keys=True))
     print(json.dumps({
         "status": result["status"],
         "holdout_sha256": result["source_manifest_sha256"],
