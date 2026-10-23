@@ -251,6 +251,11 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 proof=("MECHANICALLY_VALID" if
                        report["status"]=="VISIBLE_PATCH_MECHANICALLY_VALID"
                        else report.get("reason",report["status"]))
+            elif kind == "investigate_goal":
+                from .investigation import audit_investigation
+                r = audit_investigation(db_path, workspace, fixtures, tid)
+                proof = ("MECHANICALLY_VALID" if r["status"] == "SOURCE_GROUNDED_UNREVIEWED"
+                         else r["status"])
             elif kind=="goal_case":
                 r=audit_goal(db_path,workspace,fixtures,tid)
                 proof=("MECHANICALLY_VALID" if r["mechanical_audit"]

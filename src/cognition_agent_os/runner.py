@@ -129,6 +129,11 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
                 return finalize_observed(db,task,"UNKNOWN",error_code="REPAIR_PLANNER_UNAVAILABLE")
             from .repair_search import run_repair_case
             return run_repair_case(db,task,workspace,fixture_root)
+        if source_spec.get("kind") == "investigate_goal":
+            from .investigation import run_investigation
+            return run_investigation(db, task, workspace, fixture_root,
+                                     planner_mode=planner_mode,
+                                     local_model_name=local_model)
         if source_spec.get("kind")=="goal_intent":
             from .intent_runtime import run_intent
             return run_intent(db,task)
