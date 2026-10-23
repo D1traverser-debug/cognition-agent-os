@@ -32,6 +32,13 @@ SEED = "SCIFACT_ORIGINAL_CLAIM_VERIFICATION_PILOT_20261023"
 CONDITIONS = ("no_evidence", "full_abstract", "oracle_rationale")
 LABELS = frozenset(("SUPPORT", "CONTRADICT", "INSUFFICIENT"))
 MODEL = "qwen2.5:0.5b"
+COMPARISON_MODELS = frozenset(("qwen2.5:0.5b", "qwen2.5:1.5b"))
+# Pinned from actual verified original SciFact publisher archive in the
+# first immutable 0.5B run. A mutable /latest URL must never silently
+# change the paired scientific comparison.
+PINNED_ORIGINAL_ARCHIVE_SHA256 = (
+    "11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be"
+)
 
 
 def _load_official() -> tuple[dict, list, dict]:
@@ -41,6 +48,9 @@ def _load_official() -> tuple[dict, list, dict]:
     if len(archive) > MAX_ARCHIVE:
         raise ValueError("SciFact original archive over safety bound")
     digest = hashlib.sha256(archive).hexdigest()
+    if digest != PINNED_ORIGINAL_ARCHIVE_SHA256:
+        raise ValueError("Publisher archive changed since externally labeled "
+                         "0.5B baseline; comparable inference forbidden")
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
         members = bundle.getmembers()
         if len(members) > 1000:
@@ -238,7 +248,7 @@ def main():
         smoke()
         return 0
     from cognition_agent_os import local_model
-    if args.model != MODEL:
+    if args.model not in COMPARISON_MODELS:
         raise SystemExit("Unknown or unapproved model for this controlled study")
     tags = local_model._request("GET", "/api/tags", None, 15)
     digest = {x.get("name"): x.get("digest") for x in tags.get("models", [])
