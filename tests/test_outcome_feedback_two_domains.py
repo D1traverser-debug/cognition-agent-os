@@ -182,7 +182,9 @@ class OutcomeFeedbackTwoDomains(unittest.TestCase):
                        (tid,))
             db.commit()
         self.tick()
-        self.assertEqual(self.root(tid)["state"],"FEEDBACK_UNVERIFIABLE")
+        # The conformance gate runs BEFORE the controller transition and
+        # independently quarantines a confirmed orphaned lineage as UNKNOWN.
+        self.assertEqual(self.root(tid)["state"],"UNKNOWN")
         self.assertEqual(len(self.children(tid)),1)
         self.assertEqual(self.children(tid)[0]["task_id"],child)
         self.assertEqual(self.children(tid)[0]["state"],"BLOCKED")
