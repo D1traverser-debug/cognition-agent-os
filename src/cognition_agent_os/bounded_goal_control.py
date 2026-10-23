@@ -223,82 +223,38 @@ def _observe(db,root,contract,attempt,db_path:Path,workspace:Path,fixtures:Path)
 
 def advance_local_goals(db_path:Path,workspace:Path,fixtures:Path,
                         *,limit:int=4)->list[dict]:
-    """Host-tick-only controller transition; separate, versioned task authority.
-
-    One root transition per tick, at most two locally seeded alternatives.
-    No implicit scheduling, production effects or extra permission.
-    """
+    """Opt-in legacy local-goal policy on the SHARED admission/lease kernel."""
     if not 1<=limit<=8:
         raise ValueError("CONTROL_LIMIT")
-    db=connect(db_path)
-    results=[]
-    try:
-        # Allocate a fair, durable scan window under the same SQLite
-        # write lock. Repeatedly AWAITING children must not permanently
-        # occupy the first N slots and starve independent new goals.
-        db.execute("BEGIN IMMEDIATE")
-        try:
-            _ensure(db)
-            cursor=db.execute("""SELECT last_task_id FROM bounded_control_scan_cursor
-                                 WHERE singleton=1""").fetchone()[0]
-            ids=[r["task_id"] for r in db.execute(
-                """SELECT task_id FROM tasks WHERE state=? AND task_id>?
-                   ORDER BY task_id LIMIT ?""",(_ACTIVE,cursor,limit)).fetchall()]
-            if len(ids)<limit:
-                ids.extend(r["task_id"] for r in db.execute(
-                    """SELECT task_id FROM tasks WHERE state=? AND task_id<=?
-                       ORDER BY task_id LIMIT ?""",(_ACTIVE,cursor,limit-len(ids))).fetchall())
-            if ids:
-                db.execute("""UPDATE bounded_control_scan_cursor
-                           SET last_task_id=? WHERE singleton=1""",(ids[-1],))
-            db.commit()
-        except BaseException:
-            db.rollback()
-            raise
-        for tid in ids:
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                root=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
-                if root is None or root["state"]!=_ACTIVE:
-                    db.commit()
-                    continue
-                allowed,reason=current_guard(db,dict(root),needs_write=True)
-                if not allowed:
-                    result=_finish(db,tid,_STOP,reason)
-                else:
-                    from .bounded_control_audit import verify_registered_control
-                    registered=verify_registered_control(db,root)
-                    if not registered["valid"]:
-                        result=_finish(db,tid,_UNVERIFIABLE,
-                                       "REGISTRATION_PROOF_INVALID",
-                                       {"intake_reason":registered["reason"]})
-                    elif (root["created_at"]>time.time()+300
-                          or time.time()-root["created_at"]>MAX_CONTROL_AGE_SECONDS):
-                        result=_finish(db,tid,_STOP,
-                                       "LOCAL_CONTROL_TIME_BUDGET_EXHAUSTED")
-                    else:
-                        result=None
-                    if result is None:
-                        # verify_registered_control already validated this
-                        # contract inside the SAME SQLite write transaction.
-                        contract=json.loads(root["source_spec"])
-                        attempts=db.execute("""SELECT ordinal,child_task_id
-                          FROM bounded_goal_attempts WHERE root_task_id=?
-                          ORDER BY ordinal""",(tid,)).fetchall()
-                        if not attempts:
-                            result=_admit(db,root,contract,0,fixtures)
-                        elif (len(attempts)>2 or
-                              [x["ordinal"] for x in attempts]!=list(range(len(attempts)))):
-                            result=_finish(db,tid,_UNVERIFIABLE,"BROKEN_ATTEMPT_LINEAGE")
-                        else:
-                            result=_observe(db,root,contract,attempts[-1],
-                                            db_path,workspace,fixtures)
-                db.commit()
-                if result["status"]!="AWAITING_CHILD":
-                    results.append(result)
-            except BaseException:
-                db.rollback()
-                raise
-        return results
-    finally:
-        db.close()
+    from .control_kernel import drive_active_controller
+
+    def transition(db,root,allowed,reason):
+        if not allowed:
+            return _finish(db,root["task_id"],_STOP,reason)
+        from .bounded_control_audit import verify_registered_control
+        registered=verify_registered_control(db,root)
+        if not registered["valid"]:
+            return _finish(db,root["task_id"],_UNVERIFIABLE,
+                           "REGISTRATION_PROOF_INVALID",
+                           {"intake_reason":registered["reason"]})
+        if (root["created_at"]>time.time()+300 or
+            time.time()-root["created_at"]>MAX_CONTROL_AGE_SECONDS):
+            return _finish(db,root["task_id"],_STOP,
+                           "LOCAL_CONTROL_TIME_BUDGET_EXHAUSTED")
+        contract=json.loads(root["source_spec"])
+        attempts=db.execute("""SELECT ordinal,child_task_id
+            FROM bounded_goal_attempts WHERE root_task_id=?
+            ORDER BY ordinal""",(root["task_id"],)).fetchall()
+        if not attempts:
+            return _admit(db,root,contract,0,fixtures)
+        if (len(attempts)>2 or
+            [a["ordinal"] for a in attempts]!=list(range(len(attempts)))):
+            return _finish(db,root["task_id"],_UNVERIFIABLE,
+                           "BROKEN_ATTEMPT_LINEAGE")
+        return _observe(db,root,contract,attempts[-1],
+                        db_path,workspace,fixtures)
+
+    return drive_active_controller(
+        db_path,active_state=_ACTIVE,
+        cursor_table="bounded_control_scan_cursor",limit=limit,
+        setup=_ensure,step=transition)
