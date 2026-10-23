@@ -187,7 +187,9 @@ class OutcomeFeedbackTwoDomains(unittest.TestCase):
         self.assertEqual(self.root(tid)["state"],"UNKNOWN")
         self.assertEqual(len(self.children(tid)),1)
         self.assertEqual(self.children(tid)[0]["task_id"],child)
-        self.assertEqual(self.children(tid)[0]["state"],"BLOCKED")
+        # Conformance quarantine marks the descendant UNKNOWN, not BLOCKED:
+        # both are non-runnable, but UNKNOWN preserves its uncertain effect history.
+        self.assertEqual(self.children(tid)[0]["state"],"UNKNOWN")
 
     def test_default_host_does_not_advance_unopted_feedback(self):
         tid=self.seed(self.structure_methods())
