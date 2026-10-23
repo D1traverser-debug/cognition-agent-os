@@ -34,7 +34,7 @@ test "$EXEC_COUNT" -eq 1
 AOCI="$(find "$SANDBOX/bin" -type f -name aoci -print -quit)"
 chmod u+x "$AOCI"
 "$AOCI" --version | tee "$SANDBOX/version.txt"
-grep -F 'v0.1.0-rc21' "$SANDBOX/version.txt" >/dev/null
+grep -F 'aoci version 0.1.0-rc21 (commit cfa8e93ca9fe546a375f48b41b3d4766ed98b013' "$SANDBOX/version.txt" >/dev/null
 
 # Clone exact checked-out candidate into a disposable Git worktree.
 git clone --quiet --no-local "$GITHUB_WORKSPACE" "$SANDBOX/project"
