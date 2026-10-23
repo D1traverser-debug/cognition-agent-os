@@ -542,3 +542,60 @@ jobs:
             graphify-out/GRAPH_REPORT.md
             graphify-out/graph.html
           if-no-files-found: warn
+
+  experimental_open_goal_relevance:
+    # Opt-in genuine LOCAL inference on an ephemeral free PUBLIC CI runner.
+    # Not a cloud AI API, not owner's machine, not unattended deployment.
+    # A low quality score remains a measured failure and does not flip CI red.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-investigation-real-0.5b]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install local Ollama on disposable CI runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/ollama-local-only-install.sh"
+          sh "$RUNNER_TEMP/ollama-local-only-install.sh"
+          ollama --version
+      - name: Start strictly loopback inference and prefetch one small public model
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/ollama-investigation.log" 2>&1 &)
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null
+          timeout 420 ollama pull qwen2.5:0.5b
+          ollama list
+      - name: Measure actual model on independent relevant/irrelevant source controls
+        shell: bash
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          COGNITION_EVAL_MODEL: qwen2.5:0.5b
+          COGNITION_EVAL_ROUNDS: '2'
+          COGNITION_EVAL_OUTPUT: real-investigation-eval.json
+        run: |
+          set -euo pipefail
+          timeout 720 python scripts/measure_real_investigation.py
+      - name: Preserve actual trial-by-trial model behavior (including 0 score)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-local-investigation-model-evidence
+          path: real-investigation-eval.json
+          if-no-files-found: warn
