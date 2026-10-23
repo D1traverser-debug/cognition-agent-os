@@ -243,5 +243,28 @@ class GoalContinuityColdResume(unittest.TestCase):
         self.assertEqual(result["status"], "AUTHORITY_REVOKED")
 
 
+    def test_remote_resolver_runs_outside_sqlite_write_lock(self):
+        # The public network can be slow or unavailable. Checking source HEAD
+        # must not serialize independent granted jobs behind network latency.
+        source = {"repo":"example/public-repo", "branch":"main",
+                  "head_sha":"a"*40}
+        first = register_goal(self.db_path, self.contract(source=source))
+        with closing(connect(self.db_path)) as db:
+            second_task = create_task(
+                db, {"kind":"fixture", "old":"out", "new":"of-band"})
+        def checked_live_head(_repo, _branch):
+            with closing(sqlite3.connect(str(self.db_path), timeout=0.05)) as other:
+                other.execute("PRAGMA busy_timeout=50")
+                other.execute("BEGIN IMMEDIATE")
+                other.rollback()
+            return "b"*40
+        committed = checkpoint_goal(
+            self.db_path, "cognition-os",
+            expected_digest=first["contract_sha256"],
+            next_task_id=second_task, observed_head_sha="b"*40,
+            resolve_head=checked_live_head)
+        self.assertEqual(committed["status"], "CHECKPOINT_COMMITTED")
+
+
 if __name__ == "__main__":
     unittest.main()
