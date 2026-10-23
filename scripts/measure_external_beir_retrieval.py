@@ -192,20 +192,28 @@ def _read_dataset(raw: bytes, dataset: str):
             })
             continue
         qrels[qid][docid] = int(grade)
+    diagnostic = {
+        "dataset": dataset, "orphan_qrels_count": len(orphan_qrels),
+        "qrels_rows": len(lines) - 1, "query_total": len(queries),
+        "document_total": len(docs),
+        "excluded_orphan_qrels": orphan_qrels,
+        "strict_original_data_integrity": not bool(orphan_qrels),
+    }
     if orphan_qrels:
-        diagnostic = {
-            "dataset": dataset, "orphan_qrels_count": len(orphan_qrels),
-            "qrels_rows": len(lines) - 1, "query_total": len(queries),
-            "document_total": len(docs), "first_6_orphans": orphan_qrels[:6]
-        }
-        print("OFFICIAL_QRELS_INTEGRITY_DIAGNOSTIC "
+        # Official ArguAna has 5 qrels referring to absent corpus documents
+        # among 1,406 labels. Such missing documents are NOT negatives.
+        # Only evaluate queries with existing positive judgments and keep
+        # full diagnostic. Higher corruption exceeds experiment's remit.
+        ceiling = min(10, max(1, int(0.01 * (len(lines) - 1))))
+        print("OFFICIAL_QRELS_INTEGRITY_EXCEPTION "
               + json.dumps(diagnostic, sort_keys=True), flush=True)
-        raise ValueError("Official qrels include IDs not found in parsed files; "
-                         "dataset scoring stopped for source-integrity diagnosis")
+        if len(orphan_qrels) > ceiling:
+            raise ValueError("Official qrels deviation exceeds the "
+                             "1 percent / 10 record limit")
     eligible = [qid for qid in qrels if any(s > 0 for s in qrels[qid].values())]
     if not eligible or len(docs) > DATASET_MAX_DOCS:
         raise ValueError("Empty/oversized external benchmark")
-    return docs, queries, qrels, eligible
+    return docs, queries, qrels, eligible, diagnostic
 
 
 def _choose_ids(dataset: str, available: list[str]):
@@ -230,7 +238,7 @@ def _bootstrap_delta(a: list[float], b: list[float]) -> tuple[float, float]:
 def eval_dataset(dataset: str, md5: str) -> dict:
     started = time.perf_counter()
     raw = _fetch_checked(dataset, md5)
-    docs, queries, qrels, eligible = _read_dataset(raw, dataset)
+    docs, queries, qrels, eligible, integrity = _read_dataset(raw, dataset)
     ids = _choose_ids(dataset, eligible)
     retrievers = {
         "prefix_overlap": PrefixOverlap(docs),
@@ -274,6 +282,8 @@ def eval_dataset(dataset: str, md5: str) -> dict:
         "dataset": dataset, "archive_md5_matches_beir": True,
         "archive_sha256": hashlib.sha256(raw).hexdigest(),
         "corpus_count": len(docs), "test_qrels_total": len(qrels),
+        "external_data_integrity": integrity,
+        "scored_only_queries_with_present_positive_judgments": True,
         "sample_query_ids_sha256": hashlib.sha256(
             "\n".join(ids).encode()).hexdigest(),
         "sample_query_count": len(ids),
@@ -330,6 +340,7 @@ def main() -> int:
         output["datasets"][ds] = result
         print("DATASET " + json.dumps({
             "name": ds, "queries": result["sample_query_count"],
+            "excluded_orphan_qrels": result["external_data_integrity"]["orphan_qrels_count"],
             "docs": result["corpus_count"], "scores": {
                 method: {k: result["scores"][method][k] for k in (
                     "mean_ndcg_at_10", "mean_recall_at_100", "failure_count"
