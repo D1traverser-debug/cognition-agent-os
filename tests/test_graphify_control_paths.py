@@ -20,7 +20,7 @@ class GraphifyEvidenceTests(unittest.TestCase):
         self.graph={"built_at_commit":self.sha,
                     "nodes":[{"id":x} for pair in checker.REQUIRED_PATHS for x in pair],
                     "links":[{"source":a,"target":b,"relation":"calls",
-                              "confidence":"EXTRACTED"} for a,b in checker.REQUIRED_PATHS]}
+                              "confidence":"EXTRACTED","source_file":"src/cognition_agent_os/test.py","source_location":"L1"} for a,b in checker.REQUIRED_PATHS]}
         self.graph["nodes"]=[{"id":i} for i in sorted({n["id"] for n in self.graph["nodes"]})]
 
     def result(self):
@@ -39,6 +39,19 @@ class GraphifyEvidenceTests(unittest.TestCase):
     def test_import_edge_cannot_substitute_call(self):
         self.graph["links"][0]["relation"]="imports"
         self.assertEqual(self.result()["status"],"FAIL")
+
+    def test_extracted_edge_without_exact_source_location_is_rejected(self):
+        del self.graph["links"][0]["source_location"]
+        self.assertTrue(any(x.startswith("MISSING_SOURCE_LOCATION:")
+                            for x in self.result()["errors"]))
+
+    def test_control_edge_receipts_are_commit_bound_and_source_located(self):
+        result=self.result()
+        self.assertEqual(result["status"],"PASS",result)
+        self.assertEqual(result["commit"],self.sha)
+        self.assertEqual(len(result["control_edges"]),len(checker.REQUIRED_PATHS))
+        self.assertTrue(all(e["confidence"]=="EXTRACTED"
+                            for e in result["control_edges"]))
 
     def test_old_commit_is_rejected(self):
         self.graph["built_at_commit"]="b"*40
