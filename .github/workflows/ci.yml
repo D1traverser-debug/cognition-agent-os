@@ -554,6 +554,36 @@ jobs:
             graphify-out/graph.html
           if-no-files-found: warn
 
+
+  experimental_external_beir_retrieval:
+    # Public source labels with archive MD5 from the independent official BEIR.
+    # Opt-in and read-only; no model installation, API token or owner-machine use.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-beir-external-retrieval]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Local method and metric smoke prior to any external retrieval
+        run: python scripts/measure_external_beir_retrieval.py --smoke
+      - name: Three official BEIR corpora with independent test qrels and archive checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 960 python scripts/measure_external_beir_retrieval.py \
+            --out evaluation/beir_external_retrieval_results.json
+      - name: Save genuine BEIR per-dataset metric receipts, even if partial
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: primary-beir-external-retrieval-evidence
+          path: evaluation/beir_external_retrieval_results.json
+          if-no-files-found: warn
+
+
   experimental_open_goal_relevance:
     # Opt-in genuine LOCAL inference on an ephemeral free PUBLIC CI runner.
     # Not a cloud AI API, not owner's machine, not unattended deployment.
