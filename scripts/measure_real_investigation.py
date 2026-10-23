@@ -18,6 +18,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import time
+from unittest.mock import patch
 
 from cognition_agent_os import local_model
 from cognition_agent_os.host import run_tick
@@ -115,8 +116,23 @@ def _case_trial(case: dict, model: str) -> dict:
                 "kind": "investigate_goal", "question": case["question"],
                 "scope": "LOCAL_EVIDENCE_ONLY"})
         started = time.monotonic()
-        tick = run_tick(db_path, workspace, docs, max_jobs=1,
-                        planner_mode="ollama-local", local_model=model)
+        # This is a REAL model. We only wrap the transport to RECORD its
+        # returned JSON for synthetic data and then pass it through unchanged.
+        # Reviewer gold is never included in model messages.
+        actual_request = local_model._request
+        raw_model_replies = []
+        def observed_request(method, endpoint, payload, timeout):
+            response = actual_request(method, endpoint, payload, timeout)
+            if method == "POST" and endpoint == "/api/generate":
+                raw_model_replies.append({
+                    "stage": "source_selection" if not raw_model_replies else "grounded_extraction",
+                    "done": response.get("done"),
+                    "response": str(response.get("response", ""))[:2000],
+                })
+            return response
+        with patch.object(local_model, "_request", side_effect=observed_request):
+            tick = run_tick(db_path, workspace, docs, max_jobs=1,
+                            planner_mode="ollama-local", local_model=model)
         elapsed = round(time.monotonic() - started, 2)
         row = tick["tasks"][0] if tick["tasks"] else {"status": "NO_TASK"}
         result = {
@@ -124,6 +140,7 @@ def _case_trial(case: dict, model: str) -> dict:
             "question": case["question"], "fixture_sha256": fixture_hash,
             "task_status": row["status"], "error": row.get("reason"),
             "latency_seconds": elapsed, "model": model,
+            "model_reply_trace_synthetic_only": raw_model_replies,
             "gold_source_count": len(case["gold_sources"]),
             "gold_sources": list(case["gold_sources"]),
             "selected_sources": [],

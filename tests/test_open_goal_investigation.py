@@ -105,8 +105,12 @@ class OpenGoalInvestigationTests(unittest.TestCase):
 
     def test_fake_quote_is_rejected_no_artifact_or_success(self):
         tid = self.seed()
-        bad = [{"source": "authority.md", "quote": "False independent approval.",
-                "interpretation": "Pass"}]
+        bad = [
+            {"source": "authority.md", "quote": "False independent approval.",
+             "interpretation": "Pass"},
+            {"source": "verification.md", "quote": self.b,
+             "interpretation": "Independent verification required."},
+        ]
         fake, _ = self.model(findings=bad)
         with patch.object(local_model, "_request", side_effect=fake):
             result = run_tick(self.dbpath, self.workspace, self.sources,
@@ -114,6 +118,20 @@ class OpenGoalInvestigationTests(unittest.TestCase):
                               local_model="local:test")
         self.assertEqual(result["tasks"][0]["status"], "UNKNOWN", result)
         self.assertEqual(result["tasks"][0]["reason"], "UNGROUNDED_OR_DUPLICATE_QUOTE")
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+
+    def test_incomplete_findings_have_distinct_structural_error(self):
+        """Cardinality failure is not the same as a fabricated quote."""
+        tid = self.seed()
+        only_one = [{"source": "authority.md", "quote": self.a,
+                     "interpretation": "Potentially relevant."}]
+        fake, _ = self.model(findings=only_one)
+        with patch.object(local_model, "_request", side_effect=fake):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "UNKNOWN")
+        self.assertEqual(result["tasks"][0]["reason"], "INVALID_RESEARCH_PROPOSAL")
         self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
 
     def test_unlisted_source_rejected_before_read(self):
