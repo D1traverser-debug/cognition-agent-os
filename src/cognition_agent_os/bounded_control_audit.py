@@ -94,6 +94,45 @@ def verify_registered_control(db: sqlite3.Connection, root: sqlite3.Row) -> dict
             or receipt.get("business_outcome_verified") is not False
             or receipt.get("owner_approval_inferred") is not False):
             return {**fail, "reason": "REGISTRATION_RECEIPT_MISMATCH"}
+        # An intact root receipt is insufficient evidence that an attempt is
+        # still at ordinal zero. The admitted child, attempt index and event
+        # must describe the SAME lineage; otherwise an orphaned PENDING child
+        # could be silently duplicated on the next controller transition.
+        attempts=db.execute("""SELECT ordinal,child_task_id
+                   FROM bounded_goal_attempts WHERE root_task_id=?
+                   ORDER BY ordinal""",(root["task_id"],)).fetchall()
+        children=db.execute("""SELECT task_id,parent_task,goal_rev,grant_rev,source_spec
+                   FROM tasks WHERE parent_task=?""",(root["task_id"],)).fetchall()
+        admissions=db.execute("""SELECT details FROM events WHERE task_id=?
+                   AND kind='BOUNDED_CONTROLLER_ADMITTED'
+                   ORDER BY event_id""",(root["task_id"],)).fetchall()
+        count=len(attempts)
+        if (count>2 or len(children)!=count or len(admissions)!=count
+            or [x["ordinal"] for x in attempts]!=list(range(count))):
+            return {**fail, "reason":"ATTEMPT_LINEAGE_CARDINALITY"}
+        child_by_id={child["task_id"]:child for child in children}
+        if len(child_by_id)!=count:
+            return {**fail, "reason":"ATTEMPT_LINEAGE_CARDINALITY"}
+        for ordinal,attempt in enumerate(attempts):
+            child=child_by_id.get(attempt["child_task_id"])
+            bound=spec["alternatives"][ordinal]
+            method=bound["task_spec"]
+            admitted=json.loads(admissions[ordinal]["details"])
+            expected={
+                "ordinal":ordinal,
+                "child_task_id":attempt["child_task_id"],
+                "goal_rev":root["goal_rev"],
+                "grant_rev":root["grant_rev"],
+                "method":method["goal_type"],
+                "input_sha256":bound["input_sha256"],
+                "business_outcome_verified":False,
+            }
+            if (child is None or child["parent_task"]!=root["task_id"]
+                or child["goal_rev"]!=root["goal_rev"]
+                or child["grant_rev"]!=root["grant_rev"]
+                or json.loads(child["source_spec"])!=method
+                or admitted!=expected):
+                return {**fail, "reason":"ATTEMPT_LINEAGE_MISMATCH"}
         return {"valid":True, "reason":"REGISTRATION_INTACT",
                 "contract_sha256":receipt["contract_sha256"]}
     except (ValueError,TypeError,KeyError,IndexError,sqlite3.Error,UnicodeError):
