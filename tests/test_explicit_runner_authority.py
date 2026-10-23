@@ -7,6 +7,7 @@ already treat initialization as an explicit authority-bearing operation.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -34,29 +35,29 @@ class ExplicitAuthorizationAtEveryEntrypoint(unittest.TestCase):
 
     def test_existing_empty_sqlite_file_is_not_upgraded_on_execution(self):
         self.db.parent.mkdir()
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             db.execute("CREATE TABLE preexisting (id INTEGER)")
             db.commit()
         with self.assertRaisesRegex(RuntimeError, "initialized|configured|authority"):
             run_once(self.db, self.workspace, self.fixtures)
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             tables = {row[0] for row in db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertEqual(tables, {"preexisting"})
 
     def test_initialized_database_continues_to_run_and_idle(self):
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             initialize(db)
         self.assertEqual(run_once(self.db, self.workspace, self.fixtures)["status"], "IDLE")
         self.assertEqual(run_tick(self.db, self.workspace, self.fixtures)["status"], "IDLE")
 
     def test_revocation_not_reenabled_by_direct_runner_or_host(self):
-        with connect(self.db) as db:
+        with closing(connect(self.db)) as db:
             initialize(db)
             alter_authority(db, revoke=True)
         self.assertEqual(run_once(self.db, self.workspace, self.fixtures)["status"], "IDLE")
         self.assertEqual(run_tick(self.db, self.workspace, self.fixtures)["status"], "IDLE")
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             grant = db.execute("SELECT write_allowed,grant_rev FROM authority WHERE singleton=1").fetchone()
         self.assertEqual(grant, (0, 2))
 
