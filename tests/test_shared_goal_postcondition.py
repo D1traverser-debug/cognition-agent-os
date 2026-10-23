@@ -132,6 +132,67 @@ class SharedPostconditionFeedback(unittest.TestCase):
         self.assertEqual(self.root(task)["state"],"FEEDBACK_STOPPED")
         self.assertEqual(len(self.children(task)),1)
 
+    def test_two_mechanically_valid_steps_cannot_claim_wrong_common_record(self):
+        # Both formats are structurally valid. The SECOND candidate preserves
+        # an extra field, so it still fails the originally declared exact target.
+        methods=self.methods()
+        self.write("second.csv","id,department\nA,north\n")
+        task=self.register(methods,goal_id="exhaust-wrong-final")
+        self.tick()
+        first=self.tick()
+        self.assertEqual(first["tasks"][0]["reason"],"NO_SAFE_GOAL_PLAN",first)
+        self.assertEqual(len(self.children(task)),2)
+        last=self.tick()
+        self.assertEqual(last["tasks"][0]["status"],"NEEDS_REVIEW",last)
+        self.assertEqual(self.root(task)["state"],"FEEDBACK_STOPPED")
+        self.assertEqual(self.root(task)["error_code"],"EXHAUSTED_SAFE_ALTERNATIVES")
+        self.assertIs(last["semantic_outcome_verified"],False)
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(len(self.children(task)),2)
+
+    def test_no_op_on_same_exact_record_is_verified_without_second_attempt(self):
+        methods=self.methods()
+        self.write("first.json",'{"id":"A","owner":"ops"}')
+        task=self.register(methods,goal_id="already-correct")
+        self.tick()
+        observed=self.tick()
+        self.assertEqual(observed["tasks"][0]["status"],"VERIFIED",observed)
+        self.assertEqual(self.root(task)["state"],"FEEDBACK_EVIDENCE_READY")
+        self.assertEqual(len(self.children(task)),1)
+        self.assertIs(observed["semantic_outcome_verified"],False)
+
+    def test_source_change_after_first_failure_blocks_fallback_admission(self):
+        methods=self.methods()
+        task=self.register(methods,goal_id="second-source-drift")
+        self.tick()
+        # First child legitimately cannot preserve the conflicting owner.
+        # The second attempt's source changed from its registration digest.
+        self.write("second.csv","id\nB\n")
+        self.tick()
+        self.assertEqual(self.root(task)["state"],"FEEDBACK_UNVERIFIABLE")
+        self.assertEqual(len(self.children(task)),1)
+
+    def test_unrelated_or_malformed_acceptance_cannot_be_self_issued(self):
+        methods=self.methods()
+        invalid=[
+            {"kind":"exact_record_postcondition","identity_fields":["id"],
+             "target_record":{"id":"B","owner":"ops"}},
+            {"kind":"exact_record_postcondition","identity_fields":["id"],
+             "target_record":{"id":"A","owner":False}},
+            {"kind":"exact_record_postcondition","identity_fields":[],
+             "target_record":{"id":"A","owner":"ops"}},
+        ]
+        for acceptance in invalid:
+            with self.subTest(acceptance=acceptance):
+                with self.assertRaises(ValueError):
+                    register_evidence_goal(
+                        self.db,self.fx,goal_id="refuse-noncomparable",
+                        objective="One exact shared target",alternatives=methods,
+                        acceptance=acceptance)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],0)
+
     def test_legacy_evidence_only_goal_remains_separate(self):
         methods=self.methods()
         task=register_evidence_goal(self.db,self.fx,goal_id="legacy-evidence",
