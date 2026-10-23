@@ -70,8 +70,51 @@ def _ensure(db: sqlite3.Connection) -> None:
     db.execute("INSERT OR IGNORE INTO evidence_feedback_cursor VALUES(1,'')")
 
 
+def _checked_shared_acceptance(acceptance: dict, methods: list,
+                               fixtures: Path | None = None) -> dict:
+    """One fixed owner-defined postcondition shared across candidate formats.
+
+    The verifier does not infer this goal from each plan's desired fields.
+    It rejects attempts on different record identities and permits no
+    owner/source mutation. V1 goals retain their narrower evidence meaning.
+    """
+    if (not isinstance(acceptance,dict)
+        or set(acceptance)!={"kind","identity_fields","target_record"}
+        or acceptance["kind"]!="exact_record_postcondition"
+        or not isinstance(acceptance["identity_fields"],list)
+        or not 1<=len(acceptance["identity_fields"])<=4
+        or len(set(map(str,acceptance["identity_fields"])))!=len(acceptance["identity_fields"])
+        or not isinstance(acceptance["target_record"],dict)
+        or not 1<=len(acceptance["target_record"])<=16):
+        raise ValueError("INVALID_SHARED_ACCEPTANCE")
+    target=acceptance["target_record"]
+    if (any(not isinstance(k,str) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9-]{0,63}",k)
+            or not isinstance(v,str) or len(v)>256 for k,v in target.items())
+        or any(not isinstance(k,str) or k not in target
+               for k in acceptance["identity_fields"])
+        or not isinstance(methods,list) or len(methods)!=2):
+        raise ValueError("INVALID_SHARED_ACCEPTANCE")
+    sources=[]
+    for method in methods:
+        spec=method["task_spec"]
+        if spec.get("kind")!="goal_case":
+            raise ValueError("SHARED_ACCEPTANCE_UNSUPPORTED_CAPABILITY")
+        if (any(not isinstance(v,str) or k not in target or target[k]!=v
+                for k,v in spec["desired"].items())):
+            raise ValueError("CANDIDATE_DESIRED_CONTRADICTS_SHARED_TARGET")
+        if fixtures is not None:
+            record=record_from_bytes(spec["goal_type"],safe_fixture(fixtures,spec["input"]))
+            if any(record.get(k)!=target[k] for k in acceptance["identity_fields"]):
+                raise ValueError("CANDIDATE_WRONG_RECORD_IDENTITY")
+            sources.append(spec["goal_type"])
+    if fixtures is not None and sources[0]==sources[1]:
+        raise ValueError("CANDIDATE_METHOD_NOT_DISTINCT")
+    return acceptance
+
+
 def register_evidence_goal(db_path: Path, fixtures: Path, *, goal_id: str,
-                           objective: str, alternatives: list[dict]) -> str:
+                           objective: str, alternatives: list[dict],
+                           acceptance: dict | None = None) -> str:
     """Explicit opt-in with two immutable source-pinned existing capabilities."""
     if (not isinstance(goal_id,str) or not _ID.fullmatch(goal_id)
         or not isinstance(objective,str) or not 1<=len(objective)<=256
@@ -85,11 +128,18 @@ def register_evidence_goal(db_path: Path, fixtures: Path, *, goal_id: str,
         methods.append({"task_spec":spec,"source_sha256":pins})
     if methods[0] == methods[1]:
         raise ValueError("DUPLICATE_METHOD")
-    contract={"kind":"outcome_feedback_controller","version":1,
+    if acceptance is not None:
+        acceptance=_checked_shared_acceptance(acceptance,methods,fixtures)
+    contract={"kind":"outcome_feedback_controller",
+              "version":2 if acceptance is not None else 1,
               "goal_id":goal_id,"objective":objective,
-              "outcome_requirement":"INDEPENDENT_LOCAL_EVIDENCE",
+              "outcome_requirement":(
+                  "SHARED_LOCAL_RECORD_POSTCONDITION" if acceptance is not None
+                  else "INDEPENDENT_LOCAL_EVIDENCE"),
               "alternatives":methods,"max_attempts":2,
               "allowed_effect":"LOCAL_EVIDENCE_ONLY"}
+    if acceptance is not None:
+        contract["acceptance"]=acceptance
     if len(json.dumps(contract,ensure_ascii=False).encode())>16384:
         raise ValueError("FEEDBACK_CONTRACT_EXCEEDS_BOUND")
     db=connect(db_path)
@@ -120,13 +170,19 @@ def _verify(db:sqlite3.Connection, root:sqlite3.Row) -> tuple[bool,str,dict | No
     """Replay registration + every admitted child against immutable receipts."""
     try:
         contract=json.loads(root["source_spec"])
-        if (not isinstance(contract,dict)
-            or set(contract)!={"kind","version","goal_id","objective",
-                                "outcome_requirement","alternatives",
-                                "max_attempts","allowed_effect"}
+        if not isinstance(contract,dict):
+            return False,"INVALID_FEEDBACK_CONTRACT",None,[]
+        v2=type(contract.get("version")) is int and contract["version"]==2
+        required={"kind","version","goal_id","objective",
+                  "outcome_requirement","alternatives","max_attempts",
+                  "allowed_effect"}
+        if (set(contract)!=(required|{"acceptance"} if v2 else required)
             or contract["kind"]!="outcome_feedback_controller"
-            or type(contract["version"]) is not int or contract["version"]!=1
-            or contract["outcome_requirement"]!="INDEPENDENT_LOCAL_EVIDENCE"
+            or type(contract["version"]) is not int
+            or contract["version"] not in (1,2)
+            or contract["outcome_requirement"]!=(
+                "SHARED_LOCAL_RECORD_POSTCONDITION" if v2
+                else "INDEPENDENT_LOCAL_EVIDENCE")
             or contract["allowed_effect"]!="LOCAL_EVIDENCE_ONLY"
             or type(contract["max_attempts"]) is not int or contract["max_attempts"]!=2
             or not isinstance(contract["goal_id"],str)
@@ -138,6 +194,12 @@ def _verify(db:sqlite3.Connection, root:sqlite3.Row) -> tuple[bool,str,dict | No
             or root["parent_task"] is not None
             or root["claim_token"] is not None):
             return False,"INVALID_FEEDBACK_CONTRACT",None,[]
+        if v2:
+            _checked_shared_acceptance(contract["acceptance"],
+                                       contract["alternatives"])
+            if (contract["alternatives"][0]["task_spec"]["goal_type"] ==
+                contract["alternatives"][1]["task_spec"]["goal_type"]):
+                return False,"SHARED_METHOD_NOT_DISTINCT",None,[]
         for m in contract["alternatives"]:
             if not isinstance(m,dict) or set(m)!={"task_spec","source_sha256"}:
                 return False,"INVALID_FEEDBACK_METHOD",None,[]
@@ -233,7 +295,8 @@ def _finish(db, root, state, reason, *, child_id=None) -> dict:
             "reason":reason,"business_outcome_verified":False}
 
 
-def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path) -> str:
+def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path,
+             acceptance: dict | None = None) -> str:
     """Return SATISFIED / UNSATISFIED / WAITING / INCONCLUSIVE.
 
     Audit failures are NOT automatically treated as negative outcome: missing,
@@ -247,6 +310,35 @@ def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path) -> str:
     if state in ("PENDING","RUNNING"):
         return "WAITING"
     kind=spec["kind"]
+    if acceptance is not None and state in ("NEEDS_REVIEW","VERIFIED"):
+        # First establish original worker output integrity independently.
+        if state=="NEEDS_REVIEW":
+            audited=audit_goal(db_path,workspace,fixtures,child["task_id"])
+            if audited["status"]!="CANDIDATE_MECHANICALLY_VALID":
+                return "INCONCLUSIVE"
+            candidate_path=workspace/"artifacts"/(child["task_id"]+".json")
+            if candidate_path.is_symlink():
+                return "INCONCLUSIVE"
+            payload=json.loads(candidate_path.read_bytes())
+            if not isinstance(payload,dict) or not isinstance(payload.get("candidate_text"),str):
+                return "INCONCLUSIVE"
+            candidate=payload["candidate_text"].encode("utf-8")
+        else:
+            from .conformance import _verify_consistent
+            if _verify_consistent(child,fixtures)!="MECHANICALLY_VALID":
+                return "INCONCLUSIVE"
+            candidate=safe_fixture(fixtures,spec["input"])
+        raw=safe_fixture(fixtures,spec["input"])
+        shared=assess_local_record(
+            kind=spec["goal_type"],original=raw,
+            current_sha256=hashlib.sha256(raw).hexdigest(),
+            pinned_sha256=method["source_sha256"][spec["input"]],
+            target=acceptance["target_record"],candidate=candidate)
+        if shared["verdict"]=="LOCAL_CANDIDATE_TARGET_MET":
+            return "SATISFIED"
+        if shared["verdict"] in ("TARGET_NOT_MET","PRESERVATION_CONFLICT"):
+            return "UNSATISFIED"
+        return "INCONCLUSIVE"
     if state=="NEEDS_REVIEW":
         if kind=="goal_case":
             r=audit_goal(db_path,workspace,fixtures,child["task_id"])
@@ -263,7 +355,8 @@ def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path) -> str:
     if state=="UNKNOWN" and kind=="goal_case" and child["error_code"]=="NO_SAFE_GOAL_PLAN":
         raw=safe_fixture(fixtures,spec["input"])
         old=record_from_bytes(spec["goal_type"],raw)
-        merged={**old,**spec["desired"]}
+        merged=(acceptance["target_record"] if acceptance is not None
+                else {**old,**spec["desired"]})
         result=assess_local_record(
             kind=spec["goal_type"],original=raw,
             current_sha256=method["source_sha256"][spec["input"]],
@@ -296,14 +389,17 @@ def verify_feedback_root(db:sqlite3.Connection,root:sqlite3.Row,
         receipts=db.execute("""SELECT details FROM events
             WHERE task_id=? AND kind='FEEDBACK_OBSERVED' ORDER BY event_id""",
             (root["task_id"],)).fetchall()
-        accepted={"state":_READY,"reason":"INDEPENDENT_LOCAL_EVIDENCE",
+        accepted={"state":_READY,"reason":(
+                  "SHARED_LOCAL_TARGET_MET" if contract["version"]==2
+                  else "INDEPENDENT_LOCAL_EVIDENCE"),
                   "child_task_id":last["child_task_id"],
                   "business_outcome_verified":False,"authorizes_external_effect":False}
         if not receipts or json.loads(receipts[-1]["details"])!=accepted:
             return {"valid":False,"reason":"ACCEPTANCE_RECEIPT_INVALID"}
         try:
             if _outcome(child,contract["alternatives"][last["ordinal"]],
-                        db_path,workspace,fixtures)!="SATISFIED":
+                        db_path,workspace,fixtures,
+                        contract.get("acceptance"))!="SATISFIED":
                 return {"valid":False,"reason":"ACCEPTED_OUTCOME_NO_LONGER_VERIFIABLE"}
         except (OSError,ValueError,TypeError,KeyError,sqlite3.Error,UnicodeError):
             return {"valid":False,"reason":"OUTCOME_RECHECK_UNAVAILABLE"}
@@ -334,14 +430,17 @@ def advance_evidence_goals(db_path:Path,workspace:Path,fixtures:Path,
                          (last["child_task_id"],)).fetchone()
         try:
             verdict=_outcome(child,contract["alternatives"][last["ordinal"]],
-                             db_path,workspace,fixtures)
+                             db_path,workspace,fixtures,
+                             contract.get("acceptance"))
         except (OSError,ValueError,TypeError,KeyError,
                 sqlite3.Error,UnicodeError):
             verdict="INCONCLUSIVE"
         if verdict=="WAITING":
             return {"root_task_id":root["task_id"],"status":"AWAITING_CHILD"}
         if verdict=="SATISFIED":
-            return _finish(db,root,_READY,"INDEPENDENT_LOCAL_EVIDENCE",
+            return _finish(db,root,_READY,
+                           "SHARED_LOCAL_TARGET_MET" if contract["version"]==2
+                           else "INDEPENDENT_LOCAL_EVIDENCE",
                            child_id=child["task_id"])
         if verdict=="UNSATISFIED" and last["ordinal"]==0:
             return _admit(db,root,contract,1,fixtures)
