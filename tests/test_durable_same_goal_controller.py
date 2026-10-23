@@ -177,6 +177,21 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],0)
 
+    def test_malformed_canonical_target_fails_before_any_task(self):
+        methods=self.methods(json_conflict=False)
+        for target in (
+            {"id":"A","owner":1},
+            {"id":"A","owner":None},
+            {"id":"A","owner":"ops","bad field":"x"},
+            {"id":"A","owner":"x"*257},
+        ):
+            with self.subTest(target=target), self.assertRaisesRegex(
+                ValueError,"INVALID_TARGET"):
+                register_local_goal(self.db,self.fx,goal_id="owner-record",
+                                    target=target,alternatives=methods)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],0)
+
     def test_independent_observation_does_not_use_planner_verdict(self):
         raw=b'{"id":"A","owner":"wrong"}'
         sha=hashlib.sha256(raw).hexdigest()
