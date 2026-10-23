@@ -22,7 +22,6 @@ from .ledger import connect, create_task, current_guard, event
 from .source import safe_fixture
 
 _ID=re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
-_SHA=re.compile(r"[0-9a-f]{64}\Z")
 _ACTIVE="CONTROL_ACTIVE"
 _MET="CONTROL_CANDIDATE_MATCHED"
 _STOP="CONTROL_STOPPED"
@@ -46,6 +45,10 @@ def _ensure(db:sqlite3.Connection)->None:
 def _contract(goal_id:str,target:dict,alternatives:list,fixtures:Path)->dict:
     if (not isinstance(goal_id,str) or not _ID.fullmatch(goal_id)
         or not isinstance(target,dict) or not 1<=len(target)<=16
+        or any(not isinstance(k,str)
+               or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]{0,63}",k)
+               or not isinstance(v,str) or len(v)>256
+               for k,v in target.items())
         or not isinstance(alternatives,list) or len(alternatives)!=2):
         raise ValueError("INVALID_CONTROL_CONTRACT")
     # The reference oracle validates the exact canonical record independently.
@@ -77,14 +80,6 @@ def _contract(goal_id:str,target:dict,alternatives:list,fixtures:Path)->dict:
         packed.append({"task_spec":spec,"input_sha256":hashlib.sha256(raw).hexdigest()})
     if types!={"json_keys","csv_columns"}:
         raise ValueError("UNREGISTERED_METHOD_PAIR")
-    # A malformed target is never admitted even if neither method gets executed.
-    assess=assess_local_record(kind=packed[0]["task_spec"]["goal_type"],
-                               original=safe_fixture(fixtures,packed[0]["task_spec"]["input"]),
-                               current_sha256=packed[0]["input_sha256"],
-                               pinned_sha256=packed[0]["input_sha256"],
-                               target=target,candidate=None)
-    if assess["verdict"]=="UNVERIFIABLE":
-        raise ValueError("INVALID_TARGET")
     spec={"kind":"bounded_local_controller","schema_version":1,
           "goal_id":goal_id,"target":target,"alternatives":packed,
           "max_attempts":2,"allowed_effect":"LOCAL_CANDIDATE_ONLY"}
