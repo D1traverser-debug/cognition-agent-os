@@ -408,7 +408,7 @@ jobs:
   aoci_official_bootstrap_probe:
     # Manual supply-chain/tool availability probe only. It cannot author an
     # AOCI semantic index and must not inflate every integration CI run.
-    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[probe-aoci-toolchain]'))) }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
