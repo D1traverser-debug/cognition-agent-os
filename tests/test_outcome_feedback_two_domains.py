@@ -144,5 +144,56 @@ class OutcomeFeedbackTwoDomains(unittest.TestCase):
         self.assertEqual(self.root(tid)["state"],"UNKNOWN")
 
 
+    def test_missing_first_source_does_not_crash_host_or_grant_new_action(self):
+        tid=self.seed(self.structure_methods())
+        (self.fx / "conflict.json").unlink()
+        result=self.tick()
+        self.assertEqual(self.root(tid)["state"],"FEEDBACK_UNVERIFIABLE",result)
+        self.assertEqual(self.children(tid),[])
+        self.assertFalse(result["semantic_outcome_verified"])
+
+    def test_forged_negative_status_does_not_trigger_fallback(self):
+        self.write("conflict.json", '{"id":"A"}')
+        self.write("valid.csv", "id\nA\n")
+        methods=[
+            {"kind":"goal_case","goal_type":"json_keys",
+             "input":"conflict.json","desired":{"owner":"ops"}},
+            {"kind":"goal_case","goal_type":"csv_columns",
+             "input":"valid.csv","desired":{"owner":"ops"}},
+        ]
+        tid=self.seed(methods)
+        self.tick()
+        child=self.children(tid)[0]["task_id"]
+        with closing(connect(self.db)) as db:
+            db.execute(
+                "UPDATE tasks SET state='UNKNOWN',error_code='NO_SAFE_GOAL_PLAN' "
+                "WHERE task_id=?",(child,))
+            db.commit()
+        self.tick()
+        self.assertEqual(self.root(tid)["state"],"FEEDBACK_UNVERIFIABLE")
+        self.assertEqual(len(self.children(tid)),1)
+
+    def test_orphaned_attempt_refuses_duplicate_child_and_fences_running_work(self):
+        tid=self.seed(self.structure_methods())
+        self.tick()
+        child=self.children(tid)[0]["task_id"]
+        with closing(connect(self.db)) as db:
+            db.execute("DELETE FROM evidence_feedback_attempts WHERE root_task_id=?",
+                       (tid,))
+            db.commit()
+        self.tick()
+        self.assertEqual(self.root(tid)["state"],"FEEDBACK_UNVERIFIABLE")
+        self.assertEqual(len(self.children(tid)),1)
+        self.assertEqual(self.children(tid)[0]["task_id"],child)
+        self.assertEqual(self.children(tid)[0]["state"],"BLOCKED")
+
+    def test_default_host_does_not_advance_unopted_feedback(self):
+        tid=self.seed(self.structure_methods())
+        result=run_tick(self.db,self.work,self.fx,max_jobs=3)
+        self.assertEqual(self.root(tid)["state"],"FEEDBACK_ACTIVE")
+        self.assertEqual(self.children(tid),[])
+        self.assertEqual(result["local_goal_control"],[])
+
+
 if __name__=="__main__":
     unittest.main()
