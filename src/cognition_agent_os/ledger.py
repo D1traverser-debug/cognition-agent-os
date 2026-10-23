@@ -17,6 +17,38 @@ def connect(path: Path) -> sqlite3.Connection:
     return db
 
 
+class LedgerNotConfigured(RuntimeError):
+    """Execution cannot mint an authority or modify an uninitialized ledger."""
+
+
+def require_initialized_ledger(path: Path) -> None:
+    """Read-only admission for every operational entrypoint, not just the host.
+
+    Intentionally does not call connect() or initialize(): both can create or
+    modify SQLite storage. A provisioned but revoked ledger remains valid for
+    non-mutating processing, whereas partial/corrupt authority must fail closed.
+    """
+    from contextlib import closing
+
+    if not path.is_file() or path.is_symlink():
+        raise LedgerNotConfigured("Ledger is not initialized or configured")
+    try:
+        uri = path.resolve(strict=True).as_uri() + "?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+            grant = db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed "
+                "FROM authority WHERE singleton=1"
+            ).fetchone()
+            db.execute("SELECT task_id FROM tasks LIMIT 1").fetchone()
+            if (grant is None
+                or any(type(value) is not int for value in grant)
+                or grant[0] < 1 or grant[1] < 1
+                or grant[2] not in (0, 1)):
+                raise LedgerNotConfigured("Ledger authority is not initialized")
+    except (sqlite3.Error, OSError, ValueError) as exc:
+        raise LedgerNotConfigured("Ledger is not initialized or configured") from exc
+
+
 def initialize(db: sqlite3.Connection) -> None:
     db.executescript("""
     CREATE TABLE IF NOT EXISTS authority (
