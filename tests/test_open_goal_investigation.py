@@ -294,5 +294,26 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
 
 
+    def test_a_directory_with_only_one_real_document_is_valid_evidence(self):
+        """Do not confuse corpus cardinality with the evidence needed for a goal."""
+        from cognition_agent_os.investigation import audit_investigation
+
+        (self.sources / "verification.md").unlink()
+        tid = self.seed("What evidence governs production write permissions?")
+        findings = [{"source": "authority.md", "quote": self.a,
+                     "interpretation": "The document constrains permissions."}]
+        fake, calls = self.model(selection=["authority.md"], findings=findings)
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW", tick)
+        self.assertEqual(audit_investigation(
+            self.dbpath, self.workspace, self.sources, tid)["status"],
+            "SOURCE_GROUNDED_UNREVIEWED")
+        self.assertEqual(len([r for r in calls if r[0] == "POST"]), 2)
+
+
+
 if __name__ == "__main__":
     unittest.main()
