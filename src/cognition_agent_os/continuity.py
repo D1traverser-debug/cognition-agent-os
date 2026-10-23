@@ -127,6 +127,9 @@ def register_goal(db_path: Path, spec: dict) -> dict:
                 "SELECT * FROM authority WHERE singleton=1").fetchone()
             _guard(db, spec, authority)
             db.execute(_SCHEMA)
+            if db.execute("SELECT 1 FROM goal_continuity WHERE goal_id=?",
+                          (spec["goal_id"],)).fetchone():
+                raise ValueError("GOAL_ALREADY_REGISTERED")
             db.execute("""INSERT INTO goal_continuity(
                 goal_id, goal_rev, grant_rev, contract, contract_sha256,
                 checkpoint_version, registered_at)
