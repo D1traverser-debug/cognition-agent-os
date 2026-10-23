@@ -418,6 +418,13 @@ jobs:
       - name: Probe official AOCI-CODE in isolated checkout (no model authoring)
         shell: bash
         run: bash scripts/probe_official_aoci.sh
+      - name: Upload isolated AOCI machine evidence (no formal index)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aoci-official-bootstrap-evidence
+          path: aoci-probe-out/
+          if-no-files-found: warn
 
   graphify_official_code_inventory:
     # Official third-party CLI on a clean temporary Linux runner.
@@ -442,7 +449,7 @@ jobs:
           graphify cluster-only .
           test -s graphify-out/graph.json
           test -s graphify-out/GRAPH_REPORT.md
-          python scripts/verify_graphify_control_paths.py graphify-out/graph.json
+          python scripts/verify_graphify_control_paths.py graphify-out/graph.json --output graphify-out/control_evidence.json
           python - <<'PY'
           import json
           from pathlib import Path
@@ -458,6 +465,7 @@ jobs:
           name: graphify-official-code-inventory
           path: |
             graphify-out/graph.json
+            graphify-out/control_evidence.json
             graphify-out/GRAPH_REPORT.md
             graphify-out/graph.html
           if-no-files-found: warn
