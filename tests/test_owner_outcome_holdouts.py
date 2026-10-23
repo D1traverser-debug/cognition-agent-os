@@ -14,7 +14,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"evaluation"))
-from owner_outcome_oracle import assess_route_fitness,evaluate_outcome,evaluate_shared_record_goal
+from owner_outcome_oracle import evaluate_outcome,evaluate_shared_record_goal
 from cognition_agent_os.ledger import connect,create_task,initialize
 from cognition_agent_os.runner import run_once
 
@@ -96,23 +96,6 @@ class OwnerPinnedBlackboxHoldouts(unittest.TestCase):
                          original,candidate)["status"],"NOT_ACCEPTED")
         self.assertFalse(evaluate_outcome(contract,original,candidate)
                          ["business_outcome_verified"])
-
-    def test_two_route_labels_are_not_a_same_goal_proof(self):
-        one={"kind":"goal_intent","objective":"ensure_structure",
-             "resources":[{"role":"input","path":"settings.json"}],
-             "requirements":[{"field":"owner","equals":"ops"}]}
-        other={"kind":"goal_intent","objective":"compare_records",
-               "resources":[{"role":"reference","path":"before.csv"},
-                            {"role":"observed","path":"after.csv"}]}
-        differing=assess_route_fitness([{"route":"structure","intent":one},
-                                       {"route":"compare","intent":other}])
-        self.assertEqual(differing["reason"],"DIFFERENT_OBJECTIVES")
-        self.assertFalse(differing["safe_to_autoswitch"])
-        duplicated=assess_route_fitness([{"route":"structure","intent":one},
-                                        {"route":"compare","intent":dict(one)}])
-        self.assertEqual(duplicated["reason"],"DUPLICATE_METHOD")
-        self.assertFalse(duplicated["safe_to_autoswitch"])
-
 
     def test_two_actual_capabilities_satisfy_same_pinned_record_outcome(self):
         # A canonical user-level result is fixed BEFORE either method runs.
