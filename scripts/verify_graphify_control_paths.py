@@ -19,6 +19,13 @@ REQUIRED_PATHS = (
     ("src_cognition_agent_os_bounded_control_audit_audit_controlled_candidate", "src_cognition_agent_os_bounded_outcome_oracle_assess_local_record"),
     ("src_cognition_agent_os_conformance_inspect_conformance", "src_cognition_agent_os_conformance_check_one"),
     ("src_cognition_agent_os_conformance_check_one", "src_cognition_agent_os_bounded_control_audit_audit_controlled_candidate"),
+    # PR25: three must-have call paths for the actual SINGLE control kernel,
+    # proved present as EXTRACTED/line-located in Graphify's PR merge-tree.
+    ("src_cognition_agent_os_bounded_goal_control_advance_local_goals", "src_cognition_agent_os_control_kernel_drive_active_controller"),
+    ("src_cognition_agent_os_outcome_feedback_advance_evidence_goals", "src_cognition_agent_os_control_kernel_drive_active_controller"),
+    ("src_cognition_agent_os_control_kernel_drive_active_controller", "src_cognition_agent_os_ledger_current_guard"),
+    ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_outcome_feedback_advance_evidence_goals"),
+    ("src_cognition_agent_os_conformance_check_one", "src_cognition_agent_os_outcome_feedback_verify_feedback_root"),
 )
 
 def check(graph_path: Path, repo: Path) -> dict:
