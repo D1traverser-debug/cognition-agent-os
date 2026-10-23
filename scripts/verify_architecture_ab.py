@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import statistics
 import subprocess
@@ -159,6 +160,9 @@ def main() -> None:
         raise SystemExit("BASELINE_OR_REPETITION_CONTRACT_INVALID")
     repo=args.repo.resolve()
     candidate_sha=_run(["git","rev-parse","HEAD"],repo)
+    if (not re.fullmatch(r"[0-9a-f]{40}",candidate_sha)
+        or candidate_sha==args.baseline):
+        raise SystemExit("ARCHITECTURE_CANDIDATE_NOT_DISTINCT_COMMIT")
     _run(["git","cat-file","-e",args.baseline+"^{commit}"],repo)
     with tempfile.TemporaryDirectory(prefix="control-architecture-ab-") as td:
         workspace=Path(td)
