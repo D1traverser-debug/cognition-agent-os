@@ -97,6 +97,32 @@ CASES = (
         },
         "gold_sources": ("document-b.md",),
     },
+    {
+        "id": "buried_compressor_threshold",
+        "domain": "industrial_evidence",
+        "question": "What is the compressor minimum safe pressure?",
+        "docs": {
+            "document-a.md": ("Archived shift report without measurements. " * 35 +
+                              "The compressor minimum safe pressure is 42 kilopascals."),
+            "document-b.md": ("Archived shift report without measurements. " * 35 +
+                              "The canteen opens at eleven."),
+            "document-c.md": "The monthly shipping invoice covers food cartons.",
+        },
+        "gold_sources": ("document-a.md",),
+    },
+    {
+        "id": "buried_compressor_threshold_swapped",
+        "domain": "industrial_evidence",
+        "question": "What is the compressor minimum safe pressure?",
+        "docs": {
+            "document-a.md": ("Archived shift report without measurements. " * 35 +
+                              "The canteen opens at eleven."),
+            "document-b.md": ("Archived shift report without measurements. " * 35 +
+                              "The compressor minimum safe pressure is 42 kilopascals."),
+            "document-c.md": "The monthly shipping invoice covers food cartons.",
+        },
+        "gold_sources": ("document-b.md",),
+    },
 )
 
 
@@ -122,6 +148,10 @@ def _case_trial(case: dict, model: str, protocol: str) -> dict:
         actual_request = local_model._request
         raw_model_replies = []
         def observed_request(method, endpoint, payload, timeout):
+            if protocol == "json" and method == "POST" and endpoint == "/api/generate":
+                # Retain the exact old JSON-only protocol as an A/B comparator,
+                # even after production adopts source-bound JSON schema.
+                payload = {**payload, "format": "json"}
             if protocol == "schema" and method == "POST" and endpoint == "/api/generate":
                 # Exactly the same model, question, source text and token budget.
                 # Only Ollama's response grammar changes; reviewer gold stays out.
