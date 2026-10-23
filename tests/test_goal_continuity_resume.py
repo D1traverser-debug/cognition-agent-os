@@ -165,5 +165,83 @@ class GoalContinuityColdResume(unittest.TestCase):
         self.assertEqual(result["status"], "READY_TO_TICK")
 
 
+    def test_task_future_due_is_not_falsely_runnable(self):
+        import time
+        with closing(connect(self.db_path)) as db:
+            future = create_task(
+                db, {"kind":"fixture", "old":"future-a", "new":"future-b"},
+                due_at=time.time() + 3600)
+        register_goal(self.db_path, self.contract(next_task_id=future))
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "NOT_DUE", result)
+        self.assertNotIn("next_task_id", result)
+
+    def test_explicit_remote_reattest_must_match_independent_live_head(self):
+        source = {"repo":"example/public-repo", "branch":"main",
+                  "head_sha":"a"*40}
+        first = register_goal(self.db_path, self.contract(source=source))
+        with closing(connect(self.db_path)) as db:
+            second_task = create_task(
+                db, {"kind":"fixture", "old":"head-a", "new":"head-b"})
+        with self.assertRaises(ValueError):
+            checkpoint_goal(
+                self.db_path, "cognition-os",
+                expected_digest=first["contract_sha256"],
+                next_task_id=second_task, observed_head_sha="b"*40,
+                resolve_head=lambda *_: "c"*40)
+        with self.assertRaises(ValueError):
+            checkpoint_goal(
+                self.db_path, "cognition-os",
+                expected_digest=first["contract_sha256"],
+                next_task_id=second_task,
+                resolve_head=lambda *_: "b"*40)
+        second = checkpoint_goal(
+            self.db_path, "cognition-os",
+            expected_digest=first["contract_sha256"],
+            next_task_id=second_task, observed_head_sha="b"*40,
+            resolve_head=lambda *_: "b"*40)
+        self.assertEqual(second["status"], "CHECKPOINT_COMMITTED")
+        result = resume_goal(
+            self.db_path, resolve_head=lambda *_: "b"*40)
+        self.assertEqual(result["status"], "READY_TO_TICK", result)
+        self.assertEqual(result["next_task_id"], second_task)
+        self.assertFalse(result["business_outcome_verified"])
+
+    def test_cli_resume_reads_same_canonical_db(self):
+        contract_path = self.root / "goal.json"
+        contract_path.write_text(
+            json.dumps(self.contract()), encoding="utf-8")
+        common = [
+            sys.executable, "-m", "cognition_agent_os.cli",
+            "--db", str(self.db_path),
+            "--workspace", str(self.root / "workspace"),
+            "--fixtures", str(self.root),
+        ]
+        created = subprocess.run(
+            common + ["seed-continuity", "--spec", str(contract_path)],
+            capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(created.stdout)["status"], "REGISTERED")
+        recovered = subprocess.run(
+            common + ["goal-resume"],
+            capture_output=True, text=True, check=True)
+        state = json.loads(recovered.stdout)
+        self.assertEqual(state["status"], "READY_TO_TICK", state)
+        self.assertEqual(state["next_task_id"], self.first_task)
+
+    def test_checkpoint_after_revocation_is_not_allowed(self):
+        first = register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            other = create_task(
+                db, {"kind":"fixture", "old":"other", "new":"new"})
+            alter_authority(db, revoke=True)
+        with self.assertRaises(PermissionError):
+            checkpoint_goal(
+                self.db_path, "cognition-os",
+                expected_digest=first["contract_sha256"],
+                next_task_id=other)
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "AUTHORITY_REVOKED")
+
+
 if __name__ == "__main__":
     unittest.main()
