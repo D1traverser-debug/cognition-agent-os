@@ -49,8 +49,8 @@ VERIFY_RC=$?
 "$AOCI" --repo "$SANDBOX/project" check --json > "$SANDBOX/check.json" 2> "$SANDBOX/check.err"
 CHECK_RC=$?
 set -e
-python3 - "$SANDBOX/verify.json" "$SANDBOX/check.json" "$VERIFY_RC" "$CHECK_RC" <<'PY'
-import json,pathlib,sys
+python3 - "$SANDBOX/verify.json" "$SANDBOX/check.json" "$VERIFY_RC" "$CHECK_RC" "$GITHUB_WORKSPACE/aoci-probe-out" "$SANDBOX/project" <<'PY'
+import json,pathlib,shutil,subprocess,sys
 verify,check=(pathlib.Path(p) for p in sys.argv[1:3])
 for path in (verify,check):
     if not path.is_file() or path.stat().st_size>262144:
@@ -61,7 +61,15 @@ for path in (verify,check):
         raise SystemExit('AOCI emitted non-JSON machine evidence: '+type(exc).__name__)
     if not isinstance(result,(dict,list)):
         raise SystemExit('AOCI machine evidence is not an object or list')
-print(json.dumps({
+if int(sys.argv[3])==0 or int(sys.argv[4])==0:
+    raise SystemExit("Unexpected fully aligned verdict from un-authored AOCI skeleton")
+output=pathlib.Path(sys.argv[5])
+output.mkdir(parents=True,exist_ok=True)
+for name,source in [('verify.json',verify),('check.json',check)]:
+    shutil.copyfile(source,output/name)
+commit=subprocess.check_output(
+    ['git','-C',sys.argv[6],'rev-parse','HEAD'],text=True).strip()
+report={
  'probe':'OFFICIAL_AOCI_INIT_SCAN_SMOKE',
  'release':'v0.1.0-rc21',
  'verification_level':'PINNED_BASIC_SHA_ONLY',
@@ -70,6 +78,10 @@ print(json.dumps({
  'index_semantics_verified':False,
  'product_readiness':'NOT_READY',
  'verify_exit_code':int(sys.argv[3]),
- 'check_exit_code':int(sys.argv[4])
-},sort_keys=True))
+ 'check_exit_code':int(sys.argv[4]),
+ 'source_commit':commit,
+ 'next_required_action':'ORIGINAL_MCP_HOST_MODEL_AUTHORED_FRAS_INDEX'
+}
+(output/'status.json').write_text(json.dumps(report,indent=2,sort_keys=True)+chr(10),encoding='utf-8')
+print(json.dumps(report,sort_keys=True))
 PY
