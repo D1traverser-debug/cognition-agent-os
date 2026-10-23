@@ -69,7 +69,7 @@ def main():
     a=p.parse_args()
     result=check(a.graph,a.repo)
     if a.output:
-        a.output.write_text(json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+"\\n",encoding="utf-8")
+        a.output.write_text(json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+chr(10),encoding="utf-8")
     print(json.dumps(result,sort_keys=True))
     if result["status"]!="PASS":raise SystemExit(1)
 
