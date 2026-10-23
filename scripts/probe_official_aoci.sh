@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Experimental OFFICIAL AOCI-CODE bootstrap only; this does not author semantics.
-# Trust: pinned SHA256 from upstream release. This is not Cosign publisher auth.
+# Trust: pinned archive digest plus GitHub attestation bundle and producer identity.
 set -euo pipefail
 : "$GITHUB_WORKSPACE"
 : "$RUNNER_TEMP"
@@ -14,6 +14,29 @@ curl --fail --show-error --location --retry 2 --proto '=https' \
   "https://github.com/aoci-spec/aoci-code/releases/download/$TAG/$ARCHIVE" \
   -o "$SANDBOX/$ARCHIVE"
 printf '%s  %s\n' "$SHA256" "$SANDBOX/$ARCHIVE" | sha256sum --check --status
+# Verify the producer workflow and immutable tag commit BEFORE executing AOCI.
+# This is stronger than an archive hash, but still not a full 16-asset audit.
+PROVENANCE="AOCI-CODE_v0.1.0-rc21.provenance.sigstore.json"
+curl --fail --show-error --location --retry 2 --proto '=https' \
+  --tlsv1.2 --max-time 90 \
+  "https://github.com/aoci-spec/aoci-code/releases/download/$TAG/$PROVENANCE" \
+  -o "$SANDBOX/$PROVENANCE"
+printf '%s  %s\n' \
+  "fff53bb8636cc6085c62b019e3a3d843e4fbe3554ff173968b01e63abd47d183" \
+  "$SANDBOX/$PROVENANCE" | sha256sum --check --status
+command -v gh >/dev/null
+gh attestation verify "$SANDBOX/$ARCHIVE" \
+  --bundle "$SANDBOX/$PROVENANCE" \
+  --repo aoci-spec/aoci-code \
+  --cert-identity "https://github.com/aoci-spec/aoci-code/.github/workflows/release.yml@refs/tags/$TAG" \
+  --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+  --signer-digest "cfa8e93ca9fe546a375f48b41b3d4766ed98b013" \
+  --source-ref "refs/tags/$TAG" \
+  --source-digest "cfa8e93ca9fe546a375f48b41b3d4766ed98b013" \
+  --deny-self-hosted-runners \
+  > "$SANDBOX/provenance-verification.txt"
+test -s "$SANDBOX/provenance-verification.txt"
+
 mkdir -p "$SANDBOX/bin"
 python3 - "$SANDBOX/$ARCHIVE" "$SANDBOX/bin" <<'PY'
 import pathlib,sys,tarfile
@@ -72,7 +95,7 @@ commit=subprocess.check_output(
 report={
  'probe':'OFFICIAL_AOCI_INIT_SCAN_SMOKE',
  'release':'v0.1.0-rc21',
- 'verification_level':'PINNED_BASIC_SHA_ONLY',
+ 'verification_level':'PINNED_ARCHIVE_AND_PROVENANCE_ATTESTATION',
  'actual_mcp_host_connected':False,
  'whole_index_authored':False,
  'index_semantics_verified':False,
