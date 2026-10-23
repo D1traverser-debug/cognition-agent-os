@@ -9,7 +9,7 @@ from pathlib import Path
 from .ledger import alter_authority, connect, create_task, initialize
 from .continuity import register_goal, resume_goal, checkpoint_goal
 from .outcome_feedback import register_evidence_goal
-from .host import HostNotConfigured, run_tick
+from .host import HostNotConfigured, _admit_existing_ledger, run_tick
 from .runner import run_once
 from .watch import create_watch
 from .evaluation import EvaluationError, public_inputs, evaluate
@@ -174,7 +174,8 @@ def main(argv=None) -> int:
     review.add_argument("--candidate", type=Path, required=True)
     sub.add_parser("revoke-write")
     sub.add_parser("bump-goal")
-    sub.add_parser("status")
+    sub.add_parser("status", help="Read existing ledger state; never initialize a new database")
+    sub.add_parser("init", help="Explicitly create local prototype SQLite ledger (not a production authorization)")
     continuity_seed = sub.add_parser("seed-continuity",
         help="Explicitly anchor owner objective to an existing task; never grants authority")
     continuity_seed.add_argument("--spec", type=Path, required=True)
@@ -188,6 +189,37 @@ def main(argv=None) -> int:
     continuity_advance.add_argument("--observed-head-sha", default=None,
         help="Explicit GitHub HEAD reattestation; runtime independently re-reads it")
     args = p.parse_args(argv)
+    if args.command == "init":
+        if args.db.exists() or args.db.is_symlink():
+            try:
+                _admit_existing_ledger(args.db)
+            except HostNotConfigured as exc:
+                print(json.dumps({"status":"INITIALIZATION_REFUSED",
+                    "reason":str(exc)[:160]},sort_keys=True))
+                return 4
+            print(json.dumps({"status":"ALREADY_INITIALIZED",
+                "authority_unchanged":True,
+                "production_effect_authorized":False},sort_keys=True))
+            return 0
+        try:
+            if args.db.parent.is_symlink():
+                raise OSError("Database parent must not be a symlink")
+            db = connect(args.db)
+            try:
+                initialize(db)
+                owner = dict(db.execute("SELECT * FROM authority WHERE singleton=1").fetchone())
+            finally:
+                db.close()
+        except (OSError,sqlite3.Error) as exc:
+            print(json.dumps({"status":"INITIALIZATION_REFUSED",
+                "reason":str(exc)[:160]},sort_keys=True))
+            return 4
+        print(json.dumps({"status":"LOCAL_LEDGER_INITIALIZED",
+            "goal_rev":owner["goal_rev"],"grant_rev":owner["grant_rev"],
+            "local_write_allowed":bool(owner["write_allowed"]),
+            "production_effect_authorized":False,
+            "business_outcome_verified":False},sort_keys=True))
+        return 0
     if args.command == "goal-resume":
         result = resume_goal(args.db)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
@@ -382,9 +414,16 @@ def main(argv=None) -> int:
                           "business_outcome_verified":False,
                           "scope":"LOCAL_CANDIDATE_ONLY"},sort_keys=True))
         return 0
+    # Existing commands must never create a grant just by probing or
+    # referencing a new --db path. Only the explicit init command does so.
+    try:
+        _admit_existing_ledger(args.db)
+    except HostNotConfigured as exc:
+        print(json.dumps({"status":"HOST_NOT_CONFIGURED",
+            "reason":str(exc)[:160]},sort_keys=True))
+        return 4
     db = connect(args.db)
     try:
-        initialize(db)
         if args.command in ("seed-fixture", "seed-github"):
             spec = {"kind": "fixture", "old": args.old, "new": args.new} if args.command == "seed-fixture" else {
                 "kind": "github", "repo": args.repo, "path": args.path, "old_ref": args.old_ref, "new_ref": args.new_ref}
