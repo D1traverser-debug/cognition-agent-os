@@ -193,8 +193,12 @@ def _verify(db:sqlite3.Connection, root:sqlite3.Row) -> tuple[bool,str,dict | No
 def _admit(db:sqlite3.Connection, root:sqlite3.Row,
            contract:dict, ordinal:int,fixtures:Path) -> dict:
     method=contract["alternatives"][ordinal]
-    if _pins(method["task_spec"],fixtures)!=method["source_sha256"]:
-        return _finish(db,root,"FEEDBACK_UNVERIFIABLE","SOURCE_PIN_DRIFT")
+    try:
+        pinned_now=_pins(method["task_spec"],fixtures)
+    except (OSError,ValueError,TypeError,KeyError,UnicodeError):
+        return _finish(db,root,_UNVERIFIABLE,"SOURCE_UNAVAILABLE_AT_ADMISSION")
+    if pinned_now!=method["source_sha256"]:
+        return _finish(db,root,_UNVERIFIABLE,"SOURCE_PIN_DRIFT")
     child_id=create_task(db,method["task_spec"],parent=root["task_id"],commit=False)
     db.execute("""INSERT INTO evidence_feedback_attempts(
         root_task_id,ordinal,child_task_id) VALUES(?,?,?)""",
