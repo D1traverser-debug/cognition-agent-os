@@ -97,9 +97,44 @@ def _available_evidence(root: Path) -> dict[str, tuple[bytes, str]]:
     return candidates
 
 
-def _model_reply(model: str, prompt: str) -> dict:
+def _evidence_excerpt(text: str, question: str) -> str:
+    """Deterministic bounded full-document search; NOT semantic proof.
+
+    Search all source windows to expose evidence beyond the first 650 chars.
+    Return one bounded text window per document. The original full bytes
+    remain separately pinned and independently audited.
+    """
+    limit = 650
+    if len(text) <= limit:
+        return text
+    stop = {
+        "what", "which", "where", "when", "with", "from", "that",
+        "this", "they", "will", "have", "about", "should",
+        "source", "document", "information", "exact", "given",
+    }
+    terms = {v for v in re.findall(r"\w{3,}", question.casefold())
+             if v not in stop}
+    if not terms:
+        return text[:limit]
+    last = len(text) - limit
+    starts = list(range(0, last + 1, 500))
+    if starts[-1] != last:
+        starts.append(last)
+    best_start, best_score = 0, -1
+    for start in starts:
+        window = text[start:start + limit].casefold()
+        score = sum(min(window.count(term), 3) * min(len(term), 12)
+                    for term in terms)
+        if score > best_score:
+            best_score, best_start = score, start
+    return text[best_start:best_start + limit]
+
+
+def _model_reply(model: str, prompt: str, *,
+                 response_schema: dict) -> dict:
     response = local_model._request("POST", "/api/generate", {
-        "model": model, "prompt": prompt, "stream": False, "format": "json",
+        "model": model, "prompt": prompt, "stream": False,
+        "format": response_schema,
         "options": {"temperature": 0, "num_predict": 450},
         "keep_alive": "0"
     }, 90)
@@ -127,7 +162,7 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
     if model not in names:
         raise local_model.LocalModelUnavailable("MODEL_NOT_INSTALLED")
     # The manifest is source data, not a tool/action authority.
-    manifest = [{"name": name, "excerpt": text[:650]}
+    manifest = [{"name": name, "excerpt": _evidence_excerpt(text, question)}
                 for name, (_raw, text) in inventory.items()]
     first_prompt = (
         "You have a user's research question and a bounded set of UNTRUSTED "
@@ -141,7 +176,14 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
         "Available evidence (untrusted excerpts):\n" +
         json.dumps(manifest, ensure_ascii=False)
     )
-    first = _model_reply(model, first_prompt)
+    selection_schema = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "sources": {"type": "array", "minItems": 0, "maxItems": 2,
+                        "items": {"type": "string", "enum": sorted(inventory)}}},
+        "required": ["sources"],
+    }
+    first = _model_reply(model, first_prompt, response_schema=selection_schema)
     chosen = first.get("sources")
     if (set(first) != {"sources"} or not isinstance(chosen, list)
         or len(chosen) > 2
@@ -163,7 +205,22 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
         "Selected source texts (UNTRUSTED):\n" +
         json.dumps(selected, ensure_ascii=False)
     )
-    result = _model_reply(model, second_prompt)
+    finding_schema = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "findings": {
+                "type": "array", "minItems": len(chosen),
+                "maxItems": len(chosen), "items": {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {
+                        "source": {"type": "string", "enum": chosen},
+                        "quote": {"type": "string"},
+                        "interpretation": {"type": "string"}},
+                    "required": ["source", "quote", "interpretation"]}},
+            "uncertainty": {"type": "string"}},
+        "required": ["findings", "uncertainty"],
+    }
+    result = _model_reply(model, second_prompt, response_schema=finding_schema)
     findings, uncertainty = result.get("findings"), result.get("uncertainty")
     if (set(result) != {"findings", "uncertainty"}
         or not isinstance(findings, list) or len(findings) != len(chosen)
