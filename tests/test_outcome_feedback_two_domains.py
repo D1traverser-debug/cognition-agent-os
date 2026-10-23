@@ -87,7 +87,8 @@ class OutcomeFeedbackTwoDomains(unittest.TestCase):
         self.assertEqual(c["tasks"][0]["status"],"NEEDS_REVIEW",c)
         self.assertEqual(self.root(tid)["state"],"FEEDBACK_EVIDENCE_READY")
         self.assertFalse(c["semantic_outcome_verified"])
-        self.assertFalse(c["business_outcome_verified"] if "business_outcome_verified" in c else True)
+        self.assertEqual(c["local_goal_control"][-1]["status"],"FEEDBACK_EVIDENCE_READY")
+        self.assertIs(c["local_goal_control"][-1]["business_outcome_verified"],False)
         self.assertEqual(self.tick()["conformance"]["status"] in
                          ("MECHANICAL_EVIDENCE_OBSERVED","PARTIAL_EVIDENCE"),True)
 
