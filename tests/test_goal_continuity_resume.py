@@ -280,5 +280,49 @@ class GoalContinuityColdResume(unittest.TestCase):
         self.assertNotIn("next_task_id", result)
 
 
+    def test_nested_feature_branch_recovers_via_strict_git_ref_adapter(self):
+        source = {"repo": "example/public-repo",
+                  "branch": "experiment/feature-branch",
+                  "head_sha": "a"*40}
+        register_goal(self.db_path, self.contract(source=source))
+        with patch(
+            "cognition_agent_os.continuity.github_public_branch_head_nested",
+            return_value="a"*40
+        ) as resolver:
+            result = resume_goal(self.db_path)
+        resolver.assert_called_once_with(
+            "example/public-repo", "experiment/feature-branch")
+        self.assertEqual(result["status"], "READY_TO_TICK", result)
+
+    def test_nested_ref_client_checks_exact_identity_and_safe_url(self):
+        from cognition_agent_os.source import (
+            github_public_branch_head_nested, SourceUnavailable)
+        with patch("cognition_agent_os.source.urlopen") as fetch:
+            fetch.return_value.__enter__.return_value.read.return_value = (
+                json.dumps({"ref":"refs/heads/experiment/feature-branch",
+                            "object":{"type":"commit","sha":"a"*40}}).encode()
+            )
+            sha = github_public_branch_head_nested(
+                "example/public-repo", "experiment/feature-branch")
+            self.assertEqual(sha, "a"*40)
+            self.assertIn(
+                "/git/ref/heads/experiment/feature-branch",
+                fetch.call_args.args[0].full_url)
+        for unsafe in ("../admin", "experiment//feature",
+                       "experiment/..", "/feature", "name.lock/x"):
+            with self.subTest(branch=unsafe):
+                with self.assertRaises(ValueError):
+                    github_public_branch_head_nested(
+                        "example/public-repo", unsafe)
+        with patch("cognition_agent_os.source.urlopen") as fetch:
+            fetch.return_value.__enter__.return_value.read.return_value = (
+                json.dumps({"ref":"refs/heads/other",
+                            "object":{"type":"commit","sha":"a"*40}}).encode()
+            )
+            with self.assertRaises(SourceUnavailable):
+                github_public_branch_head_nested(
+                    "example/public-repo", "experiment/feature-branch")
+
+
 if __name__ == "__main__":
     unittest.main()
