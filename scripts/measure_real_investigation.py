@@ -100,7 +100,7 @@ CASES = (
 )
 
 
-def _case_trial(case: dict, model: str) -> dict:
+def _case_trial(case: dict, model: str, protocol: str) -> dict:
     with tempfile.TemporaryDirectory(prefix="cognition-real-investigation-") as folder:
         root = Path(folder)
         docs = root / "sources"
@@ -122,6 +122,45 @@ def _case_trial(case: dict, model: str) -> dict:
         actual_request = local_model._request
         raw_model_replies = []
         def observed_request(method, endpoint, payload, timeout):
+            if protocol == "schema" and method == "POST" and endpoint == "/api/generate":
+                # Exactly the same model, question, source text and token budget.
+                # Only Ollama's response grammar changes; reviewer gold stays out.
+                choice_stage = not raw_model_replies
+                if choice_stage:
+                    format_schema = {
+                        "type": "object", "additionalProperties": False,
+                        "properties": {
+                            "sources": {"type": "array", "minItems": 0, "maxItems": 2,
+                                        "items": {"type": "string",
+                                                  "enum": sorted(case["docs"])}}},
+                        "required": ["sources"]
+                    }
+                else:
+                    try:
+                        selected = json.loads(raw_model_replies[0]["response"])["sources"]
+                        allowed = [s for s in selected
+                                   if isinstance(s, str) and s in case["docs"]]
+                    except (ValueError,TypeError,KeyError):
+                        allowed = list(case["docs"])
+                    length = max(1, min(2, len(allowed)))
+                    format_schema = {
+                        "type": "object", "additionalProperties": False,
+                        "properties": {
+                            "findings": {
+                                "type": "array", "minItems": length,
+                                "maxItems": length, "items": {
+                                    "type": "object", "additionalProperties": False,
+                                    "properties": {
+                                        "source": {"type": "string",
+                                                   "enum": allowed},
+                                        "quote": {"type": "string"},
+                                        "interpretation": {"type": "string"}},
+                                    "required": ["source", "quote", "interpretation"]
+                                }},
+                            "uncertainty": {"type": "string"}},
+                        "required": ["findings", "uncertainty"]
+                    }
+                payload = {**payload, "format": format_schema}
             response = actual_request(method, endpoint, payload, timeout)
             if method == "POST" and endpoint == "/api/generate":
                 raw_model_replies.append({
@@ -136,7 +175,7 @@ def _case_trial(case: dict, model: str) -> dict:
         elapsed = round(time.monotonic() - started, 2)
         row = tick["tasks"][0] if tick["tasks"] else {"status": "NO_TASK"}
         result = {
-            "case": case["id"], "domain": case["domain"],
+            "case": case["id"], "domain": case["domain"], "protocol": protocol,
             "question": case["question"], "fixture_sha256": fixture_hash,
             "task_status": row["status"], "error": row.get("reason"),
             "latency_seconds": elapsed, "model": model,
@@ -162,6 +201,23 @@ def _case_trial(case: dict, model: str) -> dict:
                     for v in candidate["findings"]]
         gold = set(case["gold_sources"])
         selected = set(result["selected_sources"])
+        # Preserve quality of the first model step separately from the full
+        # quotation protocol; 0/12 final success need not mean 0/12 retrieval.
+        raw_choice = []
+        if raw_model_replies:
+            try:
+                choice = json.loads(raw_model_replies[0]["response"])
+                if (isinstance(choice, dict) and
+                    isinstance(choice.get("sources"), list) and
+                    all(isinstance(name, str) for name in choice["sources"])):
+                    raw_choice = choice["sources"]
+            except (ValueError,TypeError):
+                pass
+        result["selection_stage_sources"] = raw_choice
+        result["selection_stage_exact"] = (
+            len(raw_choice) == len(set(raw_choice)) and
+            set(raw_choice) == gold and
+            all(name in case["docs"] for name in raw_choice))
         # Abstention counts as exact only for genuinely unanswerable cases,
         # not for empty-source convenience or a broken model transport.
         correct_abstention = (
@@ -198,28 +254,44 @@ def main() -> int:
             raise SystemExit("Specified local model not installed; NO AUTO PULL")
     except local_model.LocalModelUnavailable as exc:
         raise SystemExit("Real local model endpoint unavailable: " + str(exc)) from exc
+    protocols = ("json", "schema")
     trials = []
     for repeat in range(rounds):
         for case in CASES:
-            try:
-                result = _case_trial(case, model)
-            except Exception as exc:
-                result = {"case": case["id"], "domain": case["domain"],
-                          "trial": repeat + 1, "error_class": type(exc).__name__,
-                          "error": str(exc)[:160],
-                          "exact_source_selection": False}
-            else:
-                result["trial"] = repeat + 1
-            trials.append(result)
-            print("TRIAL " + json.dumps(result, sort_keys=True), flush=True)
+            for protocol in protocols:
+                try:
+                    result = _case_trial(case, model, protocol)
+                except Exception as exc:
+                    result = {"case": case["id"], "domain": case["domain"],
+                              "protocol": protocol, "trial": repeat + 1,
+                              "error_class": type(exc).__name__,
+                              "error": str(exc)[:160],
+                              "exact_source_selection": False,
+                              "selection_stage_exact": False}
+                else:
+                    result["trial"] = repeat + 1
+                trials.append(result)
+                print("TRIAL " + json.dumps(result, sort_keys=True), flush=True)
     successes = sum(t["exact_source_selection"] for t in trials)
+    by_protocol = {}
+    for protocol in protocols:
+        subset = [t for t in trials if t["protocol"] == protocol]
+        by_protocol[protocol] = {
+            "trials": len(subset),
+            "full_grounded_results": sum(t["exact_source_selection"] for t in subset),
+            "first_stage_correct_selections": sum(
+                t["selection_stage_exact"] for t in subset),
+            "error_codes": dict(Counter(t.get("error") or "NONE" for t in subset)),
+        }
     model_digest = installed[model]
     output = {
         "status": "REAL_MODEL_CAPABILITY_MEASURED_NOT_PRODUCT_ACCEPTED",
-        "experiment": "local-source-evidence-sufficiency-v1",
+        "experiment": "json-mode-versus-schema-mode-v1",
         "model": model, "model_digest": model_digest,
         "provider": "local_loopback_ollama",
         "rounds": rounds, "case_count": len(CASES),
+        "compared_protocols": list(protocols),
+        "per_protocol": by_protocol,
         "trial_count": len(trials),
         "exact_source_selection_count": successes,
         "exact_source_selection_rate": round(successes / len(trials), 4),
