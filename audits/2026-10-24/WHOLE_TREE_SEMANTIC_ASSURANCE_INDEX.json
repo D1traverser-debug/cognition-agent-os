@@ -1,0 +1,1338 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-24",
+  "repository": "D1traverser-debug/cognition-agent-os",
+  "baseline_commit": "08045133c371ec280be0dabdb95c67edb1013c63",
+  "git_tree_complete": true,
+  "readback": {
+    "file_count": 181,
+    "bytes": 1870207,
+    "categories": {
+      "workflow": 1,
+      "root": 5,
+      "docs": 53,
+      "evaluation": 3,
+      "examples": 1,
+      "scripts": 25,
+      "src": 42,
+      "tests": 51
+    },
+    "source": "GitHub immutable tree and individual file readback",
+    "kind": "FULL_FILE_RETRIEVAL_AND_LEXICAL_STRUCTURAL_REVIEW__NOT_FORMAL_SEMANTIC_PROOF"
+  },
+  "semantics": {
+    "universal_proof": false,
+    "reason": "Source identity, code review, self-authored tests and green CI do not logically establish independent correctness over unbounded goals, changing inputs, runtime, authorization and external effects.",
+    "required_evidence": [
+      "objective-specific observable postconditions",
+      "independent trusted evaluator/source",
+      "adversarial/failure and recovery coverage per effect boundary",
+      "Windows/POSIX/OS host observation",
+      "held-out domain transfer with real owner outcomes"
+    ]
+  },
+  "reproduced_findings": [
+    {
+      "id": "FS-READ-TOCTOU",
+      "severity": "HIGH",
+      "source": "src/cognition_agent_os/source.py:safe_fixture",
+      "reproduction": "Temporary approved in-root file replaced by external symlink just after is_file check; pre-fix function returned outside bytes",
+      "remedy": "file-descriptor anchored traversal POSIX; opened final-handle inspection Windows",
+      "status": "FIX_COMMITTED__CI_PENDING",
+      "candidate_pr": 34
+    },
+    {
+      "id": "FS-WRITE-TOCTOU",
+      "severity": "HIGH",
+      "source": "src/cognition_agent_os/runner.py:store_once",
+      "reproduction": "Swap artifacts directory to outside symlink immediately before O_EXCL create; pre-fix function created outside file",
+      "remedy": "POSIX dirfd-relative O_EXCL create and descriptor-relative replay; Windows not fully hardened",
+      "status": "POSIX_FIX_COMMITTED__WINDOWS_GAP",
+      "candidate_pr": 34
+    },
+    {
+      "id": "SIBLING-STAGING-DIRECTORY-RACES",
+      "severity": "HIGH",
+      "source": "sandbox_effect._atomic_stage, repair_oracle._stage_patch, pipeline_oracle._stage, repo_repair._stage",
+      "reproduction": "Source inspection confirms check-then-open path pattern, direct adversarial replay per sibling not yet done",
+      "status": "OPEN__NOT_CONFIRMED_AT_RUNTIME",
+      "candidate_pr": 34
+    },
+    {
+      "id": "PRODUCT-INDEPENDENT-SEMANTICS",
+      "severity": "RELEASE_BLOCKER",
+      "source": "docs/PRODUCT-READINESS-GATE.md",
+      "reproduction": "No external business-effect, unknown domain, on-owner-host autonomous sustained acceptance; local candidate oracle explicitly marks semantic_outcome_verified false",
+      "status": "NOT_PROVEN"
+    }
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "git_blob_sha": "8e7fecd82d53d66de4f20f6227ba3963be9017fb",
+      "bytes": 27930,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": ".gitignore",
+      "git_blob_sha": "57a3d936be5878f1199b727634b0d03178e95dd1",
+      "bytes": 128,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/00-PRODUCT-CONOPS.md",
+      "git_blob_sha": "3f0f41ce3dadff9c1b3474dd07d72e996ee5a4f6",
+      "bytes": 9230,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/01-ARCHITECTURE-DECISIONS.md",
+      "git_blob_sha": "dbb9b2da665bcb51bbaddca537410e94190352d3",
+      "bytes": 9327,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/02-AUTHORITY-AND-INTERFACES.md",
+      "git_blob_sha": "0395c9ded9418050c65407ec5278c3a6d278e377",
+      "bytes": 9916,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/03-FIRST-VERTICAL-SLICE.md",
+      "git_blob_sha": "eee7a05e2fde4ab570bfba61d1384ac0eb682e44",
+      "bytes": 8894,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/04-SECURITY-OPERATIONS.md",
+      "git_blob_sha": "594c1ee58b47b1982477cbf066e17a548ad30b1f",
+      "bytes": 7802,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/05-P0-P1-IMPLEMENTATION-STATUS.md",
+      "git_blob_sha": "35f23df27e77325f329501e413f2976414f3e9e9",
+      "bytes": 4895,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/06-ZERO-API-CREDIT-POLICY.md",
+      "git_blob_sha": "8f7b431fbe95fa79eae94d38a6482646ddcab38c",
+      "bytes": 5522,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/07-LOCAL-HOST-RECOVERY.md",
+      "git_blob_sha": "cb32dfa2adf6be9b9d0ab15b99feaa3b48873e06",
+      "bytes": 3464,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/08-LIVE-SOURCE-CURSOR.md",
+      "git_blob_sha": "8f0c25361b52ceea2fe973608f695901467e0bea",
+      "bytes": 4619,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/09-PINNED-REFERENCE-EVALUATION.md",
+      "git_blob_sha": "1f6df8b30de0f9e2c2d9ec4ea08162b94f0c5588",
+      "bytes": 6952,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/10-BOUNDED-GOAL-LOOP.md",
+      "git_blob_sha": "313803efc13dd676433ce8e68dc3265790a8342e",
+      "bytes": 5941,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/11-SANDBOX-OUTCOME-AND-REPLAN.md",
+      "git_blob_sha": "535affce791db9f22b3a52e92f4e82e62d954438",
+      "bytes": 5238,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/12-DIAGNOSIS-AND-FAIRNESS.md",
+      "git_blob_sha": "a114cf44f72501a130211f829ef696e1b960d502",
+      "bytes": 4802,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/13-EVIDENCE-RECONCILIATION.md",
+      "git_blob_sha": "74b3670a43219918d48e629e14805acc35645d69",
+      "bytes": 5603,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/14-GOAL-INTENT-AND-SEMANTIC-CONTRACTS.md",
+      "git_blob_sha": "a605a5a49818a9a524244003d5ba48df641425ac",
+      "bytes": 7186,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/15-RUNTIME-CONFORMANCE-AND-RELEASE-GATE.md",
+      "git_blob_sha": "5a24de78bf08a4208881a00a255fab9bdbc4ca03",
+      "bytes": 13815,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/16-ISOLATED-SOURCE-REPAIR.md",
+      "git_blob_sha": "4dc92237bc9a67db71be87529629fc673456a8c5",
+      "bytes": 7257,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/17-REPAIR-COMMIT-BARRIER-AND-WINDOWS.md",
+      "git_blob_sha": "bce4555d8cbbd5e696e64af81ca40dd8dfb8a1b1",
+      "bytes": 4960,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/18-WINDOWS-NATIVE-SCHEDULER-ACCEPTANCE.md",
+      "git_blob_sha": "3a619a5e73902dc0fca2a53a71f65f9b67324125",
+      "bytes": 6489,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/19-SIGNED-OUTCOME-TRUST-BOUNDARY.md",
+      "git_blob_sha": "e3c41ad328feee39d594b3ab2af987882f59f7f7",
+      "bytes": 6069,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/20-SIGNED-FEEDBACK-TO-METHOD-REVISION.md",
+      "git_blob_sha": "d27b8a118bdf37c14c4ef1d29deb7a54b6b276ad",
+      "bytes": 6523,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/21-REVERIFY-SIGNED-METHOD-MEMORY.md",
+      "git_blob_sha": "7b86420a55e3fe7d4907387fee03970e9a1a0625",
+      "bytes": 5442,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/22-COUPLED-CROSS-FILE-REPAIR.md",
+      "git_blob_sha": "fa401ac6addbcc50413d6a888e5d7be205dba851",
+      "bytes": 6766,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/23-OFFLINE-DOCKER-REPO-REPAIR.md",
+      "git_blob_sha": "4072aa6f8fd8915da2e5a0ec113e9270c05f2b08",
+      "bytes": 8134,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/24-PUBLIC-REVISION-LOOP.md",
+      "git_blob_sha": "e58891672873d980423b6c2fbd40c7590d695502",
+      "bytes": 6465,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/25-GENUINE-LOCAL-MODEL-BENCHMARK.md",
+      "git_blob_sha": "c58f5c918cfe93a0b1b6aaca5f4a690fa3e0d893",
+      "bytes": 6713,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/26-PUBLIC-OBSERVED-OUTPUT-REPAIR.md",
+      "git_blob_sha": "066f4265f19b4124fc31dbf8ccccfc55887ac667",
+      "bytes": 4640,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/27-NEGATIVE-HYPOTHESIS-RETRY.md",
+      "git_blob_sha": "2e19f2bd46951e28c56c07c6000764c748a3be61",
+      "bytes": 3977,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/28-REAL-7B-LOCAL-CODER-EXPERIMENT.md",
+      "git_blob_sha": "061a039bfce150c85f8e061f8e0530799b8c635f",
+      "bytes": 5526,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/29-EXPLICIT-OUTCOME-AB-CHECK.md",
+      "git_blob_sha": "b638b67064fbc5a6fb7e194c601b4d3cd4fdaae6",
+      "bytes": 6496,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/30-PROSPECTIVE-UNFAMILIAR-REPAIR-CORPUS.md",
+      "git_blob_sha": "4c15074172c7e0385f13ffe0de235b2941925469",
+      "bytes": 6836,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/31-PINNED-EXTERNAL-QUIXBUGS-REPAIR.md",
+      "git_blob_sha": "b4c8dbcd278d38e7102e8f5fc98fa55529d5dfb3",
+      "bytes": 8074,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/32-LIVE-EXTERNAL-ISSUE-REPAIR-EXPERIMENT.md",
+      "git_blob_sha": "9332856f42509e6c970e43e120f4ad3f1fa21580",
+      "bytes": 15357,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/33-EXTERNAL-CPYTHON-USERSTRING-REPAIR.md",
+      "git_blob_sha": "55dad92ec05902bf36dd2b5eae65d58b26e60714",
+      "bytes": 10337,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/33-SHARED-POSTCONDITION-LOCAL-FEEDBACK.md",
+      "git_blob_sha": "5c84927a0d96232410d3c4ac6584656addaf5981",
+      "bytes": 5781,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/34-OUTSIDE-NUPLAN-PATCH-FORMAT-COMPARISON.md",
+      "git_blob_sha": "9218ff11b53fe861db80b3b774b82d24df35d99a",
+      "bytes": 9321,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/35-EXTERNAL-FINANCIAL-BREAKEVEN-REPAIR.md",
+      "git_blob_sha": "1ce27e888b2b7de18525bbf26ff5368bae0758db",
+      "bytes": 9187,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/36-ACCEPTED-REPAIR-HOLDOUT-CONFORMANCE.md",
+      "git_blob_sha": "959814dd496529633683dfafc6d8438061eeffb0",
+      "bytes": 6002,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/37-WORKER-RETURN-LEDGER-CONFORMANCE.md",
+      "git_blob_sha": "9018f3e3c68e9152888181859c8c61faa747fe0b",
+      "bytes": 5003,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/38-DELEGATED-WORKER-LEDGER-CONFORMANCE.md",
+      "git_blob_sha": "8a59741780de6460b1af49bd89e8c2728481abbd",
+      "bytes": 6161,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/39-TRANSACTION-OWNED-FINALIZATION-RECEIPT.md",
+      "git_blob_sha": "502c08bd46781954f8a49055436b62e23a5f4cec",
+      "bytes": 5339,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/40-CLAIM-LEASE-PROVENANCE.md",
+      "git_blob_sha": "228fdee7136074c31c40cd423f0eeba9b0f56fcc",
+      "bytes": 5164,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/41-LIFECYCLE-EVIDENCE-AND-GOLD-ADMISSION.md",
+      "git_blob_sha": "f33eaa0c2e0e3cd29172b9abe65936e3a8029d34",
+      "bytes": 9298,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/42-FULL-UPSTREAM-DATEUTIL-7B-REPAIR.md",
+      "git_blob_sha": "3a4f1555ddf1dd1820d9ab9bde36385712ab6573",
+      "bytes": 9374,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/43-TWO-MODULE-APScheduler-LEASE-7B.md",
+      "git_blob_sha": "f462ec69c110d44f2d20df83ed41c2b5b0dff1b2",
+      "bytes": 10133,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/44-KNOWLEDGE-TO-ACTION-REAL-HOST.md",
+      "git_blob_sha": "83d7e632d4e9a6a32ae55fd0df5638948c2f7bc2",
+      "bytes": 9402,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/45-RESEARCH-GAP-FROM-RUNTIME-FEEDBACK.md",
+      "git_blob_sha": "56c6f784849d39449392a29cc517a78d6caaca0f",
+      "bytes": 10055,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/ACTIVE-CONTROLLER-ASSURANCE.md",
+      "git_blob_sha": "36dd5b23f7e9557e53af3a19f4ae6e9549955a9a",
+      "bytes": 4736,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/ASSURANCE-BASELINE.md",
+      "git_blob_sha": "2d3793f9ccc95afa1ce7e0363c9b19903a62c772",
+      "bytes": 3877,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/BOUNDED-CONTROLLER-EXPERIMENT.md",
+      "git_blob_sha": "a4447c42750eec5fce780a39b14bd6daa1087ff0",
+      "bytes": 5027,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/ENGINEERING-COGNITION-TOOLCHAIN.md",
+      "git_blob_sha": "4cff36fdcb5fab1ebb5053dc445af88d72e44cf7",
+      "bytes": 5543,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/INDEPENDENT-OUTCOME-BASELINE.md",
+      "git_blob_sha": "aba7642ea080f0aacbc4f9b052807437cdd41c6e",
+      "bytes": 4049,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "docs/PRODUCT-READINESS-GATE.md",
+      "git_blob_sha": "3dddb0bc827afff48471ba716160d7cd792558c3",
+      "bytes": 4715,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "evaluation/assurance_registry_v1.json",
+      "git_blob_sha": "9ede0985cd1f885b6c9765a347a337911cfc2e9f",
+      "bytes": 19525,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "evaluation/curated_demo_reference.json",
+      "git_blob_sha": "716f2ef8ee0b420a1f3cfde98fb90152a80deea9",
+      "bytes": 3333,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "evaluation/owner_outcome_oracle.py",
+      "git_blob_sha": "8dbd7a745c24deddea880d0b3a012027791c3c8d",
+      "bytes": 7843,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "examples/public_mcp_immutable_pair.json",
+      "git_blob_sha": "c0aeaad0662d77294e2df9124705dfd40490daaf",
+      "bytes": 935,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "pyproject.toml",
+      "git_blob_sha": "573fb1eee0dd08d6e5439eb827a0f55a50ab8ebe",
+      "bytes": 366,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "README-P1.md",
+      "git_blob_sha": "e105b60cbd94e29bb7b4f5e1d5d345e9119cdce8",
+      "bytes": 2912,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "README.md",
+      "git_blob_sha": "d139578b1853bc5f8adb90468e0ef5364f94b21d",
+      "bytes": 4797,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/architecture_probe.py",
+      "git_blob_sha": "e31107534b49b72522a5b96322086da692871166",
+      "bytes": 2862,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/host_tick.py",
+      "git_blob_sha": "d7e7219e182465105132d6c4b6ec2940dc4f7260",
+      "bytes": 293,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/measure_real_investigation.py",
+      "git_blob_sha": "cdd89bbc8469e567bd4ce3d6bd73a7e25a4a62c6",
+      "bytes": 17888,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/probe_official_aoci.sh",
+      "git_blob_sha": "109541d66b142a536cc77747d0369dd1f6f245f0",
+      "bytes": 5167,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/register_windows_host.ps1",
+      "git_blob_sha": "b0fb25bd1b0df2a8eabc6da0a2e7547fbaee9e78",
+      "bytes": 4416,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_actual_local_model.py",
+      "git_blob_sha": "d482fc9b430f35f7d5040b7d3dc7dc34a8a22d9d",
+      "bytes": 12179,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_architecture_ab.py",
+      "git_blob_sha": "8eaa1792fb64a23f031fddc4b360c85b008208e4",
+      "bytes": 10834,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_assurance_registry.py",
+      "git_blob_sha": "47edd28436e471e9e4c67ca891446a1e462be50f",
+      "bytes": 9178,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_graphify_control_paths.py",
+      "git_blob_sha": "d8c745a6a3db4c294debd71dab39e596b0f483ac",
+      "bytes": 4902,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_host_registration.py",
+      "git_blob_sha": "6a18e75f24acac08148ebe80a6d9bad30cb58ba4",
+      "bytes": 1134,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_installed_cli.py",
+      "git_blob_sha": "27e3d656aa14002f904a5c3598df1fc46ce8a43b",
+      "bytes": 5813,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_live_watch.py",
+      "git_blob_sha": "fad72ef0a009abd35d8ffed75f59c0af25a1ddfd",
+      "bytes": 1706,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p19_unfamiliar_model.py",
+      "git_blob_sha": "e1fe1145448720853375b44b0e254b62ddbcf770",
+      "bytes": 7098,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p20_external_quixbugs.py",
+      "git_blob_sha": "306e7840f8078ddf0c2163b6a29ebf1b0e000099",
+      "bytes": 9702,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p21_live_issue.py",
+      "git_blob_sha": "e57e66c7709428f4e93d4c26e0d69c37a063b357",
+      "bytes": 11570,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p22_cpython_userstring.py",
+      "git_blob_sha": "31de68eb6999cd7d0189d3dbb338e6f3c5a2b60d",
+      "bytes": 11340,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p23_nuplan_comparison.py",
+      "git_blob_sha": "45ce05eb22cb128cd1beb6d510597cdf678c9424",
+      "bytes": 11578,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p24_financial_breakeven.py",
+      "git_blob_sha": "2e213fad4d7dbd5d420fea0904b2eca2ad4ef847",
+      "bytes": 12508,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p31_full_dateutil.py",
+      "git_blob_sha": "b7306b2a7d29c8e58c0cf5b964f29537b855a85a",
+      "bytes": 18707,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p32_full_apscheduler.py",
+      "git_blob_sha": "8025919ad2f2a0290c94af4d6355868ccdab589f",
+      "bytes": 21624,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_p36_live_research.py",
+      "git_blob_sha": "e4f82af495e748bfa0e8fabee7d333776b008b37",
+      "bytes": 4316,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_public_source.py",
+      "git_blob_sha": "208bc3913233650f0c09c20d40a6ff1ac6b8ee96",
+      "bytes": 3610,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_repo_container.py",
+      "git_blob_sha": "7154f7176b81b8ff17508d51cc81c22430dbc432",
+      "bytes": 15470,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_windows_scheduler_probe.py",
+      "git_blob_sha": "8058e6a0314f3fcda848d409a0af95fc219b5502",
+      "bytes": 5023,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "scripts/verify_windows_scheduler.ps1",
+      "git_blob_sha": "0c3f88ce4517ee4e28f3bc2bf3fdebe9fdc727a6",
+      "bytes": 4055,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "SESSION_HANDOFF.md",
+      "git_blob_sha": "04a1ab9c845a46e5d91c2d356e448eb13e7c4e95",
+      "bytes": 179611,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/__init__.py",
+      "git_blob_sha": "6448cf05e459ccbe9646c4efff4948c851e237e1",
+      "bytes": 95,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/bounded_control_audit.py",
+      "git_blob_sha": "01d393b9bc91f9498516cc92a02056ef68348971",
+      "bytes": 15103,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/bounded_goal_control.py",
+      "git_blob_sha": "78686136bf468eb5839f510b5b406bb6d0647cca",
+      "bytes": 13029,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/bounded_outcome_oracle.py",
+      "git_blob_sha": "a2fdf6a79915e7989fa5e07b5070cfeac0694e05",
+      "bytes": 3629,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/cli.py",
+      "git_blob_sha": "a6f47b97586220b17be7db2c01fac2518d59bbef",
+      "bytes": 33792,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/conformance.py",
+      "git_blob_sha": "0616463098749f71ea3fe1ac2ba75103725403df",
+      "bytes": 31307,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/container_lab.py",
+      "git_blob_sha": "780328b7b2f6a690a0638bf85d2879fd7ae9da6e",
+      "bytes": 9495,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/continuity.py",
+      "git_blob_sha": "84086b24c7d352a77741d9a4e0c7d6babbf551bf",
+      "bytes": 17726,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/control_kernel.py",
+      "git_blob_sha": "da9f21cc9be6f3a007993212766eac1b40ff9df9",
+      "bytes": 4115,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/diagnostics.py",
+      "git_blob_sha": "1040ee2b9a620e87397863d681a807e12a34acdf",
+      "bytes": 13141,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/evaluation.py",
+      "git_blob_sha": "04699f762b9cf37ab8ef6964e9ec3231af3339ed",
+      "bytes": 8430,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/goal_audit.py",
+      "git_blob_sha": "143a564414e25d0ece7424406eb2eb8af8fe970a",
+      "bytes": 6365,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/goal_loop.py",
+      "git_blob_sha": "7cf18ef6c35fd3a23551ce357c7b6b4e09aa72fa",
+      "bytes": 10077,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/graph_experiment.py",
+      "git_blob_sha": "abe66ba61c71fb0af08f8b33bfdf5f6d20d1e53f",
+      "bytes": 7147,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/host.py",
+      "git_blob_sha": "17ef13c5582bcafb2c31f83f29ac13d18a20b813",
+      "bytes": 14118,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/intent_planner.py",
+      "git_blob_sha": "a57c3feabd5cd677c50fa20a962812d851ba9243",
+      "bytes": 5488,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/intent_runtime.py",
+      "git_blob_sha": "e55283f3330a6bd5ae8d6f379ec2140dcf52f9f7",
+      "bytes": 4994,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/investigation.py",
+      "git_blob_sha": "fa714cdd9b5fca9e06ff2881ae9d7e19cac381a9",
+      "bytes": 18629,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/knowledge_routing.py",
+      "git_blob_sha": "64e0f99836a1753b0b8d2ae39ee84d90e016f947",
+      "bytes": 15990,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/ledger.py",
+      "git_blob_sha": "107536b517ad8116a980caf2768c9791dfe99702",
+      "bytes": 11111,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/local_model.py",
+      "git_blob_sha": "31a0494d529a872e496519ba7f045bff39fbdde1",
+      "bytes": 5098,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/local_retry.py",
+      "git_blob_sha": "fe8879ab5ccd21c4a0501321593cb051934f1cd8",
+      "bytes": 5427,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/outcome_attestation.py",
+      "git_blob_sha": "7f233f40d9e3121819f87b877b149a189b2fe97f",
+      "bytes": 11509,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/outcome_feedback.py",
+      "git_blob_sha": "e61940a7afdf1bef46328d083c73bacd330215ad",
+      "bytes": 23305,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/pipeline_oracle.py",
+      "git_blob_sha": "052e05390f601b632df04af54adbc7bf58152b1d",
+      "bytes": 12932,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/pipeline_repair.py",
+      "git_blob_sha": "1b8b02ccce5090494d7127b01b45c262800bbf8f",
+      "bytes": 8499,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/planner.py",
+      "git_blob_sha": "f0802d1ac21a9bbcea8ea82f379906c2995fca78",
+      "bytes": 899,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/reconciliation_oracle.py",
+      "git_blob_sha": "f50b17f502cbe88d10c261e03765331567e8a082",
+      "bytes": 11041,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/reconciliation.py",
+      "git_blob_sha": "46f6b046456b680613e588f2b47d1a3598c82b54",
+      "bytes": 10531,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/reference_model.py",
+      "git_blob_sha": "b19de80b0ed68d22a679ee8dba1fba1bcb6034e8",
+      "bytes": 5742,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/repair_oracle.py",
+      "git_blob_sha": "a301491e40a80ad6d74a135389e406e3e3e184f2",
+      "bytes": 18554,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/repair_search.py",
+      "git_blob_sha": "8e7d89646b40cf34599c8d317566abc93da41774",
+      "bytes": 13622,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/repo_refinement.py",
+      "git_blob_sha": "627551a94e922d720cf70168edccb86442534346",
+      "bytes": 16174,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/repo_repair.py",
+      "git_blob_sha": "00c5fe060ee091e3faebf3ab18afcc4257246ed4",
+      "bytes": 29509,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/research_assessment.py",
+      "git_blob_sha": "1f04fb15d405ec3cacdb313b686309c72c0c25ea",
+      "bytes": 12530,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/research_gap.py",
+      "git_blob_sha": "6c182da95ccd28fb67ecd831ea4d4ba2a03f43b4",
+      "bytes": 14027,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/runner.py",
+      "git_blob_sha": "f4fd4afe6a4e44992b5d86880f3815174b7af5b7",
+      "bytes": 10166,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/sandbox_effect.py",
+      "git_blob_sha": "ae208e6170842eadb240c9d873ca2ad498248233",
+      "bytes": 11969,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/semantic_contract.py",
+      "git_blob_sha": "34061a3f79d2b0ee60a183ff3f2915e16663d91f",
+      "bytes": 3098,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/signed_feedback.py",
+      "git_blob_sha": "7d754e22f1917ea9a5bb25558517a22a43e649ad",
+      "bytes": 22314,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/source.py",
+      "git_blob_sha": "b7f81760f4078be1d2ca4062ef8f73d5e3f70531",
+      "bytes": 7804,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "src/cognition_agent_os/watch.py",
+      "git_blob_sha": "56e72ba270539b4408508c341ec6a485e2421959",
+      "bytes": 8022,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/fixtures/p36_public_a.json",
+      "git_blob_sha": "eb6b851eda79f347275614dc234f694b04d8861f",
+      "bytes": 341,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/fixtures/p36_public_b.json",
+      "git_blob_sha": "b071f713c10026d64afa52cd5f500d7a6d0baf35",
+      "bytes": 338,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_architecture_probe.py",
+      "git_blob_sha": "e00eb18bb90fcef9f650439d8febe712433f5126",
+      "bytes": 2299,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_assurance_registry.py",
+      "git_blob_sha": "bcd9727f38bbedd222a32820b62de0738322739a",
+      "bytes": 4397,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_compact_exact_replace.py",
+      "git_blob_sha": "131af85a25b5a4f503d3fc9b7d13399088e5c390",
+      "bytes": 8616,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_conformance.py",
+      "git_blob_sha": "6964beadab4c4b982876073856da6cb28d067b88",
+      "bytes": 13793,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_control_attempt_lineage_integrity.py",
+      "git_blob_sha": "ae51e8d47e30191f4988628244ca042b3da43adc",
+      "bytes": 5189,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_diagnostics.py",
+      "git_blob_sha": "60d76aa00dc21e44f741a9a363613366df2f0a81",
+      "bytes": 12652,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_durable_same_goal_controller.py",
+      "git_blob_sha": "a19615d17181dd9715356e909cfb8d247f522c2d",
+      "bytes": 23757,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_evaluation.py",
+      "git_blob_sha": "15f6083a8b58cce8d1cd7337a865d6ac63c00707",
+      "bytes": 9370,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_explicit_runner_authority.py",
+      "git_blob_sha": "8f991ec4ceb02cb0663949063df207afda0e6e77",
+      "bytes": 2912,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_free_local.py",
+      "git_blob_sha": "5fdb40a25f0049dbb4471bd5e71a8ba9eba7f1dc",
+      "bytes": 7014,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_goal_audit.py",
+      "git_blob_sha": "455edb8c8b22b0e9c929c50b99e8fa223de7f94c",
+      "bytes": 5967,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_goal_continuity_resume.py",
+      "git_blob_sha": "6841ee8c59f3c6c4aa673ab7eb5933bce19cf664",
+      "bytes": 15601,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_goal_feedback_alternative_baseline.py",
+      "git_blob_sha": "fe0e2000f29dfea83839fa82279f4cc39a7fc289",
+      "bytes": 4747,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_goal_loop.py",
+      "git_blob_sha": "ca3f7102a1d00419cb01b7e63d2527d4ec29b94a",
+      "bytes": 12626,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_governance_failclosed.py",
+      "git_blob_sha": "8350cf73c9e0ffab6910d92544b1916841a5a944",
+      "bytes": 9814,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_graph_experiment.py",
+      "git_blob_sha": "9be0f9a9eabb268b5b2bec0ed012e595c1a443fd",
+      "bytes": 8089,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_graphify_control_paths.py",
+      "git_blob_sha": "2055e0f56fd5dbb5f4df912af4a9d239a0a6c11d",
+      "bytes": 4372,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_host.py",
+      "git_blob_sha": "7cb60d32adf6e187bff1c83aec7d3523d885e1cd",
+      "bytes": 7659,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_intent_runtime.py",
+      "git_blob_sha": "6119bfe8726a01670868312ba9b15e274f0b6caf",
+      "bytes": 20090,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_open_goal_investigation.py",
+      "git_blob_sha": "3164094d1514053edaef98d9ec0f193bbaaa54bf",
+      "bytes": 19349,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_outcome_attestation.py",
+      "git_blob_sha": "95cb6e6183170126179984412453c67459091adc",
+      "bytes": 30702,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_outcome_feedback_two_domains.py",
+      "git_blob_sha": "7d27974a1ff3613f8258ae3cca52b454db771340",
+      "bytes": 11745,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_owner_outcome_holdouts.py",
+      "git_blob_sha": "bdbeeed2dd37b219636b1b3caa52abb239854f16",
+      "bytes": 7866,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p1.py",
+      "git_blob_sha": "231d011fcdc2260977ef7fa14e887d83008f0792",
+      "bytes": 15656,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p11_pipeline_repair.py",
+      "git_blob_sha": "2909fb1795321166b6a97760ec0d42676e1900e1",
+      "bytes": 12707,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p12_repo_lab.py",
+      "git_blob_sha": "ed9225181c28da9e53211c38f4c24d5229178b8f",
+      "bytes": 25159,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p12_repository_permissions.py",
+      "git_blob_sha": "9581c517abdd162cee713cf72d193cb40a6e2572",
+      "bytes": 6606,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p13_public_refinement.py",
+      "git_blob_sha": "e8d1a4b451f3ec50de8227e6a3d37117125abd11",
+      "bytes": 15835,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p14_candidate_execution_feedback.py",
+      "git_blob_sha": "56f2d68fa8dda9e20709b4ef7c09834c4cf80960",
+      "bytes": 6006,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p14_real_model_benchmark_contract.py",
+      "git_blob_sha": "1e21a642de836773a7d995f3ce871ceb9f0ee066",
+      "bytes": 8206,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p19_unfamiliar_corpus.py",
+      "git_blob_sha": "a9206fc29553d58ba85dc3fb4b12463e8ec4d2e7",
+      "bytes": 5348,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p20_external_quixbugs.py",
+      "git_blob_sha": "6bbdce7dd9d2f382530c625b31ca9eaaa681db15",
+      "bytes": 5303,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p21_real_issue.py",
+      "git_blob_sha": "9ce90d22c0660d17ad47ba55521892d11fbcfa84",
+      "bytes": 14979,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p22_cpython_userstring.py",
+      "git_blob_sha": "6532871810d6b42723612c8d7d9d48cd9dda0983",
+      "bytes": 5800,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p23_nuplan_comparison.py",
+      "git_blob_sha": "a8045e1d43b0320dc0b2f8d59933aed96608e846",
+      "bytes": 5437,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p24_financial_breakeven.py",
+      "git_blob_sha": "860c6ce14618805a0c96b2b8c26e159fc8770599",
+      "bytes": 9117,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p31_full_dateutil.py",
+      "git_blob_sha": "2eee76db2a5eca4b7d458dbd1862db64687655e8",
+      "bytes": 4359,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p32_full_apscheduler.py",
+      "git_blob_sha": "922c17c179442832b765a2a88b94a8adc961e385",
+      "bytes": 4155,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p33_knowledge_routing.py",
+      "git_blob_sha": "158b179d9ab57001d471395b079f5dd7331ad8f3",
+      "bytes": 10236,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p34_research_gap.py",
+      "git_blob_sha": "046d5b6fb9ef1554fc50b9bc9beaeaaad384f24b",
+      "bytes": 10667,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_p35_research_assessment_host.py",
+      "git_blob_sha": "fa7f5e86701aa15ae136a607aed23a751e36c698",
+      "bytes": 27156,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_pure_repair.py",
+      "git_blob_sha": "446998f0629f9f7f9dffb1a943aa31fc2ae4333b",
+      "bytes": 23604,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_reconciliation.py",
+      "git_blob_sha": "ef9216402b25df470e2593011eb10cf965323964",
+      "bytes": 15212,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_reference_model.py",
+      "git_blob_sha": "b5cedee5bca372486524cb355d974fd58f6c6268",
+      "bytes": 5825,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_sandbox_effect.py",
+      "git_blob_sha": "565a0596c74c98a1d7f9e4e43b7d482274b67c27",
+      "bytes": 11048,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_semantic_contract.py",
+      "git_blob_sha": "cf2e11cabfbf848528e65d7249fbaedfbf69f09c",
+      "bytes": 7579,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_shared_controller_kernel.py",
+      "git_blob_sha": "ad7845b253195eaba148239b553b094bae627933",
+      "bytes": 5697,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_shared_goal_postcondition.py",
+      "git_blob_sha": "c96e8cc10784d715fa867ccc4c9d614b68597cf0",
+      "bytes": 13179,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    },
+    {
+      "path": "tests/test_watch.py",
+      "git_blob_sha": "bf3ab7496c6771a99e06cdc2d379dde6a9268f12",
+      "bytes": 11686,
+      "source_readback": "SHA_MATCHED_GIT_TREE",
+      "independent_semantic_proof": "NOT_ESTABLISHED"
+    }
+  ]
+}
