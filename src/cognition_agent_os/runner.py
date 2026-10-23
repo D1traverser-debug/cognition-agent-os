@@ -11,6 +11,7 @@ from .ledger import claim_one, connect, current_guard, event, finalize_observed,
 from .planner import propose
 from .local_model import LocalModelUnavailable, propose_local
 from .source import SourceUnavailable, get_pair
+from .isolated_filesystem import stage_immutable, ImmutableStageConflict
 
 
 class ArtifactConflict(Exception):
@@ -24,91 +25,16 @@ def _artifact_bytes(task: dict, proposal: dict) -> bytes:
                        ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
 
-def _store_once_posix(workspace: Path, task_id: str, data: bytes, *,
-                      crash_after_write: bool) -> str:
-    """Bind creation AND verification to the same opened directory identity.
-
-    Parent symlinks cannot redirect a file create after a path precheck. An
-    attacker replacing artifacts/ between directory admission and O_EXCL cannot
-    redirect the dirfd-based creation outside the original directory handle.
-    """
-    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
-        raise ValueError("Race-safe artifact creation unsupported by this host")
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    workspace_fd = os.open(str(workspace), flags)
-    try:
-        try:
-            os.mkdir("artifacts", dir_fd=workspace_fd)
-        except FileExistsError:
-            pass
-        artifacts_fd = os.open("artifacts", flags, dir_fd=workspace_fd)
-        try:
-            filename = task_id + ".json"
-            try:
-                output_fd = os.open(
-                    filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                    0o600, dir_fd=artifacts_fd)
-            except FileExistsError:
-                with os.fdopen(os.open(
-                    filename, os.O_RDONLY | os.O_NOFOLLOW,
-                    dir_fd=artifacts_fd), "rb") as opened:
-                    if opened.read(len(data) + 1) != data:
-                        raise ArtifactConflict(
-                            "Existing artifact differs from expected intent bytes")
-            else:
-                with os.fdopen(output_fd, "wb") as opened:
-                    opened.write(data)
-                    opened.flush()
-                    os.fsync(opened.fileno())
-                if crash_after_write:
-                    os._exit(79)
-            with os.fdopen(os.open(
-                filename, os.O_RDONLY | os.O_NOFOLLOW,
-                dir_fd=artifacts_fd), "rb") as opened:
-                actual = opened.read(len(data) + 1)
-            if actual != data:
-                raise ArtifactConflict("Artifact changed during independent readback")
-            return hashlib.sha256(actual).hexdigest()
-        finally:
-            os.close(artifacts_fd)
-    finally:
-        os.close(workspace_fd)
-
-
 def store_once(workspace: Path, task_id: str, data: bytes, *, crash_after_write: bool = False) -> str:
-    """Local immutable artifact only; remote effects and hostile Windows ACLs not certified."""
+    """One immutable local artifact via the shared filesystem effect boundary."""
     if len(task_id) != 32 or not all(c in "0123456789abcdef" for c in task_id):
         raise ValueError("Invalid task ID")
-    if workspace.is_symlink():
-        raise ValueError("Workspace may not be symlink")
-    workspace.mkdir(parents=True, exist_ok=True)
-    if os.name != "nt":
-        return _store_once_posix(workspace, task_id, data,
-                                 crash_after_write=crash_after_write)
-    # Windows currently has no stdlib dir_fd-relative exclusive file-create.
-    # Keep compatibility with the existing trusted-workspace ACL assumption;
-    # adversarial directory replacement is an explicit NOT_READY release gap.
-    directory = workspace / "artifacts"
-    if directory.is_symlink():
-        raise ValueError("Artifacts dir may not be symlink")
-    directory.mkdir(exist_ok=True)
-    path = directory / (task_id + ".json")
     try:
-        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        if path.is_symlink() or not path.is_file() or path.read_bytes() != data:
-            raise ArtifactConflict("Existing artifact differs from expected intent bytes")
-    else:
-        with os.fdopen(fd, "wb") as out:
-            out.write(data)
-            out.flush()
-            os.fsync(out.fileno())
-        if crash_after_write:
-            os._exit(79)
-    actual = path.read_bytes()
-    if actual != data:
-        raise ArtifactConflict("Artifact changed during independent readback")
-    return hashlib.sha256(actual).hexdigest()
+        return stage_immutable(
+            workspace, ("artifacts",), task_id + ".json", data,
+            create_workspace=True, crash_after_write=crash_after_write)
+    except ImmutableStageConflict as exc:
+        raise ArtifactConflict(str(exc)) from exc
 
 
 def verify_artifact(workspace: Path, task: dict) -> bool:
