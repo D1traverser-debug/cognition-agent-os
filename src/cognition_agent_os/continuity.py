@@ -146,7 +146,9 @@ def register_goal(db_path: Path, spec: dict) -> dict:
 
 
 def checkpoint_goal(db_path: Path, goal_id: str, *,
-                    expected_digest: str, next_task_id: str) -> dict:
+                    expected_digest: str, next_task_id: str,
+                    observed_head_sha: str | None = None,
+                    resolve_head=None) -> dict:
     """CAS-update *only* an existing task pointer under the current grant.
 
     A checkpoint is an explicit permissioned transition, not a model deciding
@@ -157,6 +159,9 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
         or not re.fullmatch(r"[0-9a-f]{64}", expected_digest)
         or not isinstance(next_task_id, str)
         or not _TASK.fullmatch(next_task_id)
+        or (observed_head_sha is not None and
+            (not isinstance(observed_head_sha, str) or
+             not _SHA.fullmatch(observed_head_sha)))
         or not _db_exists(db_path)):
         raise ValueError("INVALID_CHECKPOINT")
     with closing(connect(db_path)) as db:
@@ -176,6 +181,24 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
             spec = json.loads(row["contract"])
             if hashlib.sha256(_canonical(_validate(spec))).hexdigest() != expected_digest:
                 raise ValueError("CHECKPOINT_INTEGRITY_BROKEN")
+            source = spec["source"]
+            if observed_head_sha is not None and source is None:
+                raise ValueError("NO_REMOTE_SOURCE_TO_REATTEST")
+            if source is not None:
+                resolver = resolve_head or github_public_branch_head
+                try:
+                    live = resolver(source["repo"], source["branch"])
+                except Exception as exc:
+                    raise ValueError("SOURCE_REVALIDATION_UNAVAILABLE") from exc
+                if not isinstance(live, str) or not _SHA.fullmatch(live):
+                    raise ValueError("SOURCE_REVALIDATION_UNAVAILABLE")
+                expected_live = observed_head_sha or source["head_sha"]
+                if live != expected_live:
+                    raise ValueError("SOURCE_REVALIDATION_REQUIRED")
+                if observed_head_sha is not None:
+                    # Explicitly observed, current public HEAD. A new SHA is
+                    # not an automatic business-outcome endorsement.
+                    source["head_sha"] = observed_head_sha
             spec["next_task_id"] = next_task_id
             _guard(db, spec, authority)
             raw = _canonical(spec)
@@ -270,7 +293,8 @@ def resume_goal(db_path: Path, *, resolve_head=None) -> dict:
                         observed_head_sha=observed)
             state = task["state"]
             next_action = {
-                "PENDING": "READY_TO_TICK",
+                "PENDING": ("NOT_DUE" if task["due_at"] > time.time()
+                            else "READY_TO_TICK"),
                 "CONTROL_ACTIVE": "READY_TO_TICK",
                 "RUNNING": ("READY_TO_RECOVER" if
                     task["lease_until"] is not None
