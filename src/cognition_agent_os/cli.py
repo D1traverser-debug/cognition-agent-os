@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .ledger import alter_authority, connect, create_task, initialize
 from .continuity import register_goal, resume_goal, checkpoint_goal
+from .outcome_feedback import register_evidence_goal
 from .host import HostNotConfigured, run_tick
 from .runner import run_once
 from .watch import create_watch
@@ -71,6 +72,9 @@ def main(argv=None) -> int:
     bounded = sub.add_parser("seed-bounded-local-goal",
         help="Explicitly register two pinned local methods; no production mutation")
     bounded.add_argument("--spec",type=Path,required=True)
+    feedback=sub.add_parser("seed-evidence-feedback",
+        help="Register two pinned LOCAL capabilities for independent feedback; no external effect")
+    feedback.add_argument("--spec",type=Path,required=True)
     goal = sub.add_parser("seed-goal", help="Explicit bounded JSON/CSV conformance goal")
     goal.add_argument("--spec", type=Path, required=True)
     intake_repair = sub.add_parser("seed-code-repair",
@@ -328,6 +332,31 @@ def main(argv=None) -> int:
             return 3
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if args.command != "reference-evaluate" or result["status"] == "REFERENCE_MATCH" else 4
+    if args.command == "seed-evidence-feedback":
+        if not args.db.is_file() or args.db.is_symlink():
+            print(json.dumps({"status":"HOST_NOT_CONFIGURED"},sort_keys=True))
+            return 2
+        try:
+            if (args.spec.is_symlink() or not args.spec.is_file()
+                or args.spec.stat().st_size>16384):
+                raise ValueError("UNSAFE_FEEDBACK_SPEC")
+            proposal=json.loads(args.spec.read_text(encoding="utf-8"))
+            if not isinstance(proposal,dict) or set(proposal)!={
+                "goal_id","objective","alternatives"}:
+                raise ValueError("INVALID_FEEDBACK_SEED")
+            tid=register_evidence_goal(args.db,args.fixtures,
+                goal_id=proposal["goal_id"],
+                objective=proposal["objective"],
+                alternatives=proposal["alternatives"])
+        except (ValueError,TypeError,KeyError,OSError,sqlite3.Error,
+                PermissionError) as exc:
+            print(json.dumps({"status":"FEEDBACK_NOT_ADMITTED",
+                "reason":str(exc)[:120]},sort_keys=True))
+            return 4
+        print(json.dumps({"task_id":tid,"state":"FEEDBACK_ACTIVE",
+            "business_outcome_verified":False,
+            "allowed_effect":"LOCAL_EVIDENCE_ONLY"},sort_keys=True))
+        return 0
     if args.command == "seed-bounded-local-goal":
         # This command NEVER creates a fresh grant or ledger automatically.
         if not args.db.is_file() or args.db.is_symlink():
