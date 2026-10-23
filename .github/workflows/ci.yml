@@ -53,6 +53,38 @@ jobs:
           path: architecture_ab.json
           if-no-files-found: warn
 
+  installed_cli_cross_platform:
+    # Package install in an isolated venv; this is NOT owner-machine install.
+    if: ${{ github.event.repository.private == false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and run the actual installed cognition-os entrypoint
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m venv .venv
+          if ($IsWindows) { $runnerPython = '.venv/Scripts/python.exe' }
+          else { $runnerPython = '.venv/bin/python' }
+          & $runnerPython -m pip install --disable-pip-version-check --no-deps .
+          if ($LASTEXITCODE -ne 0) { throw 'Package installation failed' }
+          & $runnerPython scripts/verify_installed_cli.py | Tee-Object installed-cli-evidence.json
+          if ($LASTEXITCODE -ne 0) { throw 'Installed entrypoint verification failed' }
+      - name: Preserve OS-specific installed entrypoint receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-cli-${{ matrix.os }}
+          path: installed-cli-evidence.json
+          if-no-files-found: warn
+
   windows_offline_regression:
     # Public-repository hosted Windows runner; tests host compatibility,
     # NOT the user's computer or an actual unattended scheduled task.
