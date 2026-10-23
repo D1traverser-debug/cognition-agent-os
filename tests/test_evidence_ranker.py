@@ -43,6 +43,21 @@ class EvidenceMethodTests(unittest.TestCase):
         self.assertIn("证", tokens("验证变更必须批准"))
         self.assertIn("批", tokens("验证变更必须批准"))
 
+    def test_unanswerable_does_not_mean_no_relevant_evidence(self):
+        from scripts.evaluate_evidence_retrieval import HOLDOUT
+        corpus = json.loads(HOLDOUT.read_text(encoding="utf-8"))
+        unanswerable = [x for x in corpus["cases"] if not x["answerable"]]
+        self.assertEqual(len(unanswerable), 4)
+        self.assertTrue(all(x["relevant_sources"] for x in unanswerable))
+        self.assertTrue(all(set(x["relevant_sources"]).issubset(x["docs"])
+                            for x in unanswerable))
+        # Both disagreeing sensors must be retrieved, even though a single
+        # definitive sensor value cannot be asserted.
+        disagreement = next(x for x in unanswerable
+                            if x["id"] == "h16_no_single_resolution")
+        self.assertEqual(set(disagreement["relevant_sources"]),
+                         {"monitor-alpha.md", "monitor-beta.md"})
+
     def test_preregistered_holdout_never_used_to_calibrate(self):
         from scripts.evaluate_evidence_retrieval import run
         with tempfile.TemporaryDirectory() as root:
@@ -55,7 +70,9 @@ class EvidenceMethodTests(unittest.TestCase):
             for method in report["methods"].values():
                 self.assertEqual(method["development"]["total"], 8)
                 self.assertEqual(method["holdout"]["total"], 16)
-                self.assertGreaterEqual(method["holdout"]["false_answerable"], 0)
+                self.assertNotIn("false_answerable", method["holdout"])
+                self.assertTrue(report["answerability_is_not_inferred_by_retrieval"])
+                self.assertGreaterEqual(method["holdout"]["retrieval_empty_with_evidence"], 0)
 
 
 if __name__ == "__main__":
