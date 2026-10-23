@@ -45,9 +45,26 @@ def main() -> None:
                     f"stdout={proc.stdout[:300]}")
             return json.loads(proc.stdout)
 
+        # Read/status and task submission MUST NOT create a new authority.
+        absent_status = command("status", expected=4)
+        assert absent_status["status"] == "HOST_NOT_CONFIGURED", absent_status
+        absent_seed = command("seed-fixture", "--old", "stable.txt",
+                              "--new", "stable.txt", expected=4)
+        assert absent_seed["status"] == "HOST_NOT_CONFIGURED", absent_seed
+        assert not db.exists(), "Read/seed implicitly created a SQLite grant"
+        cold_before = command("goal-resume", expected=4)
+        assert cold_before["status"] == "LEDGER_NOT_INITIALIZED"
+        assert not db.exists(), "Cold goal resume initialized ledger"
+
+        # The ONLY new-ledger creation is explicit init (local evidence
+        # workflow only; not production authorization).
+        initialized = command("init")
+        assert initialized["status"] == "LOCAL_LEDGER_INITIALIZED", initialized
+        assert initialized["local_write_allowed"] is True, initialized
+        assert initialized["production_effect_authorized"] is False
+        assert db.is_file(), "Explicit init did not create SQLite ledger"
         status = command("status")
         assert status["tasks"] == [], status
-        assert db.is_file(), "Installed CLI did not initialize durable ledger"
 
         # A fresh chat/host cannot guess a persisted owner objective.
         missing = command("goal-resume", expected=4)
@@ -71,11 +88,36 @@ def main() -> None:
                  if t["task_id"] == admission["task_id"]]
         assert len(tasks) == 1 and tasks[0]["state"] == "VERIFIED", tasks
 
+        revoked = command("revoke-write")
+        assert revoked["grant"] == "REVOKED", revoked
+        authority_before = command("status")["authority"]
+        assert authority_before["write_allowed"] == 0, authority_before
+        no_regrant = command("init")
+        assert no_regrant["status"] == "ALREADY_INITIALIZED", no_regrant
+        assert no_regrant["authority_unchanged"] is True, no_regrant
+        authority_after = command("status")["authority"]
+        assert authority_before == authority_after, (authority_before, authority_after)
+
+        # An existing corrupt file must not be rebuilt or papered over.
+        corrupt = base / "corrupt.sqlite"
+        corrupt.write_bytes(b"not sqlite")
+        corrupt_common = common[:]
+        corrupt_common[corrupt_common.index("--db") + 1] = str(corrupt)
+        bad = subprocess.run(corrupt_common + ["init"],
+                             text=True,capture_output=True,
+                             env=environment, timeout=35)
+        assert bad.returncode == 4, (bad.returncode,bad.stdout,bad.stderr)
+        assert json.loads(bad.stdout)["status"] == "INITIALIZATION_REFUSED"
+        assert corrupt.read_bytes() == b"not sqlite"
+
     print(json.dumps({
         "status": "INSTALLED_CLI_SMOKE_PASS",
         "installed_version": package,
         "entrypoint": cli.name,
         "fresh_goal_no_guess": True,
+        "explicit_init_only": True,
+        "existing_revoke_preserved": True,
+        "corrupt_ledger_not_reset": True,
         "isolated_fixture_verified": True,
         "repeat_host_no_duplicate_work": True,
         "semantic_outcome_verified": False,
