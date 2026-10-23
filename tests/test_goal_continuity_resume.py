@@ -1,0 +1,169 @@
+"""OT06: a new process can recover the durable owner goal, not a handoff heading.
+
+The experiment is read-only after explicit registration. A green mechanical
+task state is NOT owner-level acceptance, and a new remote HEAD invalidates
+the pinned development checkpoint until it is revalidated.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import unittest
+from contextlib import closing
+from pathlib import Path
+from unittest.mock import patch
+
+from cognition_agent_os.ledger import connect, initialize, create_task, alter_authority
+from cognition_agent_os.continuity import register_goal, resume_goal, checkpoint_goal
+
+
+class GoalContinuityColdResume(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.db_path = self.root / "state.sqlite"
+        with closing(connect(self.db_path)) as db:
+            initialize(db)
+            self.first_task = create_task(
+                db, {"kind": "fixture", "old": "before", "new": "after"})
+
+    def contract(self, *, name="cognition-os", next_task_id=None, source=None):
+        return {
+            "goal_id": name,
+            "objective": "Build a goal-directed autonomous controller",
+            "acceptance": "A held-out user outcome must be independently verified",
+            "constraints": ["No unauthorized external write", "No paid model API"],
+            "next_task_id": self.first_task if next_task_id is None else next_task_id,
+            "source": source,
+        }
+
+    def test_original_goal_survives_new_python_interpreter(self):
+        register_goal(self.db_path, self.contract())
+        # An unrelated and outdated file does not outrank the SQLite authority.
+        (self.root / "SESSION_HANDOFF.md").write_text(
+            "# CURRENT P1 - wrong repository - wrong goal", encoding="utf-8")
+        code = (
+            "import json,sys;from pathlib import Path;"
+            "from cognition_agent_os.continuity import resume_goal;"
+            "print(json.dumps(resume_goal(Path(sys.argv[1]))))"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", code, str(self.db_path)], capture_output=True,
+            text=True, check=True)
+        result = json.loads(proc.stdout)
+        self.assertEqual(result["status"], "READY_TO_TICK", result)
+        self.assertEqual(result["goal_id"], "cognition-os")
+        self.assertEqual(result["next_task_id"], self.first_task)
+        self.assertEqual(result["acceptance"], self.contract()["acceptance"])
+        self.assertFalse(result["business_outcome_verified"])
+
+    def test_no_registered_goal_is_not_inferred_from_recent_tasks(self):
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "NO_DURABLE_GOAL", result)
+        self.assertNotIn("next_task_id", result)
+
+    def test_two_active_goals_do_not_invent_priority(self):
+        register_goal(self.db_path, self.contract())
+        register_goal(self.db_path, self.contract(name="other-goal"))
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "AMBIGUOUS_ACTIVE_GOALS", result)
+        self.assertEqual(result["goal_ids"], ["cognition-os", "other-goal"])
+        self.assertNotIn("next_task_id", result)
+
+    def test_revocation_blocks_recovered_next_action(self):
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db, revoke=True)
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "AUTHORITY_REVOKED", result)
+        self.assertNotIn("next_task_id", result)
+
+    def test_new_goal_revision_requires_explicit_reconciliation(self):
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db, goal_change=True)
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "STALE_GOAL_REVISION", result)
+        self.assertNotIn("next_task_id", result)
+
+    def test_remote_head_change_requires_revalidation_not_auto_advance(self):
+        source = {"repo": "example/public-repo", "branch": "main",
+                  "head_sha": "a"*40}
+        register_goal(self.db_path, self.contract(source=source))
+        result = resume_goal(
+            self.db_path, resolve_head=lambda _repo, _branch: "b"*40)
+        self.assertEqual(result["status"], "SOURCE_REVALIDATION_REQUIRED", result)
+        self.assertEqual(result["observed_head_sha"], "b"*40)
+        self.assertNotIn("next_task_id", result)
+
+    def test_network_outage_does_not_claim_freshness(self):
+        source = {"repo": "example/public-repo", "branch": "main",
+                  "head_sha": "a"*40}
+        register_goal(self.db_path, self.contract(source=source))
+        def fail(_repo, _branch):
+            raise OSError("unreachable")
+        result = resume_goal(self.db_path, resolve_head=fail)
+        self.assertEqual(result["status"], "SOURCE_UNAVAILABLE", result)
+        self.assertNotIn("next_task_id", result)
+
+    def test_pinned_remote_head_can_resume(self):
+        source = {"repo": "example/public-repo", "branch": "main",
+                  "head_sha": "a"*40}
+        register_goal(self.db_path, self.contract(source=source))
+        result = resume_goal(
+            self.db_path, resolve_head=lambda _repo, _branch: "a"*40)
+        self.assertEqual(result["status"], "READY_TO_TICK", result)
+
+    def test_single_field_contract_corruption_is_not_accepted(self):
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            db.execute(
+                "UPDATE goal_continuity SET contract=? WHERE goal_id=?",
+                ('{"objective":"forged goal"}', "cognition-os"))
+            db.commit()
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "INTEGRITY_CONFLICT", result)
+        self.assertNotIn("next_task_id", result)
+
+    def test_task_needs_review_not_business_success(self):
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            db.execute(
+                "UPDATE tasks SET state='VERIFIED' WHERE task_id=?",
+                (self.first_task,))
+            db.commit()
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "NEEDS_OWNER_OUTCOME_REVIEW", result)
+        self.assertFalse(result["business_outcome_verified"])
+
+    def test_duplicate_registration_requires_explicit_checkpoint(self):
+        register_goal(self.db_path, self.contract())
+        with self.assertRaises(ValueError):
+            register_goal(self.db_path, self.contract())
+
+    def test_checkpoint_cas_preserves_existing_identity_and_recovers_new_task(self):
+        first = register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            second_task = create_task(
+                db, {"kind": "fixture", "old": "new-a", "new": "new-b"})
+        second = checkpoint_goal(
+            self.db_path, "cognition-os",
+            expected_digest=first["contract_sha256"],
+            next_task_id=second_task)
+        self.assertNotEqual(first["contract_sha256"], second["contract_sha256"])
+        with self.assertRaises(ValueError):
+            checkpoint_goal(
+                self.db_path, "cognition-os",
+                expected_digest=first["contract_sha256"],
+                next_task_id=self.first_task)
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["next_task_id"], second_task)
+        self.assertEqual(result["status"], "READY_TO_TICK")
+
+
+if __name__ == "__main__":
+    unittest.main()
