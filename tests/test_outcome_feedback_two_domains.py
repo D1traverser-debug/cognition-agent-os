@@ -197,5 +197,39 @@ class OutcomeFeedbackTwoDomains(unittest.TestCase):
         self.assertEqual(result["local_goal_control"],[])
 
 
+    def test_independent_processes_recover_and_complete_same_feedback_lineage(self):
+        import subprocess
+        import sys
+        tid=self.seed(self.reconciliation_methods(),name="cold-recon")
+        call=[sys.executable,"-m","cognition_agent_os.cli",
+              "--db",str(self.db),"--workspace",str(self.work),
+              "--fixtures",str(self.fx),
+              "host-tick","--auto-local-goal-control","--max-jobs","4"]
+        receipts=[]
+        for _ in range(3):
+            proc=subprocess.run(call,text=True,capture_output=True,check=True)
+            receipts.append(json.loads(proc.stdout))
+        self.assertEqual([p["status"] for p in receipts[1]["tasks"]],
+                         ["UNKNOWN"])
+        self.assertEqual([p["status"] for p in receipts[2]["tasks"]],
+                         ["NEEDS_REVIEW"])
+        self.assertEqual(self.root(tid)["state"],"FEEDBACK_EVIDENCE_READY")
+        self.assertEqual(len(self.children(tid)),2)
+        self.assertTrue(all(p["semantic_outcome_verified"] is False
+                            for p in receipts))
+
+    def test_one_unverifiable_root_does_not_starve_other_authorized_root(self):
+        first=self.seed(self.structure_methods(),name="bad-input")
+        second=self.seed(self.reconciliation_methods(),name="valid-input")
+        self.write("conflict.json", '{"id":"A","owner":"tampered"}')
+        self.tick()
+        self.assertEqual(self.root(first)["state"],"FEEDBACK_UNVERIFIABLE")
+        self.assertEqual(self.root(second)["state"],"FEEDBACK_ACTIVE")
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(self.root(second)["state"],"FEEDBACK_EVIDENCE_READY")
+        self.assertEqual(len(self.children(second)),2)
+
+
 if __name__=="__main__":
     unittest.main()
