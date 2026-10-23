@@ -405,6 +405,20 @@ jobs:
         run: python scripts/verify_p36_live_research.py
 
 
+  aoci_official_bootstrap_probe:
+    # Real AOCI binary, but only disposable init+scan, NOT authored cognition.
+    # Pin a published release archive SHA256; report this is NOT Cosign auth.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Probe official AOCI-CODE in isolated checkout (no model authoring)
+        shell: bash
+        run: bash scripts/probe_official_aoci.sh
+
   graphify_official_code_inventory:
     # Official third-party CLI on a clean temporary Linux runner.
     # Code-only AST extraction: no model API keys or production mutation.
