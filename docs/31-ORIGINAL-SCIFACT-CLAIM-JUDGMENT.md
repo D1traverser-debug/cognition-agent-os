@@ -33,3 +33,9 @@ Research oracles are deliberately separate from the production runtime; no new s
 `python scripts/measure_external_scifact_claim_judgment.py --smoke`
 
 Full real-model run is opt-in with PR description marker `[run-scifact-real-judgment]`. Artifacts contain the annotated label comparisons and model outputs, not all copyrighted source text.
+
+## Controlled capacity A/B after a real falsification
+
+The baseline 0.5B actually ran, not a test double. Source tar SHA256 `11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be`; sample-claim-ID digest `026fe3d9785461f40433120502c22c7583abdff99304d86c56e11cc141a955a7`. With full gold abstracts **12/24 correct**; with gold rationale snippets **12/24 correct**. All evidence-present predictions were `SUPPORT` (including all twelve `CONTRADICT` cases). With no evidence it abstained only **16/24**. This is category collapse, not genuine claim verification. Exact [baseline Action 39956864434](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/39956864434).
+
+The next predefined experiment **changes only the model** to `qwen2.5:1.5b`, uses the identical pinned SciFact publisher tar and deterministic 24 claims, three conditions, JSON schema and prompt. Both model digests and per-claim class confusion are retained. This is a capacity/protocol diagnostic, NOT an automatic model upgrade. Paired scientific evidence labels may still be wrong/incomplete; original dev != original hidden test. No inference result ever alters the authoritative SQLite grant or trusted knowledge.
