@@ -30,6 +30,7 @@ def main() -> None:
         workspace = base / "artifacts"
         fixtures = base / "fixtures"
         fixtures.mkdir()
+        (fixtures / "stable.txt").write_text("unchanged source\n", encoding="utf-8")
         common = [str(cli), "--db", str(db), "--workspace",
                   str(workspace), "--fixtures", str(fixtures)]
 
@@ -53,8 +54,8 @@ def main() -> None:
         assert missing["status"] == "NO_DURABLE_GOAL", missing
         assert "next_task_id" not in missing, missing
 
-        admission = command("seed-fixture", "--old", "same-source",
-                            "--new", "same-source")
+        admission = command("seed-fixture", "--old", "stable.txt",
+                            "--new", "stable.txt")
         assert admission["state"] == "PENDING", admission
 
         tick1 = command("host-tick", "--max-jobs", "2")
