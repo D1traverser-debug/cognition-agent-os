@@ -6,7 +6,7 @@ from contextlib import closing
 import time
 from pathlib import Path
 
-from .ledger import connect
+from .ledger import connect, LedgerNotConfigured, require_initialized_ledger
 from .runner import run_once
 from .watch import poll_due_watches
 from .sandbox_effect import advance_due_reviews
@@ -21,19 +21,10 @@ class HostNotConfigured(RuntimeError):
 
 
 def _admit_existing_ledger(path: Path) -> None:
-    """Tick must use a pre-existing initialized DB created through explicit seeding."""
-    if not path.is_file() or path.is_symlink():
-        raise HostNotConfigured("No regular initialized SQLite DB; seed explicitly before enabling a host")
+    """Host and direct runner share the same read-only authority admission."""
     try:
-        uri = path.resolve(strict=True).as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-            authority = db.execute(
-                "SELECT goal_rev,grant_rev,write_allowed FROM authority WHERE singleton=1"
-            ).fetchone()
-            db.execute("SELECT task_id FROM tasks LIMIT 1").fetchall()
-        if authority is None:
-            raise HostNotConfigured("Authority row missing")
-    except (sqlite3.Error, OSError) as exc:
+        require_initialized_ledger(path)
+    except LedgerNotConfigured as exc:
         raise HostNotConfigured("Task authority DB unavailable or uninitialized") from exc
 
 
