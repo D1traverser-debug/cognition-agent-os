@@ -34,9 +34,11 @@ class SharedPostconditionFeedback(unittest.TestCase):
 
     def methods(self,*,bad_first=False):
         if bad_first:
-            self.write("first.json",'{"id":"A"}')
+            # First proposal is mechanically valid, but adds an unrelated
+            # field. The *shared* target is exactly id=A,owner=ops.
+            self.write("first.json",'{"id":"A","department":"north"}')
             first={"kind":"goal_case","goal_type":"json_keys",
-                   "input":"first.json","desired":{"department":"north"}}
+                   "input":"first.json","desired":{"owner":"ops"}}
         else:
             self.write("first.json",'{"id":"A","owner":"wrong"}')
             first={"kind":"goal_case","goal_type":"json_keys",
