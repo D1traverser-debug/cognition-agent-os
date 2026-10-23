@@ -40,6 +40,20 @@ class InvestigationInvalid(ValueError):
 class EvidenceAbstained(InvestigationInvalid):
     """The model explicitly selected no relevant sources; not a success claim."""
 
+# All codes here originate from the executor, never untrusted model/user text.
+# Persist diagnostic CLASSIFICATION without storing private source bytes or
+# model prompts in the durable database.
+_ADMISSIBLE_INVESTIGATION_CODES = frozenset({
+    "INVALID_INVESTIGATION_CONTRACT", "INVESTIGATION_TOO_LARGE",
+    "SOURCE_DIRECTORY_UNAVAILABLE", "SOURCE_DIRECTORY_TOO_LARGE",
+    "BOUNDED_EVIDENCE_SCOPE_UNAVAILABLE", "LOCAL_MODEL_REPLY_INVALID",
+    "LOCAL_MODEL_JSON_INVALID", "LOCAL_MODEL_RESPONSE_NOT_OBJECT",
+    "UNAUTHORIZED_OR_AMBIGUOUS_SOURCE_SELECTION",
+    "INVALID_RESEARCH_PROPOSAL", "INVALID_RESEARCH_FINDING",
+    "UNGROUNDED_OR_DUPLICATE_QUOTE", "INCOMPLETE_RESEARCH_EVIDENCE",
+    "EVIDENCE_CHANGED_DURING_REASONING",
+})
+
 
 def validate_investigation(spec: dict) -> dict:
     if (not isinstance(spec, dict)
@@ -218,7 +232,14 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
     except local_model.LocalModelUnavailable:
         return finalize_observed(db, task, "UNKNOWN",
                                  error_code="LOCAL_MODEL_UNAVAILABLE")
-    except (InvestigationInvalid, SourceUnavailable, ArtifactConflict,
+    except InvestigationInvalid as exc:
+        # Distinguish MODEL FORMAT vs WRONG SOURCE vs UNSUPPORTED QUOTE.
+        # This evidence is needed to choose the next remedy scientifically.
+        code = str(exc)
+        if code not in _ADMISSIBLE_INVESTIGATION_CODES:
+            code = "LOCAL_INVESTIGATION_UNVERIFIABLE"
+        return finalize_observed(db, task, "UNKNOWN", error_code=code)
+    except (SourceUnavailable, ArtifactConflict,
             ValueError, KeyError, TypeError, UnicodeError, OSError):
         return finalize_observed(db, task, "UNKNOWN",
                                  error_code="LOCAL_INVESTIGATION_UNVERIFIABLE")

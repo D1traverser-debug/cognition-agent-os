@@ -10,6 +10,7 @@ Run: PYTHONPATH=src COGNITION_EVAL_MODEL=qwen2.5:0.5b \
 from __future__ import annotations
 
 from contextlib import closing
+from collections import Counter
 import hashlib
 import json
 import os
@@ -207,6 +208,8 @@ def main() -> int:
         "exact_source_selection_rate": round(successes / len(trials), 4),
         "false_abstentions": sum(t.get("false_abstention", False) for t in trials),
         "false_evidence_cases": sum(t.get("false_evidence", False) for t in trials),
+        "error_code_histogram": dict(Counter(
+            t.get("error") or "NONE" for t in trials)),
         "independent_semantic_business_outcome_verified": False,
         "owner_host_deployed": False,
         "model_responses_mocked": False,

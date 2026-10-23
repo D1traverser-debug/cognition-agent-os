@@ -113,6 +113,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
                               max_jobs=1, planner_mode="ollama-local",
                               local_model="local:test")
         self.assertEqual(result["tasks"][0]["status"], "UNKNOWN", result)
+        self.assertEqual(result["tasks"][0]["reason"], "UNGROUNDED_OR_DUPLICATE_QUOTE")
         self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
 
     def test_unlisted_source_rejected_before_read(self):
@@ -123,6 +124,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
                               max_jobs=1, planner_mode="ollama-local",
                               local_model="local:test")
         self.assertEqual(result["tasks"][0]["status"], "UNKNOWN", result)
+        self.assertEqual(result["tasks"][0]["reason"], "UNAUTHORIZED_OR_AMBIGUOUS_SOURCE_SELECTION")
         self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
 
     def test_revocation_during_model_reasoning_prevents_commit(self):
