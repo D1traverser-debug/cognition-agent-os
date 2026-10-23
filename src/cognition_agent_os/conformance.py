@@ -450,13 +450,13 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
         else:
             last=""
         total=db.execute("""SELECT COUNT(*) FROM tasks
-                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE')""").fetchone()[0]
+                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')""").fetchone()[0]
         selected=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')
                    AND task_id>? ORDER BY task_id LIMIT ?""",(last,max_cases)).fetchall()
         if enforce and len(selected)<max_cases and last:
             selected+=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE')
+                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')
                    AND task_id<=? ORDER BY task_id LIMIT ?""",
                  (last,max_cases-len(selected))).fetchall()
         findings=[]
