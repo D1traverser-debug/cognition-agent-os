@@ -250,5 +250,49 @@ class OpenGoalInvestigationTests(unittest.TestCase):
 
 
 
+    def test_single_relevant_source_does_not_require_irrelevant_second(self):
+        """Only one source answers the goal. Rejecting it is false abstention."""
+        from cognition_agent_os.investigation import audit_investigation
+        tid = self.seed("What must be checked before granting write permission?")
+        one = [{"source": "authority.md", "quote": self.a,
+                "interpretation": "External authority should decide write grants."}]
+        fake, calls = self.model(selection=["authority.md"], findings=one)
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW", tick)
+        self.assertEqual(audit_investigation(
+            self.dbpath, self.workspace, self.sources, tid)["status"],
+            "SOURCE_GROUNDED_UNREVIEWED")
+        self.assertEqual(len([r for r in calls if r[0] == "POST"]), 2)
+
+    def test_no_relevant_evidence_requires_explicit_abstention_not_fake_research(self):
+        """A query that cannot be grounded must not fabricate two sources."""
+        tid = self.seed("What is the gearbox serial number of an unlisted vehicle?")
+        fake, calls = self.model(selection=[])
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "UNKNOWN", tick)
+        self.assertEqual(tick["tasks"][0]["reason"], "NO_RELEVANT_EVIDENCE_SELECTED")
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+        self.assertEqual(len([r for r in calls if r[0] == "POST"]), 1)
+
+    def test_model_must_not_abstain_by_claiming_unauthorized_source(self):
+        """Abstention is distinct from selecting a nonexistent or unapproved file."""
+        tid = self.seed()
+        fake, _ = self.model(selection=["other-unlisted.md"])
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "UNKNOWN", tick)
+        self.assertNotEqual(tick["tasks"][0].get("reason"),
+                            "NO_RELEVANT_EVIDENCE_SELECTED")
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+
+
 if __name__ == "__main__":
     unittest.main()
