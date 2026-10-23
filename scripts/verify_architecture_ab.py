@@ -98,6 +98,14 @@ with tempfile.TemporaryDirectory() as td:
                 alter_authority(conn,revoke=True)
         if scenario=="source_drift" and i==1:
             (fx/"bad.json").write_text('{"id":"A","owner":"tampered"}')
+        if scenario=="admission_crash" and i==1:
+            # A persisted child survives while its attempt index is lost.
+            # Conformance must refuse to admit a replacement child.
+            with closing(connect(db)) as conn:
+                conn.execute(
+                    "DELETE FROM evidence_feedback_attempts WHERE root_task_id=?",
+                    (root_id,))
+                conn.commit()
         run_tick(db,workspace,fx,max_jobs=4,auto_local_goal_control=True)
         traces.append(snapshot())
     print(json.dumps({"scenario":scenario,"traces":traces},
