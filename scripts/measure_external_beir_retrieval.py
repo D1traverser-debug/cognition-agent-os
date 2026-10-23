@@ -178,14 +178,30 @@ def _read_dataset(raw: bytes, dataset: str):
     lines = qrels_raw.decode("utf-8").splitlines()
     if not lines or "query-id" not in lines[0]:
         raise ValueError("Invalid official qrels header")
+    orphan_qrels = []
     for line in lines[1:]:
         parts = line.split("\t")
         if len(parts) != 3:
             raise ValueError("Qrels row invalid")
         qid, docid, grade = parts
         if qid not in queries or docid not in docs:
-            raise ValueError("Qrels refer to unavailable evidence")
+            orphan_qrels.append({
+                "query_id": qid[:90], "document_id": docid[:90],
+                "query_available": qid in queries,
+                "document_available": docid in docs,
+            })
+            continue
         qrels[qid][docid] = int(grade)
+    if orphan_qrels:
+        diagnostic = {
+            "dataset": dataset, "orphan_qrels_count": len(orphan_qrels),
+            "qrels_rows": len(lines) - 1, "query_total": len(queries),
+            "document_total": len(docs), "first_6_orphans": orphan_qrels[:6]
+        }
+        print("OFFICIAL_QRELS_INTEGRITY_DIAGNOSTIC "
+              + json.dumps(diagnostic, sort_keys=True), flush=True)
+        raise ValueError("Official qrels include IDs not found in parsed files; "
+                         "dataset scoring stopped for source-integrity diagnosis")
     eligible = [qid for qid in qrels if any(s > 0 for s in qrels[qid].values())]
     if not eligible or len(docs) > DATASET_MAX_DOCS:
         raise ValueError("Empty/oversized external benchmark")
