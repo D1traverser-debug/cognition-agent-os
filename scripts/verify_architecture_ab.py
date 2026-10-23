@@ -20,6 +20,19 @@ SCENARIOS = (
     "legacy_switch", "feedback_structure_switch", "feedback_record_switch",
     "revocation", "source_drift", "two_goals", "admission_crash",
 )
+# Precommitted terminal-state oracle: a simultaneous regression in both
+# versions must not pass merely because their traces agree.
+EXPECTED_FINAL = {
+    "legacy_switch": (("CONTROL_CANDIDATE_MATCHED", 2),),
+    "feedback_structure_switch": (("FEEDBACK_EVIDENCE_READY", 2),),
+    "feedback_record_switch": (("FEEDBACK_EVIDENCE_READY", 2),),
+    "revocation": (("FEEDBACK_STOPPED", 1),),
+    "source_drift": (("FEEDBACK_UNVERIFIABLE", 1),),
+    "two_goals": (("FEEDBACK_EVIDENCE_READY", 2),
+                  ("FEEDBACK_EVIDENCE_READY", 2)),
+    "admission_crash": (("UNKNOWN", 1),),
+}
+
 _WORKER = r'''
 import json, os, sqlite3, sys, tempfile
 from pathlib import Path
@@ -171,12 +184,25 @@ def main() -> None:
                     json.dumps(x,sort_keys=True) for x in originals})==1 and
                     len({json.dumps(x,sort_keys=True) for x in variants})==1)
                 equivalent=all(a==b for a,b in zip(originals,variants))
-                if not equivalent or not repeat_stable:
+                expected=list(EXPECTED_FINAL[case])
+                baseline_final=[
+                    (r["root_state"],len(r["children"]))
+                    for r in originals[0]["traces"][-1]]
+                candidate_final=[
+                    (r["root_state"],len(r["children"]))
+                    for r in variants[0]["traces"][-1]]
+                oracle_pass=(baseline_final==expected and
+                             candidate_final==expected)
+                if not equivalent or not repeat_stable or not oracle_pass:
                     mismatch.append(case)
                 records.append({
                     "scenario":case,
                     "equivalent":equivalent,
                     "repeat_stable":repeat_stable,
+                    "oracle_pass":oracle_pass,
+                    "expected_terminal":expected,
+                    "baseline_terminal":baseline_final,
+                    "candidate_terminal":candidate_final,
                     "baseline_median_seconds":round(
                         statistics.median(durations["baseline"]),4),
                     "candidate_median_seconds":round(
