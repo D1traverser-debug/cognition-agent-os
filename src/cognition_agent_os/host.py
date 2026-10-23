@@ -259,6 +259,11 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
         from .bounded_goal_control import advance_local_goals
         controlled=advance_local_goals(db_path,workspace,fixture_root,
                                        limit=min(max_jobs,4))
+        # Reuse the SAME opt-in, task ledger and host; only capability-specific
+        # independent verdict adapters differ. No second scheduler or grant.
+        from .outcome_feedback import advance_evidence_goals
+        controlled.extend(advance_evidence_goals(
+            db_path,workspace,fixture_root,limit=min(max_jobs,4)))
     else:
         controlled=[]
     _record_tick(db_path, processed=len(results), finished_at=time.time())
