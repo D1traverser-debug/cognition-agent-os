@@ -158,14 +158,14 @@ def main() -> None:
     if args.baseline != BASELINE_SHA or not 2 <= args.repetitions <= 5:
         raise SystemExit("BASELINE_OR_REPETITION_CONTRACT_INVALID")
     repo=args.repo.resolve()
-    expected=_run(["git","rev-parse","HEAD"],repo)
+    candidate_sha=_run(["git","rev-parse","HEAD"],repo)
     _run(["git","cat-file","-e",args.baseline+"^{commit}"],repo)
     with tempfile.TemporaryDirectory(prefix="control-architecture-ab-") as td:
         workspace=Path(td)
         base=workspace/"base"
         candidate=workspace/"candidate"
         _worktree(repo,base,args.baseline)
-        _worktree(repo,candidate,expected)
+        _worktree(repo,candidate,candidate_sha)
         records=[]
         mismatch=[]
         try:
@@ -184,15 +184,15 @@ def main() -> None:
                     json.dumps(x,sort_keys=True) for x in originals})==1 and
                     len({json.dumps(x,sort_keys=True) for x in variants})==1)
                 equivalent=all(a==b for a,b in zip(originals,variants))
-                expected=list(EXPECTED_FINAL[case])
+                expected_terminal=list(EXPECTED_FINAL[case])
                 baseline_final=[
                     (r["root_state"],len(r["children"]))
                     for r in originals[0]["traces"][-1]]
                 candidate_final=[
                     (r["root_state"],len(r["children"]))
                     for r in variants[0]["traces"][-1]]
-                oracle_pass=(baseline_final==expected and
-                             candidate_final==expected)
+                oracle_pass=(baseline_final==expected_terminal and
+                             candidate_final==expected_terminal)
                 if not equivalent or not repeat_stable or not oracle_pass:
                     mismatch.append(case)
                 records.append({
@@ -200,7 +200,7 @@ def main() -> None:
                     "equivalent":equivalent,
                     "repeat_stable":repeat_stable,
                     "oracle_pass":oracle_pass,
-                    "expected_terminal":expected,
+                    "expected_terminal":expected_terminal,
                     "baseline_terminal":baseline_final,
                     "candidate_terminal":candidate_final,
                     "baseline_median_seconds":round(
@@ -219,7 +219,7 @@ def main() -> None:
     report={
         "comparison":"PR24_vs_PR25_SAME_SCENARIOS",
         "baseline_sha":args.baseline,
-        "candidate_commit":expected,
+        "candidate_commit":candidate_sha,
         "scope":"ISOLATED_LOCAL_TASK_CONTROL_ONLY",
         "repetitions":args.repetitions,
         "scenarios":list(SCENARIOS),
@@ -235,7 +235,7 @@ def main() -> None:
         encoding="utf-8")
     print(json.dumps({
         "result":report["result"],"baseline":args.baseline,
-        "candidate":expected,"repetitions":args.repetitions,
+        "candidate":candidate_sha,"repetitions":args.repetitions,
         "cases":len(records),"mismatches":mismatch,
     },sort_keys=True))
     if mismatch:
