@@ -173,6 +173,33 @@ class SharedPostconditionFeedback(unittest.TestCase):
         self.assertEqual(self.root(task)["state"],"FEEDBACK_UNVERIFIABLE")
         self.assertEqual(len(self.children(task)),1)
 
+    def test_artifact_swap_after_independent_audit_is_inconclusive(self):
+        # Simulate artifact bytes changing AFTER a separately invoked audit:
+        # successful audit of earlier bytes must not license a later read.
+        import hashlib
+        from unittest.mock import patch
+        from cognition_agent_os.outcome_feedback import _outcome
+        task=self.register(self.methods(),goal_id="swap-race")
+        for _ in range(3):
+            self.tick()
+        child=self.children(task)[-1]
+        self.assertEqual(child["state"],"NEEDS_REVIEW")
+        filename=self.work/"artifacts"/(child["task_id"]+".json")
+        filename.write_bytes(filename.read_bytes()+b" ")
+        method={
+            "task_spec":json.loads(child["source_spec"]),
+            "source_sha256":{"second.csv":hashlib.sha256(
+                (self.fx/"second.csv").read_bytes()).hexdigest()},
+        }
+        with patch("cognition_agent_os.outcome_feedback.audit_goal",
+                   return_value={"status":"CANDIDATE_MECHANICALLY_VALID"}):
+            result=_outcome(child,method,self.db,self.work,self.fx,{
+                "kind":"exact_record_postcondition",
+                "identity_fields":["id"],
+                "target_record":{"id":"A","owner":"ops"},
+            })
+        self.assertEqual(result,"INCONCLUSIVE")
+
     def test_unrelated_or_malformed_acceptance_cannot_be_self_issued(self):
         methods=self.methods()
         invalid=[
