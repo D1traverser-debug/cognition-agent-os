@@ -430,7 +430,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install official Graphify in isolated runner
-        run: python -m pip install --disable-pip-version-check graphifyy
+        run: python -m pip install --disable-pip-version-check graphifyy==0.9.94
       - name: Extract code graph and prove real artifact exists
         shell: bash
         env:
