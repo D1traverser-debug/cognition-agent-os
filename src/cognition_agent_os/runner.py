@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import time
 
-from .ledger import claim_one, connect, current_guard, event, finalize_observed, initialize
+from .ledger import claim_one, connect, current_guard, event, finalize_observed, require_initialized_ledger
 from .planner import propose
 from .local_model import LocalModelUnavailable, propose_local
 from .source import SourceUnavailable, get_pair
@@ -65,9 +65,10 @@ def verify_artifact(workspace: Path, task: dict) -> bool:
 def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str | None = None,
              force_lease_expire: bool = False, planner_mode: str = "deterministic",
              local_model: str | None = None) -> dict:
+    # Direct invocation must obey the same explicit authority admission as host/CLI.
+    require_initialized_ledger(db_path)
     db = connect(db_path)
     try:
-        initialize(db)
         task = claim_one(db)
         if not task:
             return {"status": "IDLE"}
