@@ -228,9 +228,10 @@ def advance_local_goals(db_path:Path,workspace:Path,fixtures:Path,
         raise ValueError("CONTROL_LIMIT")
     from .control_kernel import drive_active_controller
 
-    def transition(db,root,allowed,reason):
-        if not allowed:
-            return _finish(db,root["task_id"],_STOP,reason)
+    def on_denied(db,root,reason):
+        return _finish(db,root["task_id"],_STOP,reason)
+
+    def transition(db,root):
         from .bounded_control_audit import verify_registered_control
         registered=verify_registered_control(db,root)
         if not registered["valid"]:
@@ -257,4 +258,4 @@ def advance_local_goals(db_path:Path,workspace:Path,fixtures:Path,
     return drive_active_controller(
         db_path,active_state=_ACTIVE,
         cursor_table="bounded_control_scan_cursor",limit=limit,
-        setup=_ensure,step=transition)
+        setup=_ensure,step=transition,on_denied=on_denied)
