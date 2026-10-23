@@ -15,9 +15,10 @@ REQUIRED_PATHS = (
     # The currently implemented bounded-control path, not merely an old P0-P3 skeleton.
     ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_bounded_goal_control_advance_local_goals"),
     ("src_cognition_agent_os_bounded_goal_control_advance_local_goals", "src_cognition_agent_os_bounded_control_audit_verify_registered_control"),
-    ("src_cognition_agent_os_bounded_goal_control__observe", "src_cognition_agent_os_goal_audit_audit_goal"),
+    ("src_cognition_agent_os_bounded_goal_control_observe", "src_cognition_agent_os_goal_audit_audit_goal"),
     ("src_cognition_agent_os_bounded_control_audit_audit_controlled_candidate", "src_cognition_agent_os_bounded_outcome_oracle_assess_local_record"),
-    ("src_cognition_agent_os_conformance_inspect_conformance", "src_cognition_agent_os_bounded_control_audit_audit_controlled_candidate"),
+    ("src_cognition_agent_os_conformance_inspect_conformance", "src_cognition_agent_os_conformance_check_one"),
+    ("src_cognition_agent_os_conformance_check_one", "src_cognition_agent_os_bounded_control_audit_audit_controlled_candidate"),
 )
 
 def check(graph_path: Path, repo: Path) -> dict:
