@@ -37,19 +37,21 @@ class AuthoritativeKernelInvariants(unittest.TestCase):
             db.commit()
         return ids
 
-    def tick(self, *, limit=4, state="FEEDBACK_ACTIVE", step=None):
+    def tick(self, *, limit=4, state="FEEDBACK_ACTIVE", step=None,
+             on_denied=None):
         family=("evidence_feedback_cursor" if state=="FEEDBACK_ACTIVE"
                 else "bounded_control_scan_cursor")
         setup=feedback_setup if state=="FEEDBACK_ACTIVE" else legacy_setup
         return drive_active_controller(
             self.db_path, active_state=state, cursor_table=family,
-            limit=limit, setup=setup, step=step)
+            limit=limit, setup=setup, step=step,
+            on_denied=on_denied or (lambda db,root,reason:
+                {"status":"DENIED","reason":reason}))
 
     def test_round_robin_advances_all_authorized_roots(self):
         roots=self.roots(5)
         visited=[]
-        def consume(db,root,allowed,why):
-            self.assertTrue(allowed,why)
+        def consume(db,root):
             visited.append(root["task_id"])
             db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
                        (root["task_id"],))
@@ -63,8 +65,7 @@ class AuthoritativeKernelInvariants(unittest.TestCase):
 
     def test_uncommitted_child_rolls_back_with_failed_transition(self):
         root=self.roots(1)[0]
-        def broken(db,task,allowed,why):
-            self.assertTrue(allowed)
+        def broken(db,task):
             create_task(
                 db,{"kind":"fixture","old":"orphan","new":"orphan2"},
                 parent=task["task_id"],commit=False)
@@ -85,11 +86,16 @@ class AuthoritativeKernelInvariants(unittest.TestCase):
         self.roots(1)
         with closing(connect(self.db_path)) as db:
             alter_authority(db,revoke=True)
-        def step(db,root,allowed,reason):
-            self.assertFalse(allowed)
+        def executable(*_args):
+            self.fail("revoked grant reached executable domain callback")
+        seen=[]
+        def denied(db,root,reason):
             self.assertIn("REVOK",reason.upper())
+            seen.append(root["task_id"])
             return {"status":"DENIED"}
-        self.assertEqual(self.tick(step=step)[0]["status"],"DENIED")
+        self.assertEqual(self.tick(step=executable,on_denied=denied)[0]["status"],
+                         "DENIED")
+        self.assertEqual(len(seen),1)
 
     def test_family_cursor_contract_not_inferred_from_untrusted_inputs(self):
         def step(*_args):
@@ -104,7 +110,8 @@ class AuthoritativeKernelInvariants(unittest.TestCase):
                     drive_active_controller(
                         self.db_path, active_state=state,
                         cursor_table=cursor,limit=1,
-                        setup=feedback_setup,step=step)
+                        setup=feedback_setup,step=step,
+                        on_denied=lambda *_: {"status":"DENIED"})
 
     def test_both_legacy_and_feedback_adapters_share_one_kernel(self):
         import inspect
