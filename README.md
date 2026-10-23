@@ -17,6 +17,8 @@ python -m venv .venv
 # Activate the venv: source .venv/bin/activate (Linux/macOS)
 # or .venv\Scripts\Activate.ps1 (Windows PowerShell).
 python -m pip install --no-deps .
+# Only an explicit init may create the local prototype ledger.
+cognition-os --db ./trial.sqlite --workspace ./trial-work init
 cognition-os --db ./trial.sqlite --workspace ./trial-work status
 cognition-os --db ./trial.sqlite --workspace ./trial-work goal-resume
 python -c "from pathlib import Path; Path('fixtures').mkdir(exist_ok=True); Path('fixtures/stable.txt').write_text('same', encoding='utf-8')"
@@ -25,7 +27,7 @@ cognition-os --db ./trial.sqlite --workspace ./trial-work host-tick --max-jobs 2
 cognition-os --db ./trial.sqlite --workspace ./trial-work status
 ```
 
-On a new database, `goal-resume` intentionally exits with code **4** and `NO_DURABLE_GOAL`; it does not infer owner authorization from a README, chat message or stale handoff. The fixture task is local-only; a Host tick is **one invocation**, not a persistent background agent. Do not put personal secrets or API tokens into this public repository.
+Before `init`, `status` and task seeding exit with code **4** and `HOST_NOT_CONFIGURED`, without creating a database or local write grant. After explicit `init`, a `goal-resume` without a registered owner goal exits with code **4** and `NO_DURABLE_GOAL`; it does not infer owner authorization from a README, chat message or stale handoff. Repeating `init` on an existing ledger is non-destructive and must never reactivate a revoked grant. The `init` command explicitly enables the current **local prototype** workflow, not third-party production writes or independent business acceptance. The fixture task is local-only; a Host tick is **one invocation**, not a persistent background agent. Do not put personal secrets or API tokens into this public repository.
 
 For module-level development: `PYTHONPATH=src python -m unittest discover -s tests -v`. CI additionally builds a clean installed console-entrypoint smoke on Linux/Windows and checks Docker isolation, Graphify call paths, and a hosted Windows scheduled task; no test substitutes for a long-running owner machine.
 
