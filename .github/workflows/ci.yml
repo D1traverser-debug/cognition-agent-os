@@ -406,9 +406,9 @@ jobs:
 
 
   aoci_official_bootstrap_probe:
-    # Real AOCI binary, but only disposable init+scan, NOT authored cognition.
-    # Pin a published release archive SHA256; report this is NOT Cosign auth.
-    if: ${{ github.event.repository.private == false }}
+    # Manual supply-chain/tool availability probe only. It cannot author an
+    # AOCI semantic index and must not inflate every integration CI run.
+    if: ${{ github.event.repository.private == false && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
