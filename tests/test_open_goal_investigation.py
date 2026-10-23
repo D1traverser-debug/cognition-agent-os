@@ -87,7 +87,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertEqual(len([x for x in calls if x[0] == "POST"]), 2)
         self.assertEqual({p.name: p.read_bytes() for p in self.sources.iterdir()}, self.before)
         # Conformance must not falsely quarantine an unapproved grounded candidate.
-        self.assertEqual(result["conformance"]["quarantined"], 0, result)
+        self.assertEqual(result["conformance"]["quarantined"], [], result)
 
     def test_different_domain_same_controller_no_domain_branch(self):
         self.a = "The regulator requires traceable assumptions in the scenario."
