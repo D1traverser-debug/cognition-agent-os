@@ -19,7 +19,8 @@ python -m venv .venv
 python -m pip install --no-deps .
 cognition-os --db ./trial.sqlite --workspace ./trial-work status
 cognition-os --db ./trial.sqlite --workspace ./trial-work goal-resume
-cognition-os --db ./trial.sqlite --workspace ./trial-work seed-fixture --old same --new same
+python -c "from pathlib import Path; Path('fixtures').mkdir(exist_ok=True); Path('fixtures/stable.txt').write_text('same', encoding='utf-8')"
+cognition-os --db ./trial.sqlite --workspace ./trial-work --fixtures ./fixtures seed-fixture --old stable.txt --new stable.txt
 cognition-os --db ./trial.sqlite --workspace ./trial-work host-tick --max-jobs 2
 cognition-os --db ./trial.sqlite --workspace ./trial-work status
 ```
