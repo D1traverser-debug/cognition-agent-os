@@ -54,11 +54,12 @@ authorized ways of realizing the same owner-defined objective:
 - Similar-looking methods: still require separate validation and a bounded
   equivalent effect contract, not automatic promotion.
 
-The read-only helper `assess_route_fitness` only rejects unsupported pairs;
-it never approves an auto-switch. Current capability registry has no proven
-pair of distinct methods targeting the same independently defined outcome.
-This is an explicit **architecture blocker**, not a prompt to insert a
-`host.py` conditional or to make a duplicate method sound different.
+An earlier test-only helper, `assess_route_fitness`, was removed: it
+compared route labels but never controlled actual task admission. The bounded
+local controller instead checks target compatibility and rejects duplicate
+method families at real SQLite registration; its read-only postcondition
+audit remains separate. Only JSON/CSV synthetic record equivalence has been
+shown—not general business-goal equivalence or unrestricted route switching.
 
 ## What this does not demonstrate
 
@@ -67,9 +68,7 @@ external-effect provider, legitimate promotion owner, or cross-capability
 replanning. Synthetic test contracts written by the developer are NOT owner
 sign-off. No production mutation, cloud LLM calls, or new authority introduced.
 
-Required next positive experiment: two genuinely independent methods with
-one fixed owner outcome/effect contract, each independently eligible, where
-one fails a hidden result oracle and the other legitimately succeeds, then a
-durable existing-ledger controller transition in the presence of revocation,
-crash, attempt exhaustion and concurrency. This experiment only makes an
-unsafe shortcut measurable; it does not assert that full capability exists.
+Later bounded-controller experiments tested one synthetic shared record goal
+across the two local methods and existing-ledger restart/concurrency rules.
+That remains outside **real-user outcome confirmation** and does not establish
+novel-domain selection, general tool authority or third-party acceptance.
