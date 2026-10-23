@@ -233,5 +233,26 @@ class OutcomeFeedbackTwoDomains(unittest.TestCase):
         self.assertEqual(len(self.children(second)),2)
 
 
+    def test_cold_goal_continuity_tracks_new_feedback_controller(self):
+        from cognition_agent_os.continuity import register_goal, resume_goal
+        tid=self.seed(self.reconciliation_methods(),name="inventory-audit")
+        register_goal(self.db,{
+            "goal_id":"inventory-audit",
+            "objective":"Find inventory source differences with bounded methods",
+            "acceptance":"Owner reviews independently verified evidence",
+            "constraints":["Local work only","No unauthorized writes"],
+            "next_task_id":tid,"source":None,
+        })
+        current=resume_goal(self.db)
+        self.assertEqual(current["status"],"READY_TO_TICK",current)
+        self.assertEqual(current["next_task_id"],tid)
+        for _ in range(3):
+            self.tick()
+        accepted=resume_goal(self.db)
+        self.assertEqual(accepted["status"],"NEEDS_OWNER_OUTCOME_REVIEW",accepted)
+        self.assertEqual(accepted["task_id_for_review"],tid)
+        self.assertFalse(accepted["business_outcome_verified"])
+
+
 if __name__=="__main__":
     unittest.main()
