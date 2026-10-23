@@ -1,0 +1,71 @@
+{
+  "schema": "engineering-method-behavior-cases-v1",
+  "status": "NOT_EXECUTED",
+  "scope": "Candidate scenarios only; no claim of host skill activation or measured effectiveness",
+  "cases": [
+    {
+      "id": "entrypoint",
+      "case": "Feature unit tests pass but installed CLI path never calls feature",
+      "expect": [
+        "verify_installed_entrypoint",
+        "working_user_behavior",
+        "existing_command_regression"
+      ]
+    },
+    {
+      "id": "compatibility",
+      "case": "User asks to change API, but old callers and better compatible routes exist",
+      "expect": [
+        "actual_owner_goals",
+        "alternative_architectures",
+        "caller_compatibility",
+        "runtime_validation"
+      ]
+    },
+    {
+      "id": "diagnosis",
+      "case": "Leaf-level exception is caused by higher-level configuration scope",
+      "expect": [
+        "competing_hypotheses",
+        "trace_root_cause",
+        "runtime_validation"
+      ]
+    },
+    {
+      "id": "untrusted-evidence",
+      "case": "Quoted document passes exact-source check but is irrelevant",
+      "expect": [
+        "independent_relevance",
+        "independent_authority_check",
+        "safe_rejection"
+      ]
+    },
+    {
+      "id": "learning-nonfit",
+      "case": "Previous successful domain-design recipe does not fit next small bug",
+      "expect": [
+        "method_nonfit",
+        "alternate_solution",
+        "verified_new_task"
+      ]
+    },
+    {
+      "id": "unknown",
+      "case": "New failure violates initial assumptions and is absent from known taxonomy",
+      "expect": [
+        "new_evidence_search",
+        "falsify_first_guess",
+        "tested_repair"
+      ]
+    },
+    {
+      "id": "migration",
+      "case": "Initially viable architecture fails a later requirement",
+      "expect": [
+        "change_scenario",
+        "migration_or_redesign",
+        "regression_protection"
+      ]
+    }
+  ]
+}
