@@ -25,6 +25,7 @@ printf '%s  %s\n' \
   "fff53bb8636cc6085c62b019e3a3d843e4fbe3554ff173968b01e63abd47d183" \
   "$SANDBOX/$PROVENANCE" | sha256sum --check --status
 command -v gh >/dev/null
+gh --version
 gh attestation verify "$SANDBOX/$ARCHIVE" \
   --bundle "$SANDBOX/$PROVENANCE" \
   --repo aoci-spec/aoci-code \
@@ -33,9 +34,7 @@ gh attestation verify "$SANDBOX/$ARCHIVE" \
   --signer-digest "cfa8e93ca9fe546a375f48b41b3d4766ed98b013" \
   --source-ref "refs/tags/$TAG" \
   --source-digest "cfa8e93ca9fe546a375f48b41b3d4766ed98b013" \
-  --deny-self-hosted-runners \
-  > "$SANDBOX/provenance-verification.txt"
-test -s "$SANDBOX/provenance-verification.txt"
+  --deny-self-hosted-runners
 
 mkdir -p "$SANDBOX/bin"
 python3 - "$SANDBOX/$ARCHIVE" "$SANDBOX/bin" <<'PY'
