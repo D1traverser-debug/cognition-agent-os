@@ -1,0 +1,17 @@
+{
+  "source_id": "p36_public_a",
+  "publisher_id": "synthetic-alpha",
+  "goal_key": "repair-goal",
+  "assertions": [
+    {
+      "route": "structure",
+      "stance": "supports",
+      "evidence_ref": "fixture:alpha-001"
+    },
+    {
+      "route": "compare",
+      "stance": "refutes",
+      "evidence_ref": "fixture:alpha-001"
+    }
+  ]
+}

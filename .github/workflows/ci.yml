@@ -1,0 +1,471 @@
+name: Cumulative offline integration - Linux and Windows
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'feat/free-local-inference-20261020'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cognition-os-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline_regression:
+    # Public runner: no trial minutes or paid provider required.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check draft requirements inventory (NOT product acceptance)
+        run: python scripts/verify_assurance_registry.py
+      - name: Python standard library offline regressions (no remote APIs)
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+  windows_offline_regression:
+    # Public-repository hosted Windows runner; tests host compatibility,
+    # NOT the user's computer or an actual unattended scheduled task.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check draft requirements inventory (NOT product acceptance)
+        shell: pwsh
+        run: python scripts/verify_assurance_registry.py
+      - name: Native Windows entrypoint smoke (no installation)
+        shell: pwsh
+        run: python scripts/host_tick.py --help
+      - name: Full Windows standard-library regression (no paid model API)
+        shell: pwsh
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+  windows_native_scheduler:
+    # Real hosted Windows OS scheduler wakeups, not a mocked timer.
+    # Does NOT prove the owner's Windows machine can run before login.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Register temporary user-scoped Windows Scheduled Task; witness two ticks
+        shell: pwsh
+        run: ./scripts/verify_windows_scheduler.ps1 -TimeoutSeconds 180
+
+  repo_container_integration:
+    # Actual Docker execution, not monkeypatched; image explicitly fetched
+    # by CI only, never by the owner runtime or model connector.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Explicitly prefetch public Python runtime image for ephemeral CI
+        run: docker pull python:3.12-alpine
+      - name: Real no-network non-root repository repair and independent holdout
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_repo_container.py
+      - name: P22 preissue CPython original-source Docker baseline without model
+        env:
+          PYTHONPATH: src
+          P22_BASELINE_ONLY: '1'
+        run: python scripts/verify_p22_cpython_userstring.py
+      - name: P23 pinned NuPlan original-method Docker baseline, no local model
+        env:
+          PYTHONPATH: src
+          P23_BASELINE_ONLY: '1'
+        run: python scripts/verify_p23_nuplan_comparison.py
+      - name: P24 pinned financial breakeven two-method Docker baseline, no model
+        env:
+          PYTHONPATH: src
+          P24_BASELINE_ONLY: '1'
+        run: python scripts/verify_p24_financial_breakeven.py
+      - name: P31 pin complete 2024 upstream dateutil and real six wheel without host execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p31_wheels"
+          printf '%s\n' \
+            'python-dateutil==2.9.0.post0 --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427' \
+            'six==1.17.0 --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274' \
+            > "$RUNNER_TEMP/p31-requirements.txt"
+          python -m pip download --disable-pip-version-check --require-hashes --no-deps \
+            --only-binary=:all: -r "$RUNNER_TEMP/p31-requirements.txt" \
+            --dest "$RUNNER_TEMP/p31_wheels"
+      - name: P31 full original real-wheel dateutil recurrence baseline inside offline Docker
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          P31_WHEELS="$RUNNER_TEMP/p31_wheels" python scripts/verify_p31_full_dateutil.py
+      - name: P32 pin complete original APScheduler 4.0.0a6 with real Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p32_wheels"
+          python -m pip download --disable-pip-version-check --only-binary=:all: --no-deps \
+            --dest "$RUNNER_TEMP/p32_wheels" \
+            'APScheduler==4.0.0a6' 'anyio==4.9.0' 'attrs==25.3.0' \
+            'tenacity==9.1.2' 'tzlocal==5.3.1' 'idna==3.10' \
+            'sniffio==1.3.1' 'typing_extensions==4.13.2'
+      - name: P32 full upstream original two-sink lease crash baseline in offline Docker
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          P32_WHEELS="$RUNNER_TEMP/p32_wheels" python scripts/verify_p32_full_apscheduler.py
+
+  experimental_real_local_model:
+    # Explicit PR opt-in marker only. This is genuine CPU inference on an
+    # ephemeral hosted CI runner, NEVER an install on the user's Windows PC.
+    # Image and weights are downloaded once in the CI job; no cloud LLM
+    # inference endpoint, paid token bill or finite AI-credit scheme.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p14-real-model]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prefetch isolated Python Docker runtime on temporary CI host
+        run: docker pull python:3.12-alpine
+      - name: Explicitly install Ollama binary only on temporary CI host
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/p14-ollama-install.sh"
+          sh "$RUNNER_TEMP/p14-ollama-install.sh"
+          ollama --version
+      - name: Start loopback-only inference and prefetch open local coder weights
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/p14-ollama-server.log" 2>&1 &)
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            tail -n 60 "$RUNNER_TEMP/p14-ollama-server.log"
+            exit 1
+          fi
+          # Qwen2.5 Coder 0.5B is a real open-weight code model (~398MB).
+          # The pull is CI-only and explicit; app runtime never auto-pulls.
+          timeout 420 ollama pull qwen2.5-coder:0.5b
+          # A larger code-specialized model is independently measured,
+          # not silently substituted if the 0.5B baseline has 0% success.
+          timeout 420 ollama pull qwen2.5-coder:1.5b
+          timeout 420 ollama pull qwen2.5-coder:3b
+          ollama list
+      - name: Measure real model proposals with independent Docker tests
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          P14_LOCAL_MODEL=qwen2.5-coder:0.5b python scripts/verify_actual_local_model.py
+          P14_LOCAL_MODEL=qwen2.5-coder:1.5b python scripts/verify_actual_local_model.py
+          P14_LOCAL_MODEL=qwen2.5-coder:3b python scripts/verify_actual_local_model.py
+
+  experimental_public_feedback_model:
+    # P15: separate opt-in, one real nonmetered 3B coder model only.
+    # This measures quality on unchanged P14 hidden cases. A zero pass
+    # remains valid observed model-quality failure, not fabricated success.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p15-feedback-model]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prepare actual offline Docker, temporary CI runner only
+        run: docker pull python:3.12-alpine
+      - name: Install local Ollama on temporary CI runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/p15-ollama-install.sh"
+          sh "$RUNNER_TEMP/p15-ollama-install.sh"
+          ollama --version
+      - name: Launch loopback-only local model and prefetch 3B code weights
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/p15-ollama-server.log" 2>&1 &)
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            tail -n 60 "$RUNNER_TEMP/p15-ollama-server.log"
+            exit 1
+          fi
+          timeout 420 ollama pull qwen2.5-coder:3b
+          ollama list
+      - name: Measure genuine model repairs with actual PUBLIC output feedback
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          P14_LOCAL_MODEL: qwen2.5-coder:3b
+        run: python scripts/verify_actual_local_model.py
+
+  experimental_local_7b_capacity:
+    # One explicitly requested nonmetered coder-capacity test only.
+    # Installed on disposable hosted Linux CI, never owner's computer.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]') || contains(github.event.pull_request.body, '[run-p23-nuplan-ab]') || contains(github.event.pull_request.body, '[run-p24-finance-7b]') || contains(github.event.pull_request.body, '[run-p31-full-dateutil-7b]') || contains(github.event.pull_request.body, '[run-p32-full-apscheduler-7b]')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Prefetch actual offline Docker image on disposable runner
+        run: docker pull python:3.12-alpine
+      - name: Independently prove original P22 defect in Docker before 7B resource loading
+        if: ${{ contains(github.event.pull_request.body, '[run-p22-issue-7b]') }}
+        env:
+          PYTHONPATH: src
+          P22_BASELINE_ONLY: '1'
+        run: python scripts/verify_p22_cpython_userstring.py
+      - name: Independently prove outside NuPlan original method baseline before 7B
+        if: ${{ contains(github.event.pull_request.body, '[run-p23-nuplan-ab]') }}
+        env:
+          PYTHONPATH: src
+          P23_BASELINE_ONLY: '1'
+        run: python scripts/verify_p23_nuplan_comparison.py
+      - name: Independently prove original finance monotonic-root defect before 7B
+        if: ${{ contains(github.event.pull_request.body, '[run-p24-finance-7b]') }}
+        env:
+          PYTHONPATH: src
+          P24_BASELINE_ONLY: '1'
+        run: python scripts/verify_p24_financial_breakeven.py
+      - name: P31 freeze genuine full-wheel baseline before any 7B inference
+        if: ${{ contains(github.event.pull_request.body, '[run-p31-full-dateutil-7b]') }}
+        shell: bash
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p31_wheels"
+          printf '%s\n' \
+            'python-dateutil==2.9.0.post0 --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427' \
+            'six==1.17.0 --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274' \
+            > "$RUNNER_TEMP/p31-requirements.txt"
+          python -m pip download --disable-pip-version-check --require-hashes --no-deps \
+            --only-binary=:all: -r "$RUNNER_TEMP/p31-requirements.txt" \
+            --dest "$RUNNER_TEMP/p31_wheels"
+          P31_WHEELS="$RUNNER_TEMP/p31_wheels" python scripts/verify_p31_full_dateutil.py
+      - name: P32 prove original two-module bug in entire pinned APScheduler wheel before local 7B
+        if: ${{ contains(github.event.pull_request.body, '[run-p32-full-apscheduler-7b]') }}
+        shell: bash
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p32_wheels"
+          python -m pip download --disable-pip-version-check --only-binary=:all: --no-deps \
+            --dest "$RUNNER_TEMP/p32_wheels" \
+            'APScheduler==4.0.0a6' 'anyio==4.9.0' 'attrs==25.3.0' \
+            'tenacity==9.1.2' 'tzlocal==5.3.1' 'idna==3.10' \
+            'sniffio==1.3.1' 'typing_extensions==4.13.2'
+          P32_WHEELS="$RUNNER_TEMP/p32_wheels" python scripts/verify_p32_full_apscheduler.py
+      - name: Install actual Ollama only on disposable CI host
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/p17-install.sh"
+          sh "$RUNNER_TEMP/p17-install.sh"
+          ollama --version
+      - name: Start local-only Ollama and prefetch 7B weights
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/p17-ollama.log" 2>&1 &)
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != 1 ]; then
+            tail -n 60 "$RUNNER_TEMP/p17-ollama.log"
+            exit 1
+          fi
+          timeout 600 ollama pull qwen2.5-coder:7b
+          ollama list
+      - name: Genuine 7B local code repair on pinned known or prospective holdouts
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          P14_LOCAL_MODEL: qwen2.5-coder:7b
+          # P18 deliberately changes ONLY owner-supplied goal semantics;
+          # original P14 public/hidden fixture bytes remain untouched.
+          P18_EXPLICIT_GOAL: ${{ contains(github.event.pull_request.body, '[run-p18-goal-7b]') && '1' || '0' }}
+          P19_UNFAMILIAR_CORPUS: ${{ contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') && '1' || '0' }}
+          P20_EXTERNAL_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p20-external-7b]') && '1' || '0' }}
+          P21_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
+          P22_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p22-issue-7b]') && '1' || '0' }}
+          P23_COMPARISON_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p23-nuplan-ab]') && '1' || '0' }}
+          P24_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p24-finance-7b]') && '1' || '0' }}
+          P31_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p31-full-dateutil-7b]') && '1' || '0' }}
+          P32_ISSUE_OPT_IN: ${{ contains(github.event.pull_request.body, '[run-p32-full-apscheduler-7b]') && '1' || '0' }}
+          # P21 observed an honest 180s local-generation timeout. Only
+          # this explicitly opted-in disposable 7B experiment uses 300s.
+          COGNITION_LOCAL_7B_GENERATE_TIMEOUT_SECONDS: ${{ (contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]')) && '300' || '180' }}
+          # Only the same explicit P21 marker permits a SINGLE attempt
+          # to regenerate after an unchanged initial model proposal.
+          COGNITION_LOCAL_NOCHANGE_RETRY: ${{ contains(github.event.pull_request.body, '[run-p21-issue-7b]') && '1' || '0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$P32_ISSUE_OPT_IN" = "1" ]; then
+            P32_REAL_7B_OPT_IN=1 P32_WHEELS="$RUNNER_TEMP/p32_wheels" python scripts/verify_p32_full_apscheduler.py
+          elif [ "$P31_ISSUE_OPT_IN" = "1" ]; then
+            P31_REAL_7B_OPT_IN=1 P31_WHEELS="$RUNNER_TEMP/p31_wheels" python scripts/verify_p31_full_dateutil.py
+          elif [ "$P24_ISSUE_OPT_IN" = "1" ]; then
+            python scripts/verify_p24_financial_breakeven.py
+          elif [ "$P23_COMPARISON_OPT_IN" = "1" ]; then
+            python scripts/verify_p23_nuplan_comparison.py
+          elif [ "$P22_ISSUE_OPT_IN" = "1" ]; then
+            python scripts/verify_p22_cpython_userstring.py
+          elif [ "$P21_ISSUE_OPT_IN" = "1" ]; then
+            python scripts/verify_p21_live_issue.py
+          elif [ "$P20_EXTERNAL_OPT_IN" = "1" ]; then
+            python scripts/verify_p20_external_quixbugs.py
+          elif [ "$P19_UNFAMILIAR_CORPUS" = "1" ]; then
+            python scripts/verify_p19_unfamiliar_model.py
+          else
+            python scripts/verify_actual_local_model.py
+          fi
+
+  live_public_source:
+    # Explicit opt-in: third-party public API quota is separate from local correctness.
+    # GitHub workflow_dispatch UI becomes usable when the workflow is on the default branch.
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p36-live-source]'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Real mutable public HEAD to immutable baseline (no API key)
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_live_watch.py
+      - name: Real immutable public GitHub source and negative control (no API key)
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_public_source.py
+      - name: P36 full original Host research lineage over real public HTTPS (synthetic sources)
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_p36_live_research.py
+
+
+  aoci_official_bootstrap_probe:
+    # Manual supply-chain/tool availability probe only. It cannot author an
+    # AOCI semantic index and must not inflate every integration CI run.
+    if: ${{ github.event.repository.private == false && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Probe official AOCI-CODE in isolated checkout (no model authoring)
+        shell: bash
+        run: bash scripts/probe_official_aoci.sh
+      - name: Upload isolated AOCI machine evidence (no formal index)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aoci-official-bootstrap-evidence
+          path: aoci-probe-out/
+          if-no-files-found: warn
+
+  graphify_official_code_inventory:
+    # Official third-party CLI on a clean temporary Linux runner.
+    # Code-only AST extraction: no model API keys or production mutation.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install official Graphify in isolated runner
+        run: python -m pip install --disable-pip-version-check graphifyy==0.9.94
+      - name: Extract code graph and prove real artifact exists
+        shell: bash
+        env:
+          GRAPHIFY_QUERY_LOG_DISABLE: '1'
+        run: |
+          set -euo pipefail
+          graphify --version
+          graphify extract . --code-only
+          graphify cluster-only .
+          test -s graphify-out/graph.json
+          test -s graphify-out/GRAPH_REPORT.md
+          python scripts/verify_graphify_control_paths.py graphify-out/graph.json --output graphify-out/control_evidence.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          graph=json.loads(Path("graphify-out/graph.json").read_text(encoding="utf-8"))
+          assert isinstance(graph,dict) and graph, "Empty graph artifact"
+          print("Official Graphify JSON top-level fields:",sorted(graph)[:15])
+          print("Graph bytes:",Path("graphify-out/graph.json").stat().st_size)
+          PY
+      - name: Retain actual graph and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphify-official-code-inventory
+          path: |
+            graphify-out/graph.json
+            graphify-out/control_evidence.json
+            graphify-out/GRAPH_REPORT.md
+            graphify-out/graph.html
+          if-no-files-found: warn
