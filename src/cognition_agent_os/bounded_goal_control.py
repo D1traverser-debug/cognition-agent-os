@@ -279,26 +279,20 @@ def advance_local_goals(db_path:Path,workspace:Path,fixtures:Path,
                     else:
                         result=None
                     if result is None:
+                        # verify_registered_control already validated this
+                        # contract inside the SAME SQLite write transaction.
                         contract=json.loads(root["source_spec"])
-                        if (contract.get("kind")!="bounded_local_controller"
-                            or contract.get("schema_version")!=1
-                            or contract.get("allowed_effect")!="LOCAL_CANDIDATE_ONLY"
-                            or contract.get("max_attempts")!=2
-                            or not isinstance(contract.get("alternatives"),list)
-                            or len(contract["alternatives"])!=2):
-                            result=_finish(db,tid,_UNVERIFIABLE,"INVALID_CONTROL_SPEC")
+                        attempts=db.execute("""SELECT ordinal,child_task_id
+                          FROM bounded_goal_attempts WHERE root_task_id=?
+                          ORDER BY ordinal""",(tid,)).fetchall()
+                        if not attempts:
+                            result=_admit(db,root,contract,0,fixtures)
+                        elif (len(attempts)>2 or
+                              [x["ordinal"] for x in attempts]!=list(range(len(attempts)))):
+                            result=_finish(db,tid,_UNVERIFIABLE,"BROKEN_ATTEMPT_LINEAGE")
                         else:
-                            attempts=db.execute("""SELECT ordinal,child_task_id
-                              FROM bounded_goal_attempts WHERE root_task_id=?
-                              ORDER BY ordinal""",(tid,)).fetchall()
-                            if not attempts:
-                                result=_admit(db,root,contract,0,fixtures)
-                            elif (len(attempts)>2 or
-                                  [x["ordinal"] for x in attempts]!=list(range(len(attempts)))):
-                                result=_finish(db,tid,_UNVERIFIABLE,"BROKEN_ATTEMPT_LINEAGE")
-                            else:
-                                result=_observe(db,root,contract,attempts[-1],
-                                                db_path,workspace,fixtures)
+                            result=_observe(db,root,contract,attempts[-1],
+                                            db_path,workspace,fixtures)
                 db.commit()
                 if result["status"]!="AWAITING_CHILD":
                     results.append(result)
