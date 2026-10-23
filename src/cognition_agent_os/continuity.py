@@ -17,7 +17,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .ledger import connect
-from .source import github_public_branch_head
+from .source import github_public_branch_head, github_public_branch_head_nested
 
 _ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _TASK = re.compile(r"[0-9a-f]{32}\Z")
@@ -48,6 +48,13 @@ def _canonical(spec: dict) -> bytes:
     return json.dumps(
         spec, sort_keys=True, ensure_ascii=False,
         separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def _public_branch_head(repo: str, branch: str) -> str:
+    # The original watcher contract remains single-segment-only.
+    if "/" in branch:
+        return github_public_branch_head_nested(repo, branch)
+    return github_public_branch_head(repo, branch)
 
 
 def _task_fingerprint(task: sqlite3.Row) -> str:
@@ -203,7 +210,7 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
         if observed_head_sha is not None and observed_source is None:
             raise ValueError("NO_REMOTE_SOURCE_TO_REATTEST")
     if observed_source is not None:
-        resolver = resolve_head or github_public_branch_head
+        resolver = resolve_head or _public_branch_head
         try:
             live = resolver(observed_source["repo"], observed_source["branch"])
         except Exception as exc:
@@ -317,7 +324,7 @@ def resume_goal(db_path: Path, *, resolve_head=None) -> dict:
                                   goal_id=row["goal_id"])
             if spec["source"] is not None:
                 src = spec["source"]
-                resolver = resolve_head or github_public_branch_head
+                resolver = resolve_head or _public_branch_head
                 try:
                     observed = resolver(src["repo"], src["branch"])
                     if not isinstance(observed, str) or not _SHA.fullmatch(observed):
