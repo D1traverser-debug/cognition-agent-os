@@ -608,6 +608,58 @@ jobs:
           path: evaluation/external_scifact_semantic_judgment.json
           if-no-files-found: warn
 
+  experimental_original_scifact_larger_model:
+    # Opt-in read-only claim/evidence reasoning against original expert
+    # SciFact labels. Gold retrieval/rationale is an optimistic oracle.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-scifact-real-1p5b]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check local semantic experiment invariants
+        run: python scripts/measure_external_scifact_claim_judgment.py --smoke
+      - name: Install disposable Ollama, no cloud credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/install-ollama-for-claims.sh"
+          sh "$RUNNER_TEMP/install-ollama-for-claims.sh"
+          ollama --version
+      - name: Start only loopback model and fetch one small public set of weights
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/ollama-scifact-original.log" 2>&1 &)
+          for attempt in $(seq 1 50); do
+            curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null && break
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null
+          timeout 420 ollama pull qwen2.5:1.5b
+      - name: Classify externally labeled scientific evidence vs no-evidence
+        shell: bash
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          timeout 1430 python scripts/measure_external_scifact_claim_judgment.py --model qwen2.5:1.5b --out evaluation/external_scifact_semantic_judgment_1p5b.json
+      - name: Retain full actual model predictions and official data digest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-scifact-semantic-evidence-1p5b
+          path: evaluation/external_scifact_semantic_judgment_1p5b.json
+          if-no-files-found: warn
+
 
   experimental_external_beir_retrieval:
     # Public source labels with archive MD5 from the independent official BEIR.
