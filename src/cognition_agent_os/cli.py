@@ -384,13 +384,16 @@ def main(argv=None) -> int:
                 or args.spec.stat().st_size>16384):
                 raise ValueError("UNSAFE_FEEDBACK_SPEC")
             proposal=json.loads(args.spec.read_text(encoding="utf-8"))
-            if not isinstance(proposal,dict) or set(proposal)!={
-                "goal_id","objective","alternatives"}:
+            if (not isinstance(proposal,dict)
+                or set(proposal) not in (
+                    {"goal_id","objective","alternatives"},
+                    {"goal_id","objective","alternatives","acceptance"})):
                 raise ValueError("INVALID_FEEDBACK_SEED")
             tid=register_evidence_goal(args.db,args.fixtures,
                 goal_id=proposal["goal_id"],
                 objective=proposal["objective"],
-                alternatives=proposal["alternatives"])
+                alternatives=proposal["alternatives"],
+                acceptance=proposal.get("acceptance"))
         except (ValueError,TypeError,KeyError,OSError,sqlite3.Error,
                 PermissionError) as exc:
             print(json.dumps({"status":"FEEDBACK_NOT_ADMITTED",
