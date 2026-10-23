@@ -31,6 +31,28 @@ jobs:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
 
+  architecture_ab_equivalence:
+    # Opt-in experiment: same task corpus, same Python, same host ticks.
+    # Compares pinned incumbent with current candidate on an ephemeral runner.
+    # NOT a real-world owner outcome acceptance.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-architecture-ab]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Baseline vs candidate full host-state behavioral parity
+        run: python scripts/verify_architecture_ab.py --repetitions 3 --output architecture_ab.json
+      - name: Upload independent per-scenario traces including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture-ab-parity
+          path: architecture_ab.json
+          if-no-files-found: warn
+
   windows_offline_regression:
     # Public-repository hosted Windows runner; tests host compatibility,
     # NOT the user's computer or an actual unattended scheduled task.
@@ -394,15 +416,34 @@ jobs:
       - name: Real mutable public HEAD to immutable baseline (no API key)
         env:
           PYTHONPATH: src
-        run: python scripts/verify_live_watch.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_live_watch.py | tee live_watch_evidence.json
       - name: Real immutable public GitHub source and negative control (no API key)
         env:
           PYTHONPATH: src
-        run: python scripts/verify_public_source.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_public_source.py | tee public_source_evidence.json
       - name: P36 full original Host research lineage over real public HTTPS (synthetic sources)
         env:
           PYTHONPATH: src
-        run: python scripts/verify_p36_live_research.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_p36_live_research.py | tee research_review_evidence.json
+      - name: Retain raw external source evidence even if one smoke fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-readonly-source-evidence
+          path: |
+            live_watch_evidence.json
+            public_source_evidence.json
+            research_review_evidence.json
+          if-no-files-found: warn
 
 
   aoci_official_bootstrap_probe:

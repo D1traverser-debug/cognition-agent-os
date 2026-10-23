@@ -312,81 +312,47 @@ def verify_feedback_root(db:sqlite3.Connection,root:sqlite3.Row,
 
 def advance_evidence_goals(db_path:Path,workspace:Path,fixtures:Path,
                            *,limit:int=4)->list[dict]:
-    """Called ONLY by opted-in existing host; creates next bounded ledger task."""
+    """Multi-domain adapter: shared scan/grant/transaction, typed evidence."""
     if not 1<=limit<=8:
         raise ValueError("INVALID_FEEDBACK_LIMIT")
-    db=connect(db_path)
-    results=[]
-    try:
-        db.execute("BEGIN IMMEDIATE")
+    from .control_kernel import drive_active_controller
+
+    def on_denied(db,root,reason):
+        return _finish(db,root,_STOP,reason)
+
+    def transition(db,root):
+        valid,reason,contract,attempts=_verify(db,root)
+        if not valid:
+            return _finish(db,root,_UNVERIFIABLE,reason)
+        if (root["created_at"]>time.time()+300 or
+            time.time()-root["created_at"]>_MAX_AGE):
+            return _finish(db,root,_STOP,"TIME_BUDGET_EXHAUSTED")
+        if not attempts:
+            return _admit(db,root,contract,0,fixtures)
+        last=attempts[-1]
+        child=db.execute("SELECT * FROM tasks WHERE task_id=?",
+                         (last["child_task_id"],)).fetchone()
         try:
-            _ensure(db)
-            cursor=db.execute("SELECT last_task_id FROM evidence_feedback_cursor "
-                              "WHERE singleton=1").fetchone()[0]
-            ids=[r["task_id"] for r in db.execute("""SELECT task_id FROM tasks
-                WHERE state=? AND task_id>? ORDER BY task_id LIMIT ?""",
-                (_ACTIVE,cursor,limit)).fetchall()]
-            if len(ids)<limit:
-                ids.extend(r["task_id"] for r in db.execute("""SELECT task_id FROM tasks
-                    WHERE state=? AND task_id<=? ORDER BY task_id LIMIT ?""",
-                    (_ACTIVE,cursor,limit-len(ids))).fetchall())
-            if ids:
-                db.execute("UPDATE evidence_feedback_cursor SET last_task_id=? "
-                           "WHERE singleton=1",(ids[-1],))
-            db.commit()
-        except BaseException:
-            db.rollback()
-            raise
-        for root_id in ids:
-            db.execute("BEGIN IMMEDIATE")
-            try:
-                root=db.execute("SELECT * FROM tasks WHERE task_id=?",
-                                (root_id,)).fetchone()
-                if not root or root["state"]!=_ACTIVE:
-                    db.commit()
-                    continue
-                allowed,why=current_guard(db,dict(root),needs_write=True)
-                if not allowed:
-                    result=_finish(db,root,_STOP,why)
-                else:
-                    valid,reason,contract,attempts=_verify(db,root)
-                    if not valid:
-                        result=_finish(db,root,_UNVERIFIABLE,reason)
-                    elif (root["created_at"]>time.time()+300
-                          or time.time()-root["created_at"]>_MAX_AGE):
-                        result=_finish(db,root,_STOP,"TIME_BUDGET_EXHAUSTED")
-                    elif not attempts:
-                        result=_admit(db,root,contract,0,fixtures)
-                    else:
-                        last=attempts[-1]
-                        child=db.execute("SELECT * FROM tasks WHERE task_id=?",
-                                         (last["child_task_id"],)).fetchone()
-                        try:
-                            verdict=_outcome(child,contract["alternatives"][last["ordinal"]],
-                                             db_path,workspace,fixtures)
-                        except (OSError,ValueError,TypeError,KeyError,
-                                sqlite3.Error,UnicodeError):
-                            verdict="INCONCLUSIVE"
-                        if verdict=="WAITING":
-                            result={"root_task_id":root_id,"status":"AWAITING_CHILD"}
-                        elif verdict=="SATISFIED":
-                            result=_finish(db,root,_READY,"INDEPENDENT_LOCAL_EVIDENCE",
-                                           child_id=child["task_id"])
-                        elif verdict=="UNSATISFIED" and last["ordinal"]==0:
-                            result=_admit(db,root,contract,1,fixtures)
-                        elif verdict=="UNSATISFIED":
-                            result=_finish(db,root,_STOP,"EXHAUSTED_SAFE_ALTERNATIVES",
-                                           child_id=child["task_id"])
-                        else:
-                            result=_finish(db,root,_UNVERIFIABLE,
-                                           "INDEPENDENT_OUTCOME_INCONCLUSIVE",
-                                           child_id=child["task_id"])
-                db.commit()
-                if result["status"]!="AWAITING_CHILD":
-                    results.append(result)
-            except BaseException:
-                db.rollback()
-                raise
-        return results
-    finally:
-        db.close()
+            verdict=_outcome(child,contract["alternatives"][last["ordinal"]],
+                             db_path,workspace,fixtures)
+        except (OSError,ValueError,TypeError,KeyError,
+                sqlite3.Error,UnicodeError):
+            verdict="INCONCLUSIVE"
+        if verdict=="WAITING":
+            return {"root_task_id":root["task_id"],"status":"AWAITING_CHILD"}
+        if verdict=="SATISFIED":
+            return _finish(db,root,_READY,"INDEPENDENT_LOCAL_EVIDENCE",
+                           child_id=child["task_id"])
+        if verdict=="UNSATISFIED" and last["ordinal"]==0:
+            return _admit(db,root,contract,1,fixtures)
+        if verdict=="UNSATISFIED":
+            return _finish(db,root,_STOP,"EXHAUSTED_SAFE_ALTERNATIVES",
+                           child_id=child["task_id"])
+        return _finish(db,root,_UNVERIFIABLE,
+                       "INDEPENDENT_OUTCOME_INCONCLUSIVE",
+                       child_id=child["task_id"])
+
+    return drive_active_controller(
+        db_path,active_state=_ACTIVE,
+        cursor_table="evidence_feedback_cursor",limit=limit,
+        setup=_ensure,step=transition,on_denied=on_denied)
