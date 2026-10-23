@@ -25,7 +25,8 @@ def drive_active_controller(
     cursor_table: str,
     limit: int,
     setup: Callable[[sqlite3.Connection], None],
-    step: Callable[[sqlite3.Connection, sqlite3.Row, bool, str], dict],
+    step: Callable[[sqlite3.Connection, sqlite3.Row], dict],
+    on_denied: Callable[[sqlite3.Connection, sqlite3.Row, str], dict],
 ) -> list[dict]:
     """Execute at most one legal root transition per selected goal and tick.
 
@@ -36,7 +37,8 @@ def drive_active_controller(
     """
     if (type(limit) is not int or not 1 <= limit <= 8 or
         (active_state, cursor_table) not in _FAMILIES or
-        not callable(setup) or not callable(step)):
+        not callable(setup) or not callable(step) or
+        not callable(on_denied)):
         raise ValueError("INVALID_CONTROLLER_KERNEL_CONTRACT")
     db = connect(db_path)
     outcomes: list[dict] = []
@@ -79,7 +81,10 @@ def drive_active_controller(
                     db.commit()
                     continue
                 allowed, reason = current_guard(db, dict(root), needs_write=True)
-                result = step(db, root, allowed, reason)
+                # The operational adapter is NEVER invoked under revoked or
+                # stale authority. Only the trusted stop/fence handler runs.
+                result = (step(db, root) if allowed else
+                          on_denied(db, root, reason))
                 if not isinstance(result, dict) or not isinstance(
                     result.get("status"), str
                 ):
