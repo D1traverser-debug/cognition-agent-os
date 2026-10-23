@@ -29,7 +29,7 @@ class FixtureReadBoundaryTests(unittest.TestCase):
             def swap_after_file_check(path):
                 nonlocal swapped
                 result = original_is_file(path)
-                if path == inside and result and not swapped:
+                if path.name == "source.txt" and result and not swapped:
                     try:
                         path.unlink()
                         path.symlink_to(outside)
