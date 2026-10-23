@@ -181,6 +181,8 @@ def main(argv=None) -> int:
     continuity_advance.add_argument("--goal-id", required=True)
     continuity_advance.add_argument("--expected-digest", required=True)
     continuity_advance.add_argument("--next-task-id", required=True)
+    continuity_advance.add_argument("--observed-head-sha", default=None,
+        help="Explicit GitHub HEAD reattestation; runtime independently re-reads it")
     args = p.parse_args(argv)
     if args.command == "goal-resume":
         result = resume_goal(args.db)
@@ -201,7 +203,8 @@ def main(argv=None) -> int:
                 result = checkpoint_goal(
                     args.db, args.goal_id,
                     expected_digest=args.expected_digest,
-                    next_task_id=args.next_task_id)
+                    next_task_id=args.next_task_id,
+                    observed_head_sha=args.observed_head_sha)
         except (ValueError, TypeError, KeyError, PermissionError,
                 sqlite3.Error, OSError) as exc:
             print(json.dumps({"status":"CONTINUITY_NOT_ADMITTED",
