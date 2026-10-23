@@ -21,6 +21,7 @@ from .sandbox_effect import stage_one
 from .reconciliation import validate_reconciliation
 from .reconciliation_oracle import audit_stored_report
 from .intent_planner import compile_intent
+from .investigation import validate_investigation, audit_investigation
 from .intent_runtime import audit_intent_plan
 from .semantic_contract import load_pinned_relationship
 from .conformance import inspect_conformance
@@ -67,6 +68,12 @@ def main(argv=None) -> int:
     report.add_argument("--task-id",required=True)
     intent = sub.add_parser("seed-intent",help="Register constrained typed outcome for capability planning")
     intent.add_argument("--spec",type=Path,required=True)
+    investigate = sub.add_parser("seed-investigation",
+        help="Opt-in an open question for locally selected, quoted source evidence")
+    investigate.add_argument("--question",required=True)
+    investigate_audit = sub.add_parser("investigation-audit",
+        help="Read-only independent quotation and source-hash replay")
+    investigate_audit.add_argument("--task-id",required=True)
     plan_audit = sub.add_parser("intent-audit",help="Read-only check of durable goal decomposition")
     plan_audit.add_argument("--task-id",required=True)
     bounded = sub.add_parser("seed-bounded-local-goal",
@@ -317,6 +324,10 @@ def main(argv=None) -> int:
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"] in ("MECHANICAL_EVIDENCE_OBSERVED",
                                         "NO_RUNTIME_EVIDENCE","PARTIAL_EVIDENCE") else 4
+    if args.command == "investigation-audit":
+        result = audit_investigation(args.db,args.workspace,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"] == "SOURCE_GROUNDED_UNREVIEWED" else 4
     if args.command == "intent-audit":
         result=audit_intent_plan(args.db,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
@@ -461,6 +472,15 @@ def main(argv=None) -> int:
             result={"task_id":create_task(db,spec),"state":"PENDING",
                     "holdout_digest_pinned":True,
                     "scope":"local_pure_ast_only"}
+        elif args.command == "seed-investigation":
+            spec = validate_investigation({"kind": "investigate_goal",
+                "question": args.question, "scope": "LOCAL_EVIDENCE_ONLY"})
+            owner = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner["write_allowed"]:
+                raise PermissionError("Investigation rejected after write revoke")
+            result = {"task_id": create_task(db, spec), "state": "PENDING",
+                      "scope": "LOCAL_EVIDENCE_ONLY",
+                      "semantic_outcome_verified": False}
         elif args.command == "seed-intent":
             if args.spec.is_symlink() or not args.spec.is_file() or args.spec.stat().st_size>16384:
                 raise ValueError("Intent file not a small regular file")
