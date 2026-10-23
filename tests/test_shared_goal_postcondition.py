@@ -183,6 +183,11 @@ class SharedPostconditionFeedback(unittest.TestCase):
         for _ in range(3):
             self.tick()
         child=self.children(task)[-1]
+        with closing(connect(self.db)) as db:
+            # Production controller receives the complete SQLite row, not
+            # the abbreviated display projection returned by children().
+            child=dict(db.execute("SELECT * FROM tasks WHERE task_id=?",
+                                  (child["task_id"],)).fetchone())
         self.assertEqual(child["state"],"NEEDS_REVIEW")
         filename=self.work/"artifacts"/(child["task_id"]+".json")
         filename.write_bytes(filename.read_bytes()+b" ")
