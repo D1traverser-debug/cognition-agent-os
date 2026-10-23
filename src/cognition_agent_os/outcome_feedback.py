@@ -319,7 +319,13 @@ def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path,
             candidate_path=workspace/"artifacts"/(child["task_id"]+".json")
             if candidate_path.is_symlink():
                 return "INCONCLUSIVE"
-            payload=json.loads(candidate_path.read_bytes())
+            candidate_artifact_bytes=candidate_path.read_bytes()
+            # The external read-only audit and this consumer must attest
+            # the SAME immutable bytes. A swap after audit but before this
+            # read cannot promote another candidate based on the old verdict.
+            if hashlib.sha256(candidate_artifact_bytes).hexdigest()!=child["artifact_hash"]:
+                return "INCONCLUSIVE"
+            payload=json.loads(candidate_artifact_bytes)
             if not isinstance(payload,dict) or not isinstance(payload.get("candidate_text"),str):
                 return "INCONCLUSIVE"
             candidate=payload["candidate_text"].encode("utf-8")
