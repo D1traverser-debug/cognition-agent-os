@@ -4,6 +4,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 import re
 from urllib.error import HTTPError, URLError
@@ -28,16 +30,90 @@ def git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
 
 
+def _bounded_opened_file(fd: int) -> bytes:
+    """Read the already-opened object, never reopen its previously checked path."""
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("Fixture is not a regular file")
+        if info.st_size > MAX_SOURCE_BYTES:
+            raise SourceUnavailable("Fixture too large")
+        content = stream.read(MAX_SOURCE_BYTES + 1)
+        if len(content) > MAX_SOURCE_BYTES:
+            raise SourceUnavailable("Fixture grew beyond size limit")
+        return content
+
+
+def _anchored_posix_fd(base: Path, canonical: Path) -> int:
+    """Use dirfd-relative, no-follow traversal to prevent path-swap escapes."""
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise SourceUnavailable("Race-safe fixture opening unsupported on this host")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(str(base), flags)
+    try:
+        for part in canonical.parts[:-1]:
+            next_fd = os.open(part, flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        return os.open(canonical.parts[-1], os.O_RDONLY | os.O_NOFOLLOW,
+                       dir_fd=directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _windows_opened_target(fd: int) -> Path:
+    """Query the OS handle's final path, not the raceable input path."""
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    final_name = kernel.GetFinalPathNameByHandleW
+    final_name.argtypes = (wintypes.HANDLE, wintypes.LPWSTR,
+                           wintypes.DWORD, wintypes.DWORD)
+    final_name.restype = wintypes.DWORD
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = final_name(msvcrt.get_osfhandle(fd), buffer, len(buffer), 0)
+    if not length or length >= len(buffer):
+        raise SourceUnavailable("Cannot verify the opened Windows fixture handle")
+    opened = buffer.value
+    if opened.startswith("\\\\?\\UNC\\"):
+        opened = "\\\\" + opened[8:]
+    elif opened.startswith("\\\\?\\"):
+        opened = opened[4:]
+    return Path(opened).resolve(strict=True)
+
+
 def safe_fixture(root: Path, relative: str) -> bytes:
+    """Return only bytes of a verified in-root regular file, with a hard cap.
+
+    Valid, stable in-root symlinks keep their prior behavior by resolving to a
+    canonical relative path first. POSIX follows each canonical component from
+    an opened root dirfd with O_NOFOLLOW; Windows separately verifies the
+    effective target of the already-opened OS handle. No post-check path reopen.
+    """
     if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
         raise ValueError("Fixture path outside approved root")
     base = root.resolve(strict=True)
     target = (base / relative).resolve(strict=True)
     if not target.is_relative_to(base) or not target.is_file():
         raise ValueError("Fixture path outside approved root")
-    if target.stat().st_size > MAX_SOURCE_BYTES:
-        raise SourceUnavailable("Fixture too large")
-    return target.read_bytes()
+    canonical = target.relative_to(base)
+    try:
+        if os.name == "nt":
+            fd = os.open(str(target), os.O_RDONLY | getattr(os, "O_BINARY", 0))
+            try:
+                opened = _windows_opened_target(fd)
+                if not opened.is_relative_to(base):
+                    raise ValueError("Opened fixture escaped approved root")
+            except BaseException:
+                os.close(fd)
+                raise
+        else:
+            fd = _anchored_posix_fd(base, canonical)
+    except OSError as exc:
+        raise SourceUnavailable("Fixture changed or became inaccessible") from exc
+    return _bounded_opened_file(fd)
 
 
 def github_public_snapshot(repo: str, path: str, ref: str) -> bytes:
