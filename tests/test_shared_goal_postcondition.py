@@ -193,6 +193,40 @@ class SharedPostconditionFeedback(unittest.TestCase):
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],0)
 
+    def test_cold_command_line_restarts_execute_distinct_common_goal_methods(self):
+        # A user can seed once; three disconnected CLI processes pick up the
+        # same SQLite/authority contract without Python-side test scheduling.
+        import subprocess
+        import sys
+        methods=self.methods()
+        spec={
+            "goal_id":"cold-cli-shared-goal",
+            "objective":"Candidate for id A with owner ops",
+            "alternatives":methods,
+            "acceptance":{"kind":"exact_record_postcondition",
+                "identity_fields":["id"],
+                "target_record":{"id":"A","owner":"ops"}},
+        }
+        specfile=self.fx.parent/"shared-goal-seed.json"
+        specfile.write_text(json.dumps(spec,sort_keys=True),encoding="utf-8")
+        common=[sys.executable,"-m","cognition_agent_os.cli",
+                "--db",str(self.db),"--workspace",str(self.work),
+                "--fixtures",str(self.fx)]
+        created=subprocess.run(common+["seed-evidence-feedback","--spec",str(specfile)],
+                               capture_output=True,text=True,check=True)
+        tid=json.loads(created.stdout)["task_id"]
+        results=[]
+        for _ in range(3):
+            tick=subprocess.run(common+["host-tick","--auto-local-goal-control",
+                                         "--max-jobs","4"],check=True,
+                                capture_output=True,text=True)
+            results.append(json.loads(tick.stdout))
+        self.assertEqual(len(self.children(tid)),2)
+        self.assertEqual(results[1]["tasks"][0]["reason"],"NO_SAFE_GOAL_PLAN")
+        self.assertEqual(results[2]["tasks"][0]["status"],"NEEDS_REVIEW")
+        self.assertEqual(self.root(tid)["state"],"FEEDBACK_EVIDENCE_READY")
+        self.assertFalse(any(x["semantic_outcome_verified"] for x in results))
+
     def test_legacy_evidence_only_goal_remains_separate(self):
         methods=self.methods()
         task=register_evidence_goal(self.db,self.fx,goal_id="legacy-evidence",
