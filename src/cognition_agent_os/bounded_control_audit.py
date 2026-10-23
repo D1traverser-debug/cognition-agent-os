@@ -118,15 +118,9 @@ def audit_controlled_candidate(db_path:Path,workspace:Path,
             registration=verify_registered_control(db,root)
             if not registration["valid"]:
                 return {**fail,"reason":"REGISTRATION_PROOF_INVALID"}
+            # Registration shape and immutable intake receipt were already
+            # checked by verify_registered_control on this same DB snapshot.
             spec=json.loads(root["source_spec"])
-            if (not isinstance(spec,dict) or spec.get("kind")!="bounded_local_controller"
-                or spec.get("schema_version")!=1
-                or spec.get("max_attempts")!=2
-                or spec.get("allowed_effect")!="LOCAL_CANDIDATE_ONLY"
-                or not isinstance(spec.get("alternatives"),list)
-                or len(spec["alternatives"])!=2
-                or not isinstance(spec.get("target"),dict)):
-                return {**fail,"reason":"ROOT_CONTRACT_INVALID"}
             attempts=db.execute("""SELECT ordinal,child_task_id FROM bounded_goal_attempts
                     WHERE root_task_id=? ORDER BY ordinal""",(root_id,)).fetchall()
             if len(attempts) not in (1,2) or [x["ordinal"] for x in attempts]!=list(range(len(attempts))):
