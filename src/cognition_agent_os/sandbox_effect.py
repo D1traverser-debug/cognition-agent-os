@@ -18,6 +18,7 @@ from .goal_audit import audit_goal, _constraints
 from .diagnostics import record_audit_failure, reject_review_if_untrusted
 from .goal_loop import validate_goal
 from .source import safe_fixture
+from .isolated_filesystem import stage_immutable
 
 MAX_STAGE_BYTES=128*1024
 MAX_REPLANS=2
@@ -29,28 +30,8 @@ def _result(task_id: str, status: str, **fields) -> dict:
 
 
 def _atomic_stage(workspace: Path, task_id: str, candidate: bytes) -> str:
-    """Create-once file effect, then actual readback. Reconcile unknown ACK."""
-    if not workspace.is_dir() or workspace.is_symlink():
-        raise OSError("Workspace must be pre-created regular directory")
-    dest=workspace/"sandbox"
-    if dest.is_symlink():
-        raise OSError("Sandbox directory may not be symlink")
-    dest.mkdir(exist_ok=True)
-    filename=dest/(task_id+".candidate")
-    try:
-        fd=os.open(str(filename),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    except FileExistsError:
-        if filename.is_symlink() or not filename.is_file() or filename.read_bytes()!=candidate:
-            raise OSError("Existing sandbox outcome differs from immutable intent")
-    else:
-        with os.fdopen(fd,"wb") as out:
-            out.write(candidate)
-            out.flush()
-            os.fsync(out.fileno())
-    real=filename.read_bytes()
-    if real!=candidate:
-        raise OSError("Stage was not read back as written")
-    return hashlib.sha256(real).hexdigest()
+    """Create-once staged effect with descriptor-anchored independent readback."""
+    return stage_immutable(workspace, ("sandbox",), task_id + ".candidate", candidate)
 
 
 def _depth(db: sqlite3.Connection, task: sqlite3.Row) -> int:

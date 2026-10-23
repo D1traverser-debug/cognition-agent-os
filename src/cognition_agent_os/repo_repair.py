@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from .isolated_filesystem import stage_immutable
 import re
 import sqlite3
 
@@ -391,25 +392,10 @@ def audit_repo(db_path,workspace,fixtures,tid,*,require_staged=False):
         return {**fail,"reason":"REPO_EVIDENCE_UNAVAILABLE"}
 
 
-def _stage(workspace,tid,changes):
-    if workspace.is_symlink():raise OSError("Unsafe repo lab root")
-    base=workspace/"repo_lab"
-    if base.is_symlink():raise OSError("Unsafe repository stage root")
-    base.mkdir(exist_ok=True)
-    dest=base/tid
-    if dest.is_symlink():raise OSError("Unsafe repository stage folder")
-    dest.mkdir(exist_ok=True)
-    for name,data in changes.items():
-        path=dest/name
-        try:
-            fd=os.open(str(path),os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-        except FileExistsError:
-            if path.is_symlink() or not path.is_file() or path.read_bytes()!=data:
-                raise OSError("Conflicting previous repository candidate")
-        else:
-            with os.fdopen(fd,"wb") as out:
-                out.write(data);out.flush();os.fsync(out.fileno())
-        if path.read_bytes()!=data:raise OSError("Stage readback mismatch")
+def _stage(workspace, tid, changes):
+    """Stage repository candidate files in the shared immutable effect boundary."""
+    for name, data in changes.items():
+        stage_immutable(workspace, ("repo_lab", tid), name, data)
 
 
 def review_repo(db_path,workspace,fixtures,tid):

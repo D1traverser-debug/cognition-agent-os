@@ -13,6 +13,7 @@ import json
 import operator
 import os
 from pathlib import Path
+from .isolated_filesystem import stage_immutable
 import re
 import sqlite3
 from contextlib import closing
@@ -159,22 +160,9 @@ def audit_patch(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
         return {**fail,"reason":"INDEPENDENT_EVIDENCE_UNAVAILABLE"}
 
 
-def _stage_patch(workspace: Path,task_id: str,content: bytes)->str:
-    if not workspace.is_dir() or workspace.is_symlink():raise OSError("Unsafe workspace")
-    folder=workspace/"repair_lab"
-    if folder.is_symlink():raise OSError("Unsafe staging directory")
-    folder.mkdir(exist_ok=True)
-    dest=folder/(task_id+".py")
-    try:
-        fd=os.open(str(dest),os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-    except FileExistsError:
-        if dest.is_symlink() or not dest.is_file() or dest.read_bytes()!=content:
-            raise OSError("Existing repair candidate differs: refuse overwrite")
-    else:
-        with os.fdopen(fd,"wb") as out:
-            out.write(content);out.flush();os.fsync(out.fileno())
-    if dest.read_bytes()!=content:raise OSError("Independent stage readback mismatch")
-    return hashlib.sha256(content).hexdigest()
+def _stage_patch(workspace: Path, task_id: str, content: bytes) -> str:
+    """Stage through the single descriptor-anchored immutable effect owner."""
+    return stage_immutable(workspace, ("repair_lab",), task_id + ".py", content)
 
 
 def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,

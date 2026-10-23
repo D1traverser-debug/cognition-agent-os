@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from .isolated_filesystem import stage_immutable
 import sqlite3
 import time
 
@@ -138,27 +139,10 @@ def audit_pipeline(db_path,workspace,fixtures,tid,*,hidden=False,staged=False):
     return _audit_internal(db_path,workspace,fixtures,tid,hidden=hidden,staged=staged)
 
 
-def _stage(workspace,tid,stage_files,patched):
-    if workspace.is_symlink():raise OSError("Unsafe workspace")
-    root=workspace/"pipeline_lab"
-    if root.is_symlink():raise OSError("Unsafe stage root")
-    root.mkdir(exist_ok=True)
-    dest=root/tid
-    if dest.is_symlink():raise OSError("Unsafe candidate directory")
-    dest.mkdir(exist_ok=True)
-    for name,data in zip(stage_files,patched):
-        path=dest/name
-        try:
-            fd=os.open(str(path),os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-        except FileExistsError:
-            if path.is_symlink() or not path.is_file() or path.read_bytes()!=data:
-                raise OSError("Conflicting prior staged candidate")
-        else:
-            with os.fdopen(fd,"wb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-        if path.read_bytes()!=data:raise OSError("Staged readback mismatch")
+def _stage(workspace, tid, stage_files, patched):
+    """Stage coupled candidates through one authorized local file boundary."""
+    for name, data in zip(stage_files, patched):
+        stage_immutable(workspace, ("pipeline_lab", tid), name, data)
 
 
 def review_pipeline(db_path,workspace,fixtures,tid):
