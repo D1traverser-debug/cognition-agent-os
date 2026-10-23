@@ -102,27 +102,6 @@ def evaluate_outcome(contract: dict, original: bytes, candidate: bytes) -> dict:
         return {**fail, "reason": str(exc)[:90]}
 
 
-def assess_route_fitness(route_entries: list[dict]) -> dict:
-    """A pair of labels never suffices to prove distinct same-goal methods.
-
-    Only rejects known invalid pairs. Future positive admission requires
-    owner-pinned equivalence and independently validated different mechanisms.
-    """
-    result = {"status": "NO_PROVEN_ALTERNATIVE", "safe_to_autoswitch": False}
-    if (not isinstance(route_entries, list) or len(route_entries) != 2
-        or any(not isinstance(e, dict) or set(e) != {"route", "intent"}
-               or not isinstance(e["intent"], dict) for e in route_entries)):
-        return {**result, "reason": "INVALID_PAIR"}
-    x, y = (e["intent"] for e in route_entries)
-    if x == y:
-        return {**result, "reason": "DUPLICATE_METHOD"}
-    if x.get("objective") != y.get("objective"):
-        return {**result, "reason": "DIFFERENT_OBJECTIVES"}
-    if x.get("resources") != y.get("resources") or x.get("requirements") != y.get("requirements"):
-        return {**result, "reason": "DIFFERENT_BOUND_TARGETS"}
-    return {**result, "reason": "NO_INDEPENDENT_EQUIVALENCE_EVIDENCE"}
-
-
 def evaluate_shared_record_goal(contract: dict, source_kind: str,
                                 original: bytes, candidate: bytes) -> dict:
     """Different file families can satisfy one pinned record-level outcome.
