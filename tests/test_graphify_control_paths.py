@@ -31,6 +31,27 @@ class GraphifyEvidenceTests(unittest.TestCase):
     def test_valid_extracted_control_edges_pass(self):
         self.assertEqual(self.result()["status"],"PASS")
 
+    def test_missing_shared_kernel_grant_gate_cannot_pass_old_path_checks(self):
+        target=("src_cognition_agent_os_control_kernel_drive_active_controller",
+                "src_cognition_agent_os_ledger_current_guard")
+        self.assertIn(target,checker.REQUIRED_PATHS)
+        self.graph["links"]=[
+            e for e in self.graph["links"]
+            if (e["source"],e["target"])!=target]
+        result=self.result()
+        self.assertEqual(result["status"],"FAIL")
+        self.assertIn("MISSING_EXTRACTED_CONTROL_EDGE:"+
+                      target[0]+"->"+target[1],result["errors"])
+
+    def test_missing_new_host_feedback_path_is_detected(self):
+        target=("src_cognition_agent_os_host_run_tick",
+                "src_cognition_agent_os_outcome_feedback_advance_evidence_goals")
+        self.assertIn(target,checker.REQUIRED_PATHS)
+        self.graph["links"]=[
+            e for e in self.graph["links"]
+            if (e["source"],e["target"])!=target]
+        self.assertEqual(self.result()["status"],"FAIL")
+
     def test_inferred_edge_cannot_substitute_extracted_call(self):
         self.graph["links"][0]["confidence"]="INFERRED"
         self.assertTrue(any(x.startswith("MISSING_EXTRACTED_CONTROL_EDGE")
