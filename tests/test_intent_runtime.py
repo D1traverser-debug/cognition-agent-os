@@ -522,12 +522,14 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
         self.assertEqual(self.task(child)["state"],"BLOCKED")
 
-    def test_nested_intent_still_refused_when_ancestor_is_healthy(self):
+    def test_nested_intent_still_refused_when_ancestor_is_decomposed(self):
         from cognition_agent_os.ledger import create_task
         parent = self.seed(self.structured())
         with closing(connect(self.db_path)) as db:
             child = create_task(db, self.comparison(), parent=parent)
-            db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
+            # PENDING is not an admitted lineage; test the recursion rule
+            # with an already-decomposed ancestor instead of invalid setup.
+            db.execute("UPDATE tasks SET state='DECOMPOSED', due_at=? WHERE task_id=?",
                        (9999999999, parent))
             db.commit()
         result = run_once(self.db_path,self.workspace,self.fixtures)
