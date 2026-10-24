@@ -29,6 +29,14 @@ The previous 2,188-line / 184,781-byte `SESSION_HANDOFF.md` is preserved **byte-
 
 The accepted 2026-10-24 pre-compaction *code* snapshot was `962ee4e560972d3cc1f47bddf1b6986b17d2c011`: 188 Git blobs individually retrieved and SHA-matched, plus local CI 552/552 Linux and Windows 552 with 5 deliberate POSIX-only skips. **That was a structural review, not 188 behavioral semantic proofs.** Documentation-only follow-up HEAD `ea868ff55bbc8103f70fae7b4a6247ddc4bb1a8f` CI #40051125193 succeeded; these are dated observations, not a statement about all future HEADs.
 
+## Active architecture reconstruction — 2026-10-24 (Draft only)
+
+Owner's latest correction: reconstruct the WHOLE cognition-agent-os architecture from original goal evolution and complete source/evidence graph; do not call isolated fixes the complete system. Each conversation must recover original objectives, direct corrections, rejected designs, authorization and OPEN evidence obligations. A 188-file SHA audit was NOT independent semantic proof of all behaviors. The actual module/architecture mapping is in `docs/01-ARCHITECTURE-DECISIONS.md` section H.
+
+Current same Draft PR #36 work: `runner.py` retains one claim/lineage/grant/evidence admission path; `capability_dispatch.py` uses a static reviewed adapter table; `ledger.lineage_guard` checks the complete ancestor chain. Existing `continuity.py` owns explicit cold goal recovery, not a new agent controller or task DB. This is NOT a completed autonomous OS; exact-head CI, unknown-task semantic assessment, real external effect verification and owner validation remain required.
+
+On EACH new chat: consult latest direct owner requests and corrections, resolve live GitHub PR HEAD and matching CI, check relevant real source and these OPEN items, then execute the closest permitted substantive task. Archived CURRENT is only history. A repository file cannot independently recover a private chat or authorize runtime writes.
+
 ## Next real work / acceptance
 
 Treat the immediate blocker as **goal-grounded cognitive decisions**, not missing documents: open-world information needs, reliable context/authority selection, different justified methods with falsifiable evidence, and the same existing Host/Worker carrying lawful actions through independent observable outcomes. Fix the actual cross-cutting failure rather than hardcoding more fixed families. Any supported runtime change must record its method, negative controls, independent outcome and risk to authorized adjacent tasks. Until real provider and owner-host evidence exists, report NOT_READY.
