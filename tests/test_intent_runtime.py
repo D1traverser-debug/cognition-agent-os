@@ -88,6 +88,45 @@ class IntentRuntimeTests(unittest.TestCase):
                 self.assertEqual(self.task(leaf)["error_code"],
                                  "UPSTREAM_TASK_INVALID")
 
+    def test_mid_execution_ancestor_revocation_blocks_actual_artifact_boundary(self):
+        """A root can fail AFTER dispatch admission; writer must recheck ancestry."""
+        from cognition_agent_os import runner
+        from cognition_agent_os.ledger import create_task
+        (self.fixtures/"before.txt").write_text("original")
+        (self.fixtures/"after.txt").write_text("changed")
+        with closing(connect(self.db_path)) as db:
+            root = create_task(db, {"kind":"fixture","old":"before.txt",
+                                    "new":"after.txt"}, due_at=9999999999)
+            parent = create_task(db, {"kind":"fixture","old":"before.txt",
+                                      "new":"after.txt"}, parent=root,
+                                 due_at=9999999999)
+            leaf = create_task(db, {"kind":"fixture","old":"before.txt",
+                                    "new":"after.txt"}, parent=parent)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id IN (?,?)",
+                       (root,parent))
+            db.commit()
+        actual = runner.get_pair
+        reads = 0
+
+        def interrupt(spec, fixtures):
+            nonlocal reads
+            observed = actual(spec, fixtures)
+            reads += 1
+            if reads == 2:
+                with closing(connect(self.db_path)) as db:
+                    db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                               (root,))
+                    db.commit()
+            return observed
+
+        with patch.object(runner, "get_pair", side_effect=interrupt):
+            result = run_once(self.db_path, self.workspace, self.fixtures)
+        self.assertEqual(reads,2)
+        self.assertEqual(result["task_id"],leaf)
+        self.assertEqual(result["status"],"BLOCKED",result)
+        self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
+        self.assertFalse((self.workspace/"artifacts"/(leaf+".json")).exists())
+
     def test_task_parent_cycle_is_not_a_legitimate_decomposition(self):
         """A corrupted parent graph cannot supply authorization or effects."""
         from cognition_agent_os.ledger import create_task
