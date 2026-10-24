@@ -379,7 +379,8 @@ class OpenGoalVerticalTests(unittest.TestCase):
                          "SOURCE_CHANGED_SINCE_PROPOSAL")
 
     def test_purely_deterministic_host_mode_does_not_pretend_to_interpret_goal(self):
-        parent = self.enqueue()
+        parent = self.enqueue(
+            "Investigate the likely root causes of a novel subsystem anomaly.")
         with patch("cognition_agent_os.local_model._request",
                    side_effect=AssertionError("local inference not enabled")):
             result = run_tick(self.db, self.ws, self.fx, max_jobs=1)
