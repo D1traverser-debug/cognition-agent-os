@@ -238,13 +238,13 @@ class PostEffectFeedback(unittest.TestCase):
         self.assertEqual(child["state"],"SANDBOX_VERIFIED")
         staged=self.work/"sandbox"/(child["task_id"]+".candidate")
         before=staged.read_bytes()
-        self.assertIn(b"\\n",before)
+        self.assertIn(b"\n",before)
         method=json.loads(self.row(tid)["source_spec"])["alternatives"][1]
 
         def swap_after_valid_receipt(db,row,workspace,fixtures):
             verdict=_verify_staged(db,row,workspace,fixtures)
             self.assertEqual(verdict,"MECHANICALLY_VALID")
-            staged.write_bytes(before.replace(b"\\n",b"\\r\\n"))
+            staged.write_bytes(before.replace(b"\n",b"\r\n"))
             return verdict
 
         with patch("cognition_agent_os.conformance._verify_staged",
