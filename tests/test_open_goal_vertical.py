@@ -117,6 +117,27 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse(observed["tasks"][0]["business_outcome_verified"])
         self.assertEqual(len(self.children(parent)), 1)
 
+    def test_owner_goal_reaches_independently_read_back_isolated_file_effect(self):
+        """The goal must advance beyond planning into a real staged effect."""
+        parent = self.enqueue()
+        original = (self.fx / "settings.json").read_bytes()
+        first = self.tick(self.suggestion(), max_jobs=2)
+        self.assertEqual([x["status"] for x in first["tasks"]],
+                         ["DECOMPOSED", "NEEDS_REVIEW"], first)
+        child = first["tasks"][0]["child_task_id"]
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("no second inference for stage")):
+            advanced = run_tick(self.db, self.ws, self.fx,
+                                max_jobs=1, auto_stage_goals=True)
+        self.assertEqual(len(advanced["sandbox_reviews"]), 1, advanced)
+        self.assertEqual(advanced["sandbox_reviews"][0]["status"],
+                         "SANDBOX_VERIFIED", advanced)
+        self.assertEqual(self.row(child)["state"], "SANDBOX_VERIFIED")
+        staged = self.ws / "sandbox" / (child + ".candidate")
+        self.assertEqual(json.loads(staged.read_text(encoding="utf-8")),
+                         {"timeout": 7, "owner": "ops"})
+        self.assertEqual((self.fx / "settings.json").read_bytes(), original)
+
     def test_model_selects_different_registered_method_for_csv_goal(self):
         goal = "Please compare baseline.csv and actual.csv to identify record discrepancies."
         parent = self.enqueue(goal)
