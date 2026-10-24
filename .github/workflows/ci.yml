@@ -590,6 +590,34 @@ jobs:
         run: |
           set -euo pipefail
           timeout 720 python scripts/measure_real_open_goal.py
+      - name: Install independently maintained UK AISI Inspect AI evaluator
+        if: ${{ contains(github.event.pull_request.body, '[inspect-unseen-original]') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check inspect-ai==0.3.283 openai
+          python -c 'import inspect_ai; print("Original UK AISI Inspect imported")'
+      - name: Execute preregistered unseen goals with original Inspect Task Solver Scorer
+        if: ${{ contains(github.event.pull_request.body, '[inspect-unseen-original]') }}
+        shell: bash
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          COGNITION_EVAL_MODEL: qwen2.5-coder:0.5b
+        run: |
+          set -euo pipefail
+          mkdir -p inspect-open-goal-logs
+          timeout 840 inspect eval scripts/inspect_open_goal_eval.py \
+            --model ollama/qwen2.5-coder:0.5b \
+            --max-samples 1 --display plain --log-dir inspect-open-goal-logs
+      - name: Preserve original Inspect evaluation transcripts and scorers
+        if: ${{ always() && contains(github.event.pull_request.body, '[inspect-unseen-original]') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspect-independent-open-goal-logs
+          path: inspect-open-goal-logs/
+          if-no-files-found: warn
       - name: Preserve full experimental evidence including failed or zero-score results
         if: always()
         uses: actions/upload-artifact@v4
