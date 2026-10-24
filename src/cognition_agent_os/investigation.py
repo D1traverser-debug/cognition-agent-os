@@ -52,7 +52,7 @@ _ADMISSIBLE_INVESTIGATION_CODES = frozenset({
     "INVALID_RESEARCH_PROPOSAL", "INVALID_RESEARCH_FINDING",
     "UNGROUNDED_OR_DUPLICATE_QUOTE", "INCOMPLETE_RESEARCH_EVIDENCE",
     "EVIDENCE_CHANGED_DURING_REASONING",
-    "INVESTIGATION_LEASE_LOST",
+    "INVESTIGATION_LEASE_LOST", "RESEARCH_SOURCE_BUDGET_EXCEEDED",
 })
 
 
@@ -188,17 +188,18 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
     if model not in names:
         raise local_model.LocalModelUnavailable("MODEL_NOT_INSTALLED")
     # The manifest is source data, not a tool/action authority.
-    # Inspect every eligible source, but present at most 24 ranked windows
-    # to the bounded local model. A lexical shortlist is NOT an exhaustive
-    # judgment that missing sources are irrelevant.
+    # Inspect every eligible source through disjoint bounded 24-window batches.
+    # A lexical shortlist or an early positive selection cannot establish
+    # relevance, irrelevance, or absence of contradictions elsewhere.
     terms = _question_terms(question)
     ranked = sorted((
         (-score, name, excerpt)
         for name, (_raw, text) in inventory.items()
         for score, excerpt in [_preview_window(text, terms)]
     ))
-    # A negative judgment on the first 24 previews cannot establish anything
-    # about sources not shown. Search successive disjoint bounded batches.
+    # A positive OR negative judgment on an early batch cannot establish
+    # absence of independent counterevidence in later batches.
+    # Enumerate all eligible previews before proposing grounded findings.
     chosen = []
     for batch_start in range(0, len(ranked), _MAX_PREVIEWS):
         batch = ranked[batch_start:batch_start + _MAX_PREVIEWS]
@@ -226,14 +227,18 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
         }
         first = _model_reply(model, first_prompt, response_schema=selection_schema,
                              before_request=before_request)
-        chosen = first.get("sources")
-        if (set(first) != {"sources"} or not isinstance(chosen, list)
-            or len(chosen) > 2
-            or not all(isinstance(name, str) and name in presented for name in chosen)
-            or len(set(chosen)) != len(chosen)):
+        batch_chosen = first.get("sources")
+        if (set(first) != {"sources"} or not isinstance(batch_chosen, list)
+            or len(batch_chosen) > 2
+            or not all(isinstance(name, str) and name in presented for name in batch_chosen)
+            or len(set(batch_chosen)) != len(batch_chosen)):
             raise InvestigationInvalid("UNAUTHORIZED_OR_AMBIGUOUS_SOURCE_SELECTION")
-        if chosen:
-            break
+        # A later source may directly refute an earlier apparently adequate one.
+        # When the explicit two-source synthesis budget is exceeded, abstain
+        # rather than silently discard a counterexample or assert coverage.
+        if len(chosen) + len(batch_chosen) > 2:
+            raise InvestigationInvalid("RESEARCH_SOURCE_BUDGET_EXCEEDED")
+        chosen.extend(batch_chosen)
     if not chosen:
         # Every preview was offered; full-document semantic absence is
         # NOT established. Never invent an answer or independent outcome.
