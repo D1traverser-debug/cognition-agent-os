@@ -207,17 +207,25 @@ def lineage_guard(db: sqlite3.Connection, task: dict, *, max_depth: int = 512) -
             or row["grant_rev"] != task["grant_rev"]):
             return False
         if row["state"] == "NEEDS_REPLAN":
+            # Two legitimate replan producers share this state: sandbox
+            # drift and newly adequate evidence after a bounded diagnosis.
+            # Require exactly one corresponding event and its exact child;
+            # an unsupported state change must never inherit authority.
             receipts = db.execute(
-                "SELECT details FROM events WHERE task_id=? "
-                "AND kind='SANDBOX_REPLAN'", (parent_id,)).fetchall()
+                "SELECT kind,details FROM events WHERE task_id=? "
+                "AND kind IN ('SANDBOX_REPLAN','DIAGNOSIS_REPLAN')",
+                (parent_id,)).fetchall()
             if len(receipts) != 1:
                 return False
             try:
                 receipt = json.loads(receipts[0]["details"])
             except (ValueError, TypeError):
                 return False
-            if (not isinstance(receipt, dict)
-                or receipt.get("child_id") != child_id):
+            if not isinstance(receipt, dict):
+                return False
+            linked = ("child_id" if receipts[0]["kind"] == "SANDBOX_REPLAN"
+                      else "next_task_id")
+            if receipt.get(linked) != child_id:
                 return False
         elif row["state"] not in _ALLOWED_LINEAGE_PARENT_STATES:
             return False
