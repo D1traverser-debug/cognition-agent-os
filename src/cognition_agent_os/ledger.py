@@ -197,6 +197,11 @@ def lineage_guard(db: sqlite3.Connection, task: dict, *, max_depth: int = 512) -
 
 
 def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> tuple[bool, str | None]:
+    # This guard is also called UNDER the artifact writer's IMMEDIATE lock.
+    # Root invalidation after an earlier runner preflight must still fence the
+    # effect. Checking only a cached claim's goal/grant revision is insufficient.
+    if not lineage_guard(db, task):
+        return False, "UPSTREAM_TASK_INVALID"
     row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
     if row["goal_rev"] != task["goal_rev"]:
         return False, "STALE_GOAL"
