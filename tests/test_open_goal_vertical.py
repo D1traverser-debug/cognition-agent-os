@@ -188,6 +188,22 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse(self.children(parent))
         self.assertFalse((self.ws / "artifacts").exists())
 
+    def test_owner_negated_csv_comparison_cannot_be_scheduled(self):
+        parent = self.enqueue(
+            "Do not compare baseline.csv with actual.csv; explain potential risks only.")
+        method = {"kind": "goal_intent", "objective": "compare_records"}
+        out = self.tick(self.suggestion(intent=method), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
+        self.assertFalse(self.children(parent))
+
+    def test_restricting_an_unrelated_field_preserves_legitimate_owner_action(self):
+        parent = self.enqueue(
+            "Do not change timeout in settings.json. "
+            "Please ensure settings.json has owner equal to ops.")
+        out = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "DECOMPOSED", out)
+        self.assertEqual(len(self.children(parent)), 1)
+
     def test_model_abstention_does_not_fabricate_work(self):
         parent = self.enqueue()
         out = self.tick(self.suggestion() | {"method": "abstain"},
