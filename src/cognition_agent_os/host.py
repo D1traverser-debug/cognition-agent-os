@@ -266,8 +266,12 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             db_path,workspace,fixture_root,limit=min(max_jobs,4)))
     else:
         controlled=[]
+    # OT13: turn objective-loss observations into durable, de-duplicated
+    # local evidence. This scan NEVER grants or schedules a corrective action.
+    from .goal_drift import observe_owner_goal_drift
+    goal_drift = observe_owner_goal_drift(db_path, limit=min(max_jobs,8))
     _record_tick(db_path, processed=len(results), finished_at=time.time())
-    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(x["status"] == "DRIFT_SIGNAL_RECORDED" for x in goal_drift) or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
             "watch_observations": watches,
             "sandbox_reviews": reviews,
             "repair_lab_reviews": repair_reviews,
@@ -276,6 +280,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             "pending_research_actions": _pending_research_actions(db_path,workspace),
             "local_goal_control": controlled,
             "goal_progress": _goal_progress(db_path,workspace,fixture_root),
+            "owner_goal_drift": goal_drift,
             "conformance": conformance,
             "preflight": preflight,
             "processed": len(results), "capacity_reached": len(results) == max_jobs,
