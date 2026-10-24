@@ -151,6 +151,54 @@ def ensure_dependencies(db:sqlite3.Connection)->None:
 
 
 def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->bool:
+    # An open-language owner goal is a model-proposed capability, never a
+    # source of new authority. Every file shown to that model stays pinned to
+    # the source bytes present when the child was created. This applies to
+    # BOTH input files for a selected record comparison, not just one.
+    candidate=db.execute(
+        "SELECT parent_task,source_spec FROM tasks WHERE task_id=?",
+        (task_id,)).fetchone()
+    if candidate is None:
+        return False
+    if candidate["parent_task"] is not None:
+        parent=db.execute("SELECT source_spec FROM tasks WHERE task_id=?",
+                          (candidate["parent_task"],)).fetchone()
+        if parent is None:
+            return False
+        try:
+            parent_spec=json.loads(parent["source_spec"])
+        except (ValueError, TypeError):
+            return False
+        if isinstance(parent_spec,dict) and parent_spec.get("kind")=="open_goal":
+            from .open_goal import validate_open_goal
+            from .intent_planner import compile_intent
+            try:
+                validate_open_goal(parent_spec)
+                proofs=db.execute(
+                    "SELECT details FROM events WHERE task_id=? "
+                    "AND kind='OPEN_GOAL_DECOMPOSED'",
+                    (candidate["parent_task"],)).fetchall()
+                if len(proofs)!=1:
+                    return False
+                evidence=json.loads(proofs[0]["details"])
+                if (not isinstance(evidence,dict)
+                    or evidence.get("child_task_id")!=task_id
+                    or evidence.get("semantic_approval") is not False
+                    or not isinstance(evidence.get("source_sha256"),dict)
+                    or not evidence["source_sha256"]
+                    or not isinstance(evidence.get("model_candidate"),dict)
+                    or evidence["model_candidate"].get("intent") is None):
+                    return False
+                compiled=compile_intent(evidence["model_candidate"]["intent"])
+                if (compiled!=evidence.get("plan")
+                    or compiled["child_source_spec"]!=json.loads(candidate["source_spec"])):
+                    return False
+                for name,digest in evidence["source_sha256"].items():
+                    if (not isinstance(name,str) or not isinstance(digest,str)
+                        or hashlib.sha256(safe_fixture(fixtures,name)).hexdigest()!=digest):
+                        return False
+            except (ValueError,TypeError,KeyError,OSError,SourceUnavailable):
+                return False
     row=db.execute(
         "SELECT evidence_path,evidence_sha256 FROM knowledge_dependencies WHERE task_id=?",
         (task_id,)).fetchone()
