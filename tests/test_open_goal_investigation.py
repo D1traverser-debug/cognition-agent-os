@@ -508,5 +508,72 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
 
 
+    def test_each_real_model_post_renews_only_its_still_valid_lease(self):
+        """Long inference requests must not outlive an unrenewed 40s claim."""
+        import time
+        self.seed()
+        selection, findings = self.model()
+        original, _calls = selection, findings
+        seen = []
+
+        def observed_request(method, path, payload, timeout):
+            if method == "POST":
+                with closing(connect(self.dbpath)) as db:
+                    row = db.execute("SELECT lease_until FROM tasks WHERE state='RUNNING'").fetchone()
+                    self.assertIsNotNone(row)
+                    seen.append(row[0] - time.time())
+                    # Artificially shorten between requests; the next request
+                    # must renew without changing its claim or granting rights.
+                    if len(seen) == 1:
+                        db.execute("UPDATE tasks SET lease_until=? WHERE state='RUNNING'",
+                                   (time.time() + 3,))
+                        db.commit()
+            return original(method, path, payload, timeout)
+
+        with patch.object(local_model, "_request", side_effect=observed_request):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "NEEDS_REVIEW", result)
+        self.assertEqual(len(seen), 2)
+        self.assertTrue(all(seconds >= 100 for seconds in seen), seen)
+
+    def test_taken_over_lease_stops_later_batch_without_artifact(self):
+        """An expired old claimant must not revive after a new worker claims."""
+        import time
+        from cognition_agent_os.ledger import claim_one
+        for n in range(27):
+            (self.sources / f"other_{n:02d}.md").write_text(
+                "Unrelated labels only.", encoding="utf-8")
+        tid = self.seed("Find a new independent assessment method.")
+        posts = 0
+        replacement = None
+
+        def fake(method, path, payload, timeout):
+            nonlocal posts, replacement
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            posts += 1
+            if posts == 1:
+                with closing(connect(self.dbpath)) as db:
+                    db.execute("UPDATE tasks SET lease_until=? WHERE task_id=?",
+                               (time.time() - 1, tid))
+                    db.commit()
+                with closing(connect(self.dbpath)) as db:
+                    replacement = claim_one(db)
+                self.assertEqual(replacement["task_id"], tid)
+                return {"done": True, "response": '{"sources":[]}'}
+            self.fail("Old claimant issued another model request after takeover")
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            run_tick(self.dbpath, self.workspace, self.sources,
+                     max_jobs=1, planner_mode="ollama-local", local_model="local:test")
+        self.assertEqual(posts, 1)
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute("SELECT claim_token FROM tasks WHERE task_id=?",
+                                        (tid,)).fetchone()[0], replacement["claim_token"])
+
+
 if __name__ == "__main__":
     unittest.main()
