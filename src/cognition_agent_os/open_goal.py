@@ -320,25 +320,35 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
                 "requirements": [{"field": key, "equals": value}],
             }
     else:
-        args_schema = {
-            "type": "object", "additionalProperties": False,
-            "properties": {
-                "reference": {"type": "string", "enum": csv_files},
-                "observed": {"type": "string", "enum": csv_files},
-            },
-            "required": ["reference", "observed"],
-        }
-        args = constrained(
-            "The owner's goal is to compare TWO CSV sources. "
-            "Choose the reference/baseline (first named in 'compare X with Y') "
-            "and observed/current (second named) using exact listed filenames. "
-            "Return ONLY reference and observed. No modifications.\n"
-            "OWNER GOAL:\n" + goal + "\n"
-            "CSV FILES:\n" +
-            json.dumps([x for x in manifest if x["format"] == ".csv"],
-                       ensure_ascii=False), args_schema
-        )
-        reference, observed = args["reference"], args["observed"]
+        # Explicit source order is OWNER data, not a fact to ask a weak
+        # model to guess or reverse. Never choose from unmentioned sources.
+        order = re.search(
+            r"\bcompare\s+([A-Za-z0-9_.-]+\.csv)\s+"
+            r"(?:with|against|to)\s+([A-Za-z0-9_.-]+\.csv)\b",
+            goal, flags=re.IGNORECASE)
+        if order is not None and {
+            order.group(1), order.group(2)} == set(named_csv):
+            reference, observed = order.group(1), order.group(2)
+        else:
+            args_schema = {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "reference": {"type": "string", "enum": csv_files},
+                    "observed": {"type": "string", "enum": csv_files},
+                },
+                "required": ["reference", "observed"],
+            }
+            args = constrained(
+                "The owner's goal is to compare TWO CSV sources. "
+                "Choose the reference/baseline (first named in 'compare X with Y') "
+                "and observed/current (second named) using exact listed filenames. "
+                "Return ONLY reference and observed. No modifications.\n"
+                "OWNER GOAL:\n" + goal + "\n"
+                "CSV FILES:\n" +
+                json.dumps([x for x in manifest if x["format"] == ".csv"],
+                           ensure_ascii=False), args_schema
+            )
+            reference, observed = args["reference"], args["observed"]
         grounded = goal.casefold()
         # Where OWNER text explicitly supplies "compare A.csv with B.csv",
         # original goal evidence settles the argument direction. A small
@@ -369,6 +379,19 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
         plan = compile_intent(intent)
     except (IntentError, TypeError, ValueError, KeyError) as exc:
         raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED") from exc
+    if intent["objective"] == "ensure_structure":
+        # Use the original registered goal planner as a candidate preflight:
+        # a contradictory existing field is not a safe append-only action.
+        # The child would eventually fail; do not mint it as success-shaped
+        # progress. Source pins and effect checks remain in the Worker.
+        from .goal_loop import plan_goal, GoalError
+        try:
+            raw = safe_fixture(fixtures, plan["child_source_spec"]["input"])
+            result = plan_goal(plan["child_source_spec"], raw)
+        except (GoalError, SourceUnavailable, OSError, ValueError) as exc:
+            raise OpenGoalInvalid("OPEN_GOAL_SOURCE_UNAVAILABLE") from exc
+        if result["status"] == "UNKNOWN":
+            raise OpenGoalInvalid("OPEN_GOAL_SOURCE_CONFLICT")
     candidate = {
         "intent": intent, "goal_quote": goal[:180],
         "rationale": decision["rationale"],
