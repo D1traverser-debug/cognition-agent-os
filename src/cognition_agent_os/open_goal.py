@@ -29,6 +29,7 @@ _CODES = frozenset({
     "OPEN_GOAL_INVALID", "OPEN_GOAL_SOURCE_UNAVAILABLE", "OPEN_GOAL_MODEL_INVALID",
     "OPEN_GOAL_METHOD_UNSUPPORTED", "OPEN_GOAL_SOURCE_CHANGED",
     "OPEN_GOAL_ABSTAINED", "OPEN_GOAL_LEASE_LOST", "LOCAL_MODEL_UNAVAILABLE",
+    "OPEN_GOAL_SOURCE_CONFLICT",
 })
 
 
@@ -153,7 +154,8 @@ def _complete_owner_literals(goal: str, source: str) -> dict[str, str] | None:
     return result
 
 
-def _select_method(goal: str, manifest: list[dict], model: str, before_request) -> dict:
+def _select_method(goal: str, manifest: list[dict], model: str, before_request,
+                   fixtures: Path) -> dict:
     """Two-stage ORIGINAL Ollama JSON Schema: method, then its typed args.
 
     Models should never invent a nested task schema, permissions or tools.
@@ -161,14 +163,23 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request) 
     are the ONLY sources of authority. Each stage has an independently
     constrained grammar and cannot silently run a third-party operation.
     """
-    if (not isinstance(model, str) or not local_model._MODEL_RE.fullmatch(model)
-        or "cloud" in model.lower() or "://" in model or ".." in model
-        or model.startswith("/")):
-        raise local_model.LocalModelUnavailable("Only installed local model allowed")
-    tags = local_model._request("GET", "/api/tags", None, 10)
-    names = {x.get("name") for x in tags.get("models", []) if isinstance(x, dict)}
-    if model not in names:
-        raise local_model.LocalModelUnavailable("Model not installed")
+    # Exact owner specifications must not require an Ollama installation.
+    # Tool availability/identity are checked lazily only for actual inference.
+    model_checked = False
+
+    def ensure_installed_model():
+        nonlocal model_checked
+        if model_checked:
+            return
+        if (not isinstance(model, str) or not local_model._MODEL_RE.fullmatch(model)
+            or "cloud" in model.lower() or "://" in model or ".." in model
+            or model.startswith("/")):
+            raise local_model.LocalModelUnavailable("Only installed local model allowed")
+        tags = local_model._request("GET", "/api/tags", None, 10)
+        names = {x.get("name") for x in tags.get("models", []) if isinstance(x, dict)}
+        if model not in names:
+            raise local_model.LocalModelUnavailable("Model not installed")
+        model_checked = True
     json_files = sorted(x["path"] for x in manifest if x["format"] == ".json")
     csv_files = sorted(x["path"] for x in manifest if x["format"] == ".csv")
     allowed = ["abstain"]
@@ -178,6 +189,7 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request) 
         allowed.append("compare_records")
 
     def constrained(prompt: str, schema: dict, *, token_cap: int = 320) -> dict:
+        ensure_installed_model()
         before_request()
         reply = local_model._request("POST", "/api/generate", {
             "model": model, "prompt": prompt, "stream": False,
@@ -371,9 +383,9 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request) 
 
 def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
                   *, planner_mode: str, local_model_name: str | None) -> dict:
-    if planner_mode != "ollama-local":
+    if planner_mode not in ("deterministic", "ollama-local"):
         return finalize_observed(db, task, "UNKNOWN",
-                                 error_code="LOCAL_MODEL_UNAVAILABLE")
+                                 error_code="OPEN_GOAL_INVALID")
     if task.get("parent_task") is not None:
         return finalize_observed(db, task, "UNKNOWN", error_code="OPEN_GOAL_INVALID")
     def error_after_model(code: str) -> dict:
@@ -391,8 +403,9 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
         def before_request():
             if not renew_claim(db, task, lease_seconds=120):
                 raise OpenGoalInvalid("OPEN_GOAL_LEASE_LOST")
-        selected = _select_method(spec["goal"], manifest, local_model_name or "",
-                                  before_request)
+        selected = _select_method(spec["goal"], manifest,
+                                  (local_model_name or "") if planner_mode == "ollama-local" else "",
+                                  before_request, fixtures)
     except local_model.LocalModelUnavailable:
         return error_after_model("LOCAL_MODEL_UNAVAILABLE")
     except (OpenGoalInvalid, SourceUnavailable, OSError, ValueError, TypeError) as exc:
@@ -434,7 +447,7 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
         db.execute("UPDATE tasks SET state='DECOMPOSED',decision=?,"
                    "error_code=NULL,state_version=state_version+1,"
                    "lease_until=NULL,claim_token=NULL WHERE task_id=?",
-                   ("MODEL_CHOSEN_REGISTERED_LOCAL_METHOD", task["task_id"]))
+                   ("OWNER_GROUNDED_REGISTERED_LOCAL_METHOD", task["task_id"]))
         event(db, task["task_id"], "OPEN_GOAL_DECOMPOSED", {
             "child_task_id": child,
             "source_sha256": hashes,
