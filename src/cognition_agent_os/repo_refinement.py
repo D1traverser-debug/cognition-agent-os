@@ -19,7 +19,7 @@ from .container_lab import candidate_changes,cases_from_bytes,run_suite,Containe
 from .repo_repair import audit_repo,_sources,_candidate_from_model,sha
 from .source import safe_fixture
 from .runner import store_once,ArtifactConflict
-from .ledger import connect,create_task,event
+from .ledger import connect,create_task,event,current_guard
 
 MAX_ATTEMPTS_PER_LINEAGE=3
 TASK=re.compile(r"[0-9a-f]{32}\Z")
@@ -265,6 +265,14 @@ def _freeze_revision(db_path,workspace,fixtures,tid,parent,spec,base,visible,cha
             or auth["grant_rev"]!=now["grant_rev"]):
             db.commit()
             return _deny("REVISION_AUTHORITY_CHANGED_BEFORE_FREEZE")
+        # The model can finish after a remote/parent/grant change. A nominally
+        # current task grant is insufficient if any ancestor was invalidated.
+        # Revalidate the entire goal lineage under the original write lock
+        # immediately before minting the revision child and staging bytes.
+        allowed,reason=current_guard(db,dict(now),needs_write=True)
+        if not allowed:
+            db.commit()
+            return _deny("REVISION_AUTHORITY_CHANGED_BEFORE_FREEZE",reason=reason)
         if ({p:sha(safe_fixture(fixtures,p)) for p in spec["files"]}!=immutable["source_sha256"]
             or sha(safe_fixture(fixtures,spec["visible"]))!=immutable["public_sha256"]):
             db.commit()
