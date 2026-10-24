@@ -3,6 +3,7 @@
 Graph reachability is supporting evidence, never an authorization oracle.
 """
 import argparse
+import ast
 import json
 import subprocess
 from pathlib import Path
@@ -14,7 +15,9 @@ REQUIRED_PATHS = (
     # Post-refactor: runner performs admission, a static adapter dispatches
     # capability-specific work. Prove BOTH real call edges independently.
     ("src_cognition_agent_os_runner_run_once", "src_cognition_agent_os_capability_dispatch_dispatch_capability"),
-    ("src_cognition_agent_os_capability_dispatch__intent", "src_cognition_agent_os_intent_runtime_run_intent"),
+    # Graphify currently extracts runner->dispatch but not a Python function
+    # reached through a static registry. Verify that hop with Python AST below.
+
     # The currently implemented bounded-control path, not merely an old P0-P3 skeleton.
     ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_bounded_goal_control_advance_local_goals"),
     ("src_cognition_agent_os_bounded_goal_control_advance_local_goals", "src_cognition_agent_os_bounded_control_audit_verify_registered_control"),
@@ -65,6 +68,34 @@ def check(graph_path: Path, repo: Path) -> dict:
         evidence.append({"caller":src,"callee":dst,"confidence":"EXTRACTED",
                          "source_file":citations[0]["source_file"],
                          "source_location":citations[0]["source_location"]})
+    # The intentionally static registry is indirect. Python AST, not a
+    # guessed Graphify edge, must independently witness both the exact
+    # goal_intent binding and its direct call to the legacy target function.
+    try:
+        module = ast.parse((repo / "src/cognition_agent_os/capability_dispatch.py")
+                           .read_text(encoding="utf-8"))
+        reg = next(n.value for n in module.body
+                   if isinstance(n, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == "_HANDLERS"
+                           for t in n.targets))
+        mapping = {k.value: v.id for k, v in zip(reg.keys, reg.values)
+                   if isinstance(k, ast.Constant) and isinstance(k.value, str)
+                   and isinstance(v, ast.Name)}
+        handler_name = mapping.get("goal_intent")
+        handler = next(n for n in module.body if isinstance(n, ast.FunctionDef)
+                       and n.name == handler_name)
+        imported = any(
+            isinstance(n, ast.ImportFrom)
+            and n.module == "intent_runtime"
+            and any(alias.name == "run_intent" for alias in n.names)
+            for n in ast.walk(handler))
+        invoked = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "run_intent" for n in ast.walk(handler))
+        if not (imported and invoked):
+            errors.append("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN")
+    except (OSError, ValueError, StopIteration, SyntaxError, TypeError, AttributeError):
+        errors.append("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN")
     return {"status":"PASS" if not errors else "FAIL",
             "commit":sha,"nodes":len(nodes),"edges":len(g["links"]),
             "inferred_edges":sum(e.get("confidence")=="INFERRED" for e in g["links"]),
