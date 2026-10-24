@@ -10,7 +10,7 @@ import unittest
 from cognition_agent_os.goal_drift import observe_owner_goal_drift
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import (
-    connect, initialize, create_task, alter_authority,
+    connect, initialize, create_task, alter_authority, LedgerNotConfigured,
 )
 
 
