@@ -22,6 +22,14 @@ DIRECT_STAGES = frozenset({
     ("repo_repair", "_stage"),
 })
 
+# Direct Path file writes outside the shared stage sink are explicit exceptions:
+# ephemeral Docker source inputs and temporary SSH signature verification.
+# Any new direct Python Path.write_* call fails CI until deliberately reviewed.
+DIRECT_FILE_WRITERS = frozenset({
+    ("container_lab", "run_suite"),
+    ("signed_feedback", "_historical_negative_is_authentic"),
+})
+
 ARTIFACT_STORES = frozenset({
     ("capability_dispatch", "_snapshot_diff"),
     ("goal_loop", "run_goal_case"),
@@ -52,6 +60,7 @@ class _Effects(ast.NodeVisitor):
         self.stack: list[str] = []
         self.direct: list[tuple[str, str, int]] = []
         self.store: list[tuple[str, str, int]] = []
+        self.direct_io: list[tuple[str, str, int]] = []
         self.functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
         self.aliases: dict[str, str] = {
             "stage_immutable": "stage_immutable", "store_once": "store_once"
@@ -82,6 +91,8 @@ class _Effects(ast.NodeVisitor):
         else:
             name = None
         owner = self.stack[0] if self.stack else "<module>"
+        if isinstance(callee, ast.Attribute) and callee.attr in ("write_bytes", "write_text"):
+            self.direct_io.append((self.module, owner, node.lineno))
         if name == "stage_immutable":
             self.direct.append((self.module, owner, node.lineno))
         elif name == "store_once":
@@ -110,6 +121,7 @@ def inspect(root: Path) -> list[str]:
     findings: list[str] = []
     direct: list[tuple[str, str, int]] = []
     stores: list[tuple[str, str, int]] = []
+    direct_io: list[tuple[str, str, int]] = []
     functions: dict[tuple[str, str], ast.FunctionDef | ast.AsyncFunctionDef] = {}
     for path in sorted(pkg.glob("*.py")):
         try:
@@ -121,11 +133,13 @@ def inspect(root: Path) -> list[str]:
         visitor.visit(parsed)
         direct.extend(visitor.direct)
         stores.extend(visitor.store)
+        direct_io.extend(visitor.direct_io)
         functions.update({(path.stem, name): node
                           for name, node in visitor.functions.items()})
     for category, observed, expected in (
         ("STAGE", direct, DIRECT_STAGES),
         ("ARTIFACT", stores, ARTIFACT_STORES),
+        ("DIRECT_FILE", direct_io, DIRECT_FILE_WRITERS),
     ):
         counted: dict[tuple[str, str], int] = {}
         for module, function, lineno in observed:
