@@ -100,7 +100,7 @@ def _owner_prohibits_method(goal: str, *exact_subjects: str) -> bool:
     treated as a ban on adding the requested 'owner' field.
     This bounded grammar is a guard, not universal NLU correctness proof.
     """
-    for clause in re.split(r"[.;!?\n。！？]+", goal.casefold()):
+    for clause in re.split(r"[;!?\n。！？]+|\.(?=\s|$)", goal.casefold()):
         if (_NEGATED_LOCAL_ACTION.search(clause)
             and all(subject.casefold() in clause for subject in exact_subjects)):
             return True
@@ -216,22 +216,6 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request) 
             or key.casefold() not in grounded or value.casefold() not in grounded
             or _owner_prohibits_method(goal, name, key, value)):
             raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
-        # A well-formed model proposal may invert an explicit negative
-        # OWNER instruction. Plain substring grounding of the key and
-        # value does not establish affirmative intent. Refuse the candidate
-        # whenever the owner's own text directly negates setting this key.
-        # Negations about DIFFERENT keys (e.g. do not overwrite timeout)
-        # still permit a separately, explicitly requested new field.
-        negated_action = re.finditer(
-            r"\b(?:do\s+not|don't|never|must\s+not|avoid)\s+"
-            r"(?:(?:ever|actually)\s+)?"
-            r"(?:set|add|insert|write|assign|change|update)\b",
-            goal, flags=re.IGNORECASE)
-        for occurrence in negated_action:
-            clause = goal[occurrence.end():].split(";", 1)[0].split(".", 1)[0]
-            if re.search(r"(?<![a-zA-Z0-9_])" + re.escape(key) +
-                         r"(?![a-zA-Z0-9_])", clause, flags=re.IGNORECASE):
-                raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
         intent = {
             "kind": "goal_intent", "objective": "ensure_structure",
             "resources": [{"role": "input", "path": name}],
