@@ -147,6 +147,56 @@ class PostEffectFeedback(unittest.TestCase):
         self.assertEqual(self.row(tid)["state"],"FEEDBACK_EVIDENCE_READY")
         self.assertEqual(len(self.children(tid)),2)
 
+    def test_first_staged_mechanically_valid_wrong_target_selects_alternative(self):
+        # Executing a structurally correct proposal does not establish
+        # the precommitted exact target if it preserves extra fields.
+        (self.fx/"first.json").write_text('{"id":"A","department":"north"}')
+        tid=self.register()
+        self.tick()
+        first_effect=self.tick()
+        self.assertEqual(self.children(tid)[0]["state"],"SANDBOX_VERIFIED",
+                         first_effect)
+        self.assertEqual(len(self.children(tid)),2)
+        self.assertNotEqual(self.row(tid)["state"],"FEEDBACK_EVIDENCE_READY")
+        next_effect=self.tick()
+        self.assertEqual(self.row(tid)["state"],"FEEDBACK_EVIDENCE_READY",
+                         next_effect)
+        self.assertEqual(len(self.children(tid)),2)
+
+    def test_noop_still_verifies_actual_existing_record_without_writing(self):
+        (self.fx/"first.json").write_text('{"id":"A","owner":"ops"}')
+        tid=self.register()
+        self.tick()
+        self.tick()
+        self.assertEqual(self.children(tid)[0]["state"],"VERIFIED")
+        self.assertEqual(self.row(tid)["state"],"FEEDBACK_EVIDENCE_READY")
+        self.assertFalse((self.work/"sandbox").exists())
+
+    def test_source_mutation_after_staged_effect_revokes_readback(self):
+        tid=self.register()
+        for _ in range(3):self.tick()
+        self.assertEqual(self.row(tid)["state"],"FEEDBACK_EVIDENCE_READY")
+        (self.fx/"second.csv").write_text("id\\nB\\n".replace("\\n","\n"))
+        with closing(connect(self.db)) as db:
+            result=verify_feedback_root(db,db.execute(
+                "SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone(),
+                self.db,self.work,self.fx)
+        self.assertFalse(result["valid"],result)
+
+    def test_scope_is_explicit_and_cannot_self_authorize_external_action(self):
+        for scope in ("PRODUCTION_WRITE","NETWORK_MUTATION","LOCAL_SANDBOX_ONLY"):
+            with self.subTest(scope=scope):
+                with self.assertRaises(ValueError):
+                    register_evidence_goal(self.db,self.fx,goal_id="deny",
+                        objective="no external effect",alternatives=self.methods(),
+                        acceptance=_ACCEPT,execution_scope=scope)
+        with self.assertRaises(ValueError):
+            register_evidence_goal(self.db,self.fx,goal_id="deny",
+                objective="no acceptance",alternatives=self.methods(),
+                execution_scope=_EFFECT)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],0)
+
     def test_v2_legacy_semantics_unchanged(self):
         tid=register_evidence_goal(self.db,self.fx,goal_id="legacy-v2",
             objective="Only local candidate evidence",alternatives=self.methods(),
