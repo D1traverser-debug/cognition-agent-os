@@ -91,6 +91,12 @@ class DurableOwnerGoalDriftTests(unittest.TestCase):
         self.assertEqual(response[0]["status"], "NOT_ADMITTED")
         self.assertEqual(self.events(tid), [])
 
+    def test_missing_database_is_not_silently_created_by_drift_observer(self):
+        missing = self.root / "not-provisioned.sqlite"
+        with self.assertRaises(LedgerNotConfigured):
+            observe_owner_goal_drift(missing)
+        self.assertFalse(missing.exists())
+
     def test_non_owner_fixture_jobs_do_not_become_spurious_owner_alerts(self):
         tid = self.seed(state="UNKNOWN", kind="fixture")
         self.assertEqual(observe_owner_goal_drift(self.db), [])
