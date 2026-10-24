@@ -22,6 +22,7 @@ from .reconciliation import validate_reconciliation
 from .reconciliation_oracle import audit_stored_report
 from .intent_planner import compile_intent
 from .investigation import validate_investigation, audit_investigation
+from .open_goal import validate_open_goal, audit_open_goal
 from .intent_runtime import audit_intent_plan
 from .semantic_contract import load_pinned_relationship
 from .conformance import inspect_conformance
@@ -66,6 +67,12 @@ def main(argv=None) -> int:
     report = sub.add_parser("reconciliation-audit",
                             help="Read-only independent SQL check of a proposed diff report")
     report.add_argument("--task-id",required=True)
+    open_input = sub.add_parser("seed-open-goal",
+        help="Enqueue owner natural-language goal; local installed model selects registered LOCAL proposal method")
+    open_input.add_argument("--goal", required=True)
+    open_audit = sub.add_parser("open-goal-audit",
+        help="Read-only independent check of source-pinned open-goal child provenance")
+    open_audit.add_argument("--task-id", required=True)
     intent = sub.add_parser("seed-intent",help="Register constrained typed outcome for capability planning")
     intent.add_argument("--spec",type=Path,required=True)
     investigate = sub.add_parser("seed-investigation",
@@ -479,6 +486,15 @@ def main(argv=None) -> int:
             result={"task_id":create_task(db,spec),"state":"PENDING",
                     "holdout_digest_pinned":True,
                     "scope":"local_pure_ast_only"}
+        elif args.command == "seed-open-goal":
+            spec=validate_open_goal({"kind":"open_goal","goal":args.goal})
+            owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner or not owner["write_allowed"]:
+                raise PermissionError("Cannot admit open goal after grant revocation")
+            result={"task_id":create_task(db,spec),"state":"PENDING",
+                    "scope":"OWNER_LOCAL_SOURCES_PROPOSAL_ONLY",
+                    "requires_installed_local_model":True,
+                    "business_outcome_verified":False}
         elif args.command == "seed-investigation":
             spec = validate_investigation({"kind": "investigate_goal",
                 "question": args.question, "scope": "LOCAL_EVIDENCE_ONLY"})
