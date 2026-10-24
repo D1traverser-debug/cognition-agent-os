@@ -57,16 +57,22 @@ class OpenGoalVerticalTests(unittest.TestCase):
                 "SELECT task_id FROM tasks WHERE parent_task=?", (tid,)).fetchall()]
 
     def suggestion(self, *, intent=None, quote="owner equal to ops"):
-        if intent is None:
-            intent = {
-                "kind": "goal_intent", "objective": "ensure_structure",
-                "resources": [{"role": "input", "path": "settings.json"}],
-                "requirements": [{"field": "owner", "equals": "ops"}],
-            }
-        return {"intent": intent, "goal_quote": quote,
-                "rationale": "A bounded local non-destructive candidate",
-                "rejected_alternative": "Record comparison lacks this acceptance",
-                "uncertainty": "Meaning and business effect require review"}
+        candidate = {
+            "method": "ensure_structure",
+            "input": "settings.json",
+            "reference": "__none__", "observed": "__none__",
+            "field": "owner", "equals": "ops",
+            "rationale": "A bounded local non-destructive candidate",
+            "rejected_alternative": "Compare records is not applicable",
+            "uncertainty": "Meaning and business effect need independent review",
+        }
+        if intent is not None and intent.get("objective") == "compare_records":
+            candidate.update({
+                "method": "compare_records", "input": "__none__",
+                "reference": "baseline.csv", "observed": "actual.csv",
+                "field": "__none__", "equals": "__none__",
+            })
+        return candidate
 
     def transport(self, candidate, *, mutate=None):
         def responder(method, endpoint, payload, timeout):
@@ -125,7 +131,7 @@ class OpenGoalVerticalTests(unittest.TestCase):
     def test_invalid_model_tool_or_write_grant_cannot_mint_child(self):
         parent = self.enqueue()
         illegal = self.suggestion()
-        illegal["intent"]["remote_write_allowed"] = True
+        illegal["remote_write_allowed"] = True
         out = self.tick(illegal, max_jobs=1)
         self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
         self.assertFalse(self.children(parent))
@@ -134,14 +140,14 @@ class OpenGoalVerticalTests(unittest.TestCase):
     def test_nonexistent_model_selected_source_cannot_mint_child(self):
         parent = self.enqueue()
         invalid = self.suggestion()
-        invalid["intent"]["resources"][0]["path"] = "newly-made-by-model.json"
+        invalid["input"] = "newly-made-by-model.json"
         out = self.tick(invalid, max_jobs=1)
         self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
         self.assertFalse(self.children(parent))
 
     def test_model_abstention_does_not_fabricate_work(self):
         parent = self.enqueue()
-        out = self.tick(self.suggestion(intent="unused") | {"intent": None},
+        out = self.tick(self.suggestion() | {"method": "abstain"},
                         max_jobs=1)
         self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
         self.assertFalse(self.children(parent))
