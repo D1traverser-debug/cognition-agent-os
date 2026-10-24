@@ -152,6 +152,28 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertEqual(child_spec["desired"],
                          {"owner": "ops", "team": "core"})
 
+    def test_three_owner_fields_all_survive_model_one_field_reply(self):
+        parent = self.enqueue(
+            "Ensure settings.json has owner equal to ops, team equal to core, "
+            "and mode equal to safe, preserving all existing fields.")
+        out = self.tick(self.suggestion(), max_jobs=2)
+        self.assertEqual([x["status"] for x in out["tasks"]],
+                         ["DECOMPOSED", "NEEDS_REVIEW"], out)
+        with closing(connect(self.db)) as db:
+            child = db.execute("SELECT source_spec FROM tasks WHERE parent_task=?",
+                               (parent,)).fetchone()
+        self.assertEqual(
+            json.loads(child[0])["desired"],
+            {"owner": "ops", "team": "core", "mode": "safe"})
+
+    def test_unsafe_negated_member_blocks_entire_conjunction(self):
+        parent = self.enqueue(
+            "Ensure settings.json has owner equal to ops. "
+            "Do not set team equal to core in settings.json.")
+        out = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
+        self.assertEqual(self.children(parent), [])
+
     def test_explanation_of_how_to_apply_is_not_authorization_to_apply(self):
         parent = self.enqueue(
             "Explain how to ensure settings.json has owner equal to ops; "
