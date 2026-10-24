@@ -31,6 +31,7 @@ from cognition_agent_os.ledger import connect, initialize, create_task
 from cognition_agent_os.open_goal import audit_open_goal
 from cognition_agent_os.goal_audit import audit_goal
 from cognition_agent_os.reconciliation_oracle import audit_stored_report
+from cognition_agent_os.investigation import audit_investigation
 
 MODEL = os.environ.get("COGNITION_EVAL_MODEL", "qwen2.5-coder:0.5b")
 _EVAL_ROOT = Path(__file__).resolve().parent.parent
@@ -80,6 +81,7 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
         child = None
         audit_status = None
         staged = None
+        research_artifact = None
         if len(children) == 1:
             item = children[0]
             spec = json.loads(item["source_spec"])
@@ -96,6 +98,13 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
             elif kind == "record_reconciliation":
                 audit_status = audit_stored_report(
                     db_file, workspace, source, task_id)["status"]
+            elif kind == "investigate_goal":
+                audit_status = audit_investigation(
+                    db_file, workspace, source, task_id)["status"]
+                research_path = workspace / "artifacts" / (task_id + ".json")
+                if research_path.is_file():
+                    research_artifact = json.loads(
+                        research_path.read_text(encoding="utf-8"))
             child = {"state": item["state"], "spec": spec, "audit": audit_status}
         result = {
             "parent_state": parent["state"],
@@ -104,6 +113,7 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
             "child": child,
             "source_preserved": preserved,
             "isolated_stage": staged,
+            "research_artifact": research_artifact,
             "goal_audit": audit_open_goal(db_file, source, root_task)["status"],
             "worker_error_class": error,
             "elapsed_seconds": round(time.monotonic()-started, 2),
