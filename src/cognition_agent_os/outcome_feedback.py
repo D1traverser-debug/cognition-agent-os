@@ -333,6 +333,16 @@ def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path,
         if _verify_staged(verifier_db,child,workspace,fixtures)!="MECHANICALLY_VALID":
             return "INCONCLUSIVE"
         candidate=safe_fixture(workspace,"sandbox/"+child["task_id"]+".candidate")
+        # Attest exactly the same immutable candidate and original task
+        # artifact bytes after the separate read-only verifier returns.
+        proposal_raw=safe_fixture(
+            workspace,"artifacts/"+child["task_id"]+".json")
+        if hashlib.sha256(proposal_raw).hexdigest()!=child["artifact_hash"]:
+            return "INCONCLUSIVE"
+        proposal=json.loads(proposal_raw)
+        if (not isinstance(proposal,dict)
+            or hashlib.sha256(candidate).hexdigest()!=proposal.get("candidate_sha256")):
+            return "INCONCLUSIVE"
         raw=safe_fixture(fixtures,spec["input"])
         shared=assess_local_record(
             kind=spec["goal_type"],original=raw,
