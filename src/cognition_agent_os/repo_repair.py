@@ -20,7 +20,7 @@ from .container_lab import (
     ContainerUnavailable)
 from .runner import store_once,ArtifactConflict
 from .source import safe_fixture
-from .ledger import connect,finalize_observed,event
+from .ledger import connect,finalize_observed,event,current_guard
 
 
 def sha(value):return hashlib.sha256(value).hexdigest()
@@ -444,12 +444,12 @@ def review_repo(db_path,workspace,fixtures,tid):
     try:
         db.execute("BEGIN IMMEDIATE")
         row=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
-        auth=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+
         if not row or row["state"]!="NEEDS_REVIEW":
             db.commit();return {"task_id":tid,"status":"NOT_PENDING_REVIEW"}
-        if (not auth or not auth["write_allowed"] or
-            auth["goal_rev"]!=row["goal_rev"] or auth["grant_rev"]!=row["grant_rev"]):
-            db.commit();return {"task_id":tid,"status":"AUTHORITY_BLOCKED"}
+        allowed,reason=current_guard(db,dict(row),needs_write=True)
+        if not allowed:
+            db.commit();return {"task_id":tid,"status":"AUTHORITY_BLOCKED","reason":reason}
         circuit=db.execute("""SELECT 1 FROM conformance_capability_guard
                WHERE disabled=1 AND kind IN ('goal_sandbox_stage','pure_code_repair_lab')
                LIMIT 1""").fetchone()
