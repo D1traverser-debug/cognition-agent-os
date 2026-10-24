@@ -84,6 +84,29 @@ def _unique_pairs(pairs):
     return obj
 
 
+_NEGATED_LOCAL_ACTION = re.compile(
+    r"\b(?:do\s+not|don't|never|must\s+not|should\s+not|not\s+to)"
+    r"\s+(?:(?:ever|directly|automatically|please)\s+){0,2}"
+    r"(?:ensure|set|add|update|make|write|insert|create|compare|modify|change)\b",
+    re.IGNORECASE,
+)
+
+
+def _owner_prohibits_method(goal: str, *exact_subjects: str) -> bool:
+    """Fail closed when OWNER explicitly negates this exact proposed effect.
+
+    The text within a third-party source is not consulted. Negating an
+    unrelated side effect ('do not overwrite timeout') is intentionally NOT
+    treated as a ban on adding the requested 'owner' field.
+    This bounded grammar is a guard, not universal NLU correctness proof.
+    """
+    for clause in re.split(r"[.;!?\n。！？]+", goal.casefold()):
+        if (_NEGATED_LOCAL_ACTION.search(clause)
+            and all(subject.casefold() in clause for subject in exact_subjects)):
+            return True
+    return False
+
+
 def _select_method(goal: str, manifest: list[dict], model: str, before_request) -> dict:
     """Two-stage ORIGINAL Ollama JSON Schema: method, then its typed args.
 
@@ -190,7 +213,8 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request) 
         if (name not in json_files or not isinstance(key, str)
             or not isinstance(value, str) or not key or not value
             or len(value) > 256 or name.casefold() not in grounded
-            or key.casefold() not in grounded or value.casefold() not in grounded):
+            or key.casefold() not in grounded or value.casefold() not in grounded
+            or _owner_prohibits_method(goal, name, key, value)):
             raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
         # A well-formed model proposal may invert an explicit negative
         # OWNER instruction. Plain substring grounding of the key and
@@ -251,7 +275,8 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request) 
             reference, observed = source_order
         if (reference not in csv_files or observed not in csv_files
             or reference == observed or reference.casefold() not in grounded
-            or observed.casefold() not in grounded):
+            or observed.casefold() not in grounded
+            or _owner_prohibits_method(goal, reference, observed)):
             raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
         intent = {
             "kind": "goal_intent", "objective": "compare_records",
