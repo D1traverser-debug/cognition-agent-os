@@ -141,6 +141,10 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                     from .reconciliation_oracle import audit_stored_report
                     audit=audit_stored_report(path,workspace,fixtures,row["task_id"])
                     check=audit["status"]=="REPORT_MECHANICALLY_VERIFIED"
+                elif kind=="public_tool_discovery":
+                    from .public_tool_discovery import audit_public_discovery
+                    audit=audit_public_discovery(path,workspace,row["task_id"])
+                    check=audit["status"]=="PUBLIC_TOOL_LEADS_MECHANICALLY_GROUNDED"
                 else:
                     kind=None
                 if kind is not None:
