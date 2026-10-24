@@ -64,6 +64,44 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["reason"],"STALE_GOAL")
         self.assertEqual(self.task(tid)["state"],"BLOCKED")
 
+    def test_deep_descendant_cannot_run_when_root_is_invalid(self):
+        """An intermediate DECOMPOSED task must not conceal a blocked root."""
+        from cognition_agent_os.ledger import create_task
+        for root_state in ("BLOCKED", "UNKNOWN"):
+            with self.subTest(root_state=root_state):
+                with closing(connect(self.db_path)) as db:
+                    root = create_task(db, {"kind":"fixture",
+                                            "old":"missing-a", "new":"missing-b"},
+                                       due_at=9999999999)
+                    middle = create_task(db, {"kind":"fixture",
+                                              "old":"missing-c", "new":"missing-d"},
+                                         parent=root, due_at=9999999999)
+                    leaf = create_task(db, self.structured(), parent=middle)
+                    db.execute("UPDATE tasks SET state=? WHERE task_id=?",
+                               (root_state, root))
+                    db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                               (middle,))
+                    db.commit()
+                result = run_once(self.db_path, self.workspace, self.fixtures)
+                self.assertEqual(result["task_id"], leaf)
+                self.assertEqual(result["status"], "BLOCKED", result)
+                self.assertEqual(self.task(leaf)["error_code"],
+                                 "UPSTREAM_TASK_INVALID")
+
+    def test_task_parent_cycle_is_not_a_legitimate_decomposition(self):
+        """A corrupted parent graph cannot supply authorization or effects."""
+        from cognition_agent_os.ledger import create_task
+        with closing(connect(self.db_path)) as db:
+            first = create_task(db, self.structured())
+            second = create_task(db, self.structured(), parent=first,
+                                 due_at=9999999999)
+            db.execute("UPDATE tasks SET parent_task=? WHERE task_id=?",
+                       (second, first))
+            db.commit()
+        result = run_once(self.db_path, self.workspace, self.fixtures)
+        self.assertEqual(result["status"], "BLOCKED", result)
+        self.assertEqual(self.task(first)["error_code"], "UPSTREAM_TASK_INVALID")
+
     def test_blocked_upstream_prevents_cross_capability_child_execution(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         for intent in (self.structured(),self.comparison()):
