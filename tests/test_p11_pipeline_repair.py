@@ -59,9 +59,9 @@ class CoupledRepairTest(unittest.TestCase):
                    "visible":"public.json","holdout":"secret.json",
                    "holdout_sha256":hashlib.sha256(self.hidden_bytes).hexdigest()}
 
-    def seed(self):
+    def seed(self, *, parent=None):
         db=connect(self.dbpath)
-        tid=create_task(db,self.spec)
+        tid=create_task(db,self.spec,parent=parent)
         db.close()
         return tid
 
@@ -70,8 +70,8 @@ class CoupledRepairTest(unittest.TestCase):
         try:return dict(db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone())
         finally:db.close()
 
-    def prepare(self):
-        tid=self.seed()
+    def prepare(self, *, parent=None):
+        tid=self.seed(parent=parent)
         outcome=run_once(self.dbpath,self.ws,self.fx)
         self.assertEqual(outcome["status"],"NEEDS_REVIEW",outcome)
         self.assertFalse(outcome["holdout_seen_by_planner"])
@@ -170,6 +170,27 @@ class CoupledRepairTest(unittest.TestCase):
         self.assertNotEqual(review_pipeline(self.dbpath,self.ws,self.fx,tid)["status"],
                             "REPAIR_LAB_VERIFIED")
         self.assertFalse((self.ws/"pipeline_lab").exists())
+
+    def test_blocked_ancestor_cannot_authorize_pipeline_lab_stage(self):
+        """A frozen two-file proposal loses write authority with its root."""
+        db=connect(self.dbpath)
+        try:
+            root=create_task(db,self.spec,due_at=9999999999)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",(root,))
+            db.commit()
+        finally:
+            db.close()
+        tid=self.prepare(parent=root)
+        db=connect(self.dbpath)
+        try:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(root,))
+            db.commit()
+        finally:
+            db.close()
+        observed=review_pipeline(self.dbpath,self.ws,self.fx,tid)
+        self.assertNotEqual(observed["status"],"REPAIR_LAB_VERIFIED",observed)
+        self.assertFalse((self.ws/"pipeline_lab"/tid/"net.py").exists())
+        self.assertFalse((self.ws/"pipeline_lab"/tid/"scale.py").exists())
 
     def test_staged_file_tampering_invalidates_prior_success(self):
         tid=self.prepare()
