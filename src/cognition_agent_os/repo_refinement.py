@@ -71,6 +71,10 @@ def _record_attempt(db_path,tid,expected_task,entry):
             or auth["grant_rev"]!=task["grant_rev"]):
             db.commit()
             return False
+        allowed,_=current_guard(db,dict(task),needs_write=True)
+        if not allowed:
+            db.commit()
+            return False
         used=db.execute("""SELECT COUNT(*) FROM events WHERE task_id=?
              AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",(tid,)).fetchone()[0]
         if used>=MAX_ATTEMPTS_PER_LINEAGE:
@@ -123,6 +127,11 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
                 or not auth["write_allowed"] or auth["goal_rev"]!=task["goal_rev"]
                 or auth["grant_rev"]!=task["grant_rev"]):
                 return _deny("REVISION_AUTHORITY_UNAVAILABLE")
+            # Do not spend local-model or Docker budget on a child whose
+            # upstream goal was invalidated before planning began.
+            allowed,reason=current_guard(db,dict(task),needs_write=True)
+            if not allowed:
+                return _deny("REVISION_AUTHORITY_UNAVAILABLE",reason=reason)
             remaining=min(max_attempts,MAX_ATTEMPTS_PER_LINEAGE-prior)
             if remaining<=0:
                 return _deny("REFINEMENT_BUDGET_EXHAUSTED")
