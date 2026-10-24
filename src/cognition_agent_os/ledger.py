@@ -170,7 +170,7 @@ def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120)
 # The ledger is the sole authority; a corrupt or future unrecognized state
 # cannot automatically become an authorization to execute.
 _ALLOWED_LINEAGE_PARENT_STATES = frozenset({
-    "PENDING", "RUNNING", "DECOMPOSED", "NEEDS_REVIEW",
+    "DECOMPOSED", "NEEDS_REVIEW",
     "RESEARCH_NEEDED", "VERIFIED", "STAGED",
     "SANDBOX_VERIFIED", "REPAIR_LAB_VERIFIED",
     "CONTROL_ACTIVE", "CONTROL_CANDIDATE_MATCHED",
