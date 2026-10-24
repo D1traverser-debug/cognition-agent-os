@@ -197,6 +197,33 @@ class PostEffectFeedback(unittest.TestCase):
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],0)
 
+    def test_separate_owner_blackbox_rechecks_executed_file_without_planner_status(self):
+        # The evaluator is implemented outside src/cognition_agent_os, gets
+        # only precommitted owner target and actual staged bytes, not a plan,
+        # controller state, receipt or self-grader output.
+        root=Path(__file__).resolve().parents[1]
+        sys.path.insert(0,str(root/"evaluation"))
+        from owner_outcome_oracle import evaluate_shared_record_goal
+        inputs=self.methods()
+        original_csv=(self.fx/"second.csv").read_bytes()
+        frozen={"schema_version":1,"goal_id":"owner-held-posteffect",
+                "canonical_record":_ACCEPT["target_record"],
+                "source_sha256":{
+                    "json_keys":hashlib.sha256((self.fx/"first.json").read_bytes()).hexdigest(),
+                    "csv_columns":hashlib.sha256(original_csv).hexdigest()},
+                "allowed_effect":"LOCAL_CANDIDATE_ONLY"}
+        tid=self.register()
+        for _ in range(3):self.tick()
+        child=self.children(tid)[-1]["task_id"]
+        effect=(self.work/"sandbox"/(child+".candidate")).read_bytes()
+        result=evaluate_shared_record_goal(
+            frozen,"csv_columns",original_csv,effect)
+        self.assertEqual(result["status"],"SYNTHETIC_SHARED_GOAL_MET",result)
+        self.assertFalse(result["business_outcome_verified"])
+        self.assertEqual(evaluate_shared_record_goal(
+            frozen,"csv_columns",original_csv,b"id,owner\\nB,ops\\n".replace(b"\\n",b"\n"))
+                         ["status"],"NOT_ACCEPTED")
+
     def test_v2_legacy_semantics_unchanged(self):
         tid=register_evidence_goal(self.db,self.fx,goal_id="legacy-v2",
             objective="Only local candidate evidence",alternatives=self.methods(),
