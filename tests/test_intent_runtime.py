@@ -142,6 +142,37 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(observed["task_id"], leaf)
         self.assertEqual(observed["status"], "NEEDS_REVIEW", observed)
 
+    def test_replan_receipt_must_bind_exact_direct_child(self):
+        """A real-looking replan event cannot authorize a different child."""
+        from cognition_agent_os.ledger import event
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        for event_kind, id_field in (
+                ("SANDBOX_REPLAN", "child_id"),
+                ("DIAGNOSIS_REPLAN", "next_task_id")):
+            with self.subTest(kind=event_kind):
+                with closing(connect(self.db_path)) as db:
+                    parent = create_task(db, self.structured(),
+                                         due_at=9999999999)
+                    unrelated = create_task(db, self.structured(),
+                                             due_at=9999999999)
+                    leaf = create_task(
+                        db, {"kind": "goal_case", "goal_type": "json_keys",
+                             "input": "settings.json",
+                             "desired": {"owner": "ops"}},
+                        parent=parent)
+                    db.execute("UPDATE tasks SET state='NEEDS_REPLAN' "
+                               "WHERE task_id=?", (parent,))
+                    event(db, parent, event_kind, {id_field: unrelated})
+                    db.commit()
+                observed = run_once(self.db_path, self.workspace, self.fixtures)
+                self.assertEqual(observed["task_id"], leaf)
+                self.assertEqual(observed["status"], "BLOCKED", observed)
+                self.assertEqual(self.task(leaf)["error_code"],
+                                 "UPSTREAM_TASK_INVALID")
+                self.assertFalse((self.workspace / "artifacts" /
+                                  (leaf + ".json")).exists())
+
     def test_mid_execution_ancestor_revocation_blocks_actual_artifact_boundary(self):
         """A root can fail AFTER dispatch admission; writer must recheck ancestry."""
         from cognition_agent_os import runner
