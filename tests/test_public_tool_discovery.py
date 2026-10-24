@@ -84,6 +84,16 @@ class PublicToolDiscoveryVertical(unittest.TestCase):
         self.assertIs(artifact["business_outcome_verified"],False)
         self.assertIs(artifact["provider_security_verified"],False)
         self.assertEqual(out["goal_progress"]["goals"][0]["owner_outcome_verified"],False)
+        # Cross-branch integration: the same Host discovers an authorized
+        # public candidate, yet durably refuses to mark the owner goal done.
+        self.assertEqual(len(out["owner_goal_drift"]), 1, out)
+        self.assertEqual(out["owner_goal_drift"][0]["root_task_id"], root)
+        self.assertEqual(out["owner_goal_drift"][0]["fidelity_state"],
+                         "EVIDENCE_RESEARCH_ONLY_NOT_OWNER_RESULT")
+        self.assertIs(out["owner_goal_drift"][0]["owner_outcome_verified"], False)
+        # No evidence revision, so another Host entry does not spam alerts.
+        subsequent=run_tick(self.db,self.ws,self.fx,max_jobs=2)
+        self.assertEqual(subsequent["owner_goal_drift"], [], subsequent)
 
     def test_absent_explicit_public_grant_does_not_call_network(self):
         parent=self.seed(False)
