@@ -137,6 +137,29 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertEqual(audit_open_goal(self.db, self.fx, parent)["status"],
                          "METHOD_CANDIDATE_MECHANICALLY_GROUNDED")
 
+    def test_explicit_owner_csv_order_corrects_reversed_model_argument_roles(self):
+        goal = "Compare baseline.csv with actual.csv to identify discrepancies."
+        parent = self.enqueue(goal)
+        model = {
+            "kind": "goal_intent", "objective": "compare_records",
+            "resources": [{"role": "reference", "path": "baseline.csv"},
+                          {"role": "observed", "path": "actual.csv"}],
+        }
+        candidate = self.suggestion(intent=model)
+        candidate["reference"], candidate["observed"] = (
+            candidate["observed"], candidate["reference"])
+        out = self.tick(candidate)
+        self.assertEqual([x["status"] for x in out["tasks"]],
+                         ["DECOMPOSED", "NEEDS_REVIEW"], out)
+        with closing(connect(self.db)) as db:
+            child = db.execute("SELECT source_spec FROM tasks WHERE parent_task=?",
+                               (parent,)).fetchone()
+            spec = json.loads(child[0])
+        self.assertEqual(spec["reference"], "baseline.csv")
+        self.assertEqual(spec["observed"], "actual.csv")
+        self.assertEqual(audit_open_goal(self.db, self.fx, parent)["status"],
+                         "METHOD_CANDIDATE_MECHANICALLY_GROUNDED")
+
     def test_invalid_model_tool_or_write_grant_cannot_mint_child(self):
         parent = self.enqueue()
         illegal = self.suggestion()
