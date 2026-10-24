@@ -26,7 +26,9 @@ class GraphifyEvidenceTests(unittest.TestCase):
     def result(self):
         self.path.write_text(json.dumps(self.graph),encoding="utf-8")
         with patch.object(checker.subprocess,"check_output",return_value=self.sha+"\n"):
-            return checker.check(self.path,Path(self.tmp.name))
+            # Graph is synthetic, but the registry contract under test is
+            # the actual checkout, not a nonexistent module in temp data.
+            return checker.check(self.path,Path(__file__).resolve().parents[1])
 
     def test_valid_extracted_control_edges_pass(self):
         self.assertEqual(self.result()["status"],"PASS")
@@ -73,6 +75,21 @@ class GraphifyEvidenceTests(unittest.TestCase):
         self.assertEqual(len(result["control_edges"]),len(checker.REQUIRED_PATHS))
         self.assertTrue(all(e["confidence"]=="EXTRACTED"
                             for e in result["control_edges"]))
+
+    def test_registry_cannot_silently_change_goal_intent_destination(self):
+        live = (Path(__file__).resolve().parents[1] /
+                "src/cognition_agent_os/capability_dispatch.py").read_text(encoding="utf-8")
+        altered = live.replace('"goal_intent": _intent', '"goal_intent": _goal_case')
+        self.assertNotEqual(altered, live)
+        folder = Path(self.tmp.name)/"src"/"cognition_agent_os"
+        folder.mkdir(parents=True)
+        (folder/"capability_dispatch.py").write_text(altered, encoding="utf-8")
+        self.path.write_text(json.dumps(self.graph), encoding="utf-8")
+        with patch.object(checker.subprocess,"check_output",return_value=self.sha+"\\n"):
+            result = checker.check(self.path,Path(self.tmp.name))
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertIn("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN",
+                      result["errors"])
 
     def test_old_commit_is_rejected(self):
         self.graph["built_at_commit"]="b"*40
