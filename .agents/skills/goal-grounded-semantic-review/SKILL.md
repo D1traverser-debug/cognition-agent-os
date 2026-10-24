@@ -1,11 +1,11 @@
 ---
 name: goal-grounded-semantic-review
-description: Recover original owner requirements, research expert methods and primary sources, decide on minimal architecture changes, and independently audit behavior and evidence before modifying cognition-agent-os. Use for goal changes, substantial design decisions, context/knowledge drift, full-repo semantic reviews, or claims of verified Agent capability.
+description: Independently investigate ambiguous owner requirements, competing architecture choices, recurrent failures and evidence quality in cognition-agent-os. Use for substantial semantic reviews or conflicting knowledge, not ordinary well-specified edits.
 ---
 
 # Goal-grounded semantic review
 
-This is an **on-demand decision and verification procedure**, not a second controller, authorization ledger, standing prompt, release gate, or claim that all files were read. Follow the repo-root `AGENTS.md` and actual owner permissions.
+This is an **on-demand method**, not a second controller, standing prompt, grant, release gate or claim that all files were read. Do not trigger just because a task mentions code, a goal or a database. Follow the repo-root `AGENTS.md` and actual owner permissions.
 
 ## Start at the original source, not the last summary
 
@@ -33,9 +33,9 @@ For each behavioral requirement in scope, identify:
 
 For repository-wide requests, enumerate the **entire live tree** and record **individual behavior obligations**, not one pass/fail per filename or SHA. Review docs and scripts as material behavior/sources too; inert binary/assets require classification, not fabricated line semantics. Evidence must be attached to exact revisions. Do not report full coverage when any obligation is missing or unverified.
 
-## Decide the smallest root-cause correction
+## Decide the correct root-cause intervention
 
-Prefer fixing the actual shared decision/retrieval/execution path. Compare at least two meaningfully different remedies if the choice is material (e.g. original interface, compatible adapter, contract-preserving refactor, removal). Explicitly evaluate effect on external contracts, neighboring legitimate tasks, stale knowledge and recovery. Do not create a standalone authority, agent or documentation ledger merely to satisfy audit formatting.
+Fix the actual shared failure and meet the *entire* behavioral requirement. Compare at least two meaningfully different remedies if the choice is material (e.g. original interface, compatible adapter, contract-preserving refactor, removal). Explicitly evaluate effect on external contracts, neighboring legitimate tasks, stale knowledge and recovery. Do not create a standalone authority, agent or documentation ledger merely to satisfy audit formatting.
 
 Preserve source history immutably where possible. Knowledge selection must not equate newest with true, matching words with applicable, or archived text with authority. Model output is evidence/hypothesis until verified and authorized.
 
@@ -49,4 +49,6 @@ Preserve source history immutably where possible. Knowledge selection must not e
 
 ## Output discipline
 
-Do not generate a new sprawling prompt, parallel task registry or standalone historical report by default. For routine work, concise decision + diffs + independent receipts suffice. For a genuinely full semantic audit, a per-behavior matrix is required, and any incomplete entry stays explicitly OPEN. If no action is authorized, perform read-only research and identify the blocking boundary instead of pretending execution.
+Do not generate a new sprawling prompt, parallel task registry or standalone historical report by default. For authorized in-scope work, correct observed failures and rerun tests until the behavioral acceptance criteria are satisfied or an evidenced blocker/permission boundary stops execution. Do not stop at the first code diff, green command or explanation. For routine work, concise decision + diffs + independent receipts suffice. For a genuinely full semantic audit, a per-behavior matrix is required, and any incomplete entry stays explicitly OPEN. If no action is authorized, perform read-only research and identify the blocking boundary instead of pretending execution.
+
+**Empirical skill evaluation:** File presence, YAML validity and regular CI do not prove that Codex loaded this Skill or followed it. Compare real captured agent runs with/without it on positive and negative trigger cases, original-source fidelity, actual outcome, independent verification, unnecessary work and owner correction burden; do not claim stable transfer before those evaluations.
