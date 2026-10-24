@@ -41,6 +41,12 @@ REQUIRED_PATHS = (
     ("src_cognition_agent_os_repo_repair_review_repo", "src_cognition_agent_os_ledger_current_guard"),
     ("src_cognition_agent_os_repo_refinement_freeze_revision", "src_cognition_agent_os_ledger_current_guard"),
     ("src_cognition_agent_os_repo_refinement_record_attempt", "src_cognition_agent_os_ledger_current_guard"),
+    # New goal is still driven by the SAME Host/Worker/ledger, not by a
+    # second autonomous scheduler or model-issued execution authority.
+    ("src_cognition_agent_os_capability_dispatch_open_goal", "src_cognition_agent_os_open_goal_run_open_goal"),
+    ("src_cognition_agent_os_open_goal_run_open_goal", "src_cognition_agent_os_ledger_current_guard"),
+    ("src_cognition_agent_os_open_goal_run_open_goal", "src_cognition_agent_os_ledger_create_task"),
+    ("src_cognition_agent_os_conformance_check_one", "src_cognition_agent_os_open_goal_audit_open_goal"),
 )
 
 def check(graph_path: Path, repo: Path) -> dict:
