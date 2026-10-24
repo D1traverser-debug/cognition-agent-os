@@ -78,6 +78,11 @@ def _open_goal(c: CapabilityContext) -> dict:
                          local_model_name=c.local_model)
 
 
+def _public_tool_discovery(c: CapabilityContext) -> dict:
+    from .public_tool_discovery import run_public_discovery
+    return run_public_discovery(c.db, c.task, c.workspace)
+
+
 def _reconcile(c: CapabilityContext) -> dict:
     from .reconciliation import run_reconciliation
     return run_reconciliation(c.db, c.task, c.workspace, c.fixtures)
@@ -152,6 +157,7 @@ _HANDLERS = {
     "investigate_goal": _investigate,
     "goal_intent": _intent,
     "open_goal": _open_goal,
+    "public_tool_discovery": _public_tool_discovery,
     "record_reconciliation": _reconcile,
     "goal_case": _goal_case,
     "fixture": _snapshot_diff,

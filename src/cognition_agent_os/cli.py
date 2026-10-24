@@ -70,6 +70,8 @@ def main(argv=None) -> int:
     open_input = sub.add_parser("seed-open-goal",
         help="Enqueue owner natural-language goal; local installed model selects registered LOCAL proposal method")
     open_input.add_argument("--goal", required=True)
+    open_input.add_argument("--allow-public-tool-discovery", action="store_true",
+        help="Explicitly allow disclosure of up to three goal-derived search terms to GitHub public repository search")
     open_audit = sub.add_parser("open-goal-audit",
         help="Read-only independent check of source-pinned open-goal child provenance")
     open_audit.add_argument("--task-id", required=True)
@@ -491,12 +493,18 @@ def main(argv=None) -> int:
                     "holdout_digest_pinned":True,
                     "scope":"local_pure_ast_only"}
         elif args.command == "seed-open-goal":
-            spec=validate_open_goal({"kind":"open_goal","goal":args.goal})
+            spec={"kind":"open_goal","goal":args.goal}
+            if args.allow_public_tool_discovery:
+                spec["allow_public_discovery"]=True
+            spec=validate_open_goal(spec)
             owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             if not owner or not owner["write_allowed"]:
                 raise PermissionError("Cannot admit open goal after grant revocation")
             result={"task_id":create_task(db,spec),"state":"PENDING",
-                    "scope":"OWNER_LOCAL_SOURCES_PROPOSAL_ONLY",
+                    "scope":("OWNER_EXPLICIT_PUBLIC_METADATA_RESEARCH"
+                             if args.allow_public_tool_discovery
+                             else "OWNER_LOCAL_SOURCES_PROPOSAL_ONLY"),
+                    "public_search_authorized":args.allow_public_tool_discovery,
                     "requires_installed_local_model":True,
                     "business_outcome_verified":False}
         elif args.command == "seed-investigation":

@@ -185,7 +185,10 @@ def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->boo
                     or evidence.get("child_task_id")!=task_id
                     or evidence.get("semantic_approval") is not False
                     or not isinstance(evidence.get("source_sha256"),dict)
-                    or not evidence["source_sha256"]
+                    or (not evidence["source_sha256"] and not (
+                        parent_spec.get("allow_public_discovery") is True
+                        and json.loads(candidate["source_spec"]).get("kind")
+                            == "public_tool_discovery"))
                     or not isinstance(evidence.get("model_candidate"),dict)
                     or evidence["model_candidate"].get("intent") is None):
                     return False

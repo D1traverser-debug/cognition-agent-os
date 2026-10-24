@@ -261,6 +261,12 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 r = audit_investigation(db_path, workspace, fixtures, tid)
                 proof = ("MECHANICALLY_VALID" if r["status"] == "SOURCE_GROUNDED_UNREVIEWED"
                          else r["status"])
+            elif kind=="public_tool_discovery":
+                from .public_tool_discovery import audit_public_discovery
+                r=audit_public_discovery(db_path,workspace,tid)
+                proof=("MECHANICALLY_VALID" if
+                       r["status"]=="PUBLIC_TOOL_LEADS_MECHANICALLY_GROUNDED"
+                       else r.get("reason",r["status"]))
             elif kind=="goal_case":
                 r=audit_goal(db_path,workspace,fixtures,tid)
                 proof=("MECHANICALLY_VALID" if r["mechanical_audit"]
