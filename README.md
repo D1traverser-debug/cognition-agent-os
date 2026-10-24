@@ -1,6 +1,6 @@
 # cognition-agent-os
 
-**Status: experimental integrated candidate — NOT READY for unattended autonomous use, external production writes, or business-outcome claims.** As of 2026-10-24 the current *development* integration tip is [Draft PR #36](https://github.com/D1traverser-debug/cognition-agent-os/pull/36), branch `feature/shared-goal-posteffect-readback-20261024`, checkpoint `962ee4e560972d3cc1f47bddf1b6986b17d2c011`. This is a dated checkpoint: **read the actual GitHub PR head and CI against its exact SHA on every continuation**, do not treat this sentence or an earlier PR number as lasting authority. Default `main` is only a placeholder. No merge, user-device installation or paid model API is authorized by the PR.
+**Status: experimental integrated candidate — NOT_READY for unattended autonomy, external production writes or business-outcome claims.** This README is a dated guide, NOT a current source-ref oracle. Resolve actual live GitHub open Draft PR heads, ancestry, approvals and matching-head CI before continuation; the historical PR numbers in this repository are NOT current-state authority. The last reviewed integration is Draft PR #48 with follow-up Draft PR #49 for full-tree provenance and targeted drift-evidence repair; future changes may supersede both. Default `main` is a placeholder. No merge, deployment or paid model API is authorized by a Draft PR.
 
 ## Intended product
 
@@ -31,9 +31,9 @@ Before `init`, `status` and task seeding exit with code **4** and `HOST_NOT_CONF
 
 For module-level development: `PYTHONPATH=src python -m unittest discover -s tests -v`. CI additionally builds a clean installed console-entrypoint smoke on Linux/Windows and checks Docker isolation, Graphify call paths, and a hosted Windows scheduled task; no test substitutes for a long-running owner machine.
 
-## Current integrated prototype: capability and evidence boundaries
+## Historical 2026-10-24 integrated baseline: capability and evidence boundaries
 
-The only implemented development trunk is the stacked candidate **PR #26 → #27 → #28 → #33 → #34 → #35 → #36**. PRs #29–#32 form a **parallel retrieval/model research branch**, not an already-integrated production inference stack. PRs #1–#25 and historical P-label experiment notes remain evidence, not active deployment configurations. Branch membership and source SHA, rather than filenames or old "CURRENT" headings, determine actual implementation.
+At the dated 2026-10-24 baseline, an earlier development trunk was the stacked candidate **PR #26 → #27 → #28 → #33 → #34 → #35 → #36**. Later Draft PR branches are not included in that historical list; fetch the live PR graph before using it. PRs #29–#32 form a **parallel retrieval/model research branch**, not an already-integrated production inference stack. PRs #1–#25 and historical P-label experiment notes remain evidence, not active deployment configurations. Branch membership and source SHA, rather than filenames or old "CURRENT" headings, determine actual implementation.
 
 The implemented trunk contains one SQLite task/grant authority and shared `control_kernel`; Host/Worker scheduling, explicit local capability registration, source-pinned research and read-only knowledge routing, finite counterexample/retry handling, Docker-contained repair experiments, signed-review input, and the opt-in **local sandbox** shared-goal post-effect check. The latter verifies staged bytes under a frozen exact-record postcondition, not a real external provider effect. Neither natural-language open-ended unknown-method discovery nor validated cross-task autonomous learning is proven by the fixed JSON/CSV controller, optional model work, or past external code-repair experiments.
 

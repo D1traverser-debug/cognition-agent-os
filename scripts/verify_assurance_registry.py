@@ -172,19 +172,22 @@ def verify_live_handoff(root):
         readme = readme_path.read_text(encoding='utf-8')
     except UnicodeError as exc:
         raise RegistryError('context text must be UTF-8') from exc
+    # Static checks must never bless a historical PR number as the LIVE head.
+    # A dated navigation snapshot is permitted; only host/GitHub ref reads
+    # can establish the actual current code and authorization.
     headings = [line for line in live.splitlines()
                 if re.match(r'^#+\s+CURRENT\b', line)]
-    require(len(headings) == 1 and headings[0].startswith('# CURRENT'),
-            'ambiguous or missing live CURRENT checkpoint')
-    # A stable exact PR identity in both entrypoints is preferable to
-    # guessing priority by timestamps or the first lexical match.
-    match = re.search(r'\bDraft PR #(\d+)\b', headings[0])
-    require(match is not None and
-            f'[Draft PR #{match.group(1)}]' in readme,
-            'README and live handoff disagree on candidate identity')
-    branch = re.search(r'\bfeature/[a-z0-9][a-z0-9_-]+\b', live)
-    require(branch is not None and branch.group(0) in readme,
-            'branch not equally identified by README and active handoff')
+    require(not headings, 'dated handoff must not assert CURRENT authority')
+    first = live.splitlines()[0] if live.splitlines() else ''
+    require(re.fullmatch(
+        r'# cognition-agent-os — dated continuation pointer \(\d{4}-\d{2}-\d{2}\)',
+        first) is not None, 'handoff must be a date-scoped non-authoritative pointer')
+    require('live GitHub' in live and 'exact HEADs' in live
+            and 'ALL open Draft PRs' in live,
+            'handoff lacks explicit live-authority resolution requirement')
+    require('current *development* integration tip' not in readme
+            and 'live GitHub' in readme,
+            'README must not freeze an obsolete live PR as active')
     require('NOT_READY' in live and 'NOT_READY' in readme,
             'cannot silently promote incomplete product via handoff')
     require('archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md' in live,
@@ -198,10 +201,10 @@ def verify_live_handoff(root):
             'archived original text was lost or silently changed')
     require(historical != raw and len(historical) > _MAX_ACTIVE_HANDOFF_BYTES,
             'history was rewritten as the current brief')
-    return {'status': 'CURRENT_HANDOFF_VALID',
+    return {'status': 'DATED_HANDOFF_VALID',
             'active_bytes': len(raw),
             'archive_integrity': 'EXACT_GIT_BLOB',
-            'live_pr': int(match.group(1)),
+            'current_ref_verified': False,
             'historical_instruction_authority': False,
             'semantic_claims_verified': False}
 

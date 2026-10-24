@@ -128,5 +128,46 @@ class DurableOwnerGoalDriftTests(unittest.TestCase):
         self.assertEqual(len(self.events(tid)), 1)
 
 
+    def test_new_independent_receipt_reopens_same_state_goal_observation(self):
+        """A new independent verdict must be observable without task state churn."""
+        tid = self.seed(child={"kind": "investigate_goal",
+                               "question": "What is an applicable method?",
+                               "scope": "LOCAL_EVIDENCE_ONLY"})
+        first = observe_owner_goal_drift(self.db)
+        self.assertEqual(len(first), 1)
+        with closing(connect(self.db)) as db:
+            from cognition_agent_os.ledger import event
+            child = db.execute(
+                "SELECT task_id FROM tasks WHERE parent_task=?", (tid,)
+            ).fetchone()["task_id"]
+            event(db, child, "INDEPENDENT_RESULT_RECHECKED",
+                  {"verdict": "CONTRADICTS_PRIOR_CANDIDATE"})
+            db.commit()
+        second = observe_owner_goal_drift(self.db)
+        self.assertEqual(len(second), 1, "Independent receipt was ignored")
+        self.assertNotEqual(first[0]["observation_sha256"],
+                            second[0]["observation_sha256"])
+        self.assertEqual(observe_owner_goal_drift(self.db), [])
+        self.assertEqual(len(self.events(tid)), 2)
+
+    def test_changed_child_artifact_and_error_refresh_observation(self):
+        """A changed worker receipt without state label change is new evidence."""
+        tid = self.seed(child={"kind": "investigate_goal",
+                               "question": "What is an applicable method?",
+                               "scope": "LOCAL_EVIDENCE_ONLY"})
+        first = observe_owner_goal_drift(self.db)
+        self.assertEqual(len(first), 1)
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET artifact_hash=?, error_code=?, "
+                       "state_version=state_version+1 WHERE parent_task=?",
+                       ("a" * 64, "INDEPENDENT_AUDIT_REJECTED", tid))
+            db.commit()
+        second = observe_owner_goal_drift(self.db)
+        self.assertEqual(len(second), 1, "Changed artifact/error not observed")
+        self.assertNotEqual(first[0]["observation_sha256"],
+                            second[0]["observation_sha256"])
+        self.assertEqual(observe_owner_goal_drift(self.db), [])
+
+
 if __name__ == "__main__":
     unittest.main()
