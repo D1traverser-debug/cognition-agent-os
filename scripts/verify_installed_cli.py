@@ -88,6 +88,20 @@ def main() -> None:
                  if t["task_id"] == admission["task_id"]]
         assert len(tasks) == 1 and tasks[0]["state"] == "VERIFIED", tasks
 
+        # Owner enters a natural-language goal directly through the installed
+        # binary, no authored JSON plan or extra authority file. No installed
+        # model is called until the real Host is explicitly run in local mode.
+        (fixtures / "settings.json").write_text('{"timeout":7}\n',encoding="utf-8")
+        open_seed = command(
+            "seed-open-goal", "--goal",
+            "Please ensure settings.json has owner equal to ops without overwriting timeout.")
+        assert open_seed["state"] == "PENDING", open_seed
+        assert open_seed["requires_installed_local_model"] is True, open_seed
+        assert open_seed["business_outcome_verified"] is False, open_seed
+        pending_audit = command("open-goal-audit",
+                                "--task-id",open_seed["task_id"], expected=4)
+        assert pending_audit["status"] == "UNVERIFIABLE", pending_audit
+
         revoked = command("revoke-write")
         assert revoked["grant"] == "REVOKED", revoked
         authority_before = command("status")["authority"]
