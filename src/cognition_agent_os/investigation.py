@@ -52,6 +52,7 @@ _ADMISSIBLE_INVESTIGATION_CODES = frozenset({
     "INVALID_RESEARCH_PROPOSAL", "INVALID_RESEARCH_FINDING",
     "UNGROUNDED_OR_DUPLICATE_QUOTE", "INCOMPLETE_RESEARCH_EVIDENCE",
     "EVIDENCE_CHANGED_DURING_REASONING",
+    "INVESTIGATION_LEASE_LOST",
 })
 
 
@@ -154,7 +155,9 @@ def _evidence_excerpt(text: str, question: str) -> str:
 
 
 def _model_reply(model: str, prompt: str, *,
-                 response_schema: dict) -> dict:
+                 response_schema: dict, before_request=None) -> dict:
+    if before_request is not None:
+        before_request()
     response = local_model._request("POST", "/api/generate", {
         "model": model, "prompt": prompt, "stream": False,
         "format": response_schema,
@@ -175,7 +178,7 @@ def _model_reply(model: str, prompt: str, *,
 
 
 def _research(question: str, inventory: dict[str, tuple[bytes, str]],
-              model: str) -> tuple[list[str], list[dict], str]:
+              model: str, *, before_request=None) -> tuple[list[str], list[dict], str]:
     if (not isinstance(model, str) or not local_model._MODEL_RE.fullmatch(model)
         or "cloud" in model.lower() or ".." in model or "://" in model):
         raise local_model.LocalModelUnavailable("INVALID_INSTALLED_MODEL")
@@ -221,7 +224,8 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
                             "items": {"type": "string", "enum": sorted(presented)}}},
             "required": ["sources"],
         }
-        first = _model_reply(model, first_prompt, response_schema=selection_schema)
+        first = _model_reply(model, first_prompt, response_schema=selection_schema,
+                             before_request=before_request)
         chosen = first.get("sources")
         if (set(first) != {"sources"} or not isinstance(chosen, list)
             or len(chosen) > 2
@@ -264,7 +268,8 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
             "uncertainty": {"type": "string"}},
         "required": ["findings", "uncertainty"],
     }
-    result = _model_reply(model, second_prompt, response_schema=finding_schema)
+    result = _model_reply(model, second_prompt, response_schema=finding_schema,
+                          before_request=before_request)
     findings, uncertainty = result.get("findings"), result.get("uncertainty")
     if (set(result) != {"findings", "uncertainty"}
         or not isinstance(findings, list) or len(findings) != len(chosen)
@@ -296,8 +301,15 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
     try:
         spec = validate_investigation(json.loads(task["source_spec"]))
         inventory = _available_evidence(fixtures)
+        from .ledger import renew_claim
+
+        def before_request():
+            if not renew_claim(db, task, lease_seconds=120):
+                raise InvestigationInvalid("INVESTIGATION_LEASE_LOST")
+
         chosen, findings, uncertainty = _research(
-            spec["question"], inventory, local_model_name or "")
+            spec["question"], inventory, local_model_name or "",
+            before_request=before_request)
         hashes = {name: hashlib.sha256(inventory[name][0]).hexdigest()
                   for name in chosen}
         artifact = {
