@@ -225,7 +225,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
                          "METHOD_CANDIDATE_MECHANICALLY_GROUNDED")
 
     def test_invalid_model_tool_or_write_grant_cannot_mint_child(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         illegal = self.suggestion()
         illegal["remote_write_allowed"] = True
         out = self.tick(illegal, max_jobs=1)
@@ -234,7 +237,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse((self.ws / "artifacts").exists())
 
     def test_nonexistent_model_selected_source_cannot_mint_child(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         invalid = self.suggestion()
         invalid["input"] = "newly-made-by-model.json"
         out = self.tick(invalid, max_jobs=1)
@@ -279,7 +285,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse(self.children(parent))
 
     def test_source_changes_while_model_decides_no_child_or_action(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         changed = False
         def mutate():
             nonlocal changed
@@ -292,7 +301,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse(self.children(parent))
 
     def test_grant_revoked_while_model_decides_cannot_spawn_child(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         changed = False
         def mutate():
             nonlocal changed
