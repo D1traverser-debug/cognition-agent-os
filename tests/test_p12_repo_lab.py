@@ -79,9 +79,9 @@ class RepoLabTest(unittest.TestCase):
              "holdout":"hidden.json",
              "holdout_sha256":hashlib.sha256(sealed).hexdigest()}
 
-    def seed(self):
+    def seed(self, *, parent=None):
         db=connect(self.dbpath)
-        tid=create_task(db,self.spec)
+        tid=create_task(db,self.spec,parent=parent)
         db.close()
         return tid
 
@@ -90,8 +90,8 @@ class RepoLabTest(unittest.TestCase):
             return dict(db.execute(
                 "SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone())
 
-    def plan(self):
-        tid=self.seed()
+    def plan(self, *, parent=None):
+        tid=self.seed(parent=parent)
         result=run_once(self.dbpath,self.ws,self.fx)
         self.assertEqual(result["status"],"NEEDS_REVIEW",result)
         self.assertFalse(result["holdout_seen_by_planner"])
@@ -271,6 +271,22 @@ class RepoLabTest(unittest.TestCase):
             result=review_repo(self.dbpath,self.ws,self.fx,tid)
         self.assertNotEqual(result["status"],"REPAIR_LAB_VERIFIED")
         self.assertFalse((self.ws/"repo_lab").exists())
+
+    def test_blocked_ancestor_cannot_authorize_container_lab_stage(self):
+        """Good Docker holdout results cannot bypass a disabled parent goal."""
+        with closing(connect(self.dbpath)) as db:
+            root=create_task(db,self.spec,due_at=9999999999)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",(root,))
+            db.commit()
+        tid=self.plan(parent=root)
+        with closing(connect(self.dbpath)) as db:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(root,))
+            db.commit()
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=self._fake_suite):
+            observed=review_repo(self.dbpath,self.ws,self.fx,tid)
+        self.assertNotEqual(observed["status"],"REPAIR_LAB_VERIFIED",observed)
+        self.assertFalse((self.ws/"repo_lab"/tid/"calculations.py").exists())
 
     def test_repo_candidate_error_after_lease_takeover_is_not_unknown(self):
         from cognition_agent_os import repo_repair
