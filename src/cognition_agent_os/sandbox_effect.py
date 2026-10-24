@@ -13,7 +13,7 @@ from pathlib import Path
 import sqlite3
 import time
 
-from .ledger import connect, create_task, event
+from .ledger import connect, create_task, event, current_guard
 from .goal_audit import audit_goal, _constraints
 from .diagnostics import record_audit_failure, reject_review_if_untrusted
 from .goal_loop import validate_goal
@@ -99,7 +99,7 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
     try:
         db.execute("BEGIN IMMEDIATE")
         task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
-        owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+
         # The same write lock fences a circuit trip from concurrently
         # authorizing another sandbox file effect after a critical breach.
         guard_exists=db.execute("""SELECT 1 FROM sqlite_master
@@ -114,10 +114,14 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
         if not task or task["state"]!="NEEDS_REVIEW":
             db.commit()
             return _result(task_id,"NOT_PENDING_REVIEW")
-        if (not owner or not owner["write_allowed"] or task["goal_rev"]!=owner["goal_rev"]
-                or task["grant_rev"]!=owner["grant_rev"]):
+        # Recheck the same full lineage/goal/grant boundary used by Worker
+        # under the write lock that protects this actual sandbox effect.
+        # The parent's state may have changed after the earlier proposal
+        # and after the separate read-only review.
+        allowed,reason=current_guard(db,dict(task),needs_write=True)
+        if not allowed:
             db.commit()
-            return _result(task_id,"AUTHORITY_BLOCKED")
+            return _result(task_id,"AUTHORITY_BLOCKED",reason=reason)
         # Re-run the independent full audit under lock; acquisition and task
         # authority can change between the initial check and commit.
         audit=audit_goal(db_path,workspace,fixtures,task_id)

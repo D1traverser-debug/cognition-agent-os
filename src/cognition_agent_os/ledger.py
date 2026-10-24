@@ -166,17 +166,34 @@ def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120)
 
 
 
+# Only recognized nonterminal/eligible ancestor states may carry a live child.
+# The ledger is the sole authority; a corrupt or future unrecognized state
+# cannot automatically become an authorization to execute.
+_ALLOWED_LINEAGE_PARENT_STATES = frozenset({
+    "DECOMPOSED", "NEEDS_REVIEW",
+    "RESEARCH_NEEDED", "VERIFIED", "STAGED",
+    "SANDBOX_VERIFIED", "REPAIR_LAB_VERIFIED",
+    "CONTROL_ACTIVE", "CONTROL_CANDIDATE_MATCHED",
+    "FEEDBACK_ACTIVE", "FEEDBACK_EVIDENCE_READY",
+})
+
+
 def lineage_guard(db: sqlite3.Connection, task: dict, *, max_depth: int = 512) -> bool:
     """Fail closed for any invalid ancestor in this exact task's goal lineage.
 
     A direct-parent-only check allows a DECOMPOSED intermediate task to hide
-    a blocked grandparent. A descendant must not execute when ANY ancestor
-    was blocked, failed, lost, changed goal/grant or formed a cycle. This is
-    inspection of the one existing task ledger, not a second policy store.
+    a blocked grandparent. A descendant must not execute when an ancestor
+    is blocked, invalid or unrecognized. Explicit producer-bound replacement
+    and replan children may inherit the same goal/grant, never a generic
+    UNKNOWN status. This is the original ledger, not a second policy store.
     """
     if type(max_depth) is not int or not 1 <= max_depth <= 512:
         raise ValueError("INVALID_LINEAGE_DEPTH")
     seen = {task["task_id"]}
+    # Preserve the direct child identity when validating each ancestor's
+    # transition. A normal stale-source replan deliberately leaves its parent
+    # in NEEDS_REPLAN, but only a child bound to the actual producer event is valid.
+    child_id = task["task_id"]
     parent_id = task.get("parent_task")
     for _ in range(max_depth):
         if parent_id is None:
@@ -185,13 +202,60 @@ def lineage_guard(db: sqlite3.Connection, task: dict, *, max_depth: int = 512) -
             return False
         seen.add(parent_id)
         row = db.execute(
-            "SELECT task_id,parent_task,state,goal_rev,grant_rev "
+            "SELECT task_id,parent_task,state,error_code,goal_rev,grant_rev "
             "FROM tasks WHERE task_id=?", (parent_id,)).fetchone()
-        if (row is None
-            or row["state"] in ("BLOCKED", "UNKNOWN", "REJECTED")
-            or row["goal_rev"] != task["goal_rev"]
+        if (row is None or row["goal_rev"] != task["goal_rev"]
             or row["grant_rev"] != task["grant_rev"]):
             return False
+        if row["state"] == "NEEDS_REPLAN":
+            # Two legitimate replan producers share this state: sandbox
+            # drift and newly adequate evidence after a bounded diagnosis.
+            # Require exactly one corresponding event and its exact child;
+            # an unsupported state change must never inherit authority.
+            receipts = db.execute(
+                "SELECT kind,details FROM events WHERE task_id=? "
+                "AND kind IN ('SANDBOX_REPLAN','DIAGNOSIS_REPLAN')",
+                (parent_id,)).fetchall()
+            if len(receipts) != 1:
+                return False
+            try:
+                receipt = json.loads(receipts[0]["details"])
+            except (ValueError, TypeError):
+                return False
+            if not isinstance(receipt, dict):
+                return False
+            linked = ("child_id" if receipts[0]["kind"] == "SANDBOX_REPLAN"
+                      else "next_task_id")
+            if receipt.get(linked) != child_id:
+                return False
+        elif (row["state"] == "UNKNOWN"
+              and row["error_code"] == "PUBLIC_REVISION_SUPERSEDED"):
+            # P13 public-feedback revision: the original immutable candidate
+            # is superseded, but an exactly identified review child still
+            # legitimately owns the next sealed-holdout task. The UNKNOWN
+            # parent alone NEVER authorizes anything.
+            parent_events = db.execute(
+                "SELECT details FROM events WHERE task_id=? "
+                "AND kind='REPO_REFINEMENT_PARENT_SUPERSEDED'",
+                (parent_id,)).fetchall()
+            child_events = db.execute(
+                "SELECT details FROM events WHERE task_id=? "
+                "AND kind='REPO_REFINEMENT_PROPOSAL_FROZEN'",
+                (child_id,)).fetchall()
+            if len(parent_events) != 1 or len(child_events) != 1:
+                return False
+            try:
+                p = json.loads(parent_events[0]["details"])
+                c = json.loads(child_events[0]["details"])
+            except (ValueError, TypeError):
+                return False
+            if (not isinstance(p, dict) or p.get("child") != child_id
+                or not isinstance(c, dict) or c.get("parent") != parent_id
+                or c.get("holdout_review_pending") is not True):
+                return False
+        elif row["state"] not in _ALLOWED_LINEAGE_PARENT_STATES:
+            return False
+        child_id = parent_id
         parent_id = row["parent_task"]
     return False
 

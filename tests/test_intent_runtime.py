@@ -88,6 +88,123 @@ class IntentRuntimeTests(unittest.TestCase):
                 self.assertEqual(self.task(leaf)["error_code"],
                                  "UPSTREAM_TASK_INVALID")
 
+    def test_closed_or_unrecognized_ancestor_never_authorizes_descendant(self):
+        """A forbidden or corrupt parent state cannot silently fall through."""
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        invalid_states = (
+            "UNRECOGNIZED_TERMINAL_STATE", "CONTROL_STOPPED",
+            "CONTROL_UNVERIFIABLE", "FEEDBACK_STOPPED",
+            "FEEDBACK_UNVERIFIABLE", "NEEDS_REPLAN",
+            "PENDING", "RUNNING",
+        )
+        for root_state in invalid_states:
+            with self.subTest(ancestor=root_state):
+                with closing(connect(self.db_path)) as db:
+                    root = create_task(db, self.structured(),
+                                       due_at=9999999999)
+                    intermediate = create_task(
+                        db, self.structured(), parent=root,
+                        due_at=9999999999)
+                    leaf = create_task(
+                        db, {"kind": "goal_case", "goal_type": "json_keys",
+                             "input": "settings.json",
+                             "desired": {"owner": "ops"}},
+                        parent=intermediate)
+                    db.execute("UPDATE tasks SET state=? WHERE task_id=?",
+                               (root_state, root))
+                    db.execute(
+                        "UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                        (intermediate,))
+                    db.commit()
+                observed = run_once(self.db_path, self.workspace, self.fixtures)
+                self.assertEqual(observed["task_id"], leaf, observed)
+                self.assertEqual(observed["status"], "BLOCKED", observed)
+                self.assertEqual(self.task(leaf)["error_code"],
+                                 "UPSTREAM_TASK_INVALID")
+                self.assertFalse((self.workspace / "artifacts" /
+                                  (leaf + ".json")).exists())
+
+    def test_valid_decomposed_ancestor_keeps_legitimate_descendants(self):
+        """The new invalid-state guard must not block normal decomposition."""
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        with closing(connect(self.db_path)) as db:
+            root = create_task(db, self.structured(),
+                               due_at=9999999999)
+            leaf = create_task(
+                db, {"kind": "goal_case", "goal_type": "json_keys",
+                     "input": "settings.json", "desired": {"owner": "ops"}},
+                parent=root)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                       (root,))
+            db.commit()
+        observed = run_once(self.db_path, self.workspace, self.fixtures)
+        self.assertEqual(observed["task_id"], leaf)
+        self.assertEqual(observed["status"], "NEEDS_REVIEW", observed)
+
+    def test_replan_receipt_must_bind_exact_direct_child(self):
+        """A real-looking replan event cannot authorize a different child."""
+        from cognition_agent_os.ledger import event
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        for event_kind, id_field in (
+                ("SANDBOX_REPLAN", "child_id"),
+                ("DIAGNOSIS_REPLAN", "next_task_id")):
+            with self.subTest(kind=event_kind):
+                with closing(connect(self.db_path)) as db:
+                    parent = create_task(db, self.structured(),
+                                         due_at=9999999999)
+                    unrelated = create_task(db, self.structured(),
+                                             due_at=9999999999)
+                    leaf = create_task(
+                        db, {"kind": "goal_case", "goal_type": "json_keys",
+                             "input": "settings.json",
+                             "desired": {"owner": "ops"}},
+                        parent=parent)
+                    db.execute("UPDATE tasks SET state='NEEDS_REPLAN' "
+                               "WHERE task_id=?", (parent,))
+                    event(db, parent, event_kind, {id_field: unrelated})
+                    db.commit()
+                observed = run_once(self.db_path, self.workspace, self.fixtures)
+                self.assertEqual(observed["task_id"], leaf)
+                self.assertEqual(observed["status"], "BLOCKED", observed)
+                self.assertEqual(self.task(leaf)["error_code"],
+                                 "UPSTREAM_TASK_INVALID")
+                self.assertFalse((self.workspace / "artifacts" /
+                                  (leaf + ".json")).exists())
+
+    def test_superseded_unknown_without_matching_revision_proofs_is_fenced(self):
+        """Only exact original revision-child receipts permit an UNKNOWN ancestor."""
+        from cognition_agent_os.ledger import event
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        for variant in ("missing", "wrong_child", "missing_child"):
+            with self.subTest(variant=variant):
+                with closing(connect(self.db_path)) as db:
+                    root=create_task(db,self.structured(),due_at=9999999999)
+                    unrelated=create_task(db,self.structured(),due_at=9999999999)
+                    child=create_task(
+                        db, {"kind":"goal_case","goal_type":"json_keys",
+                             "input":"settings.json","desired":{"owner":"ops"}},
+                        parent=root)
+                    db.execute("UPDATE tasks SET state='UNKNOWN', "
+                               "error_code='PUBLIC_REVISION_SUPERSEDED' "
+                               "WHERE task_id=?",(root,))
+                    if variant != "missing":
+                        event(db,root,"REPO_REFINEMENT_PARENT_SUPERSEDED",{
+                            "child":unrelated if variant=="wrong_child" else child})
+                        if variant != "missing_child":
+                            event(db,child,"REPO_REFINEMENT_PROPOSAL_FROZEN",{
+                                "parent":root,"holdout_review_pending":True})
+                    db.commit()
+                observed=run_once(self.db_path,self.workspace,self.fixtures)
+                self.assertEqual(observed["task_id"],child)
+                self.assertEqual(observed["status"],"BLOCKED",observed)
+                self.assertEqual(self.task(child)["error_code"],
+                                 "UPSTREAM_TASK_INVALID")
+                self.assertFalse((self.workspace/"artifacts"/(child+".json")).exists())
+
     def test_mid_execution_ancestor_revocation_blocks_actual_artifact_boundary(self):
         """A root can fail AFTER dispatch admission; writer must recheck ancestry."""
         from cognition_agent_os import runner
@@ -126,6 +243,36 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["status"],"BLOCKED",result)
         self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
         self.assertFalse((self.workspace/"artifacts"/(leaf+".json")).exists())
+
+    def test_blocked_ancestor_prevents_late_sandbox_effect(self):
+        """A review-stage write needs the same live ancestor gate as the worker."""
+        from cognition_agent_os.sandbox_effect import stage_one
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        with closing(connect(self.db_path)) as db:
+            root = create_task(db, self.structured(), due_at=9999999999)
+            leaf = create_task(
+                db, {"kind": "goal_case", "goal_type": "json_keys",
+                     "input": "settings.json", "desired": {"owner": "ops"}},
+                parent=root)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                       (root,))
+            db.commit()
+        self.assertEqual(run_once(self.db_path, self.workspace, self.fixtures)["status"],
+                         "NEEDS_REVIEW")
+        self.assertEqual(self.task(leaf)["state"], "NEEDS_REVIEW")
+        with closing(connect(self.db_path)) as db:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                       (root,))
+            db.commit()
+        from cognition_agent_os.goal_audit import audit_goal
+        audited = audit_goal(self.db_path, self.workspace, self.fixtures, leaf)
+        self.assertEqual(audited["status"], "UPSTREAM_TASK_INVALID", audited)
+        observed = stage_one(self.db_path, self.workspace, self.fixtures, leaf)
+        self.assertNotEqual(observed["status"], "SANDBOX_VERIFIED", observed)
+        self.assertFalse((self.workspace / "sandbox" /
+                          (leaf + ".candidate")).exists())
+        self.assertNotEqual(self.task(leaf)["state"], "SANDBOX_VERIFIED")
 
     def test_task_parent_cycle_is_not_a_legitimate_decomposition(self):
         """A corrupted parent graph cannot supply authorization or effects."""
@@ -436,12 +583,14 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
         self.assertEqual(self.task(child)["state"],"BLOCKED")
 
-    def test_nested_intent_still_refused_when_ancestor_is_healthy(self):
+    def test_nested_intent_still_refused_when_ancestor_is_decomposed(self):
         from cognition_agent_os.ledger import create_task
         parent = self.seed(self.structured())
         with closing(connect(self.db_path)) as db:
             child = create_task(db, self.comparison(), parent=parent)
-            db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
+            # PENDING is not an admitted lineage; test the recursion rule
+            # with an already-decomposed ancestor instead of invalid setup.
+            db.execute("UPDATE tasks SET state='DECOMPOSED', due_at=? WHERE task_id=?",
                        (9999999999, parent))
             db.commit()
         result = run_once(self.db_path,self.workspace,self.fixtures)

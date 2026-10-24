@@ -26,6 +26,8 @@ jobs:
           persist-credentials: false
       - name: Check draft requirements inventory (NOT product acceptance)
         run: python scripts/verify_assurance_registry.py
+      - name: Check registered effect paths and central grant guards
+        run: python scripts/verify_effect_boundaries.py
       - name: Python standard library offline regressions (no remote APIs)
         env:
           PYTHONPATH: src
@@ -98,6 +100,9 @@ jobs:
       - name: Check draft requirements inventory (NOT product acceptance)
         shell: pwsh
         run: python scripts/verify_assurance_registry.py
+      - name: Check registered effect paths and central grant guards
+        shell: pwsh
+        run: python scripts/verify_effect_boundaries.py
       - name: Native Windows entrypoint smoke (no installation)
         shell: pwsh
         run: python scripts/host_tick.py --help
@@ -479,9 +484,9 @@ jobs:
 
 
   aoci_official_bootstrap_probe:
-    # Manual supply-chain/tool availability probe only. It cannot author an
-    # AOCI semantic index and must not inflate every integration CI run.
-    if: ${{ github.event.repository.private == false && github.event_name == 'workflow_dispatch' }}
+    # Isolated original AOCI official bootstrap on explicit Draft opt-in,
+    # or manual workflow dispatch. Never an installed owner-host MCP service.
+    if: ${{ github.event.repository.private == false && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-aoci-original]'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:

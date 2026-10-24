@@ -118,6 +118,48 @@ class PublicRevisionTests(unittest.TestCase):
         self.assertEqual(len(observations),2)
         self.assertEqual([json.loads(x[0])["public_passes"] for x in observations],[1,2])
 
+    def test_blocked_ancestor_during_model_cannot_freeze_revision(self):
+        """A late ancestor stop invalidates the revision, not just the model."""
+        with closing(connect(self.db)) as db:
+            root=create_task(db,self.spec,due_at=9999999999)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",(root,))
+            db.execute("UPDATE tasks SET parent_task=? WHERE task_id=?",
+                       (root,self.parent))
+            db.commit()
+        def model_then_stop(*args,**kwargs):
+            with closing(connect(self.db)) as db:
+                db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                           (root,))
+                db.commit()
+            return self.model_output(self.good)
+        with patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite), \
+             patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   side_effect=model_then_stop):
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=1)
+        self.assertNotEqual(result["status"],"REVISED_PUBLIC_CANDIDATE_FROZEN",result)
+        with closing(connect(self.db)) as db:
+            descendants=db.execute(
+                "SELECT task_id FROM tasks WHERE parent_task=?",(self.parent,)).fetchall()
+        self.assertFalse(descendants)
+
+    def test_preexisting_blocked_ancestor_spends_no_model_budget(self):
+        """A typed but invalid lineage is rejected before any model request."""
+        with closing(connect(self.db)) as db:
+            root=create_task(db,self.spec,due_at=9999999999)
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(root,))
+            db.execute("UPDATE tasks SET parent_task=? WHERE task_id=?",
+                       (root,self.parent))
+            db.commit()
+        with patch("cognition_agent_os.repo_refinement.run_suite") as docker, \
+             patch("cognition_agent_os.repo_refinement._candidate_from_model") as model:
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=1)
+        self.assertNotEqual(result["status"],"REVISED_PUBLIC_CANDIDATE_FROZEN",result)
+        docker.assert_not_called()
+        model.assert_not_called()
+
     def test_no_local_model_or_pull_fails_before_revision_commit(self):
         from cognition_agent_os import local_model
         with patch("cognition_agent_os.repo_refinement.run_suite",

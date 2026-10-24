@@ -20,7 +20,7 @@ from contextlib import closing
 
 from .source import safe_fixture
 from .repair_search import parse_function, validate_repair_spec, visible_cases, RepairError
-from .ledger import connect,event
+from .ledger import connect,event,current_guard
 
 CHECKS={
     ast.Lt:operator.lt,ast.LtE:operator.le,
@@ -185,7 +185,7 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
     try:
         db.execute("BEGIN IMMEDIATE")
         row=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
-        authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+
         circuit=db.execute("""SELECT 1 FROM conformance_capability_guard
               WHERE disabled=1 AND kind IN (?,?) LIMIT 1""",
               ("goal_sandbox_stage",REPAIR_LAB_CAPABILITY)).fetchone()
@@ -195,11 +195,10 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
         if not row or row["state"]!="NEEDS_REVIEW":
             db.commit()
             return {"task_id":task_id,"status":"NOT_PENDING_REVIEW"}
-        if (not authority or not authority["write_allowed"] or
-            authority["grant_rev"]!=row["grant_rev"] or
-            authority["goal_rev"]!=row["goal_rev"]):
+        allowed,reason=current_guard(db,dict(row),needs_write=True)
+        if not allowed:
             db.commit()
-            return {"task_id":task_id,"status":"AUTHORITY_BLOCKED"}
+            return {"task_id":task_id,"status":"AUTHORITY_BLOCKED","reason":reason}
         decision=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=True)
         if decision["status"]=="HOLDOUT_REFUTED":
             frozen=json.loads((workspace/"artifacts"/(task_id+".json")).read_bytes())

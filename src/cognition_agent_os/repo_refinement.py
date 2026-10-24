@@ -19,7 +19,7 @@ from .container_lab import candidate_changes,cases_from_bytes,run_suite,Containe
 from .repo_repair import audit_repo,_sources,_candidate_from_model,sha
 from .source import safe_fixture
 from .runner import store_once,ArtifactConflict
-from .ledger import connect,create_task,event
+from .ledger import connect,create_task,event,current_guard
 
 MAX_ATTEMPTS_PER_LINEAGE=3
 TASK=re.compile(r"[0-9a-f]{32}\Z")
@@ -69,6 +69,10 @@ def _record_attempt(db_path,tid,expected_task,entry):
             or not auth["write_allowed"]
             or auth["goal_rev"]!=task["goal_rev"]
             or auth["grant_rev"]!=task["grant_rev"]):
+            db.commit()
+            return False
+        allowed,_=current_guard(db,dict(task),needs_write=True)
+        if not allowed:
             db.commit()
             return False
         used=db.execute("""SELECT COUNT(*) FROM events WHERE task_id=?
@@ -123,6 +127,11 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
                 or not auth["write_allowed"] or auth["goal_rev"]!=task["goal_rev"]
                 or auth["grant_rev"]!=task["grant_rev"]):
                 return _deny("REVISION_AUTHORITY_UNAVAILABLE")
+            # Do not spend local-model or Docker budget on a child whose
+            # upstream goal was invalidated before planning began.
+            allowed,reason=current_guard(db,dict(task),needs_write=True)
+            if not allowed:
+                return _deny("REVISION_AUTHORITY_UNAVAILABLE",reason=reason)
             remaining=min(max_attempts,MAX_ATTEMPTS_PER_LINEAGE-prior)
             if remaining<=0:
                 return _deny("REFINEMENT_BUDGET_EXHAUSTED")
@@ -265,6 +274,14 @@ def _freeze_revision(db_path,workspace,fixtures,tid,parent,spec,base,visible,cha
             or auth["grant_rev"]!=now["grant_rev"]):
             db.commit()
             return _deny("REVISION_AUTHORITY_CHANGED_BEFORE_FREEZE")
+        # The model can finish after a remote/parent/grant change. A nominally
+        # current task grant is insufficient if any ancestor was invalidated.
+        # Revalidate the entire goal lineage under the original write lock
+        # immediately before minting the revision child and staging bytes.
+        allowed,reason=current_guard(db,dict(now),needs_write=True)
+        if not allowed:
+            db.commit()
+            return _deny("REVISION_AUTHORITY_CHANGED_BEFORE_FREEZE",reason=reason)
         if ({p:sha(safe_fixture(fixtures,p)) for p in spec["files"]}!=immutable["source_sha256"]
             or sha(safe_fixture(fixtures,spec["visible"]))!=immutable["public_sha256"]):
             db.commit()
