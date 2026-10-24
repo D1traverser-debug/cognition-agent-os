@@ -126,6 +126,8 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                                        "stale_authority":0,
                                        "independent_checks":[],
                                        "failed_independent_checks":0})
+        if row["task_id"] != root_id:
+            group.setdefault("_descendants", []).append(dict(row))
         if (workspace is not None and fixtures is not None
             and row["state"]=="NEEDS_REVIEW"):
             try:
@@ -181,6 +183,13 @@ def _goal_progress(path: Path, workspace: Path | None = None,
             "REVIEW_UNRESOLVED_EVIDENCE" if item["awaiting_review"] else
             "DIAGNOSE_BLOCKER" if item["blocked"] or item["unknown"] else
             "REQUIRE_INDEPENDENT_OUTCOME_CHECK")
+        # Every tick compares actual work with the original immutable root
+        # contract. Local research is not a verified owner/business outcome.
+        from .goal_fidelity import check_goal_fidelity
+        original=by_id.get(root_id)
+        if original is not None:
+            item.update(check_goal_fidelity(
+                dict(original), item.pop("_descendants", [])))
         item["semantic_outcome_verified"]=False
         summary.append(item)
     return {"goals":summary,"scanned_tasks":len(rows),
