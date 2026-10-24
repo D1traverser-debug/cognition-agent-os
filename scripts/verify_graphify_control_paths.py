@@ -32,6 +32,15 @@ REQUIRED_PATHS = (
     ("src_cognition_agent_os_control_kernel_drive_active_controller", "src_cognition_agent_os_ledger_current_guard"),
     ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_outcome_feedback_advance_evidence_goals"),
     ("src_cognition_agent_os_conformance_check_one", "src_cognition_agent_os_outcome_feedback_verify_feedback_root"),
+    # All post-planning local effects must use one authorization gate.
+    # These are real official EXTRACTED call edges, not the checker inventing
+    # reachability or an LLM asserting that a class has been repaired.
+    ("src_cognition_agent_os_sandbox_effect_stage_one", "src_cognition_agent_os_ledger_current_guard"),
+    ("src_cognition_agent_os_pipeline_oracle_review_pipeline", "src_cognition_agent_os_ledger_current_guard"),
+    ("src_cognition_agent_os_repair_oracle_review_patch", "src_cognition_agent_os_ledger_current_guard"),
+    ("src_cognition_agent_os_repo_repair_review_repo", "src_cognition_agent_os_ledger_current_guard"),
+    ("src_cognition_agent_os_repo_refinement_freeze_revision", "src_cognition_agent_os_ledger_current_guard"),
+    ("src_cognition_agent_os_repo_refinement_record_attempt", "src_cognition_agent_os_ledger_current_guard"),
 )
 
 def check(graph_path: Path, repo: Path) -> dict:
