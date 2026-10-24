@@ -102,6 +102,39 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["status"], "BLOCKED", result)
         self.assertEqual(self.task(first)["error_code"], "UPSTREAM_TASK_INVALID")
 
+    def test_unknown_capability_cannot_fall_through_to_snapshot_executor(self):
+        """Free-text or malformed task kinds never become executable plugins."""
+        tid = self.seed({"kind": "run_arbitrary_tool", "old": "x", "new": "y",
+                         "module": "os", "command": "untrusted"})
+        observed = run_once(self.db_path, self.workspace, self.fixtures)
+        self.assertEqual(observed["status"], "UNKNOWN", observed)
+        self.assertEqual(self.task(tid)["error_code"], "INVALID_TASK_SPEC")
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+
+    def test_registered_capability_dispatch_uses_same_ledger_and_cold_resume(self):
+        """No new task DB, goal authority or runner is introduced by adapters."""
+        from cognition_agent_os.continuity import register_goal, resume_goal
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        tid = self.seed(self.structured())
+        contract = {
+            "goal_id": "single_spine",
+            "objective": "Maintain valid user goal across sessions",
+            "acceptance": "Independent outcome confirmation still required",
+            "constraints": ["No unauthorized remote effects"],
+            "next_task_id": tid,
+            "source": None,
+        }
+        register_goal(self.db_path, contract)
+        resumed = resume_goal(self.db_path)
+        self.assertEqual(resumed["status"], "READY_TO_TICK", resumed)
+        self.assertEqual(resumed["next_task_id"], tid)
+        tick = run_tick(self.db_path, self.workspace, self.fixtures,
+                        max_jobs=2)
+        self.assertEqual(tick["tasks"][0]["status"], "DECOMPOSED", tick)
+        self.assertFalse(tick["semantic_outcome_verified"])
+        self.assertFalse(resume_goal(self.db_path)["business_outcome_verified"])
+
     def test_blocked_upstream_prevents_cross_capability_child_execution(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         for intent in (self.structured(),self.comparison()):
