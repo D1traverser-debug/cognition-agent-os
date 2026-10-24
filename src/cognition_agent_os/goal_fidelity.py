@@ -40,7 +40,8 @@ def check_goal_fidelity(root: dict, descendants: list[dict]) -> dict:
     specs = [d["source_spec"] for d in descendants]
     duplicate = len(specs) != len(set(specs))
     research = any(
-        _kind(d) == "investigate_goal" for d in descendants)
+        _kind(d) in ("investigate_goal", "public_tool_discovery")
+        for d in descendants)
     if duplicate and not pending:
         status, next_action = (
             "REPEATED_CANDIDATE_UNVERIFIED",
