@@ -14,7 +14,7 @@ import sqlite3
 from pathlib import Path
 
 from .goal_fidelity import check_goal_fidelity
-from .ledger import connect, current_guard, event
+from .ledger import connect, current_guard, event, require_initialized_ledger
 
 MAX_ROOTS_PER_TICK = 16
 MAX_DESCENDANTS_PER_ROOT = 64
@@ -94,6 +94,8 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
     """
     if type(limit) is not int or not 1 <= limit <= MAX_ROOTS_PER_TICK:
         raise ValueError("INVALID_GOAL_DRIFT_SCAN_LIMIT")
+    # Observing a goal may not implicitly create a new authority database.
+    require_initialized_ledger(db_path)
     results = []
     db = connect(db_path)
     try:
