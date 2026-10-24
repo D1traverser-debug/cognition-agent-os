@@ -1,0 +1,114 @@
+{
+  "baseline": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+  "role": "FILE_READBACK_NOT_SEMANTIC_PROOF",
+  "files": [
+    {
+      "path": "docs/02-AUTHORITY-AND-INTERFACES.md",
+      "blob_sha": "0395c9ded9418050c65407ec5278c3a6d278e377",
+      "read_sha": "0395c9ded9418050c65407ec5278c3a6d278e377",
+      "match": true,
+      "bytes": 9916,
+      "lines": 124,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/03-FIRST-VERTICAL-SLICE.md",
+      "blob_sha": "eee7a05e2fde4ab570bfba61d1384ac0eb682e44",
+      "read_sha": "eee7a05e2fde4ab570bfba61d1384ac0eb682e44",
+      "match": true,
+      "bytes": 8894,
+      "lines": 87,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/04-SECURITY-OPERATIONS.md",
+      "blob_sha": "594c1ee58b47b1982477cbf066e17a548ad30b1f",
+      "read_sha": "594c1ee58b47b1982477cbf066e17a548ad30b1f",
+      "match": true,
+      "bytes": 7802,
+      "lines": 66,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/05-P0-P1-IMPLEMENTATION-STATUS.md",
+      "blob_sha": "35f23df27e77325f329501e413f2976414f3e9e9",
+      "read_sha": "35f23df27e77325f329501e413f2976414f3e9e9",
+      "match": true,
+      "bytes": 4895,
+      "lines": 53,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/06-ZERO-API-CREDIT-POLICY.md",
+      "blob_sha": "8f7b431fbe95fa79eae94d38a6482646ddcab38c",
+      "read_sha": "8f7b431fbe95fa79eae94d38a6482646ddcab38c",
+      "match": true,
+      "bytes": 5522,
+      "lines": 69,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/07-LOCAL-HOST-RECOVERY.md",
+      "blob_sha": "cb32dfa2adf6be9b9d0ab15b99feaa3b48873e06",
+      "read_sha": "cb32dfa2adf6be9b9d0ab15b99feaa3b48873e06",
+      "match": true,
+      "bytes": 3464,
+      "lines": 40,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/08-LIVE-SOURCE-CURSOR.md",
+      "blob_sha": "8f0c25361b52ceea2fe973608f695901467e0bea",
+      "read_sha": "8f0c25361b52ceea2fe973608f695901467e0bea",
+      "match": true,
+      "bytes": 4619,
+      "lines": 77,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/09-PINNED-REFERENCE-EVALUATION.md",
+      "blob_sha": "1f6df8b30de0f9e2c2d9ec4ea08162b94f0c5588",
+      "read_sha": "1f6df8b30de0f9e2c2d9ec4ea08162b94f0c5588",
+      "match": true,
+      "bytes": 6952,
+      "lines": 84,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/10-BOUNDED-GOAL-LOOP.md",
+      "blob_sha": "313803efc13dd676433ce8e68dc3265790a8342e",
+      "read_sha": "313803efc13dd676433ce8e68dc3265790a8342e",
+      "match": true,
+      "bytes": 5941,
+      "lines": 116,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/11-SANDBOX-OUTCOME-AND-REPLAN.md",
+      "blob_sha": "535affce791db9f22b3a52e92f4e82e62d954438",
+      "read_sha": "535affce791db9f22b3a52e92f4e82e62d954438",
+      "match": true,
+      "bytes": 5238,
+      "lines": 104,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/12-DIAGNOSIS-AND-FAIRNESS.md",
+      "blob_sha": "a114cf44f72501a130211f829ef696e1b960d502",
+      "read_sha": "a114cf44f72501a130211f829ef696e1b960d502",
+      "match": true,
+      "bytes": 4802,
+      "lines": 97,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/13-EVIDENCE-RECONCILIATION.md",
+      "blob_sha": "74b3670a43219918d48e629e14805acc35645d69",
+      "read_sha": "74b3670a43219918d48e629e14805acc35645d69",
+      "match": true,
+      "bytes": 5603,
+      "lines": 109,
+      "semantic_proof": false
+    }
+  ]
+}
