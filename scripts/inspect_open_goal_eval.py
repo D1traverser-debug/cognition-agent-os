@@ -158,6 +158,28 @@ def owner_intent_oracle():
                     and observation["parent_error"] in {
                         "OPEN_GOAL_ABSTAINED", "OPEN_GOAL_METHOD_UNSUPPORTED"
                     })
+            elif case_kind == "conflict":
+                correct = (
+                    observation["parent_state"] == "UNKNOWN"
+                    and observation["parent_error"] == "OPEN_GOAL_SOURCE_CONFLICT"
+                    and observation["child_count"] == 0
+                    and observation["isolated_stage"] is None
+                )
+            elif case_kind == "already":
+                desired = expected["desired"]
+                original = json.loads(state.metadata["files"][expected["name"]])
+                correct = (
+                    all(original.get(k) == v for k, v in desired.items())
+                    and observation["parent_state"] == "DECOMPOSED"
+                    and observation["child_count"] == 1
+                    and child is not None
+                    and child["spec"].get("input") == expected["name"]
+                    and child["spec"].get("desired") == desired
+                    and child["state"] == "VERIFIED"
+                    and observation["isolated_stage"] is None
+                    and observation["goal_audit"] ==
+                        "METHOD_CANDIDATE_MECHANICALLY_GROUNDED"
+                )
             elif case_kind == "json":
                 expected_spec = {
                     "kind": "goal_case",
