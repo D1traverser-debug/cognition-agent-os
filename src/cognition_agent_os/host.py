@@ -192,8 +192,28 @@ def _goal_progress(path: Path, workspace: Path | None = None,
         from .goal_fidelity import check_goal_fidelity
         original=by_id.get(root_id)
         if original is not None:
-            item.update(check_goal_fidelity(
-                dict(original), item.pop("_descendants", [])))
+            descendants=item.pop("_descendants", [])
+            item.update(check_goal_fidelity(dict(original), descendants))
+            # Product-level LOCAL result is not inferred from planner status,
+            # component test success, or a drift alert. Read the actual source
+            # and output under the original owner postconditions each tick.
+            if workspace is not None and fixtures is not None:
+                try:
+                    import json
+                    root_spec=json.loads(original["source_spec"])
+                    if (isinstance(root_spec, dict)
+                        and root_spec.get("kind") == "open_goal"):
+                        from .owner_postcondition import inspect_owner_local_outcome
+                        owner_result=inspect_owner_local_outcome(
+                            path, workspace, fixtures, root_id)
+                        item["local_owner_result"]=owner_result
+                        if owner_result["local_owner_outcome_verified"]:
+                            item["next_control_action"]="LOCAL_OWNER_OUTCOME_VERIFIED"
+                except (ValueError, TypeError, KeyError, OSError):
+                    item["local_owner_result"]={
+                        "status":"OWNER_POSTCONDITION_UNVERIFIED",
+                        "local_owner_outcome_verified":False,
+                        "business_outcome_verified":False}
         item["semantic_outcome_verified"]=False
         summary.append(item)
     return {"goals":summary,"scanned_tasks":len(rows),
