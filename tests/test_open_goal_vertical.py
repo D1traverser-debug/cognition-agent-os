@@ -182,6 +182,50 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
         self.assertFalse(self.children(parent))
 
+    def test_exact_owner_json_runs_in_default_deterministic_host_without_ollama(self):
+        root = self.enqueue(
+            "Ensure settings.json has owner equal to ops and retain the original timeout.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("exact owner goal cannot require a model")):
+            out = run_tick(self.db, self.ws, self.fx, max_jobs=2)
+        self.assertEqual([r["status"] for r in out["tasks"]],
+                         ["DECOMPOSED", "NEEDS_REVIEW"], out)
+        self.assertEqual(self.row(root)["state"], "DECOMPOSED")
+        self.assertEqual(len(self.children(root)), 1)
+
+    def test_exact_owner_csv_runs_in_default_deterministic_host_without_ollama(self):
+        root = self.enqueue(
+            "Compare baseline.csv with actual.csv to identify record discrepancies.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("explicit roles cannot require a model")):
+            out = run_tick(self.db, self.ws, self.fx, max_jobs=2)
+        self.assertEqual([r["status"] for r in out["tasks"]],
+                         ["DECOMPOSED", "NEEDS_REVIEW"], out)
+        child = self.children(root)[0]
+        self.assertEqual(audit_stored_report(self.db, self.ws, self.fx, child)["status"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+
+    def test_source_conflict_is_detected_before_subtask_creation(self):
+        (self.fx / "settings.json").write_text(
+            '{"timeout":7,"owner":"security"}\n', encoding="utf-8")
+        root = self.enqueue(
+            "Ensure settings.json has owner equal to ops, preserving prior fields.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("conflict is source-verifiable")):
+            out = run_tick(self.db, self.ws, self.fx, max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
+        self.assertEqual(self.row(root)["error_code"], "OPEN_GOAL_SOURCE_CONFLICT")
+        self.assertEqual(self.children(root), [])
+
+    def test_unfamiliar_goal_remains_unexecuted_without_installed_model(self):
+        root = self.enqueue(
+            "Investigate the root causes of a novel satellite subsystem anomaly.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("deterministic Host must never call Ollama")):
+            out = run_tick(self.db, self.ws, self.fx, max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
+        self.assertEqual(self.children(root), [])
+
     def test_model_selects_different_registered_method_for_csv_goal(self):
         goal = "Please compare baseline.csv and actual.csv to identify record discrepancies."
         parent = self.enqueue(goal)
