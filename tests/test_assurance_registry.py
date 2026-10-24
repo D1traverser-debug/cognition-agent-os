@@ -80,9 +80,10 @@ class AssuranceRegistryTests(unittest.TestCase):
         self.rejected(lambda x: x['source_registry']['legacy_conops'].__setitem__(
             'archived_basename', '../untrusted.json'))
 
-    def test_active_handoff_is_one_small_unambiguous_current_record(self):
+    def test_active_handoff_is_small_dated_navigation_not_live_authority(self):
         report = verify_live_handoff(ROOT)
-        self.assertEqual(report['status'], 'CURRENT_HANDOFF_VALID')
+        self.assertEqual(report['status'], 'DATED_HANDOFF_VALID')
+        self.assertFalse(report['current_ref_verified'])
         self.assertEqual(report['archive_integrity'], 'EXACT_GIT_BLOB')
         self.assertLess(report['active_bytes'], 8192)
 
@@ -91,7 +92,7 @@ class AssuranceRegistryTests(unittest.TestCase):
         self.assertEqual(len([
             line for line in live.splitlines()
             if line.startswith('# CURRENT')
-        ]), 1)
+        ]), 0)
         self.assertNotIn('## HISTORICAL CHECKPOINT ARCHIVE', live)
         self.assertNotIn('**START HERE, NOT THE HISTORICAL', live)
 
@@ -108,7 +109,7 @@ class AssuranceRegistryTests(unittest.TestCase):
             with self.assertRaises(RegistryError):
                 verify_live_handoff(dst)
 
-    def test_archive_tamper_and_ambiguous_live_branch_rejected(self):
+    def test_archive_tamper_and_false_current_head_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             dst = Path(d)
             (dst / 'README.md').write_text((ROOT / 'README.md').read_text(encoding='utf-8'), encoding='utf-8')
@@ -124,6 +125,23 @@ class AssuranceRegistryTests(unittest.TestCase):
             live = (dst / 'SESSION_HANDOFF.md')
             live.write_text(live.read_text(encoding='utf-8') +
                             '\\n# CURRENT misleading checkpoint\\n'.replace('\\n','\n'), encoding='utf-8')
+            with self.assertRaises(RegistryError):
+                verify_live_handoff(dst)
+
+
+    def test_readme_cannot_restore_a_frozen_current_pr(self):
+        with tempfile.TemporaryDirectory() as d:
+            dst = Path(d)
+            (dst / 'README.md').write_text(
+                (ROOT / 'README.md').read_text(encoding='utf-8').replace(
+                    'live GitHub', 'current *development* integration tip'),
+                encoding='utf-8')
+            (dst / 'SESSION_HANDOFF.md').write_text(
+                (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8'),
+                encoding='utf-8')
+            (dst / 'archive').mkdir()
+            (dst / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').write_bytes(
+                (ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').read_bytes())
             with self.assertRaises(RegistryError):
                 verify_live_handoff(dst)
 
