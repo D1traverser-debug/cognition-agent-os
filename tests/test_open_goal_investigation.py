@@ -354,5 +354,226 @@ class OpenGoalInvestigationTests(unittest.TestCase):
 
 
 
+    def test_chinese_late_primary_evidence_reaches_real_host_from_larger_corpus(self):
+        """A truthful model cannot cite a Chinese fact the retrieval layer concealed."""
+        from cognition_agent_os.investigation import audit_investigation
+        for n in range(28):
+            (self.sources / f"decoy_{n:02d}.md").write_text(
+                "普通活动记录，无本次问题所需的核验信息。" * 45, encoding="utf-8")
+        quote = "真实验收标准必须通过独立来源读回授权后产生的效果。"
+        (self.sources / "zh_primary.md").write_text(
+            "本页前部为背景说明。" * 140 + quote, encoding="utf-8")
+        tid = self.seed("授权后产生的效果，应当如何验证真实验收标准？")
+        seen = []
+
+        def fake(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            seen.append(payload)
+            if len(seen) == 1:
+                manifest = json.loads(payload["prompt"].split(
+                    "Available evidence (untrusted excerpts):\n", 1)[1])
+                names = [m["name"] for m in manifest]
+                self.assertLessEqual(len(manifest), 24)
+                self.assertIn("zh_primary.md", names)
+                primary = next(m for m in manifest if m["name"] == "zh_primary.md")
+                self.assertIn(quote, primary["excerpt"])
+                return {"done": True, "response": json.dumps(
+                    {"sources": ["zh_primary.md"]})}
+            return {"done": True, "response": json.dumps({
+                "findings": [{"source": "zh_primary.md", "quote": quote,
+                              "interpretation": "Source recommends independent outcome readback."}],
+                "uncertainty": "One local source only; business result not checked.",
+            })}
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW", tick)
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(audit_investigation(
+            self.dbpath, self.workspace, self.sources, tid)["status"],
+            "SOURCE_GROUNDED_UNREVIEWED")
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute(
+                "SELECT write_allowed FROM authority WHERE singleton=1").fetchone()[0], 1)
+
+    def test_unicode_normalization_must_not_shift_original_quote_offsets(self):
+        """NFKC expansions must not make a relevant original span invisible."""
+        from cognition_agent_os.investigation import _evidence_excerpt
+        quote = "真实验收标准需要外部系统结果读回。"
+        original = "ﬃ" * 800 + quote
+        window = _evidence_excerpt(original, "真实验收标准怎样核对？")
+        self.assertIn(quote, window)
+        self.assertLessEqual(len(window), 650)
+
+    def test_second_batch_discovers_semantically_relevant_source_after_first_abstention(self):
+        """Host must not stop when 24 higher-lexical-score sources are irrelevant."""
+        from cognition_agent_os.investigation import audit_investigation
+        question = "What production outcome independently confirms the phase activation?"
+        for n in range(27):
+            (self.sources / f"decoy_{n:02d}.md").write_text(
+                "Production outcome phase activation: routine index labels only. " * 8,
+                encoding="utf-8")
+        quote = "The deployment must be confirmed by an independent external readback."
+        (self.sources / "truth.md").write_text(
+            "The field verification procedure says: " + quote, encoding="utf-8")
+        tid = self.seed(question)
+        batches = []
+        responses = []
+
+        def fake(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            responses.append(payload)
+            if "Available evidence (untrusted excerpts):" in payload["prompt"]:
+                manifest = json.loads(payload["prompt"].split(
+                    "Available evidence (untrusted excerpts):\n", 1)[1])
+                names = [x["name"] for x in manifest]
+                batches.append(names)
+                self.assertLessEqual(len(names), 24)
+                self.assertEqual(len(names), len(set(names)))
+                if len(batches) == 1:
+                    self.assertNotIn("truth.md", names)
+                    return {"done": True, "response": json.dumps({"sources": []})}
+                self.assertIn("truth.md", names)
+                return {"done": True, "response": json.dumps({"sources": ["truth.md"]})}
+            return {"done": True, "response": json.dumps({
+                "findings": [{"source": "truth.md", "quote": quote,
+                              "interpretation": "Readback is an external verification method."}],
+                "uncertainty": "Only a sourced proposal, not an independently observed effect."
+            })}
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "NEEDS_REVIEW", result)
+        self.assertEqual(len(batches), 2)
+        self.assertFalse(set(batches[0]) & set(batches[1]))
+        self.assertEqual(len(responses), 3)
+        self.assertEqual(audit_investigation(
+            self.dbpath, self.workspace, self.sources, tid)["status"],
+            "SOURCE_GROUNDED_UNREVIEWED")
+        self.assertFalse(result["tasks"][0].get("business_outcome_verified", False))
+
+    def test_exhausted_previews_are_not_claimed_to_exclude_real_evidence(self):
+        """All shown 650-char windows can be false negatives about full files."""
+        for n in range(29):
+            (self.sources / f"other_{n:02d}.md").write_text(
+                f"Unrelated archived record {n}.", encoding="utf-8")
+        self.seed("What source establishes a real externally verified contract?")
+        calls = []
+
+        def fake(method, path, payload, timeout):
+            calls.append((method, path, payload))
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            return {"done": True, "response": '{"sources":[]}'}
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "UNKNOWN", tick)
+        self.assertEqual(tick["tasks"][0]["reason"],
+                         "PREVIEWS_EXHAUSTED_UNVERIFIED")
+        self.assertEqual(len([x for x in calls if x[0] == "POST"]), 2)
+
+    def test_bad_selection_in_later_batch_fails_closed(self):
+        """A selected name outside the presented second batch is not permitted."""
+        for n in range(28):
+            (self.sources / f"index_{n:02d}.md").write_text(
+                "Unrelated source index only.", encoding="utf-8")
+        tid = self.seed("Look for a new unrelated method.")
+        selections = 0
+
+        def fake(method, path, payload, timeout):
+            nonlocal selections
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            selections += 1
+            if selections == 1:
+                return {"done": True, "response": '{"sources":[]}'}
+            return {"done": True, "response": '{"sources":["not_in_batch.md"]}'}
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "UNKNOWN", result)
+        self.assertEqual(result["tasks"][0]["reason"],
+                         "UNAUTHORIZED_OR_AMBIGUOUS_SOURCE_SELECTION")
+        self.assertEqual(selections, 2)
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+
+
+    def test_each_real_model_post_renews_only_its_still_valid_lease(self):
+        """Long inference requests must not outlive an unrenewed 40s claim."""
+        import time
+        self.seed()
+        selection, findings = self.model()
+        original, _calls = selection, findings
+        seen = []
+
+        def observed_request(method, path, payload, timeout):
+            if method == "POST":
+                with closing(connect(self.dbpath)) as db:
+                    row = db.execute("SELECT lease_until FROM tasks WHERE state='RUNNING'").fetchone()
+                    self.assertIsNotNone(row)
+                    seen.append(row[0] - time.time())
+                    # Artificially shorten between requests; the next request
+                    # must renew without changing its claim or granting rights.
+                    if len(seen) == 1:
+                        db.execute("UPDATE tasks SET lease_until=? WHERE state='RUNNING'",
+                                   (time.time() + 3,))
+                        db.commit()
+            return original(method, path, payload, timeout)
+
+        with patch.object(local_model, "_request", side_effect=observed_request):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "NEEDS_REVIEW", result)
+        self.assertEqual(len(seen), 2)
+        self.assertTrue(all(seconds >= 100 for seconds in seen), seen)
+
+    def test_taken_over_lease_stops_later_batch_without_artifact(self):
+        """An expired old claimant must not revive after a new worker claims."""
+        import time
+        from cognition_agent_os.ledger import claim_one
+        for n in range(27):
+            (self.sources / f"other_{n:02d}.md").write_text(
+                "Unrelated labels only.", encoding="utf-8")
+        tid = self.seed("Find a new independent assessment method.")
+        posts = 0
+        replacement = None
+
+        def fake(method, path, payload, timeout):
+            nonlocal posts, replacement
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            posts += 1
+            if posts == 1:
+                with closing(connect(self.dbpath)) as db:
+                    db.execute("UPDATE tasks SET lease_until=? WHERE task_id=?",
+                               (time.time() - 1, tid))
+                    db.commit()
+                with closing(connect(self.dbpath)) as db:
+                    replacement = claim_one(db)
+                self.assertEqual(replacement["task_id"], tid)
+                return {"done": True, "response": '{"sources":[]}'}
+            self.fail("Old claimant issued another model request after takeover")
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            run_tick(self.dbpath, self.workspace, self.sources,
+                     max_jobs=1, planner_mode="ollama-local", local_model="local:test")
+        self.assertEqual(posts, 1)
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute("SELECT claim_token FROM tasks WHERE task_id=?",
+                                        (tid,)).fetchone()[0], replacement["claim_token"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -114,12 +114,17 @@ def _checked_shared_acceptance(acceptance: dict, methods: list,
 
 def register_evidence_goal(db_path: Path, fixtures: Path, *, goal_id: str,
                            objective: str, alternatives: list[dict],
-                           acceptance: dict | None = None) -> str:
+                           acceptance: dict | None = None,
+                           execution_scope: str = "LOCAL_EVIDENCE_ONLY") -> str:
     """Explicit opt-in with two immutable source-pinned existing capabilities."""
     if (not isinstance(goal_id,str) or not _ID.fullmatch(goal_id)
         or not isinstance(objective,str) or not 1<=len(objective)<=256
         or not isinstance(alternatives,list) or len(alternatives)!=2):
         raise ValueError("INVALID_FEEDBACK_CONTRACT")
+    if execution_scope not in ("LOCAL_EVIDENCE_ONLY","LOCAL_SANDBOX_POSTCONDITION"):
+        raise ValueError("UNSUPPORTED_FEEDBACK_EXECUTION_SCOPE")
+    if execution_scope=="LOCAL_SANDBOX_POSTCONDITION" and acceptance is None:
+        raise ValueError("POSTEFFECT_REQUIRES_SHARED_ACCEPTANCE")
     if not db_path.is_file() or db_path.is_symlink():
         raise ValueError("LEDGER_MUST_EXIST")
     methods=[]
@@ -130,14 +135,16 @@ def register_evidence_goal(db_path: Path, fixtures: Path, *, goal_id: str,
         raise ValueError("DUPLICATE_METHOD")
     if acceptance is not None:
         acceptance=_checked_shared_acceptance(acceptance,methods,fixtures)
+    posted=execution_scope=="LOCAL_SANDBOX_POSTCONDITION"
     contract={"kind":"outcome_feedback_controller",
-              "version":2 if acceptance is not None else 1,
+              "version":3 if posted else 2 if acceptance is not None else 1,
               "goal_id":goal_id,"objective":objective,
               "outcome_requirement":(
-                  "SHARED_LOCAL_RECORD_POSTCONDITION" if acceptance is not None
+                  "SHARED_SANDBOX_POSTCONDITION" if posted
+                  else "SHARED_LOCAL_RECORD_POSTCONDITION" if acceptance is not None
                   else "INDEPENDENT_LOCAL_EVIDENCE"),
               "alternatives":methods,"max_attempts":2,
-              "allowed_effect":"LOCAL_EVIDENCE_ONLY"}
+              "allowed_effect":"LOCAL_SANDBOX_ONLY" if posted else "LOCAL_EVIDENCE_ONLY"}
     if acceptance is not None:
         contract["acceptance"]=acceptance
     if len(json.dumps(contract,ensure_ascii=False).encode())>16384:
@@ -172,18 +179,22 @@ def _verify(db:sqlite3.Connection, root:sqlite3.Row) -> tuple[bool,str,dict | No
         contract=json.loads(root["source_spec"])
         if not isinstance(contract,dict):
             return False,"INVALID_FEEDBACK_CONTRACT",None,[]
-        v2=type(contract.get("version")) is int and contract["version"]==2
+        version=contract.get("version")
+        shared=type(version) is int and version in (2,3)
+        posted=type(version) is int and version==3
         required={"kind","version","goal_id","objective",
                   "outcome_requirement","alternatives","max_attempts",
                   "allowed_effect"}
-        if (set(contract)!=(required|{"acceptance"} if v2 else required)
+        if (set(contract)!=(required|{"acceptance"} if shared else required)
             or contract["kind"]!="outcome_feedback_controller"
             or type(contract["version"]) is not int
-            or contract["version"] not in (1,2)
+            or contract["version"] not in (1,2,3)
             or contract["outcome_requirement"]!=(
-                "SHARED_LOCAL_RECORD_POSTCONDITION" if v2
+                "SHARED_SANDBOX_POSTCONDITION" if posted
+                else "SHARED_LOCAL_RECORD_POSTCONDITION" if shared
                 else "INDEPENDENT_LOCAL_EVIDENCE")
-            or contract["allowed_effect"]!="LOCAL_EVIDENCE_ONLY"
+            or contract["allowed_effect"]!=("LOCAL_SANDBOX_ONLY" if posted
+                                            else "LOCAL_EVIDENCE_ONLY")
             or type(contract["max_attempts"]) is not int or contract["max_attempts"]!=2
             or not isinstance(contract["goal_id"],str)
             or not _ID.fullmatch(contract["goal_id"])
@@ -194,7 +205,7 @@ def _verify(db:sqlite3.Connection, root:sqlite3.Row) -> tuple[bool,str,dict | No
             or root["parent_task"] is not None
             or root["claim_token"] is not None):
             return False,"INVALID_FEEDBACK_CONTRACT",None,[]
-        if v2:
+        if shared:
             _checked_shared_acceptance(contract["acceptance"],
                                        contract["alternatives"])
             if (contract["alternatives"][0]["task_spec"]["goal_type"] ==
@@ -296,7 +307,9 @@ def _finish(db, root, state, reason, *, child_id=None) -> dict:
 
 
 def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path,
-             acceptance: dict | None = None) -> str:
+             acceptance: dict | None = None, *,
+             require_staged: bool = False,
+             verifier_db: sqlite3.Connection | None = None) -> str:
     """Return SATISFIED / UNSATISFIED / WAITING / INCONCLUSIVE.
 
     Audit failures are NOT automatically treated as negative outcome: missing,
@@ -310,7 +323,37 @@ def _outcome(child,method,db_path:Path,workspace:Path,fixtures:Path,
     if state in ("PENDING","RUNNING"):
         return "WAITING"
     kind=spec["kind"]
-    if acceptance is not None and state in ("NEEDS_REVIEW","VERIFIED"):
+    if require_staged and state=="NEEDS_REVIEW":
+        # A checked proposal is not a completed sandbox action.
+        return "WAITING"
+    if require_staged and state=="SANDBOX_VERIFIED":
+        if verifier_db is None or acceptance is None:
+            return "INCONCLUSIVE"
+        from .conformance import _verify_staged
+        if _verify_staged(verifier_db,child,workspace,fixtures)!="MECHANICALLY_VALID":
+            return "INCONCLUSIVE"
+        candidate=safe_fixture(workspace,"sandbox/"+child["task_id"]+".candidate")
+        # Attest exactly the same immutable candidate and original task
+        # artifact bytes after the separate read-only verifier returns.
+        proposal_raw=safe_fixture(
+            workspace,"artifacts/"+child["task_id"]+".json")
+        if hashlib.sha256(proposal_raw).hexdigest()!=child["artifact_hash"]:
+            return "INCONCLUSIVE"
+        proposal=json.loads(proposal_raw)
+        if (not isinstance(proposal,dict)
+            or hashlib.sha256(candidate).hexdigest()!=proposal.get("candidate_sha256")):
+            return "INCONCLUSIVE"
+        raw=safe_fixture(fixtures,spec["input"])
+        shared=assess_local_record(
+            kind=spec["goal_type"],original=raw,
+            current_sha256=hashlib.sha256(raw).hexdigest(),
+            pinned_sha256=method["source_sha256"][spec["input"]],
+            target=acceptance["target_record"],candidate=candidate)
+        return ("SATISFIED" if shared["verdict"]=="LOCAL_CANDIDATE_TARGET_MET"
+                else "UNSATISFIED" if shared["verdict"] in
+                ("TARGET_NOT_MET","PRESERVATION_CONFLICT") else "INCONCLUSIVE")
+    if acceptance is not None and state in (
+        ("VERIFIED",) if require_staged else ("NEEDS_REVIEW","VERIFIED")):
         # First establish original worker output integrity independently.
         if state=="NEEDS_REVIEW":
             audited=audit_goal(db_path,workspace,fixtures,child["task_id"])
@@ -396,7 +439,8 @@ def verify_feedback_root(db:sqlite3.Connection,root:sqlite3.Row,
             WHERE task_id=? AND kind='FEEDBACK_OBSERVED' ORDER BY event_id""",
             (root["task_id"],)).fetchall()
         accepted={"state":_READY,"reason":(
-                  "SHARED_LOCAL_TARGET_MET" if contract["version"]==2
+                  "SHARED_SANDBOX_POSTCONDITION_MET" if contract["version"]==3
+                  else "SHARED_LOCAL_TARGET_MET" if contract["version"]==2
                   else "INDEPENDENT_LOCAL_EVIDENCE"),
                   "child_task_id":last["child_task_id"],
                   "business_outcome_verified":False,"authorizes_external_effect":False}
@@ -405,7 +449,9 @@ def verify_feedback_root(db:sqlite3.Connection,root:sqlite3.Row,
         try:
             if _outcome(child,contract["alternatives"][last["ordinal"]],
                         db_path,workspace,fixtures,
-                        contract.get("acceptance"))!="SATISFIED":
+                        contract.get("acceptance"),
+                        require_staged=contract["version"]==3,
+                        verifier_db=db)!="SATISFIED":
                 return {"valid":False,"reason":"ACCEPTED_OUTCOME_NO_LONGER_VERIFIABLE"}
         except (OSError,ValueError,TypeError,KeyError,sqlite3.Error,UnicodeError):
             return {"valid":False,"reason":"OUTCOME_RECHECK_UNAVAILABLE"}
@@ -437,7 +483,9 @@ def advance_evidence_goals(db_path:Path,workspace:Path,fixtures:Path,
         try:
             verdict=_outcome(child,contract["alternatives"][last["ordinal"]],
                              db_path,workspace,fixtures,
-                             contract.get("acceptance"))
+                             contract.get("acceptance"),
+                             require_staged=contract["version"]==3,
+                             verifier_db=db)
         except (OSError,ValueError,TypeError,KeyError,
                 sqlite3.Error,UnicodeError):
             verdict="INCONCLUSIVE"
@@ -445,7 +493,8 @@ def advance_evidence_goals(db_path:Path,workspace:Path,fixtures:Path,
             return {"root_task_id":root["task_id"],"status":"AWAITING_CHILD"}
         if verdict=="SATISFIED":
             return _finish(db,root,_READY,
-                           "SHARED_LOCAL_TARGET_MET" if contract["version"]==2
+                           "SHARED_SANDBOX_POSTCONDITION_MET" if contract["version"]==3
+                           else "SHARED_LOCAL_TARGET_MET" if contract["version"]==2
                            else "INDEPENDENT_LOCAL_EVIDENCE",
                            child_id=child["task_id"])
         if verdict=="UNSATISFIED" and last["ordinal"]==0:

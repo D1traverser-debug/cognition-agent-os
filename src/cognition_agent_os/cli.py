@@ -387,13 +387,15 @@ def main(argv=None) -> int:
             if (not isinstance(proposal,dict)
                 or set(proposal) not in (
                     {"goal_id","objective","alternatives"},
-                    {"goal_id","objective","alternatives","acceptance"})):
+                    {"goal_id","objective","alternatives","acceptance"},
+                    {"goal_id","objective","alternatives","acceptance","execution_scope"})):
                 raise ValueError("INVALID_FEEDBACK_SEED")
             tid=register_evidence_goal(args.db,args.fixtures,
                 goal_id=proposal["goal_id"],
                 objective=proposal["objective"],
                 alternatives=proposal["alternatives"],
-                acceptance=proposal.get("acceptance"))
+                acceptance=proposal.get("acceptance"),
+                execution_scope=proposal.get("execution_scope","LOCAL_EVIDENCE_ONLY"))
         except (ValueError,TypeError,KeyError,OSError,sqlite3.Error,
                 PermissionError) as exc:
             print(json.dumps({"status":"FEEDBACK_NOT_ADMITTED",
@@ -401,7 +403,9 @@ def main(argv=None) -> int:
             return 4
         print(json.dumps({"task_id":tid,"state":"FEEDBACK_ACTIVE",
             "business_outcome_verified":False,
-            "allowed_effect":"LOCAL_EVIDENCE_ONLY"},sort_keys=True))
+            "allowed_effect":("LOCAL_SANDBOX_ONLY" if
+                proposal.get("execution_scope")=="LOCAL_SANDBOX_POSTCONDITION"
+                else "LOCAL_EVIDENCE_ONLY")},sort_keys=True))
         return 0
     if args.command == "seed-bounded-local-goal":
         # This command NEVER creates a fresh grant or ledger automatically.

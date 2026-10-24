@@ -100,3 +100,36 @@ P1 代码层的候选边界（可调整文件夹名，不应随意改变职责�
 - [GitHub Actions troubleshooting](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows)：schedule 可能延迟/丢失，不是可靠 wake 的单一真相源。
 
 后续接口详见 [02-AUTHORITY-AND-INTERFACES.md](02-AUTHORITY-AND-INTERFACES.md)，操作限制详见 [04-SECURITY-OPERATIONS.md](04-SECURITY-OPERATIONS.md)。
+
+## H. 2026-10-24 实际代码基线与架构重构决策（Draft PR #36，待独立验收）
+
+**原始目标**：用户只输入目标、约束及必要授权；总控主动识别遗漏、针对未知研究原始证据、选择合适方法、在现有可信边界下推进任务，独立从真实目标效果验收，并在重启或新对话中恢复上下文。**这不是把43个 Python 模块等同于43个服务，也不是把测试数量当成完成度。** 原始用户纠正及先前否决的“只做局部补丁、复制多套总控、让用户一再提供精准提示词、生产写入未经授权”始终优先于本文草案。
+
+### H1. 候选目标架构与目前代码的对应
+
+| 逻辑职责 | 当前真实接口/组件 | 已知边界、剩余问题 |
+|---|---|---|
+| 目标契约及跨运行恢复 | `continuity.py`、`intent_planner.py`、`intent_runtime.py` | `resume_goal` 只读恢复**已登记**的 owner 目标；尚不能自动从陌生自然语言完成全部目标解析。ChatGPT 新会话不能被假设自动读取运行宿主上的 SQLite。 |
+| 任务权威、权限、租约及执行生命周期 | `ledger.py`、`runner.py`、`host.py`、`control_kernel.py` | 原有单一 SQLite 保留；架构重构对全层级任务祖先约束进行 fail-closed 审查。Host 仍是被真实操作系统唤醒的有界 tick，不是已安装全天在线的后台服务。 |
+| 受限领域能力（adapter） | `capability_dispatch.py` 的静态注册表，调用现有 `knowledge_routing`、`investigation`、`research_*`、`repo_repair`、`goal_loop`、`reconciliation` 等 | 只是可信代码认可的本地/隔离能力；外部写入、任意 Skill 自动安装及自授予工具仍禁止。尚未证明开放世界方法发现。 |
+| 来源检索、证据版本与候选推理 | `source.py`、`investigation.py`、`knowledge_routing.py`、`research_gap.py`、`research_assessment.py` | 来源 SHA 证明一致性而非真实性；模型检索不能自证语义正确，撤回/争议和新来源获取尚需真实效果研究。 |
+| 行动与不可变产物 | `isolated_filesystem.py`、`sandbox_effect.py`、现有 repo/fixture 执行器 | 本地 sandbox 与生产远端不同；不能由工具成功自动提升为 owner 业务成功。 |
+| 独立反馈和闭环治理 | `evaluation.py`、`goal_audit.py`、`conformance.py`、`outcome_feedback.py`、`local_retry.py`、`diagnostics.py` | 存在部分机械验收与重试；真实 owner 目标完成、陌生任务正确性、失败类别全范围修复及合法邻接行为还需独立证据。 |
+
+### H2. 架构取舍
+
+- **采用**：保留一个账本和 Host/Worker，先划定 owner goal/authority → bounded orchestration → explicit capability adapter → independent evidence/outcome 的责任线，迁移现有处理器并通过正负场景验证。
+- **不采用**：将43模块重命名为微服务/新增多个自治总控/重写一套任务数据库/直接套大型 Agent 框架。除非经过对照测试发现不能满足边界要求。
+- **不采用“一次性替换全部代码”**：此前的完整 blob 遍历只是源身份与结构审查，**不是每项行为都有独立语义证明**。在此信息条件下大爆炸重写会丢失未识别的合法行为。采用有端到端对照证据的递进迁移，更符合风险约束。
+- **实施中的兼容层**：`runner.py` 的既有来源读/方案提议接口仍由 compare adapter 使用，以保留旧有失效注入和撤权检测。它是明确的迁移过渡边界，不是第二套控制器；正式能力集合在静态映射中可审查。
+
+### H3. 端到端验收义务和跨会话继承
+
+1. 目标登记及新进程恢复：先验证 `continuity.resume_goal` 的同一目标 ID、授权版本、下一任务身份和已知 `UNKNOWN`，**不**以交接文件/助手记忆伪造授权。出现两个有效目标不能臆测优先级。
+2. 研究到行动：必须从用户目标发现真实信息缺口，读取适当的原始来源，明确来源可信与适用条件，提出备选方案并拒绝幻觉来源；该能力**尚未以通用未知任务证明**。
+3. 任务传递：不同能力、多层后代在祖先阻止、目标修订、撤权、循环父链及租约竞争时必须拒绝执行；其他合规工作不应被无关失败挡住。
+4. 执行与验证：对真实授权动作，观察实际外部效果、未知 ACK、重试幂等、合法相邻动作和失败类修复；没有可独立复核的真实业务结果不得报 READY。
+5. 开发对话继承：每次先查**最新用户原始目标/明确纠正**、GitHub PR 实际 HEAD 和确切版本测试，再看根目录 `AGENTS.md` 与单一 `SESSION_HANDOFF.md`。归档交接、旧 CURRENT 与旧 ConOps 只能做历史证据；不可把 ChatGPT 记忆、GitHub 元数据、目标账本当成同一个权限系统。
+6. 重构完成判据：与旧版合法路径对照、失效注入、全部当前相关回归、Graphify/AST 可追溯结构、真实陌生任务的独立结果及 owner 纠错负担；任一关键义务未验证，明确保留 OPEN 与 NOT_READY。
+
+**状态：架构契约已梳理，运行时能力分发和完整祖先检查作为改造候选进入 Draft；并没有完成整个自主 Agent OS，也没有任何生产部署或新授权。**

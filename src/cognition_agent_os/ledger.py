@@ -130,7 +130,78 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
         raise
 
 
+
+def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120) -> bool:
+    """Extend ONLY this still-live worker claim, never revive expired claims.
+
+    Used around bounded long local-model requests. Unlike a long initial
+    lease, renewal preserves short crash recovery when no worker is alive.
+    This method grants no capability and checks the original current
+    goal/grant and still-enabled authorization under one write lock.
+    """
+    if (not isinstance(lease_seconds, int)
+        or not 1 <= lease_seconds <= 180):
+        raise ValueError("Lease renewal interval out of bounds")
+    now = time.time()
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        updated = db.execute(
+            """UPDATE tasks
+               SET lease_until=?,state_version=state_version+1
+               WHERE task_id=? AND claim_token=? AND state='RUNNING'
+                 AND lease_until>?
+                 AND EXISTS (
+                     SELECT 1 FROM authority
+                     WHERE singleton=1 AND goal_rev=? AND grant_rev=?
+                       AND write_allowed=1
+                 )""",
+            (now + lease_seconds, task["task_id"], task["claim_token"], now,
+             task["goal_rev"], task["grant_rev"]),
+        ).rowcount
+        db.commit()
+        return updated == 1
+    except BaseException:
+        db.rollback()
+        raise
+
+
+
+def lineage_guard(db: sqlite3.Connection, task: dict, *, max_depth: int = 512) -> bool:
+    """Fail closed for any invalid ancestor in this exact task's goal lineage.
+
+    A direct-parent-only check allows a DECOMPOSED intermediate task to hide
+    a blocked grandparent. A descendant must not execute when ANY ancestor
+    was blocked, failed, lost, changed goal/grant or formed a cycle. This is
+    inspection of the one existing task ledger, not a second policy store.
+    """
+    if type(max_depth) is not int or not 1 <= max_depth <= 512:
+        raise ValueError("INVALID_LINEAGE_DEPTH")
+    seen = {task["task_id"]}
+    parent_id = task.get("parent_task")
+    for _ in range(max_depth):
+        if parent_id is None:
+            return True
+        if not isinstance(parent_id, str) or parent_id in seen:
+            return False
+        seen.add(parent_id)
+        row = db.execute(
+            "SELECT task_id,parent_task,state,goal_rev,grant_rev "
+            "FROM tasks WHERE task_id=?", (parent_id,)).fetchone()
+        if (row is None
+            or row["state"] in ("BLOCKED", "UNKNOWN", "REJECTED")
+            or row["goal_rev"] != task["goal_rev"]
+            or row["grant_rev"] != task["grant_rev"]):
+            return False
+        parent_id = row["parent_task"]
+    return False
+
+
 def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> tuple[bool, str | None]:
+    # This guard is also called UNDER the artifact writer's IMMEDIATE lock.
+    # Root invalidation after an earlier runner preflight must still fence the
+    # effect. Checking only a cached claim's goal/grant revision is insufficient.
+    if not lineage_guard(db, task):
+        return False, "UPSTREAM_TASK_INVALID"
     row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
     if row["goal_rev"] != task["goal_rev"]:
         return False, "STALE_GOAL"

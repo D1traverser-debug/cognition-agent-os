@@ -8,7 +8,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from verify_assurance_registry import check, RegistryError, verify_archived_sources
+from verify_assurance_registry import (check, RegistryError, verify_archived_sources,
+                                       verify_live_handoff)
 
 class AssuranceRegistryTests(unittest.TestCase):
     @classmethod
@@ -78,6 +79,53 @@ class AssuranceRegistryTests(unittest.TestCase):
     def test_archive_path_traversal_rejected(self):
         self.rejected(lambda x: x['source_registry']['legacy_conops'].__setitem__(
             'archived_basename', '../untrusted.json'))
+
+    def test_active_handoff_is_one_small_unambiguous_current_record(self):
+        report = verify_live_handoff(ROOT)
+        self.assertEqual(report['status'], 'CURRENT_HANDOFF_VALID')
+        self.assertEqual(report['archive_integrity'], 'EXACT_GIT_BLOB')
+        self.assertLess(report['active_bytes'], 8192)
+
+    def test_archive_is_not_an_active_instruction_source(self):
+        live = (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8')
+        self.assertEqual(len([
+            line for line in live.splitlines()
+            if line.startswith('# CURRENT')
+        ]), 1)
+        self.assertNotIn('## HISTORICAL CHECKPOINT ARCHIVE', live)
+        self.assertNotIn('**START HERE, NOT THE HISTORICAL', live)
+
+    def test_stale_handoff_substitution_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            dst = Path(d)
+            (dst / 'README.md').write_text((ROOT / 'README.md').read_text(encoding='utf-8'), encoding='utf-8')
+            (dst / 'SESSION_HANDOFF.md').write_text(
+                (ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').read_text(encoding='utf-8'),
+                encoding='utf-8')
+            (dst / 'archive').mkdir()
+            (dst / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').write_bytes(
+                (ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').read_bytes())
+            with self.assertRaises(RegistryError):
+                verify_live_handoff(dst)
+
+    def test_archive_tamper_and_ambiguous_live_branch_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            dst = Path(d)
+            (dst / 'README.md').write_text((ROOT / 'README.md').read_text(encoding='utf-8'), encoding='utf-8')
+            (dst / 'SESSION_HANDOFF.md').write_text(
+                (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8'), encoding='utf-8')
+            (dst / 'archive').mkdir()
+            archive = dst / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md'
+            archive.write_bytes(b'spoofed historical context')
+            with self.assertRaises(RegistryError):
+                verify_live_handoff(dst)
+            archive.write_bytes(
+                (ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').read_bytes())
+            live = (dst / 'SESSION_HANDOFF.md')
+            live.write_text(live.read_text(encoding='utf-8') +
+                            '\\n# CURRENT misleading checkpoint\\n'.replace('\\n','\n'), encoding='utf-8')
+            with self.assertRaises(RegistryError):
+                verify_live_handoff(dst)
 
     def test_changed_original_archive_bytes_are_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

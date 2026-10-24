@@ -64,6 +64,116 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["reason"],"STALE_GOAL")
         self.assertEqual(self.task(tid)["state"],"BLOCKED")
 
+    def test_deep_descendant_cannot_run_when_root_is_invalid(self):
+        """An intermediate DECOMPOSED task must not conceal a blocked root."""
+        from cognition_agent_os.ledger import create_task
+        for root_state in ("BLOCKED", "UNKNOWN"):
+            with self.subTest(root_state=root_state):
+                with closing(connect(self.db_path)) as db:
+                    root = create_task(db, {"kind":"fixture",
+                                            "old":"missing-a", "new":"missing-b"},
+                                       due_at=9999999999)
+                    middle = create_task(db, {"kind":"fixture",
+                                              "old":"missing-c", "new":"missing-d"},
+                                         parent=root, due_at=9999999999)
+                    leaf = create_task(db, self.structured(), parent=middle)
+                    db.execute("UPDATE tasks SET state=? WHERE task_id=?",
+                               (root_state, root))
+                    db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                               (middle,))
+                    db.commit()
+                result = run_once(self.db_path, self.workspace, self.fixtures)
+                self.assertEqual(result["task_id"], leaf)
+                self.assertEqual(result["status"], "BLOCKED", result)
+                self.assertEqual(self.task(leaf)["error_code"],
+                                 "UPSTREAM_TASK_INVALID")
+
+    def test_mid_execution_ancestor_revocation_blocks_actual_artifact_boundary(self):
+        """A root can fail AFTER dispatch admission; writer must recheck ancestry."""
+        from cognition_agent_os import runner
+        from cognition_agent_os.ledger import create_task
+        (self.fixtures/"before.txt").write_text("original")
+        (self.fixtures/"after.txt").write_text("changed")
+        with closing(connect(self.db_path)) as db:
+            root = create_task(db, {"kind":"fixture","old":"before.txt",
+                                    "new":"after.txt"}, due_at=9999999999)
+            parent = create_task(db, {"kind":"fixture","old":"before.txt",
+                                      "new":"after.txt"}, parent=root,
+                                 due_at=9999999999)
+            leaf = create_task(db, {"kind":"fixture","old":"before.txt",
+                                    "new":"after.txt"}, parent=parent)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id IN (?,?)",
+                       (root,parent))
+            db.commit()
+        actual = runner.get_pair
+        reads = 0
+
+        def interrupt(spec, fixtures):
+            nonlocal reads
+            observed = actual(spec, fixtures)
+            reads += 1
+            if reads == 2:
+                with closing(connect(self.db_path)) as db:
+                    db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                               (root,))
+                    db.commit()
+            return observed
+
+        with patch.object(runner, "get_pair", side_effect=interrupt):
+            result = run_once(self.db_path, self.workspace, self.fixtures)
+        self.assertEqual(reads,2)
+        self.assertEqual(result["task_id"],leaf)
+        self.assertEqual(result["status"],"BLOCKED",result)
+        self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
+        self.assertFalse((self.workspace/"artifacts"/(leaf+".json")).exists())
+
+    def test_task_parent_cycle_is_not_a_legitimate_decomposition(self):
+        """A corrupted parent graph cannot supply authorization or effects."""
+        from cognition_agent_os.ledger import create_task
+        with closing(connect(self.db_path)) as db:
+            first = create_task(db, self.structured())
+            second = create_task(db, self.structured(), parent=first,
+                                 due_at=9999999999)
+            db.execute("UPDATE tasks SET parent_task=? WHERE task_id=?",
+                       (second, first))
+            db.commit()
+        result = run_once(self.db_path, self.workspace, self.fixtures)
+        self.assertEqual(result["status"], "BLOCKED", result)
+        self.assertEqual(self.task(first)["error_code"], "UPSTREAM_TASK_INVALID")
+
+    def test_unknown_capability_cannot_fall_through_to_snapshot_executor(self):
+        """Free-text or malformed task kinds never become executable plugins."""
+        tid = self.seed({"kind": "run_arbitrary_tool", "old": "x", "new": "y",
+                         "module": "os", "command": "untrusted"})
+        observed = run_once(self.db_path, self.workspace, self.fixtures)
+        self.assertEqual(observed["status"], "UNKNOWN", observed)
+        self.assertEqual(self.task(tid)["error_code"], "INVALID_TASK_SPEC")
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
+
+    def test_registered_capability_dispatch_uses_same_ledger_and_cold_resume(self):
+        """No new task DB, goal authority or runner is introduced by adapters."""
+        from cognition_agent_os.continuity import register_goal, resume_goal
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        tid = self.seed(self.structured())
+        contract = {
+            "goal_id": "single_spine",
+            "objective": "Maintain valid user goal across sessions",
+            "acceptance": "Independent outcome confirmation still required",
+            "constraints": ["No unauthorized remote effects"],
+            "next_task_id": tid,
+            "source": None,
+        }
+        register_goal(self.db_path, contract)
+        resumed = resume_goal(self.db_path)
+        self.assertEqual(resumed["status"], "READY_TO_TICK", resumed)
+        self.assertEqual(resumed["next_task_id"], tid)
+        tick = run_tick(self.db_path, self.workspace, self.fixtures,
+                        max_jobs=2)
+        self.assertEqual(tick["tasks"][0]["status"], "DECOMPOSED", tick)
+        self.assertFalse(tick["semantic_outcome_verified"])
+        self.assertFalse(resume_goal(self.db_path)["business_outcome_verified"])
+
     def test_blocked_upstream_prevents_cross_capability_child_execution(self):
         self.fixtures.joinpath("settings.json").write_text('{"critical":"keep"}')
         for intent in (self.structured(),self.comparison()):
@@ -320,9 +430,24 @@ class IntentRuntimeTests(unittest.TestCase):
         db.execute("UPDATE tasks SET state='UNKNOWN' WHERE task_id=?",(parent,))
         db.commit();db.close()
         result=run_once(self.db_path,self.workspace,self.fixtures)
-        self.assertEqual(result["status"],"UNKNOWN")
+        # Upstream failure is an earlier, stricter invariant than recursive
+        # intent admission. The descendant must never reach an adapter.
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
+        self.assertEqual(self.task(child)["state"],"BLOCKED")
+
+    def test_nested_intent_still_refused_when_ancestor_is_healthy(self):
+        from cognition_agent_os.ledger import create_task
+        parent = self.seed(self.structured())
+        with closing(connect(self.db_path)) as db:
+            child = create_task(db, self.comparison(), parent=parent)
+            db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
+                       (9999999999, parent))
+            db.commit()
+        result = run_once(self.db_path,self.workspace,self.fixtures)
+        self.assertEqual(result["task_id"],child)
+        self.assertEqual(result["status"],"UNKNOWN",result)
         self.assertEqual(result["reason"],"INTENT_RECURSION_REFUSED")
-        self.assertEqual(self.task(child)["state"],"UNKNOWN")
 
     def test_plan_receipt_falsification_cannot_forge_validity(self):
         tid=self.seed(self.structured())

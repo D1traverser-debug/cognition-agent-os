@@ -145,6 +145,66 @@ def verify_archived_sources(registry, directory):
                           'requirements': len(originals), 'scenarios': len(old_titles)})
     return confirmed
 
+
+# Immutable Git blob ID of the original long, multiply-"CURRENT" handoff.
+# The archive is evidence, not an alternate source of live project commands.
+_ARCHIVE_HANDOFF = 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md'
+_ARCHIVE_GIT_BLOB_SHA1 = '6bc6ad3041876916c16886767ce2ff24bfd88b75'
+_MAX_ACTIVE_HANDOFF_BYTES = 8192
+
+def verify_live_handoff(root):
+    """Check only identity, active/archive isolation and stale-context hygiene.
+
+    NOT a proof that retrieved prose is semantically correct, current GitHub
+    state is live, or any owner objective has been achieved.
+    """
+    active_path = root / 'SESSION_HANDOFF.md'
+    archive_path = root / _ARCHIVE_HANDOFF
+    readme_path = root / 'README.md'
+    for path in (active_path, archive_path, readme_path):
+        require(path.is_file() and not path.is_symlink(),
+                'missing, linked or unsuitable context source: ' + path.name)
+    raw = active_path.read_bytes()
+    require(0 < len(raw) <= _MAX_ACTIVE_HANDOFF_BYTES,
+            'active handoff unbounded: old and new instructions mixed')
+    try:
+        live = raw.decode('utf-8')
+        readme = readme_path.read_text(encoding='utf-8')
+    except UnicodeError as exc:
+        raise RegistryError('context text must be UTF-8') from exc
+    headings = [line for line in live.splitlines()
+                if re.match(r'^#+\s+CURRENT\b', line)]
+    require(len(headings) == 1 and headings[0].startswith('# CURRENT'),
+            'ambiguous or missing live CURRENT checkpoint')
+    # A stable exact PR identity in both entrypoints is preferable to
+    # guessing priority by timestamps or the first lexical match.
+    match = re.search(r'\bDraft PR #(\d+)\b', headings[0])
+    require(match is not None and
+            f'[Draft PR #{match.group(1)}]' in readme,
+            'README and live handoff disagree on candidate identity')
+    branch = re.search(r'\bfeature/[a-z0-9][a-z0-9_-]+\b', live)
+    require(branch is not None and branch.group(0) in readme,
+            'branch not equally identified by README and active handoff')
+    require('NOT_READY' in live and 'NOT_READY' in readme,
+            'cannot silently promote incomplete product via handoff')
+    require('archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md' in live,
+            'historical evidence is not explicitly discoverable')
+    require('**START HERE, NOT THE HISTORICAL' not in live,
+            'superseded START HERE leaked into live context')
+    historical = archive_path.read_bytes()
+    # Git SHA-1 object ID contains the original exact byte length and bytes.
+    blob = b'blob ' + str(len(historical)).encode('ascii') + b'\x00' + historical
+    require(hashlib.sha1(blob).hexdigest() == _ARCHIVE_GIT_BLOB_SHA1,
+            'archived original text was lost or silently changed')
+    require(historical != raw and len(historical) > _MAX_ACTIVE_HANDOFF_BYTES,
+            'history was rewritten as the current brief')
+    return {'status': 'CURRENT_HANDOFF_VALID',
+            'active_bytes': len(raw),
+            'archive_integrity': 'EXACT_GIT_BLOB',
+            'live_pr': int(match.group(1)),
+            'historical_instruction_authority': False,
+            'semantic_claims_verified': False}
+
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
@@ -156,6 +216,7 @@ def main(argv=None):
         result = check(reg,
                        (root / 'docs/00-PRODUCT-CONOPS.md').read_text(encoding='utf-8'),
                        (root / 'docs/PRODUCT-READINESS-GATE.md').read_text(encoding='utf-8'))
+        result['active_handoff'] = verify_live_handoff(root)
         result['original_source_content_verified'] = (
             verify_archived_sources(reg, opts.archive_dir)
             if opts.archive_dir else 'NOT_CHECKED_CI_HAS_NO_PRIVATE_ARCHIVES')
