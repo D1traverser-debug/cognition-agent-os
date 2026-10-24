@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from .ledger import finalize_observed, renew_claim
+from .ledger import current_guard, finalize_observed, renew_claim
 from .runner import ArtifactConflict, store_once
 
 _TERMS = re.compile(r"[a-z][a-z0-9-]{2,24}\Z")
@@ -158,6 +158,9 @@ def run_public_discovery(db: sqlite3.Connection, task: dict,
         if (original.get("kind") != "open_goal"
             or original.get("allow_public_discovery") is not True):
             raise PublicDiscoveryInvalid("MISSING_ORIGINAL_OWNER_GRANT")
+        allowed, reason = current_guard(db, task, needs_write=True)
+        if not allowed:
+            return finalize_observed(db, task, "BLOCKED", error_code=reason)
         if not renew_claim(db, task, lease_seconds=60):
             raise PublicDiscoveryInvalid("PUBLIC_DISCOVERY_LEASE_LOST")
         envelope, raw_digest = _search_public_github(spec["terms"])
@@ -202,11 +205,11 @@ def audit_public_discovery(db_path: Path, workspace: Path,
             db.row_factory = sqlite3.Row
             row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
             if row is None or row["state"] != "NEEDS_REVIEW":
-                return unknown
+                return {**unknown, "reason":"TASK_NOT_REVIEWABLE"}
             spec = validate_public_discovery(json.loads(row["source_spec"]))
             from .runner import verify_artifact
             if not verify_artifact(workspace, dict(row)):
-                return unknown
+                return {**unknown, "reason":"ARTIFACT_HASH_OR_PATH_UNAVAILABLE"}
             path = workspace / "artifacts" / (task_id + ".json")
             obj = json.loads(path.read_bytes())
             if (obj.get("task_id") != task_id or obj.get("goal_rev") != row["goal_rev"]
@@ -218,11 +221,12 @@ def audit_public_discovery(db_path: Path, workspace: Path,
                 or obj.get("next_step") != "INDEPENDENTLY_REVIEW_FIT_API_AND_SECURITY"
                 or obj.get("candidate_repositories") !=
                     _project_results(obj.get("provider_results"))):
-                return unknown
+                return {**unknown, "reason":"PUBLIC_METADATA_RECEIPT_CONTRADICTION"}
             return {"status": "PUBLIC_TOOL_LEADS_MECHANICALLY_GROUNDED",
                     "count": len(obj["candidate_repositories"]),
                     "business_outcome_verified": False,
                     "provider_security_verified": False}
     except (OSError, sqlite3.Error, ValueError, TypeError, KeyError,
-            PublicDiscoveryInvalid):
-        return unknown
+            PublicDiscoveryInvalid) as exc:
+        return {**unknown, "reason":"AUDIT_INPUT_UNAVAILABLE_OR_INVALID",
+                "diagnostic_class":type(exc).__name__}
