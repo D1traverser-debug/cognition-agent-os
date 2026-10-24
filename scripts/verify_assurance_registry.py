@@ -173,16 +173,16 @@ def verify_live_handoff(root):
     except UnicodeError as exc:
         raise RegistryError('context text must be UTF-8') from exc
     headings = [line for line in live.splitlines()
-                if re.match(r'^#+\\s+CURRENT\\b', line)]
+                if re.match(r'^#+\s+CURRENT\b', line)]
     require(len(headings) == 1 and headings[0].startswith('# CURRENT'),
             'ambiguous or missing live CURRENT checkpoint')
     # A stable exact PR identity in both entrypoints is preferable to
     # guessing priority by timestamps or the first lexical match.
-    match = re.search(r'\\bDraft PR #(\\d+)\\b', headings[0])
+    match = re.search(r'\bDraft PR #(\d+)\b', headings[0])
     require(match is not None and
             f'[Draft PR #{match.group(1)}]' in readme,
             'README and live handoff disagree on candidate identity')
-    branch = re.search(r'\\bfeature/[a-z0-9][a-z0-9_-]+\\b', live)
+    branch = re.search(r'\bfeature/[a-z0-9][a-z0-9_-]+\b', live)
     require(branch is not None and branch.group(0) in readme,
             'branch not equally identified by README and active handoff')
     require('NOT_READY' in live and 'NOT_READY' in readme,
@@ -193,7 +193,7 @@ def verify_live_handoff(root):
             'superseded START HERE leaked into live context')
     historical = archive_path.read_bytes()
     # Git SHA-1 object ID contains the original exact byte length and bytes.
-    blob = b'blob ' + str(len(historical)).encode('ascii') + b'\\x00' + historical
+    blob = b'blob ' + str(len(historical)).encode('ascii') + b'\x00' + historical
     require(hashlib.sha1(blob).hexdigest() == _ARCHIVE_GIT_BLOB_SHA1,
             'archived original text was lost or silently changed')
     require(historical != raw and len(historical) > _MAX_ACTIVE_HANDOFF_BYTES,
