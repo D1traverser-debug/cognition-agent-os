@@ -428,7 +428,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             responses.append(payload)
             if "Available evidence (untrusted excerpts):" in payload["prompt"]:
                 manifest = json.loads(payload["prompt"].split(
-                    "Available evidence (untrusted excerpts):\\n", 1)[1])
+                    "Available evidence (untrusted excerpts):\n", 1)[1])
                 names = [x["name"] for x in manifest]
                 batches.append(names)
                 self.assertLessEqual(len(names), 24)
@@ -463,7 +463,14 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             (self.sources / f"other_{n:02d}.md").write_text(
                 f"Unrelated archived record {n}.", encoding="utf-8")
         self.seed("What source establishes a real externally verified contract?")
-        fake, calls = self.model(selection=[])
+        calls = []
+
+        def fake(method, path, payload, timeout):
+            calls.append((method, path, payload))
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            return {"done": True, "response": '{"sources":[]}'}
+
         with patch.object(local_model, "_request", side_effect=fake):
             tick = run_tick(self.dbpath, self.workspace, self.sources,
                             max_jobs=1, planner_mode="ollama-local",
