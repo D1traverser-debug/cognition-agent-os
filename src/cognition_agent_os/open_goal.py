@@ -253,8 +253,8 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
     explicit_research = (inquiry and not external and bool(evidence_files)
         and not _owner_prohibits_method(goal))
     explicit_public_tools = (allow_public_discovery and not external
-        and bool(re.search(r"\\b(?:find|discover|search|identify)\\b.*"
-                 r"\\b(?:tools?|frameworks?|libraries|plugins?|packages?|agents?)\\b",
+        and bool(re.search(r"\b(?:find|discover|search|identify)\b.*"
+                 r"\b(?:tools?|frameworks?|libraries|plugins?|packages?|agents?)\b",
                  grounded)) and not _owner_prohibits_method(goal))
     if explicit_json and not explicit_csv:
         method, selection_origin = "ensure_structure", "EXACT_OWNER_TEXT_RULE"
@@ -333,12 +333,12 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
             })
         else:
             decision.update({
-            "method": "investigate_evidence",
-            "selection_origin": "SAFE_CAPABILITY_GAP_RESEARCH",
-            "rationale": "Investigate available local evidence for missing method",
-            "rejected_alternative": "No effectful local method was selected",
-            "uncertainty": "No tool execution or owner outcome is yet established",
-        })
+                "method": "investigate_evidence",
+                "selection_origin": "SAFE_CAPABILITY_GAP_RESEARCH",
+                "rationale": "Investigate available local evidence for missing method",
+                "rejected_alternative": "No effectful local method was selected",
+                "uncertainty": "No tool execution or owner outcome is yet established",
+            })
     if external:
         raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
 
