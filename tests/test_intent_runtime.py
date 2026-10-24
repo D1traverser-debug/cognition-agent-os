@@ -391,9 +391,24 @@ class IntentRuntimeTests(unittest.TestCase):
         db.execute("UPDATE tasks SET state='UNKNOWN' WHERE task_id=?",(parent,))
         db.commit();db.close()
         result=run_once(self.db_path,self.workspace,self.fixtures)
-        self.assertEqual(result["status"],"UNKNOWN")
+        # Upstream failure is an earlier, stricter invariant than recursive
+        # intent admission. The descendant must never reach an adapter.
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
+        self.assertEqual(self.task(child)["state"],"BLOCKED")
+
+    def test_nested_intent_still_refused_when_ancestor_is_healthy(self):
+        from cognition_agent_os.ledger import create_task
+        parent = self.seed(self.structured())
+        with closing(connect(self.db_path)) as db:
+            child = create_task(db, self.comparison(), parent=parent)
+            db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
+                       (9999999999, parent))
+            db.commit()
+        result = run_once(self.db_path,self.workspace,self.fixtures)
+        self.assertEqual(result["task_id"],child)
+        self.assertEqual(result["status"],"UNKNOWN",result)
         self.assertEqual(result["reason"],"INTENT_RECURSION_REFUSED")
-        self.assertEqual(self.task(child)["state"],"UNKNOWN")
 
     def test_plan_receipt_falsification_cannot_forge_validity(self):
         tid=self.seed(self.structured())
