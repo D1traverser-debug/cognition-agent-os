@@ -39,7 +39,7 @@ class PureRepairTests(unittest.TestCase):
         self.db=self.root/"state.sqlite"
         connection=connect(self.db);initialize(connection);connection.close()
 
-    def seed(self,source,visible,holdout,*,function="condition"):
+    def seed(self,source,visible,holdout,*,function="condition",parent=None):
         source_name="function.py"
         self.fx.joinpath(source_name).write_text(source)
         self.fx.joinpath("visible.json").write_text(json.dumps(visible))
@@ -50,7 +50,7 @@ class PureRepairTests(unittest.TestCase):
               "holdout":"hidden.json",
               "holdout_sha256":hashlib.sha256(hidden).hexdigest()}
         db=connect(self.db)
-        tid=create_task(db,spec)
+        tid=create_task(db,spec,parent=parent)
         db.close()
         return tid,spec
 
@@ -65,7 +65,7 @@ class PureRepairTests(unittest.TestCase):
             "SELECT details FROM events WHERE task_id=? AND kind=?",(tid,kind))]
         finally:db.close()
 
-    def example_compare(self,*,reject=False):
+    def example_compare(self,*,reject=False,parent=None):
         source="def condition(x, threshold):\n    return x > threshold\n"
         visible=[
             {"args":[5,5],"expected":True},
@@ -74,7 +74,7 @@ class PureRepairTests(unittest.TestCase):
         holdout=[{"args":[7,7],"expected":True if not reject else False},
                  {"args":[0,8],"expected":False},
                  {"args":[12,8],"expected":True}]
-        return self.seed(source,visible,holdout)
+        return self.seed(source,visible,holdout,parent=parent)
 
     def test_pure_repair_failure_after_goal_rotation_must_not_claim_unknown(self):
         from cognition_agent_os import repair_search
@@ -259,6 +259,28 @@ class PureRepairTests(unittest.TestCase):
         db=connect(self.db);alter_authority(db,revoke=True);db.close()
         self.assertEqual(review_patch(self.db,self.ws,self.fx,tid)["status"],"AUTHORITY_BLOCKED")
         self.assertFalse((self.ws/"repair_lab").exists())
+
+    def test_blocked_ancestor_cannot_authorize_independent_repair_stage(self):
+        """Independent holdout passing cannot revive a blocked root lineage."""
+        db=connect(self.db)
+        try:
+            root=create_task(db, {"kind":"goal_intent","objective":"compare_records"},
+                             due_at=9999999999)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",(root,))
+            db.commit()
+        finally:
+            db.close()
+        tid,_=self.example_compare(parent=root)
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        db=connect(self.db)
+        try:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(root,))
+            db.commit()
+        finally:
+            db.close()
+        observed=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertNotEqual(observed["status"],"REPAIR_LAB_VERIFIED",observed)
+        self.assertFalse((self.ws/"repair_lab"/(tid+".py")).exists())
 
     def test_tampered_immutable_proposal_refuses(self):
         tid,_=self.example_compare()
