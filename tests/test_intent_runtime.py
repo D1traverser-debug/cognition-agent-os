@@ -96,6 +96,7 @@ class IntentRuntimeTests(unittest.TestCase):
             "UNRECOGNIZED_TERMINAL_STATE", "CONTROL_STOPPED",
             "CONTROL_UNVERIFIABLE", "FEEDBACK_STOPPED",
             "FEEDBACK_UNVERIFIABLE", "NEEDS_REPLAN",
+            "PENDING", "RUNNING",
         )
         for root_state in invalid_states:
             with self.subTest(ancestor=root_state):
