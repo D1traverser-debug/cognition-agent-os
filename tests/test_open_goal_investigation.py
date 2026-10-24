@@ -372,7 +372,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             seen.append(payload)
             if len(seen) == 1:
                 manifest = json.loads(payload["prompt"].split(
-                    "Available evidence (untrusted excerpts):\\n", 1)[1])
+                    "Available evidence (untrusted excerpts):\n", 1)[1])
                 names = [m["name"] for m in manifest]
                 self.assertLessEqual(len(manifest), 24)
                 self.assertIn("zh_primary.md", names)
