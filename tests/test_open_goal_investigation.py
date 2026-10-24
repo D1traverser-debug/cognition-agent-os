@@ -370,16 +370,17 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             if method == "GET":
                 return {"models": [{"name": "local:test"}]}
             seen.append(payload)
-            if len(seen) == 1:
-                manifest = json.loads(payload["prompt"].split(
-                    "Available evidence (untrusted excerpts):\n", 1)[1])
+            marker = "Available evidence (untrusted excerpts):\n"
+            if marker in payload["prompt"]:
+                manifest = json.loads(payload["prompt"].split(marker, 1)[1])
                 names = [m["name"] for m in manifest]
                 self.assertLessEqual(len(manifest), 24)
-                self.assertIn("zh_primary.md", names)
-                primary = next(m for m in manifest if m["name"] == "zh_primary.md")
-                self.assertIn(quote, primary["excerpt"])
+                if len(seen) == 1:
+                    self.assertIn("zh_primary.md", names)
+                    primary = next(m for m in manifest if m["name"] == "zh_primary.md")
+                    self.assertIn(quote, primary["excerpt"])
                 return {"done": True, "response": json.dumps(
-                    {"sources": ["zh_primary.md"]})}
+                    {"sources": ["zh_primary.md"] if "zh_primary.md" in names else []})}
             return {"done": True, "response": json.dumps({
                 "findings": [{"source": "zh_primary.md", "quote": quote,
                               "interpretation": "Source recommends independent outcome readback."}],
@@ -390,7 +391,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
                             max_jobs=1, planner_mode="ollama-local",
                             local_model="local:test")
         self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW", tick)
-        self.assertEqual(len(seen), 2)
+        self.assertEqual(len(seen), 3)
         self.assertEqual(audit_investigation(
             self.dbpath, self.workspace, self.sources, tid)["status"],
             "SOURCE_GROUNDED_UNREVIEWED")
@@ -508,6 +509,43 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             self.dbpath, self.workspace, self.sources, tid)["status"],
             "SOURCE_GROUNDED_UNREVIEWED")
         self.assertFalse(artifact["business_outcome_verified"])
+
+    def test_source_budget_overflow_abstains_without_discarding_late_source(self):
+        """Extra eligible evidence is an explicit unknown, never a silent top-two cut."""
+        question = "What does evidence establish about production rollout verification?"
+        (self.sources / "a_lead.md").write_text(
+            (question + "\n") * 4 + "Initial staging checks show a safe rollout.",
+            encoding="utf-8")
+        for n in range(24):
+            (self.sources / f"b_index_{n:02d}.md").write_text(
+                (question + "\n") * 2 + "Routine index label only.", encoding="utf-8")
+        (self.sources / "z_reversal.md").write_text(
+            "Independent later field inspection found unsafe operation.",
+            encoding="utf-8")
+        tid = self.seed(question)
+        shown = []
+
+        def fake(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            prompt = payload["prompt"]
+            marker = "Available evidence (untrusted excerpts):\n"
+            self.assertIn(marker, prompt, "Budget overflow must block synthesis")
+            names = {item["name"] for item in json.loads(prompt.split(marker, 1)[1])}
+            shown.append(names)
+            selected = (["a_lead.md", "b_index_00.md"] if "a_lead.md" in names else
+                        ["z_reversal.md"] if "z_reversal.md" in names else [])
+            return {"done": True, "response": json.dumps({"sources": selected})}
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "UNKNOWN", result)
+        self.assertEqual(result["tasks"][0]["reason"],
+                         "RESEARCH_SOURCE_BUDGET_EXCEEDED")
+        self.assertGreaterEqual(len(shown), 2)
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
 
     def test_exhausted_previews_are_not_claimed_to_exclude_real_evidence(self):
         """All shown 650-char windows can be false negatives about full files."""
