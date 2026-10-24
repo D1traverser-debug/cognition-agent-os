@@ -31,6 +31,7 @@ from cognition_agent_os.ledger import connect, initialize, create_task
 from cognition_agent_os.open_goal import audit_open_goal
 from cognition_agent_os.goal_audit import audit_goal
 from cognition_agent_os.reconciliation_oracle import audit_stored_report
+from cognition_agent_os.investigation import audit_investigation
 
 MODEL = os.environ.get("COGNITION_EVAL_MODEL", "qwen2.5-coder:0.5b")
 _EVAL_ROOT = Path(__file__).resolve().parent.parent
@@ -80,6 +81,7 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
         child = None
         audit_status = None
         staged = None
+        research_artifact = None
         if len(children) == 1:
             item = children[0]
             spec = json.loads(item["source_spec"])
@@ -96,6 +98,13 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
             elif kind == "record_reconciliation":
                 audit_status = audit_stored_report(
                     db_file, workspace, source, task_id)["status"]
+            elif kind == "investigate_goal":
+                audit_status = audit_investigation(
+                    db_file, workspace, source, task_id)["status"]
+                research_path = workspace / "artifacts" / (task_id + ".json")
+                if research_path.is_file():
+                    research_artifact = json.loads(
+                        research_path.read_text(encoding="utf-8"))
             child = {"state": item["state"], "spec": spec, "audit": audit_status}
         result = {
             "parent_state": parent["state"],
@@ -104,6 +113,7 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
             "child": child,
             "source_preserved": preserved,
             "isolated_stage": staged,
+            "research_artifact": research_artifact,
             "goal_audit": audit_open_goal(db_file, source, root_task)["status"],
             "worker_error_class": error,
             "elapsed_seconds": round(time.monotonic()-started, 2),
@@ -158,6 +168,34 @@ def owner_intent_oracle():
                     and observation["parent_error"] in {
                         "OPEN_GOAL_ABSTAINED", "OPEN_GOAL_METHOD_UNSUPPORTED"
                     })
+            elif case_kind == "research":
+                research = observation["research_artifact"]
+                correct = (
+                    observation["parent_state"] == "DECOMPOSED"
+                    and observation["child_count"] == 1
+                    and child is not None
+                    and child["state"] == "NEEDS_REVIEW"
+                    and child["spec"] == {
+                        "kind": "investigate_goal",
+                        "question": str(state.input),
+                        "scope": "LOCAL_EVIDENCE_ONLY",
+                    }
+                    and child["audit"] == "SOURCE_GROUNDED_UNREVIEWED"
+                    and isinstance(research, dict)
+                    and set(research["selected_sources"]) == set(expected["sources"])
+                    and research.get("business_outcome_verified") is False
+                    and research.get("authorizes_mutation") is False
+                    and observation["goal_audit"] ==
+                        "METHOD_CANDIDATE_MECHANICALLY_GROUNDED"
+                )
+            elif case_kind == "abstain_or_no_evidence":
+                no_research = observation["research_artifact"] is None
+                correct = (no_research and (
+                    (observation["parent_state"] == "UNKNOWN"
+                     and observation["child_count"] == 0)
+                    or (observation["parent_state"] == "DECOMPOSED"
+                        and observation["child_count"] == 1
+                        and child is not None and child["state"] == "UNKNOWN")))
             elif case_kind == "conflict":
                 correct = (
                     observation["parent_state"] == "UNKNOWN"
@@ -242,7 +280,7 @@ def unseen_owner_goal():
     for row in fixture["cases"]:
         # Target/labels never enter state.input, model prompt or source file.
         target = {name: row[name] for name in (
-            "expect", "desired", "name", "reference", "observed")
+            "expect", "desired", "name", "reference", "observed", "sources")
             if name in row}
         dataset.append(Sample(
             id=row["id"], input=row["goal"],
