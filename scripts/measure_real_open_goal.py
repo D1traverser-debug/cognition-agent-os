@@ -13,7 +13,9 @@ import os
 from pathlib import Path
 import tempfile
 import time
+from unittest.mock import patch
 
+from cognition_agent_os import local_model
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, initialize, create_task
 from cognition_agent_os.open_goal import audit_open_goal
@@ -62,8 +64,20 @@ def one_trial(case: dict) -> dict:
             initialize(db)
             tid = create_task(db, {"kind": "open_goal", "goal": case["goal"]})
         started = time.monotonic()
-        host = run_tick(db_path, workspace, sources, max_jobs=2,
-                        planner_mode="ollama-local", local_model=MODEL)
+        original_transport = local_model._request
+        model_trace = []
+        def record_transport(method, endpoint, payload, timeout):
+            response = original_transport(method, endpoint, payload, timeout)
+            if method == "POST" and endpoint == "/api/generate":
+                model_trace.append({
+                    "response": str(response.get("response", ""))[:4096],
+                    "done": response.get("done"),
+                    "response_format": payload.get("format"),
+                })
+            return response
+        with patch.object(local_model, "_request", side_effect=record_transport):
+            host = run_tick(db_path, workspace, sources, max_jobs=2,
+                            planner_mode="ollama-local", local_model=MODEL)
         elapsed = round(time.monotonic() - started, 2)
         with closing(connect(db_path)) as db:
             parent = db.execute("SELECT state,error_code FROM tasks WHERE task_id=?",
@@ -103,6 +117,7 @@ def one_trial(case: dict) -> dict:
             "child_state": effective_child["state"] if effective_child else None,
             "extra_children": extra_children,
             "audit": verified["status"], "source_preserved": source_preserved,
+            "model_reply_trace_synthetic_only": model_trace,
             "method_correct": bool(method_correct and source_preserved
                                    and not extra_children),
             "business_outcome_verified": False,
