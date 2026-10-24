@@ -144,6 +144,22 @@ class PublicRevisionTests(unittest.TestCase):
                 "SELECT task_id FROM tasks WHERE parent_task=?",(self.parent,)).fetchall()
         self.assertFalse(descendants)
 
+    def test_preexisting_blocked_ancestor_spends_no_model_budget(self):
+        """A typed but invalid lineage is rejected before any model request."""
+        with closing(connect(self.db)) as db:
+            root=create_task(db,self.spec,due_at=9999999999)
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",(root,))
+            db.execute("UPDATE tasks SET parent_task=? WHERE task_id=?",
+                       (root,self.parent))
+            db.commit()
+        with patch("cognition_agent_os.repo_refinement.run_suite") as docker, \
+             patch("cognition_agent_os.repo_refinement._candidate_from_model") as model:
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=1)
+        self.assertNotEqual(result["status"],"REVISED_PUBLIC_CANDIDATE_FROZEN",result)
+        docker.assert_not_called()
+        model.assert_not_called()
+
     def test_no_local_model_or_pull_fails_before_revision_commit(self):
         from cognition_agent_os import local_model
         with patch("cognition_agent_os.repo_refinement.run_suite",
