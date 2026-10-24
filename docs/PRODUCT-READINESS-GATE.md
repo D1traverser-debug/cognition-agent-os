@@ -1,6 +1,10 @@
-# Integrated product readiness gate — 2026-10-23 (PR #26 candidate)
+# Integrated product readiness gate — snapshot 2026-10-24 (development PR #36)
 
 **Current disposition: NOT_READY for unattended autonomous use.** Green CI is component evidence, not business outcome, deployed host, or autonomous planning evidence.
+
+**Source/version caveat:** these six acceptance gates are a **current engineering evaluation model**, not the same identifier namespace as archived owner-source ConOps G1–G8. The inherited R01–R24/OT01–OT14 inventory is marked DRAFT/NOT_STAKEHOLDER_APPROVED in `evaluation/assurance_registry_v1.json`. Later user corrections and tested architectural decisions must be traced, not overridden with a frozen old proposal. Actual design authority rests with current user objectives, delegated scope, implemented source/host state and independent provider results; no PR or model self-declaration grants permission.
+
+**Branch and evidence:** latest code-tested root at snapshot `962ee4e560972d3cc1f47bddf1b6986b17d2c011` (PR #36; full recursive tree 188 files). [Actions #40050033744](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/40050033744) passed real Linux/Windows local CI; optional model/provisioner experiments skipped. Every subsequent commit must recheck its own matching HEAD CI before calling it tested.
 
 ## Required single-system acceptance
 
@@ -23,6 +27,15 @@
 - Multi-domain outcome-based held-out generalization: **NOT VERIFIED**.
 - End-to-end self-governance including authorized promotion and recurrence prevention: **NOT VERIFIED**.
 
+### Additional evidence from the currently stacked integration branch
+
+- **One local controller, not seven speculative agents:** current `ledger.py`, `control_kernel.py`, `host.py`, `runner.py`, domain adapters and `outcome_feedback.py` share SQLite task, grant and event lifecycle. This is a verified *implementation feature*, not proof of an open-ended cognitive operating system.
+- **Knowledge and research:** `knowledge_routing.py`, `research_gap.py`, `research_assessment.py`, `investigation.py` and optional local model adapter support bounded, pre-registered or source-pinned research. They do **not** establish unrestricted unknown-source credibility, novel method learning and autonomous scientific validity. Previous genuine model trials and negative results are preserved in docs/25–45 and independent PR #29–32.
+- **Owner-target correctness:** PR #33 v2 fixed shared-target checking before candidate acceptance; PR #36 v3 adds an explicit **local sandbox-effect** required flag and independent post-effect readback through the original host/worker, with tamper and fresh-source rechecks. Successful synthetic file outcome is **NOT owner-meaningful external business effect**, including when separate fixture oracle agrees.
+- **File safety:** PRs #34/#35 use one POSIX dirfd-anchored read/staging owner and test sibling mutation entries. Hostile shared mutable-directory Windows write safety remains a specific release blocker; skipped Windows attack tests cannot count as PASS.
+- **Host continuity:** hosted ephemeral Windows Task Scheduler and cross-process SQLite restart demonstrate a valid test environment, **not** deployment/uptime on the owner's PC nor native ChatGPT chat-session connection.
+- **Unproven capability gate:** no personally authorized provider mutation/readback, unknown ACK transaction guarantee, real cost ledger, representative held-out cross-domain method discovery, cumulative user correction-load measurement or approved system-wide promotion. All six product acceptance gates remain **OPEN**.
+
 ## Immediate implementation order
 
 The remaining product blockers are qualitatively different from fixing the packaging:
@@ -31,6 +44,6 @@ The remaining product blockers are qualitatively different from fixing the packa
 3. Test new, previously unknown task types and causal alternative selection across at least two materially different real domains. Track objective completion, permission denials, repeats, negative transfer, latency and human corrections.
 4. Only after the above, verify original OT06 new-chat continuity against the live authoritative state and real owner-device unattended operation. Hosted CI scheduler is not a substitute.
 
-Keep PR #26 in Draft and PR #25 as historical experimental evidence. Do not treat the initial local `init` write flag as a user-approved remote production grant.
+Keep the current integration stack PR #26→#27→#28→#33→#34→#35→#36 in Draft, and preserve PR #29–#32 as a separate experimental evidence branch; old PR #25 is historical architecture evidence. Check exact live PR head/CI before using these dated references. Do not treat the initial local `init` write flag as a user-approved remote production grant.
 
 **Release rule:** Until all six gates have end-to-end evidence on the same system candidate, the project must not be described as a usable autonomous OS. Do not conflate GitHub Actions with a deployed controller. Draft branches must not be merged or deployed implicitly.
