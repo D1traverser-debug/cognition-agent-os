@@ -457,6 +457,58 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             "SOURCE_GROUNDED_UNREVIEWED")
         self.assertFalse(result["tasks"][0].get("business_outcome_verified", False))
 
+    def test_late_independent_counterevidence_after_first_positive_batch(self):
+        """A favorable first batch must not hide later contradictory evidence."""
+        from cognition_agent_os.investigation import audit_investigation
+        question = "What does evidence establish about production rollout verification?"
+        lead = "Initial staging checks suggest the production rollout is safe."
+        reversal = "Independent field inspection later found the rollout unsafe."
+        (self.sources / "a_lead.md").write_text(
+            (question + "\n") * 4 + lead, encoding="utf-8")
+        for n in range(24):
+            (self.sources / f"b_index_{n:02d}.md").write_text(
+                (question + "\n") * 2 + "Routine index label only.", encoding="utf-8")
+        (self.sources / "z_reversal.md").write_text(
+            "Later independent audit evidence: " + reversal, encoding="utf-8")
+        tid = self.seed(question)
+        shown = []
+
+        def fake(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            prompt = payload["prompt"]
+            marker = "Available evidence (untrusted excerpts):\n"
+            if marker in prompt:
+                manifest = json.loads(prompt.split(marker, 1)[1])
+                names = {item["name"] for item in manifest}
+                shown.append(names)
+                selected = (["a_lead.md"] if "a_lead.md" in names else
+                            ["z_reversal.md"] if "z_reversal.md" in names else [])
+                return {"done": True, "response": json.dumps({"sources": selected})}
+            return {"done": True, "response": json.dumps({
+                "findings": [
+                    {"source": "a_lead.md", "quote": lead,
+                     "interpretation": "A favorable early stage signal."},
+                    {"source": "z_reversal.md", "quote": reversal,
+                     "interpretation": "A later independent adverse finding."}],
+                "uncertainty": "Conflicting sources; real outcome is not established."})}
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "NEEDS_REVIEW", result)
+        self.assertGreaterEqual(len(shown), 2)
+        self.assertIn("a_lead.md", shown[0])
+        self.assertTrue(any("z_reversal.md" in group for group in shown[1:]))
+        artifact = json.loads((self.workspace / "artifacts" / (tid + ".json")).read_text())
+        self.assertEqual(set(artifact["selected_sources"]),
+                         {"a_lead.md", "z_reversal.md"})
+        self.assertEqual(audit_investigation(
+            self.dbpath, self.workspace, self.sources, tid)["status"],
+            "SOURCE_GROUNDED_UNREVIEWED")
+        self.assertFalse(artifact["business_outcome_verified"])
+
     def test_exhausted_previews_are_not_claimed_to_exclude_real_evidence(self):
         """All shown 650-char windows can be false negatives about full files."""
         for n in range(29):
