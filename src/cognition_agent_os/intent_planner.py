@@ -14,14 +14,16 @@ from pathlib import Path
 from .goal_loop import validate_goal, GoalError
 from .reconciliation import validate_reconciliation, ReconciliationError
 from .investigation import validate_investigation, InvestigationInvalid
+from .public_tool_discovery import validate_public_discovery, PublicDiscoveryInvalid
 
 MAX_INTENT_BYTES=16384
 MAX_STEPS=5
-SUPPORTED_INTENTS={"ensure_structure","compare_records","investigate_evidence"}
+SUPPORTED_INTENTS={"ensure_structure","compare_records","investigate_evidence","discover_public_tools"}
 ALLOWED_ROLES={
     "ensure_structure":("input",),
     "compare_records":("reference","observed"),
     "investigate_evidence":(),
+    "discover_public_tools":(),
 }
 
 
@@ -98,7 +100,7 @@ def compile_intent(intent: dict) -> dict:
             raise IntentError("Comparison objective scope invalid") from exc
         capability="csv_evidence_reconciliation_v1"
         expected="SQLITE_RECOMPUTED_REPORT_OR_ABSTENTION"
-    else:
+    elif objective=="investigate_evidence":
         if set(intent)!={"kind","objective","resources","question"}:
             raise IntentError("Research objective requires bounded original question")
         try:
@@ -108,6 +110,18 @@ def compile_intent(intent: dict) -> dict:
             raise IntentError("Invalid local research objective") from exc
         capability="source_quote_grounded_investigation_v1"
         expected="SOURCE_GROUNDED_UNREVIEWED_OR_ABSTAINED"
+    else:
+        if set(intent)!={"kind","objective","resources","terms"}:
+            raise IntentError("Explicit public tool-search scope required")
+        try:
+            spec=validate_public_discovery({
+                "kind":"public_tool_discovery",
+                "scope":"GITHUB_PUBLIC_METADATA_ONLY",
+                "terms":intent["terms"]})
+        except (PublicDiscoveryInvalid,ValueError,TypeError) as exc:
+            raise IntentError("Invalid public metadata discovery contract") from exc
+        capability="public_github_tool_leads_v1"
+        expected="PUBLIC_CANDIDATES_REQUIRE_INDEPENDENT_REVIEW"
     steps=[
         {"stage":"OBSERVE","capability":"local_evidence_read","resources":source},
         {"stage":"CHALLENGE","capability":"bounded_hypotheses","family":capability},
