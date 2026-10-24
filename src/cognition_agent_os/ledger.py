@@ -191,7 +191,7 @@ def lineage_guard(db: sqlite3.Connection, task: dict, *, max_depth: int = 512) -
     seen = {task["task_id"]}
     # Preserve the direct child identity when validating each ancestor's
     # transition. A normal stale-source replan deliberately leaves its parent
-    # in NEEDS_REPLAN, but only the child recorded by SANDBOX_REPLAN is valid.
+    # in NEEDS_REPLAN, but only a child bound to the actual producer event is valid.
     child_id = task["task_id"]
     parent_id = task.get("parent_task")
     for _ in range(max_depth):
