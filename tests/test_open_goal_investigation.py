@@ -398,6 +398,15 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT write_allowed FROM authority WHERE singleton=1").fetchone()[0], 1)
 
+    def test_unicode_normalization_must_not_shift_original_quote_offsets(self):
+        """NFKC expansions must not make a relevant original span invisible."""
+        from cognition_agent_os.investigation import _evidence_excerpt
+        quote = "真实验收标准需要外部系统结果读回。"
+        original = "ﬃ" * 800 + quote
+        window = _evidence_excerpt(original, "真实验收标准怎样核对？")
+        self.assertIn(quote, window)
+        self.assertLessEqual(len(window), 650)
+
     def test_empty_preview_selection_is_not_false_global_no_evidence(self):
         """24 ranked previews cannot establish absence in a larger full corpus."""
         for n in range(29):
