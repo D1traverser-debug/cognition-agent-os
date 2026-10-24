@@ -82,8 +82,7 @@ class OpenGoalVerticalTests(unittest.TestCase):
             if mutate:
                 mutate()
             if "method" in payload.get("format", {}).get("properties", {}):
-                result = {k: candidate[k] for k in
-                          ("method", "rationale", "rejected_alternative", "uncertainty")}
+                result = {"method": candidate["method"]}
             elif candidate["method"] == "ensure_structure":
                 result = {k: candidate[k] for k in ("input", "field", "equals")}
             else:
@@ -205,7 +204,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertEqual(len(self.children(parent)), 1)
 
     def test_model_abstention_does_not_fabricate_work(self):
-        parent = self.enqueue()
+        # Unlike a fully explicit JSON/CSV owner request, this ambiguous
+        # request must defer to the constrained model's abstain decision.
+        parent = self.enqueue(
+            "Investigate how the operating environment should evolve over time.")
         out = self.tick(self.suggestion() | {"method": "abstain"},
                         max_jobs=1)
         self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
