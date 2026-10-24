@@ -354,5 +354,67 @@ class OpenGoalInvestigationTests(unittest.TestCase):
 
 
 
+    def test_chinese_late_primary_evidence_reaches_real_host_from_larger_corpus(self):
+        """A truthful model cannot cite a Chinese fact the retrieval layer concealed."""
+        from cognition_agent_os.investigation import audit_investigation
+        for n in range(28):
+            (self.sources / f"decoy_{n:02d}.md").write_text(
+                "普通活动记录，无本次问题所需的核验信息。" * 45, encoding="utf-8")
+        quote = "真实验收标准必须通过独立来源读回授权后产生的效果。"
+        (self.sources / "zh_primary.md").write_text(
+            "本页前部为背景说明。" * 140 + quote, encoding="utf-8")
+        tid = self.seed("授权后产生的效果，应当如何验证真实验收标准？")
+        seen = []
+
+        def fake(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            seen.append(payload)
+            if len(seen) == 1:
+                manifest = json.loads(payload["prompt"].split(
+                    "Available evidence (untrusted excerpts):\\n", 1)[1])
+                names = [m["name"] for m in manifest]
+                self.assertLessEqual(len(manifest), 24)
+                self.assertIn("zh_primary.md", names)
+                primary = next(m for m in manifest if m["name"] == "zh_primary.md")
+                self.assertIn(quote, primary["excerpt"])
+                return {"done": True, "response": json.dumps(
+                    {"sources": ["zh_primary.md"]})}
+            return {"done": True, "response": json.dumps({
+                "findings": [{"source": "zh_primary.md", "quote": quote,
+                              "interpretation": "Source recommends independent outcome readback."}],
+                "uncertainty": "One local source only; business result not checked.",
+            })}
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW", tick)
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(audit_investigation(
+            self.dbpath, self.workspace, self.sources, tid)["status"],
+            "SOURCE_GROUNDED_UNREVIEWED")
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute(
+                "SELECT write_allowed FROM authority WHERE singleton=1").fetchone()[0], 1)
+
+    def test_empty_preview_selection_is_not_false_global_no_evidence(self):
+        """24 ranked previews cannot establish absence in a larger full corpus."""
+        for n in range(29):
+            (self.sources / f"other_{n:02d}.md").write_text(
+                f"Unrelated archived record {n}.", encoding="utf-8")
+        self.seed("What source establishes a real externally verified contract?")
+        fake, calls = self.model(selection=[])
+        with patch.object(local_model, "_request", side_effect=fake):
+            tick = run_tick(self.dbpath, self.workspace, self.sources,
+                            max_jobs=1, planner_mode="ollama-local",
+                            local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"], "UNKNOWN", tick)
+        self.assertEqual(tick["tasks"][0]["reason"],
+                         "PREVIEW_COVERAGE_INCOMPLETE")
+        self.assertEqual(len([x for x in calls if x[0] == "POST"]), 1)
+
+
+
 if __name__ == "__main__":
     unittest.main()
