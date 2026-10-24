@@ -37,3 +37,19 @@
 陈旧索引被当作现状、遗漏管理范围、模型编造文件职责、AOCI 自身退化但 CI 未发现、图边缺失/错误推断、跨会话索引未读取、脚本仅检查存在而非实际使用、历史 OT 标识发生语义碰撞、修复破坏合法 sibling 操作、同库哈希被误当外部签名、外部数据中嵌入指令、工具更新的供应链漂移、CI 通过被错判成业务目标实现。
 
 **当前产品状态：NOT_READY。** 本文件和实验没有宣称 AOCI 已正式在你的 Codex/本机上线。
+
+## 2026-10-24 上游原始方法对照与架构纠偏（实验候选）
+
+此前断言“不是五个 Agent”没有经过证据支持，予以撤回。**单一任务/授权账本不等于单模型或单角色**：规划、检索、工具执行、独立复核可以各用单个或多个 Agent；真正需要保持一个权威的是用户目标、授权、任务事务、外部效果和审计事件。多角色的独立性必须由真实来源/隔离输入/不同 oracle 体现，而不是同一模型切换人设。
+
+原始材料及可复用边界：
+- [AOCI-CODE 上游 README 与 AGENTS](https://github.com/aoci-spec/aoci-code)：实际产品是源码阅读后模型编写的版本化 F/R/A/S 全系统认知索引；原版 MCP `aoci_rules → aoci_overview` 支持整索引身份、分块/收据、挑战式认知校验与上下文压缩后重新加载。**采用其原版索引/维护协议，不自行重写“可供模型使用的完整认知”**。但检验索引语法与模型复述不等于原始用户需求正确，也不提供生产执行控制。
+- [Graphify 官方项目](https://github.com/Graphify-Labs/graphify)：复用其真实 AST/tree-sitter 图、`EXTRACTED/INFERRED` 区别及 source-located 调用路径做变更影响分析；不以单个抽取边证明代码语义/调用时序。现有 CI 运行官方 Graphify 和跨模块调用证据，下一步应以真实改动的影响路径测漏检，而非仅出图。
+- [Temporal Workflow 与 Activity](https://docs.temporal.io/workflows)：把 LLM/API 等非确定性操作放在 Activity 内，结果进 Event History；重放不会再运行已完成的 Activity。它解决 crash/replay/可追溯执行机制，但**不保证外部不可知 ACK 一定只产生一次效果**；还需要提供方幂等键和对账。是否整体采用 Temporal 必须与现有 SQLite Host/Worker 在同样崩溃/授权/补偿场景做 A/B，不能凭文档另造并行控制器。
+- [LangGraph 结构化流程](https://docs.langchain.com/oss/javascript/langgraph/thinking-in-langgraph)：节点状态、有限分解、pause/resume、人类授权与异常分类可作复杂目标决策编排候选；并不自动给出某个目标的独立正确性 oracle。
+- [OpenHands 隔离运行](https://github.com/OpenHands/docs/blob/main/openhands/usage/architecture/runtime.mdx)：工具和代码执行置于 Docker sandbox，作为危险候选执行隔离参考；不替代用户授权或实际用户效果验收。
+- [Lost in the Middle（原论文）](https://arxiv.org/abs/2307.03172)：信息出现位置会影响长上下文检索表现，是针对性评测模型遗漏而非全称断言“模型必然不确定”的实证依据。
+
+针对本项目的因果拆分：模型可能错误定位证据/遗失上文，但近期已经证实的跨入口后置写入漏洞主要是**程序员未复用共享许可路径且验收用例缺失**，不能归咎为随机采样。前者用原版 AOCI/Graphify + 位置调换/冷启动测识别率；后者用统一事务+原始状态事件+变异测试处理；长任务中断/未知 ACK 再与 Temporal 的实际 Activity 语义等价对照。
+
+**可证伪实验而非产品承诺**：相同固定代码修复任务及隐藏跨模块反例，比较“源码全文检索”“仅 Graphify 图”“AOCI 原版完整模型索引 + Graphify”（在真正 MCP Host 上）；记录遗漏路径、模型认知挑战正确率、合法邻路被误阻止率、所需用户纠错次数和检索成本。当前只能运行**隔离 AOCI 官方 bootstrap**（无模型 authoring/no MCP host），所以不能把这些候选的名义能力登记为本产品已具备的能力。系统继续 NOT_READY。
