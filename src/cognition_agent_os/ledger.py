@@ -130,6 +130,41 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
         raise
 
 
+
+def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120) -> bool:
+    """Extend ONLY this still-live worker claim, never revive expired claims.
+
+    Used around bounded long local-model requests. Unlike a long initial
+    lease, renewal preserves short crash recovery when no worker is alive.
+    This method grants no capability and checks the original current
+    goal/grant and still-enabled authorization under one write lock.
+    """
+    if (not isinstance(lease_seconds, int)
+        or not 1 <= lease_seconds <= 180):
+        raise ValueError("Lease renewal interval out of bounds")
+    now = time.time()
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        updated = db.execute(
+            """UPDATE tasks
+               SET lease_until=?,state_version=state_version+1
+               WHERE task_id=? AND claim_token=? AND state='RUNNING'
+                 AND lease_until>?
+                 AND EXISTS (
+                     SELECT 1 FROM authority
+                     WHERE singleton=1 AND goal_rev=? AND grant_rev=?
+                       AND write_allowed=1
+                 )""",
+            (now + lease_seconds, task["task_id"], task["claim_token"], now,
+             task["goal_rev"], task["grant_rev"]),
+        ).rowcount
+        db.commit()
+        return updated == 1
+    except BaseException:
+        db.rollback()
+        raise
+
+
 def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> tuple[bool, str | None]:
     row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
     if row["goal_rev"] != task["goal_rev"]:
