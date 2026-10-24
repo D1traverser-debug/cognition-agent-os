@@ -16,6 +16,7 @@ import sqlite3
 from contextlib import closing
 
 from .source import safe_fixture
+from .ledger import lineage_guard
 
 TASK_ID = re.compile(r"[a-f0-9]{32}\Z")
 MAX_BYTES = 128 * 1024
@@ -35,7 +36,8 @@ def _read_only(db_path: Path, task_id: str):
         db.row_factory=sqlite3.Row
         task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
         authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
-        return (dict(task) if task else None, dict(authority) if authority else None)
+        return (dict(task) if task else None, dict(authority) if authority else None,
+                lineage_guard(db, dict(task)) if task else False)
 
 
 def _parse_json(bytestring: bytes):
@@ -94,7 +96,9 @@ def audit_goal(db_path: Path, workspace: Path, fixture_root: Path, task_id: str)
         fetched=_read_only(db_path,task_id)
         if not fetched or not fetched[0] or not fetched[1]:
             return _reject("TASK_NOT_FOUND",task_id)
-        task,authority=fetched
+        task,authority,lineage_valid=fetched
+        if not lineage_valid:
+            return _reject("UPSTREAM_TASK_INVALID",task_id)
         if task["state"]!="NEEDS_REVIEW":
             return _reject("TASK_NOT_PENDING_REVIEW",task_id)
         spec=json.loads(task["source_spec"])
