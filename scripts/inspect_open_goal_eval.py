@@ -168,6 +168,34 @@ def owner_intent_oracle():
                     and observation["parent_error"] in {
                         "OPEN_GOAL_ABSTAINED", "OPEN_GOAL_METHOD_UNSUPPORTED"
                     })
+            elif case_kind == "research":
+                research = observation["research_artifact"]
+                correct = (
+                    observation["parent_state"] == "DECOMPOSED"
+                    and observation["child_count"] == 1
+                    and child is not None
+                    and child["state"] == "NEEDS_REVIEW"
+                    and child["spec"] == {
+                        "kind": "investigate_goal",
+                        "question": str(state.input),
+                        "scope": "LOCAL_EVIDENCE_ONLY",
+                    }
+                    and child["audit"] == "SOURCE_GROUNDED_UNREVIEWED"
+                    and isinstance(research, dict)
+                    and set(research["selected_sources"]) == set(expected["sources"])
+                    and research.get("business_outcome_verified") is False
+                    and research.get("authorizes_mutation") is False
+                    and observation["goal_audit"] ==
+                        "METHOD_CANDIDATE_MECHANICALLY_GROUNDED"
+                )
+            elif case_kind == "abstain_or_no_evidence":
+                no_research = observation["research_artifact"] is None
+                correct = (no_research and (
+                    (observation["parent_state"] == "UNKNOWN"
+                     and observation["child_count"] == 0)
+                    or (observation["parent_state"] == "DECOMPOSED"
+                        and observation["child_count"] == 1
+                        and child is not None and child["state"] == "UNKNOWN")))
             elif case_kind == "conflict":
                 correct = (
                     observation["parent_state"] == "UNKNOWN"
@@ -252,7 +280,7 @@ def unseen_owner_goal():
     for row in fixture["cases"]:
         # Target/labels never enter state.input, model prompt or source file.
         target = {name: row[name] for name in (
-            "expect", "desired", "name", "reference", "observed")
+            "expect", "desired", "name", "reference", "observed", "sources")
             if name in row}
         dataset.append(Sample(
             id=row["id"], input=row["goal"],
