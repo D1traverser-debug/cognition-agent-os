@@ -73,7 +73,7 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
                 "SELECT state,error_code FROM tasks WHERE task_id=?",
                 (root_task,)).fetchone()
             children = db.execute(
-                "SELECT task_id,state,source_spec FROM tasks "
+                "SELECT task_id,state,error_code,source_spec FROM tasks "
                 "WHERE parent_task=? ORDER BY task_id", (root_task,)).fetchall()
         preserved = all(
             hashlib.sha256((source / name).read_bytes()).hexdigest() == digest
@@ -105,7 +105,8 @@ def _observed_run(goal: str, files: dict[str, str]) -> dict:
                 if research_path.is_file():
                     research_artifact = json.loads(
                         research_path.read_text(encoding="utf-8"))
-            child = {"state": item["state"], "spec": spec, "audit": audit_status}
+            child = {"state": item["state"], "error_code": item["error_code"],
+                     "spec": spec, "audit": audit_status}
         result = {
             "parent_state": parent["state"],
             "parent_error": parent["error_code"],
