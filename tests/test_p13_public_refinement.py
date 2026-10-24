@@ -133,7 +133,7 @@ class PublicRevisionTests(unittest.TestCase):
                 db.commit()
             return self.model_output(self.good)
         with patch("cognition_agent_os.repo_refinement.run_suite",
-                   side_effect=self.suite), \\
+                   side_effect=self.suite), \
              patch("cognition_agent_os.repo_refinement._candidate_from_model",
                    side_effect=model_then_stop):
             result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
