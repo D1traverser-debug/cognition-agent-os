@@ -548,6 +548,56 @@ jobs:
             graphify-out/graph.html
           if-no-files-found: warn
 
+  experimental_live_open_goal_method:
+    # Real local inference on disposable hosted Linux. No owner-host install.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-real-open-goal]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install local Ollama on ephemeral worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/ollama-open-goal-install.sh"
+          sh "$RUNNER_TEMP/ollama-open-goal-install.sh"
+          ollama --version
+      - name: Start loopback model with explicitly downloaded local weights
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/ollama-open-goal.log" 2>&1 &)
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          timeout 420 ollama pull qwen2.5-coder:0.5b
+      - name: Measure unfamiliar owner-goal method choices with real Host and held-out labels
+        shell: bash
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          COGNITION_EVAL_MODEL: qwen2.5-coder:0.5b
+          COGNITION_EVAL_OUTPUT: real-open-goal-eval.json
+        run: |
+          set -euo pipefail
+          timeout 720 python scripts/measure_real_open_goal.py
+      - name: Preserve full experimental evidence including failed or zero-score results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-goal-original-local-model-evidence
+          path: real-open-goal-eval.json
+          if-no-files-found: warn
+
   experimental_open_goal_relevance:
     # Opt-in genuine LOCAL inference on an ephemeral free PUBLIC CI runner.
     # Not a cloud AI API, not owner's machine, not unattended deployment.

@@ -71,6 +71,13 @@ def _intent(c: CapabilityContext) -> dict:
     return run_intent(c.db, c.task)
 
 
+def _open_goal(c: CapabilityContext) -> dict:
+    from .open_goal import run_open_goal
+    return run_open_goal(c.db, c.task, c.fixtures,
+                         planner_mode=c.planner_mode,
+                         local_model_name=c.local_model)
+
+
 def _reconcile(c: CapabilityContext) -> dict:
     from .reconciliation import run_reconciliation
     return run_reconciliation(c.db, c.task, c.workspace, c.fixtures)
@@ -144,6 +151,7 @@ _HANDLERS = {
     "pure_code_repair": _pure_repair,
     "investigate_goal": _investigate,
     "goal_intent": _intent,
+    "open_goal": _open_goal,
     "record_reconciliation": _reconcile,
     "goal_case": _goal_case,
     "fixture": _snapshot_diff,
@@ -166,6 +174,29 @@ def dispatch_capability(context: CapabilityContext, source_spec: dict) -> dict:
         return finalize_observed(context.db, context.task, "UNKNOWN",
                                  error_code="INVALID_TASK_SPEC")
     if kind in _DETERMINISTIC_ONLY and context.planner_mode != "deterministic":
-        return finalize_observed(context.db, context.task, "UNKNOWN",
-                                 error_code=_DETERMINISTIC_ONLY[kind])
+        # Natural-language interpretation needs an installed model; the
+        # registered LOCAL method it selects is itself deterministic.
+        # A typed task submitted directly in ollama-local mode still obeys
+        # the original deterministic-only behavior. The runner has already
+        # validated a full, pinned parent OPEN_GOAL_DECOMPOSED receipt.
+        from_model_goal = False
+        parent_id = context.task.get("parent_task")
+        if parent_id is not None:
+            from .knowledge_routing import check_child_dependency
+            parent = context.db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=?",
+                (parent_id,)).fetchone()
+            if parent:
+                try:
+                    parent_spec = json.loads(parent["source_spec"])
+                    from_model_goal = (
+                        isinstance(parent_spec, dict)
+                        and parent_spec.get("kind") == "open_goal"
+                        and check_child_dependency(
+                            context.db, context.task["task_id"], context.fixtures))
+                except (ValueError, TypeError, KeyError):
+                    from_model_goal = False
+        if not from_model_goal:
+            return finalize_observed(context.db, context.task, "UNKNOWN",
+                                     error_code=_DETERMINISTIC_ONLY[kind])
     return _HANDLERS[kind](context)

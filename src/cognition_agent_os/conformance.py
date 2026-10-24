@@ -211,10 +211,15 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             if kind=="knowledge_intent":
                 from .knowledge_routing import audit_knowledge_intent_plan
                 result=audit_knowledge_intent_plan(db_path,fixtures,tid)
+            elif kind=="open_goal":
+                from .open_goal import audit_open_goal
+                result=audit_open_goal(db_path,fixtures,tid)
             else:
                 result=audit_intent_plan(db_path,tid)
-            proof=("MECHANICALLY_VALID" if result["status"]=="PLAN_MECHANICALLY_VALID"
-                   else result.get("reason","PLAN_AUDIT_FAILED"))
+            proof=("MECHANICALLY_VALID" if result["status"] in (
+                "PLAN_MECHANICALLY_VALID",
+                "METHOD_CANDIDATE_MECHANICALLY_GROUNDED")
+                   else result.get("reason",result.get("status","PLAN_AUDIT_FAILED")))
         elif state=="RESEARCH_NEEDED":
             if kind=="knowledge_intent":
                 from .research_gap import audit_gap
