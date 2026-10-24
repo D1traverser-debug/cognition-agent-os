@@ -174,6 +174,37 @@ class IntentRuntimeTests(unittest.TestCase):
                 self.assertFalse((self.workspace / "artifacts" /
                                   (leaf + ".json")).exists())
 
+    def test_superseded_unknown_without_matching_revision_proofs_is_fenced(self):
+        """Only exact original revision-child receipts permit an UNKNOWN ancestor."""
+        from cognition_agent_os.ledger import event
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        for variant in ("missing", "wrong_child", "missing_child"):
+            with self.subTest(variant=variant):
+                with closing(connect(self.db_path)) as db:
+                    root=create_task(db,self.structured(),due_at=9999999999)
+                    unrelated=create_task(db,self.structured(),due_at=9999999999)
+                    child=create_task(
+                        db, {"kind":"goal_case","goal_type":"json_keys",
+                             "input":"settings.json","desired":{"owner":"ops"}},
+                        parent=root)
+                    db.execute("UPDATE tasks SET state='UNKNOWN', "
+                               "error_code='PUBLIC_REVISION_SUPERSEDED' "
+                               "WHERE task_id=?",(root,))
+                    if variant != "missing":
+                        event(db,root,"REPO_REFINEMENT_PARENT_SUPERSEDED",{
+                            "child":unrelated if variant=="wrong_child" else child})
+                        if variant != "missing_child":
+                            event(db,child,"REPO_REFINEMENT_PROPOSAL_FROZEN",{
+                                "parent":root,"holdout_review_pending":True})
+                    db.commit()
+                observed=run_once(self.db_path,self.workspace,self.fixtures)
+                self.assertEqual(observed["task_id"],child)
+                self.assertEqual(observed["status"],"BLOCKED",observed)
+                self.assertEqual(self.task(child)["error_code"],
+                                 "UPSTREAM_TASK_INVALID")
+                self.assertFalse((self.workspace/"artifacts"/(child+".json")).exists())
+
     def test_mid_execution_ancestor_revocation_blocks_actual_artifact_boundary(self):
         """A root can fail AFTER dispatch admission; writer must recheck ancestry."""
         from cognition_agent_os import runner
