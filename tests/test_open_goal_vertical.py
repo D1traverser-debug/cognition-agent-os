@@ -138,6 +138,28 @@ class OpenGoalVerticalTests(unittest.TestCase):
                          {"timeout": 7, "owner": "ops"})
         self.assertEqual((self.fx / "settings.json").read_bytes(), original)
 
+    def test_owner_multiple_explicit_rules_cannot_be_reduced_to_one(self):
+        parent = self.enqueue(
+            "Ensure settings.json has owner equal to ops AND team equal to core, "
+            "keeping all previous entries.")
+        out = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "DECOMPOSED", out)
+        with closing(connect(self.db)) as db:
+            child = db.execute("SELECT source_spec FROM tasks WHERE parent_task=?",
+                               (parent,)).fetchone()
+        self.assertIsNotNone(child)
+        child_spec = json.loads(child[0])
+        self.assertEqual(child_spec["desired"],
+                         {"owner": "ops", "team": "core"})
+
+    def test_explanation_of_how_to_apply_is_not_authorization_to_apply(self):
+        parent = self.enqueue(
+            "Explain how to ensure settings.json has owner equal to ops; "
+            "do not create a changed file or proposal.")
+        out = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
+        self.assertFalse(self.children(parent))
+
     def test_model_selects_different_registered_method_for_csv_goal(self):
         goal = "Please compare baseline.csv and actual.csv to identify record discrepancies."
         parent = self.enqueue(goal)
