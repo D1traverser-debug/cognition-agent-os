@@ -261,7 +261,7 @@ jobs:
     # remains valid observed model-quality failure, not fabricated success.
     if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p15-feedback-model]') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -612,6 +612,51 @@ jobs:
           timeout 840 inspect eval scripts/inspect_open_goal_eval.py \
             --model ollama/qwen2.5-coder:0.5b \
             --max-samples 1 --display plain --log-dir inspect-open-goal-logs
+      - name: Preregistered bilingual research model A/B: pull local 1.5B
+        if: ${{ contains(github.event.pull_request.body, '[compare-research-ab]') }}
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          timeout 420 ollama pull qwen2.5:1.5b
+          ollama list
+      - name: Compare local research models on precommitted v5 and original v4
+        if: ${{ contains(github.event.pull_request.body, '[compare-research-ab]') }}
+        shell: bash
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p inspect-research-ab/coder-0.5b-v5 inspect-research-ab/general-1.5b-v4 inspect-research-ab/general-1.5b-v5
+          echo 'A: Original coder:0.5B, new sealed v5 goals'
+          COGNITION_EVAL_MODEL=qwen2.5-coder:0.5b \
+          COGNITION_EVAL_DATASET=evaluation/inspect_unseen_goal_set_v5.json \
+          timeout 570 inspect eval scripts/inspect_open_goal_eval.py \
+            --model ollama/qwen2.5-coder:0.5b \
+            --max-samples 1 --display plain --log-dir inspect-research-ab/coder-0.5b-v5
+          echo 'B: General multilingual:1.5B, earlier v4 baseline'
+          COGNITION_EVAL_MODEL=qwen2.5:1.5b \
+          COGNITION_EVAL_DATASET=evaluation/inspect_unseen_goal_set_v4.json \
+          timeout 570 inspect eval scripts/inspect_open_goal_eval.py \
+            --model ollama/qwen2.5:1.5b \
+            --max-samples 1 --display plain --log-dir inspect-research-ab/general-1.5b-v4
+          echo 'B: General multilingual:1.5B, new sealed v5 goals'
+          COGNITION_EVAL_MODEL=qwen2.5:1.5b \
+          COGNITION_EVAL_DATASET=evaluation/inspect_unseen_goal_set_v5.json \
+          timeout 570 inspect eval scripts/inspect_open_goal_eval.py \
+            --model ollama/qwen2.5:1.5b \
+            --max-samples 1 --display plain --log-dir inspect-research-ab/general-1.5b-v5
+      - name: Preserve original A/B Inspect .eval files even when quality fails
+        if: ${{ always() && contains(github.event.pull_request.body, '[compare-research-ab]') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: independent-research-model-ab-evidence
+          path: inspect-research-ab/
+          if-no-files-found: warn
       - name: Preserve original Inspect evaluation transcripts and scorers
         if: ${{ always() && contains(github.event.pull_request.body, '[inspect-unseen-original]') }}
         uses: actions/upload-artifact@v4
