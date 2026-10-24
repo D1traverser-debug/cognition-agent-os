@@ -1,6 +1,6 @@
 # cognition-agent-os
 
-**Status: experimental integrated candidate — NOT READY for unattended autonomous use, external production writes, or business-outcome claims.** As of 2026-10-24 the current *development* integration tip is [Draft PR #36](https://github.com/D1traverser-debug/cognition-agent-os/pull/36), branch `feature/shared-goal-posteffect-readback-20261024`, checkpoint `962ee4e560972d3cc1f47bddf1b6986b17d2c011`. This is a dated checkpoint: **read the actual GitHub PR head and CI against its exact SHA on every continuation**, do not treat this sentence or an earlier PR number as lasting authority. Default `main` is only a placeholder. No merge, user-device installation or paid model API is authorized by the PR.
+**Status: experimental integrated candidate — NOT_READY for unattended autonomy, external production writes or business-outcome claims.** This README is a dated guide, NOT a current source-ref oracle. Resolve actual live GitHub open Draft PR heads, ancestry, approvals and matching-head CI before continuation; the historical PR numbers in this repository are NOT current-state authority. The last reviewed integration is Draft PR #48 with follow-up Draft PR #49 for full-tree provenance and targeted drift-evidence repair; future changes may supersede both. Default `main` is a placeholder. No merge, deployment or paid model API is authorized by a Draft PR.
 
 ## Intended product
 
