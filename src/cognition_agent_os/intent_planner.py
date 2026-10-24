@@ -13,13 +13,15 @@ from pathlib import Path
 
 from .goal_loop import validate_goal, GoalError
 from .reconciliation import validate_reconciliation, ReconciliationError
+from .investigation import validate_investigation, InvestigationInvalid
 
 MAX_INTENT_BYTES=16384
 MAX_STEPS=5
-SUPPORTED_INTENTS={"ensure_structure","compare_records"}
+SUPPORTED_INTENTS={"ensure_structure","compare_records","investigate_evidence"}
 ALLOWED_ROLES={
     "ensure_structure":("input",),
     "compare_records":("reference","observed"),
+    "investigate_evidence":(),
 }
 
 
@@ -81,7 +83,7 @@ def compile_intent(intent: dict) -> dict:
             raise IntentError("Structural objective constraints invalid") from exc
         capability="json_structural_conformance_v1"
         expected="JSON_REQUIRED_FIELDS_PRESERVED"
-    else:
+    elif objective=="compare_records":
         if set(intent) not in ({"kind","objective","resources"},
                                {"kind","objective","resources","relationship_contract"}):
             raise IntentError("Unknown relationship or contract extension")
@@ -96,6 +98,16 @@ def compile_intent(intent: dict) -> dict:
             raise IntentError("Comparison objective scope invalid") from exc
         capability="csv_evidence_reconciliation_v1"
         expected="SQLITE_RECOMPUTED_REPORT_OR_ABSTENTION"
+    else:
+        if set(intent)!={"kind","objective","resources","question"}:
+            raise IntentError("Research objective requires bounded original question")
+        try:
+            spec=validate_investigation({"kind":"investigate_goal",
+                "question":intent["question"],"scope":"LOCAL_EVIDENCE_ONLY"})
+        except (InvestigationInvalid,ValueError,TypeError) as exc:
+            raise IntentError("Invalid local research objective") from exc
+        capability="source_quote_grounded_investigation_v1"
+        expected="SOURCE_GROUNDED_UNREVIEWED_OR_ABSTAINED"
     steps=[
         {"stage":"OBSERVE","capability":"local_evidence_read","resources":source},
         {"stage":"CHALLENGE","capability":"bounded_hypotheses","family":capability},
