@@ -81,7 +81,16 @@ class OpenGoalVerticalTests(unittest.TestCase):
                 return {"models": [{"name": "installed:test"}]}
             if mutate:
                 mutate()
-            return {"done": True, "response": json.dumps(candidate)}
+            if "method" in payload.get("format", {}).get("properties", {}):
+                result = {k: candidate[k] for k in
+                          ("method", "rationale", "rejected_alternative", "uncertainty")}
+            elif candidate["method"] == "ensure_structure":
+                result = {k: candidate[k] for k in ("input", "field", "equals")}
+            else:
+                result = {k: candidate[k] for k in ("reference", "observed")}
+            if "remote_write_allowed" in candidate:
+                result["remote_write_allowed"] = candidate["remote_write_allowed"]
+            return {"done": True, "response": json.dumps(result)}
         return responder
 
     def tick(self, candidate, *, mutate=None, max_jobs=2):
