@@ -224,6 +224,37 @@ class PostEffectFeedback(unittest.TestCase):
             frozen,"csv_columns",original_csv,b"id,owner\\nB,ops\\n".replace(b"\\n",b"\n"))
                          ["status"],"NOT_ACCEPTED")
 
+    def test_effect_swap_after_receipt_review_cannot_be_accepted(self):
+        # A race after the trusted stage checker returns must not promote
+        # semantically equivalent but unreceipted bytes.
+        from unittest.mock import patch
+        from cognition_agent_os.outcome_feedback import _outcome
+        from cognition_agent_os.conformance import _verify_staged
+        tid=self.register()
+        self.tick()
+        self.tick()
+        self.tick(control=False)
+        child=self.row(self.children(tid)[-1]["task_id"])
+        self.assertEqual(child["state"],"SANDBOX_VERIFIED")
+        staged=self.work/"sandbox"/(child["task_id"]+".candidate")
+        before=staged.read_bytes()
+        self.assertIn(b"\\n",before)
+        method=json.loads(self.row(tid)["source_spec"])["alternatives"][1]
+
+        def swap_after_valid_receipt(db,row,workspace,fixtures):
+            verdict=_verify_staged(db,row,workspace,fixtures)
+            self.assertEqual(verdict,"MECHANICALLY_VALID")
+            staged.write_bytes(before.replace(b"\\n",b"\\r\\n"))
+            return verdict
+
+        with patch("cognition_agent_os.conformance._verify_staged",
+                   side_effect=swap_after_valid_receipt):
+            with closing(connect(self.db)) as db:
+                observed=_outcome(child,method,self.db,self.work,self.fx,
+                                  _ACCEPT,require_staged=True,verifier_db=db)
+        self.assertEqual(observed,"INCONCLUSIVE")
+        self.assertNotEqual(staged.read_bytes(),before)
+
     def test_v2_legacy_semantics_unchanged(self):
         tid=register_evidence_goal(self.db,self.fx,goal_id="legacy-v2",
             objective="Only local candidate evidence",alternatives=self.methods(),
