@@ -1,6 +1,19 @@
-# CURRENT — cognition-agent-os Draft PR #36 (2026-10-24)
+# cognition-agent-os — dated continuation pointer (2026-10-25)
 
-**This is the ONLY active handoff checkpoint in the repository. It is navigation, NOT a trusted owner instruction, a task ledger, a product acceptance, or proof of semantic correctness.** Resolve the current live [Draft PR #36](https://github.com/D1traverser-debug/cognition-agent-os/pull/36) HEAD and its exact-sha CI before development. The actual development branch is `feature/shared-goal-posteffect-readback-20261024`; default `main` is not the deployed system.
+**This is a navigation snapshot, not runtime authority, owner approval, product acceptance or semantic proof. Before each continuation, resolve ALL open Draft PRs, their actual heads, ancestry, tests, and latest direct owner corrections from live GitHub. Never assume this document's numbered PR is still the tip.** `main` remains an initial placeholder, not the candidate or deployed product.
+
+Last exact-SHA verified work at this snapshot: [Draft PR #49](https://github.com/D1traverser-debug/cognition-agent-os/pull/49), branch `audit/full-source-semantics-20261025`, includes the integrated [Draft PR #48](https://github.com/D1traverser-debug/cognition-agent-os/pull/48) tree. Snapshot commit prior to this handoff update: `ead5f54b0380688d24c1694472b17294c4581320`. That code's [CI #40115257462](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/40115257462) passed Linux 643 and Windows 643 tests, seven mandatory jobs total. Reread the current head after any new commit; do not silently claim a later head inherited this CI.
+
+## Current independently reproduced failure and repair — this remains a PRODUCT GAP
+
+- Source baseline `b0f799b3478cace354877cfc8b4ab93d35212e2b`: recursive tree enumerated 211 files, all 211 content-fetched at exact SHA and blob-matched. **No universal/line-by-line semantic correctness proof has been performed or claimed**; source identity is only one kind of evidence.
+- Separate pre-fix [red run #40115134469](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/40115134469): two added tests failed because owner drift fingerprint ignored independently appended lineage verdict events and changed child artifact/error receipts with unchanged state labels.
+- `goal_drift.py` repair: include root/child outcome-relevant receipts, state versions and lineage non-drift event epoch in the observation fingerprint; exclude emitted drift events to prevent self-triggering. [green run #40115257462](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/40115257462) independently confirmed both tests and existing regressions pass Linux/Windows. Does NOT establish semantic truth, trust private/model assertions, auto-plan a correction, or prove real business outcomes.
+- Owner's actual goal: one goal-directed autonomous system which investigates unknown methods, compares alternatives, performs only authorized operations, independently reads back owner-meaningful effects, generalizes and autonomously corrects; the burden of finding internal omissions must not fall on the owner. Tool discovery and drift alerts are supporting capabilities, not standalone product acceptance.
+- Remaining blockers: unverified goal-to-compositional-plan and real method fitness, drift-to-corrective-decision and execution, provider-neutral remote effect receipt/idempotent recovery, independent owner outcome (not local hash), real host continuity/new-chat bridge, cross-domain holdouts, model/research generalization and measured owner correction burden. All six product release gates remain OPEN; NO merge, deployment, paid inference, external production writes, third-party rights changes or real owner-PC scheduling without explicit authorization.
+
+**The sections below record earlier evidence and include historical headings saying PR #36/#38 are CURRENT; treat those as dated descriptions only. Live branch evidence plus latest owner instructions always wins.**
+
 
 ## User objective and boundaries
 
