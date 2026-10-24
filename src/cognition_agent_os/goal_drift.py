@@ -48,7 +48,8 @@ def _descendants(db: sqlite3.Connection, root_id: str) -> tuple[list[dict], bool
     while queue:
         current = queue.pop(0)
         rows = db.execute(
-            "SELECT task_id,parent_task,state,source_spec,goal_rev,grant_rev "
+            "SELECT task_id,parent_task,state,source_spec,goal_rev,grant_rev, "
+            "state_version,artifact_hash,error_code,decision "
             "FROM tasks WHERE parent_task=? ORDER BY task_id LIMIT ?",
             (current, MAX_DESCENDANTS_PER_ROOT + 1),
         ).fetchall()
@@ -83,6 +84,35 @@ def _select_roots(db: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
             (rows[-1]["task_id"],)
         )
     return rows
+
+
+def _lineage_evidence_epoch(db: sqlite3.Connection, task_ids: list[str]) -> int:
+    """Changed ledger receipts must invalidate a stale observation fingerprint.
+
+    Drift signals themselves are excluded: observing a goal must never
+    recursively create 'new evidence' on its next unchanged Host tick.
+    """
+    if not task_ids:
+        return 0
+    placeholders = ",".join("?" for _ in task_ids)
+    row = db.execute(
+        "SELECT COALESCE(MAX(event_id), 0) FROM events "
+        "WHERE kind!='OWNER_GOAL_DRIFT_SIGNAL' AND task_id IN ("
+        + placeholders + ")", task_ids
+    ).fetchone()
+    return int(row[0])
+
+
+def _task_evidence_snapshot(task: dict | sqlite3.Row) -> tuple:
+    """Stable, content-free identity of all persisted task outcome fields."""
+    raw = task["source_spec"]
+    raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else bytes(raw)
+    return (
+        task["task_id"], task["state"], task["state_version"],
+        task["goal_rev"], task["grant_rev"],
+        hashlib.sha256(raw_bytes).hexdigest(),
+        task["artifact_hash"], task["error_code"], task["decision"],
+    )
 
 
 def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
@@ -125,14 +155,11 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
                     result["next_goal_action"] = "INSPECT_COMPLETE_LINEAGE"
                 state = result["fidelity_state"]
                 fingerprint = hashlib.sha256(json.dumps({
-                    "root_spec_sha256": result["root_contract_digest"],
-                    "root_state": root["state"],
-                    "root_goal_rev": root["goal_rev"],
-                    "root_grant_rev": root["grant_rev"],
+                    "root_task": _task_evidence_snapshot(root),
                     "descendants": sorted(
-                        (d["task_id"], d["state"],
-                         hashlib.sha256(d["source_spec"].encode()).hexdigest())
-                        for d in descendants),
+                        _task_evidence_snapshot(d) for d in descendants),
+                    "lineage_receipt_epoch": _lineage_evidence_epoch(
+                        db, [root_id] + [d["task_id"] for d in descendants]),
                     "state": state,
                 }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
                 old = db.execute(
