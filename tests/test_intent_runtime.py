@@ -234,6 +234,9 @@ class IntentRuntimeTests(unittest.TestCase):
             db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
                        (root,))
             db.commit()
+        from cognition_agent_os.goal_audit import audit_goal
+        audited = audit_goal(self.db_path, self.workspace, self.fixtures, leaf)
+        self.assertEqual(audited["status"], "UPSTREAM_TASK_INVALID", audited)
         observed = stage_one(self.db_path, self.workspace, self.fixtures, leaf)
         self.assertNotEqual(observed["status"], "SANDBOX_VERIFIED", observed)
         self.assertFalse((self.workspace / "sandbox" /
