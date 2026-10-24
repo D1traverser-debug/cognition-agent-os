@@ -243,6 +243,15 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
                                  error_code="LOCAL_MODEL_UNAVAILABLE")
     if task.get("parent_task") is not None:
         return finalize_observed(db, task, "UNKNOWN", error_code="OPEN_GOAL_INVALID")
+    def error_after_model(code: str) -> dict:
+        # A model response may arrive after write authority has been revoked.
+        # Even the failure receipt must not mask that fact as an ordinary
+        # inference error. No child/effect is ever created in this branch.
+        allowed, reason = current_guard(db, task, needs_write=True)
+        if not allowed:
+            return finalize_observed(db, task, "BLOCKED", error_code=reason)
+        return finalize_observed(db, task, "UNKNOWN", error_code=code)
+
     try:
         spec = validate_open_goal(json.loads(task["source_spec"]))
         manifest, hashes = _manifest(fixtures)
@@ -252,12 +261,10 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
         selected = _select_method(spec["goal"], manifest, local_model_name or "",
                                   before_request)
     except local_model.LocalModelUnavailable:
-        return finalize_observed(db, task, "UNKNOWN",
-                                 error_code="LOCAL_MODEL_UNAVAILABLE")
+        return error_after_model("LOCAL_MODEL_UNAVAILABLE")
     except (OpenGoalInvalid, SourceUnavailable, OSError, ValueError, TypeError) as exc:
         code = str(exc)
-        return finalize_observed(db, task, "UNKNOWN",
-                                 error_code=code if code in _CODES
+        return error_after_model(code if code in _CODES
                                  else "OPEN_GOAL_SOURCE_UNAVAILABLE")
     db.execute("BEGIN IMMEDIATE")
     try:
