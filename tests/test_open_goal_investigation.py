@@ -407,8 +407,58 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertIn(quote, window)
         self.assertLessEqual(len(window), 650)
 
-    def test_empty_preview_selection_is_not_false_global_no_evidence(self):
-        """24 ranked previews cannot establish absence in a larger full corpus."""
+    def test_second_batch_discovers_semantically_relevant_source_after_first_abstention(self):
+        """Host must not stop when 24 higher-lexical-score sources are irrelevant."""
+        from cognition_agent_os.investigation import audit_investigation
+        question = "What production outcome independently confirms the phase activation?"
+        for n in range(27):
+            (self.sources / f"decoy_{n:02d}.md").write_text(
+                "Production outcome phase activation: routine index labels only. " * 8,
+                encoding="utf-8")
+        quote = "The deployment must be confirmed by an independent external readback."
+        (self.sources / "truth.md").write_text(
+            "The field verification procedure says: " + quote, encoding="utf-8")
+        tid = self.seed(question)
+        batches = []
+        responses = []
+
+        def fake(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            responses.append(payload)
+            if "Available evidence (untrusted excerpts):" in payload["prompt"]:
+                manifest = json.loads(payload["prompt"].split(
+                    "Available evidence (untrusted excerpts):\\n", 1)[1])
+                names = [x["name"] for x in manifest]
+                batches.append(names)
+                self.assertLessEqual(len(names), 24)
+                self.assertEqual(len(names), len(set(names)))
+                if len(batches) == 1:
+                    self.assertNotIn("truth.md", names)
+                    return {"done": True, "response": json.dumps({"sources": []})}
+                self.assertIn("truth.md", names)
+                return {"done": True, "response": json.dumps({"sources": ["truth.md"]})}
+            return {"done": True, "response": json.dumps({
+                "findings": [{"source": "truth.md", "quote": quote,
+                              "interpretation": "Readback is an external verification method."}],
+                "uncertainty": "Only a sourced proposal, not an independently observed effect."
+            })}
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "NEEDS_REVIEW", result)
+        self.assertEqual(len(batches), 2)
+        self.assertFalse(set(batches[0]) & set(batches[1]))
+        self.assertEqual(len(responses), 3)
+        self.assertEqual(audit_investigation(
+            self.dbpath, self.workspace, self.sources, tid)["status"],
+            "SOURCE_GROUNDED_UNREVIEWED")
+        self.assertFalse(result["tasks"][0].get("business_outcome_verified", False))
+
+    def test_exhausted_previews_are_not_claimed_to_exclude_real_evidence(self):
+        """All shown 650-char windows can be false negatives about full files."""
         for n in range(29):
             (self.sources / f"other_{n:02d}.md").write_text(
                 f"Unrelated archived record {n}.", encoding="utf-8")
@@ -420,9 +470,35 @@ class OpenGoalInvestigationTests(unittest.TestCase):
                             local_model="local:test")
         self.assertEqual(tick["tasks"][0]["status"], "UNKNOWN", tick)
         self.assertEqual(tick["tasks"][0]["reason"],
-                         "PREVIEW_COVERAGE_INCOMPLETE")
-        self.assertEqual(len([x for x in calls if x[0] == "POST"]), 1)
+                         "PREVIEWS_EXHAUSTED_UNVERIFIED")
+        self.assertEqual(len([x for x in calls if x[0] == "POST"]), 2)
 
+    def test_bad_selection_in_later_batch_fails_closed(self):
+        """A selected name outside the presented second batch is not permitted."""
+        for n in range(28):
+            (self.sources / f"index_{n:02d}.md").write_text(
+                "Unrelated source index only.", encoding="utf-8")
+        tid = self.seed("Look for a new unrelated method.")
+        selections = 0
+
+        def fake(method, path, payload, timeout):
+            nonlocal selections
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            selections += 1
+            if selections == 1:
+                return {"done": True, "response": '{"sources":[]}'}
+            return {"done": True, "response": '{"sources":["not_in_batch.md"]}'}
+
+        with patch.object(local_model, "_request", side_effect=fake):
+            result = run_tick(self.dbpath, self.workspace, self.sources,
+                              max_jobs=1, planner_mode="ollama-local",
+                              local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"], "UNKNOWN", result)
+        self.assertEqual(result["tasks"][0]["reason"],
+                         "UNAUTHORIZED_OR_AMBIGUOUS_SOURCE_SELECTION")
+        self.assertEqual(selections, 2)
+        self.assertFalse((self.workspace / "artifacts" / (tid + ".json")).exists())
 
 
 if __name__ == "__main__":
