@@ -331,6 +331,10 @@ def main(argv=None) -> int:
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"] in ("MECHANICAL_EVIDENCE_OBSERVED",
                                         "NO_RUNTIME_EVIDENCE","PARTIAL_EVIDENCE") else 4
+    if args.command == "open-goal-audit":
+        result=audit_open_goal(args.db,args.fixtures,args.task_id)
+        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        return 0 if result["status"]=="METHOD_CANDIDATE_MECHANICALLY_GROUNDED" else 4
     if args.command == "investigation-audit":
         result = audit_investigation(args.db,args.workspace,args.fixtures,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
