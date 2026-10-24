@@ -71,6 +71,13 @@ def _intent(c: CapabilityContext) -> dict:
     return run_intent(c.db, c.task)
 
 
+def _open_goal(c: CapabilityContext) -> dict:
+    from .open_goal import run_open_goal
+    return run_open_goal(c.db, c.task, c.fixtures,
+                         planner_mode=c.planner_mode,
+                         local_model_name=c.local_model)
+
+
 def _reconcile(c: CapabilityContext) -> dict:
     from .reconciliation import run_reconciliation
     return run_reconciliation(c.db, c.task, c.workspace, c.fixtures)
@@ -144,6 +151,7 @@ _HANDLERS = {
     "pure_code_repair": _pure_repair,
     "investigate_goal": _investigate,
     "goal_intent": _intent,
+    "open_goal": _open_goal,
     "record_reconciliation": _reconcile,
     "goal_case": _goal_case,
     "fixture": _snapshot_diff,
