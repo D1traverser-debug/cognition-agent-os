@@ -290,7 +290,27 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
            for k in ("rationale", "rejected_alternative", "uncertainty")):
         raise OpenGoalInvalid("OPEN_GOAL_MODEL_INVALID")
     if decision["method"] == "abstain":
-        raise OpenGoalInvalid("OPEN_GOAL_ABSTAINED")
+        # Abstention from an EFFECTFUL method need not dead-end the owner's
+        # broader goal. When local public-style evidence is available, admit
+        # exactly one read-only investigation of the ORIGINAL full goal.
+        # This is discovery of possible methods, not permission to execute
+        # an unknown method or approval of any owner outcome.
+        safe_gap_research = (
+            bool(evidence_files) and not external and not mixed_action
+            and not _owner_prohibits_method(goal) and len(goal) <= 500
+            and not re.search(
+                r"\b(?:set|ensure|add|insert|compare|reconcile)\b",
+                grounded)
+        )
+        if not safe_gap_research:
+            raise OpenGoalInvalid("OPEN_GOAL_ABSTAINED")
+        decision.update({
+            "method": "investigate_evidence",
+            "selection_origin": "SAFE_CAPABILITY_GAP_RESEARCH",
+            "rationale": "Investigate available local evidence for missing method",
+            "rejected_alternative": "No effectful local method was selected",
+            "uncertainty": "No tool execution or owner outcome is yet established",
+        })
     if external:
         raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
 
@@ -404,8 +424,10 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
         # Keep owner wording unchanged in the research child; model-generated
         # instruction or evidence cannot expand the scope beyond local notes.
         # A documented, explicit question is not a license to mutate sources.
-        if (not evidence_files or not inquiry or mixed_action
-            or len(goal) > 500 or _owner_prohibits_method(goal)):
+        if (not evidence_files or mixed_action
+            or len(goal) > 500 or _owner_prohibits_method(goal)
+            or (not inquiry and decision["selection_origin"] not in (
+                "SAFE_CAPABILITY_GAP_RESEARCH", "LOCAL_MODEL_ENUM"))):
             raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
         if not model:
             raise local_model.LocalModelUnavailable("Local model required for evidence research")
