@@ -1,0 +1,115 @@
+{
+  "version": "heldout-model-optional-v3",
+  "preregistered": true,
+  "metadata": "New synthetic evaluation before implementation; model fallback and pure-typed goals scored separately",
+  "cases": [
+    {
+      "id": "inventory_single_offline",
+      "goal": "Ensure inventory.json has warehouse equal to north while keeping current stock fields.",
+      "files": {
+        "inventory.json": "{\"stock\":14,\"item\":\"A\"}\n"
+      },
+      "expect": "json",
+      "name": "inventory.json",
+      "desired": {
+        "warehouse": "north"
+      }
+    },
+    {
+      "id": "settings_two_fields_offline",
+      "goal": "Set policy.json owner equal to finance and status equal to approved; do not change existing fields.",
+      "files": {
+        "policy.json": "{\"expires\":\"2027-01\"}\n"
+      },
+      "expect": "json",
+      "name": "policy.json",
+      "desired": {
+        "owner": "finance",
+        "status": "approved"
+      }
+    },
+    {
+      "id": "csv_novel_order_offline",
+      "goal": "Compare source.csv with outcome.csv and show row differences without altering inputs.",
+      "files": {
+        "source.csv": "id,score\np,1\nq,4\n",
+        "outcome.csv": "id,score\np,2\nq,4\n"
+      },
+      "expect": "csv",
+      "reference": "source.csv",
+      "observed": "outcome.csv"
+    },
+    {
+      "id": "csv_role_contrasted_offline",
+      "goal": "Compare canonical.csv against captured.csv for discrepancies.",
+      "files": {
+        "canonical.csv": "id,count\nx,9\n",
+        "captured.csv": "id,count\nx,8\n"
+      },
+      "expect": "csv",
+      "reference": "canonical.csv",
+      "observed": "captured.csv"
+    },
+    {
+      "id": "unsupported_external_broker",
+      "goal": "Upload all customer account data to an external service using production token credentials.",
+      "files": {
+        "client.json": "{\"account\":\"synthetic\"}\n"
+      },
+      "expect": "abstain"
+    },
+    {
+      "id": "negated_instruction",
+      "goal": "Do not set warehouse equal to north in inventory.json; explain the risks only.",
+      "files": {
+        "inventory.json": "{\"stock\":14}\n"
+      },
+      "expect": "abstain"
+    },
+    {
+      "id": "ambiguous_open_research",
+      "goal": "Investigate the likely causes of unexpected anomalies in a novel network interface.",
+      "files": {
+        "inventory.json": "{\"stock\":14}\n"
+      },
+      "expect": "abstain"
+    },
+    {
+      "id": "source_conflict",
+      "goal": "Ensure policy.json has owner equal to finance; preserve original values.",
+      "files": {
+        "policy.json": "{\"owner\":\"security\",\"expires\":\"2027-01\"}\n"
+      },
+      "expect": "conflict",
+      "name": "policy.json",
+      "desired": {
+        "owner": "finance"
+      }
+    },
+    {
+      "id": "already_satisfied",
+      "goal": "Ensure snapshot.json has status equal to valid while retaining all existing fields.",
+      "files": {
+        "snapshot.json": "{\"status\":\"valid\",\"seq\":21}\n"
+      },
+      "expect": "already",
+      "name": "snapshot.json",
+      "desired": {
+        "status": "valid"
+      }
+    },
+    {
+      "id": "spurious_other_source",
+      "goal": "Set registry.json category equal to local while retaining all existing entries.",
+      "files": {
+        "registry.json": "{\"revision\":2}\n",
+        "other.csv": "id,x\nz,1\n"
+      },
+      "expect": "json",
+      "name": "registry.json",
+      "desired": {
+        "category": "local"
+      }
+    }
+  ]
+}
