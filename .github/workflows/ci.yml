@@ -605,6 +605,7 @@ jobs:
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_NO_CLOUD: '1'
           COGNITION_EVAL_MODEL: qwen2.5-coder:0.5b
+          COGNITION_EVAL_DATASET: ${{ contains(github.event.pull_request.body, '[inspect-unseen-v2]') && 'evaluation/inspect_unseen_goal_set_v2.json' || 'evaluation/inspect_unseen_goal_set_v1.json' }}
         run: |
           set -euo pipefail
           mkdir -p inspect-open-goal-logs

@@ -33,7 +33,12 @@ from cognition_agent_os.goal_audit import audit_goal
 from cognition_agent_os.reconciliation_oracle import audit_stored_report
 
 MODEL = os.environ.get("COGNITION_EVAL_MODEL", "qwen2.5-coder:0.5b")
-DATASET = Path(__file__).resolve().parent.parent / "evaluation/inspect_unseen_goal_set_v1.json"
+_EVAL_ROOT = Path(__file__).resolve().parent.parent
+DATASET = (_EVAL_ROOT / os.environ.get(
+    "COGNITION_EVAL_DATASET", "evaluation/inspect_unseen_goal_set_v1.json"
+)).resolve()
+if not DATASET.is_relative_to(_EVAL_ROOT / "evaluation"):
+    raise ValueError("Only preregistered repository evaluation datasets allowed")
 
 
 def _observed_run(goal: str, files: dict[str, str]) -> dict:
@@ -226,7 +231,7 @@ def unseen_owner_goal():
         dataset=dataset,
         solver=real_cognition_host(),
         scorer=owner_intent_oracle(),
-        name="independent-open-owner-goal-v1",
+        name="independent-" + fixture["version"],
         version="1",
         time_limit=120,
         fail_on_error=False,

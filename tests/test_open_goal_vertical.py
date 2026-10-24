@@ -138,6 +138,50 @@ class OpenGoalVerticalTests(unittest.TestCase):
                          {"timeout": 7, "owner": "ops"})
         self.assertEqual((self.fx / "settings.json").read_bytes(), original)
 
+    def test_owner_multiple_explicit_rules_cannot_be_reduced_to_one(self):
+        parent = self.enqueue(
+            "Ensure settings.json has owner equal to ops AND team equal to core, "
+            "keeping all previous entries.")
+        out = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "DECOMPOSED", out)
+        with closing(connect(self.db)) as db:
+            child = db.execute("SELECT source_spec FROM tasks WHERE parent_task=?",
+                               (parent,)).fetchone()
+        self.assertIsNotNone(child)
+        child_spec = json.loads(child[0])
+        self.assertEqual(child_spec["desired"],
+                         {"owner": "ops", "team": "core"})
+
+    def test_three_owner_fields_all_survive_model_one_field_reply(self):
+        parent = self.enqueue(
+            "Ensure settings.json has owner equal to ops, team equal to core, "
+            "and mode equal to safe, preserving all existing fields.")
+        out = self.tick(self.suggestion(), max_jobs=2)
+        self.assertEqual([x["status"] for x in out["tasks"]],
+                         ["DECOMPOSED", "NEEDS_REVIEW"], out)
+        with closing(connect(self.db)) as db:
+            child = db.execute("SELECT source_spec FROM tasks WHERE parent_task=?",
+                               (parent,)).fetchone()
+        self.assertEqual(
+            json.loads(child[0])["desired"],
+            {"owner": "ops", "team": "core", "mode": "safe"})
+
+    def test_unsafe_negated_member_blocks_entire_conjunction(self):
+        parent = self.enqueue(
+            "Ensure settings.json has owner equal to ops. "
+            "Do not set team equal to core in settings.json.")
+        out = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
+        self.assertEqual(self.children(parent), [])
+
+    def test_explanation_of_how_to_apply_is_not_authorization_to_apply(self):
+        parent = self.enqueue(
+            "Explain how to ensure settings.json has owner equal to ops; "
+            "do not create a changed file or proposal.")
+        out = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
+        self.assertFalse(self.children(parent))
+
     def test_model_selects_different_registered_method_for_csv_goal(self):
         goal = "Please compare baseline.csv and actual.csv to identify record discrepancies."
         parent = self.enqueue(goal)
@@ -181,7 +225,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
                          "METHOD_CANDIDATE_MECHANICALLY_GROUNDED")
 
     def test_invalid_model_tool_or_write_grant_cannot_mint_child(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         illegal = self.suggestion()
         illegal["remote_write_allowed"] = True
         out = self.tick(illegal, max_jobs=1)
@@ -190,7 +237,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse((self.ws / "artifacts").exists())
 
     def test_nonexistent_model_selected_source_cannot_mint_child(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         invalid = self.suggestion()
         invalid["input"] = "newly-made-by-model.json"
         out = self.tick(invalid, max_jobs=1)
@@ -235,7 +285,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse(self.children(parent))
 
     def test_source_changes_while_model_decides_no_child_or_action(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         changed = False
         def mutate():
             nonlocal changed
@@ -248,7 +301,10 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertFalse(self.children(parent))
 
     def test_grant_revoked_while_model_decides_cannot_spawn_child(self):
-        parent = self.enqueue()
+        # This owner syntax intentionally requires an actual local model
+        # argument request; fully literal equalities are now compiled directly.
+        parent = self.enqueue(
+            "Please ensure settings.json includes owner as ops; preserve timeout.")
         changed = False
         def mutate():
             nonlocal changed
