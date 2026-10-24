@@ -51,6 +51,7 @@ REVIEW_EFFECTS = frozenset({
     ("repair_oracle", "review_patch"),
     ("repo_repair", "review_repo"),
     ("repo_refinement", "_freeze_revision"),
+    ("repo_refinement", "_record_attempt"),
 })
 
 
