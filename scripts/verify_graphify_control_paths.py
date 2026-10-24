@@ -11,7 +11,10 @@ REQUIRED_PATHS = (
     ("src_cognition_agent_os_cli_main", "src_cognition_agent_os_host_run_tick"),
     ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_runner_run_once"),
     ("src_cognition_agent_os_runner_run_once", "src_cognition_agent_os_ledger_claim_one"),
-    ("src_cognition_agent_os_runner_run_once", "src_cognition_agent_os_intent_runtime_run_intent"),
+    # Post-refactor: runner performs admission, a static adapter dispatches
+    # capability-specific work. Prove BOTH real call edges independently.
+    ("src_cognition_agent_os_runner_run_once", "src_cognition_agent_os_capability_dispatch_dispatch_capability"),
+    ("src_cognition_agent_os_capability_dispatch__intent", "src_cognition_agent_os_intent_runtime_run_intent"),
     # The currently implemented bounded-control path, not merely an old P0-P3 skeleton.
     ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_bounded_goal_control_advance_local_goals"),
     ("src_cognition_agent_os_bounded_goal_control_advance_local_goals", "src_cognition_agent_os_bounded_control_audit_verify_registered_control"),
