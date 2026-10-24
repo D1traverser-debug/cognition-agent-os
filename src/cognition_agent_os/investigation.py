@@ -128,14 +128,16 @@ def _preview_window(text: str, terms: dict[str, int]) -> tuple[int, str]:
     """Evaluate all bounded overlapping windows, not just a file prefix."""
     import unicodedata
     limit = 650
-    normalized = unicodedata.normalize("NFKC", text).casefold()
     last = max(0, len(text) - limit)
     starts = list(range(0, last + 1, 325))
     if starts[-1] != last:
         starts.append(last)
     best_score, best_start = -1, 0
     for start in starts:
-        window = normalized[start:start + limit]
+        # Normalize EACH original-text window, not the entire document:
+        # NFKC and casefold may change codepoint length, so normalized
+        # offsets are not valid offsets into original source quotations.
+        window = unicodedata.normalize("NFKC", text[start:start + limit]).casefold()
         score = sum(min(window.count(term), 3) * weight
                     for term, weight in terms.items())
         if score > best_score:
