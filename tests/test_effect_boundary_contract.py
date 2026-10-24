@@ -71,6 +71,16 @@ class EffectBoundaryContractTests(unittest.TestCase):
         self.assertTrue(any(x.startswith("UNREGISTERED_ARTIFACT_EFFECT")
                             for x in inspect(self.root)))
 
+    def test_new_direct_file_write_cannot_hide_outside_shared_stage(self):
+        dest = self.pkg / "goal_loop.py"
+        dest.write_text(dest.read_text(encoding="utf-8") +
+                        "\ndef hidden_direct_write():\n"
+                        "    from pathlib import Path\n"
+                        "    return Path('untracked').write_bytes(b'x')\n",
+                        encoding="utf-8")
+        self.assertTrue(any(x.startswith("UNREGISTERED_DIRECT_FILE_EFFECT")
+                            for x in inspect(self.root)))
+
     def test_missing_registered_review_module_fails_closed(self):
         (self.pkg / "repair_oracle.py").unlink()
         faults = inspect(self.root)
