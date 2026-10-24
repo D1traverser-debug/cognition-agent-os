@@ -84,34 +84,34 @@ def _goal_case(c: CapabilityContext) -> dict:
 
 def _snapshot_diff(c: CapabilityContext) -> dict:
     """Preserve the original fixture/GitHub comparison semantics."""
-    from .local_model import LocalModelUnavailable, propose_local
-    from .planner import propose
-    from .source import SourceUnavailable, get_pair
-    # Shared immutable artifact writer stays on the original runtime boundary.
+    # Preserve legacy runner's trusted interception seam during migration.
+    # It is used by preexisting revocation/source-race tests; the new static
+    # capability table does not alter authorization or grant semantics.
+    from . import runner as legacy
     from .runner import ArtifactConflict, _artifact_bytes, store_once
 
     task = c.task
     tid = task["task_id"]
     try:
         spec = json.loads(task["source_spec"])
-        old, new, evidence = get_pair(spec, c.fixtures)
-        old_confirm, new_confirm, evidence_confirm = get_pair(
+        old, new, evidence = legacy.get_pair(spec, c.fixtures)
+        old_confirm, new_confirm, evidence_confirm = legacy.get_pair(
             json.loads(task["source_spec"]), c.fixtures)
         if old != old_confirm or new != new_confirm or evidence != evidence_confirm:
-            raise SourceUnavailable("Source changed during verification")
+            raise legacy.SourceUnavailable("Source changed during verification")
         if c.planner_mode == "deterministic":
-            proposal = propose(old, new, evidence)
+            proposal = legacy.propose(old, new, evidence)
         elif c.planner_mode == "ollama-local":
-            proposal = propose_local(old, new, evidence,
+            proposal = legacy.propose_local(old, new, evidence,
                                      model=c.local_model or "")
         else:
             raise ValueError("Unsupported planner mode")
-    except LocalModelUnavailable as exc:
+    except legacy.LocalModelUnavailable as exc:
         observed = finalize_observed(c.db, task, "UNKNOWN",
                                      error_code="LOCAL_MODEL_UNAVAILABLE")
         return ({**observed, "diagnostic": type(exc).__name__}
                 if observed["status"] == "UNKNOWN" else observed)
-    except (SourceUnavailable, FileNotFoundError, KeyError, ValueError, OSError) as exc:
+    except (legacy.SourceUnavailable, FileNotFoundError, KeyError, ValueError, OSError) as exc:
         observed = finalize_observed(c.db, task, "UNKNOWN",
                                      error_code="SOURCE_UNAVAILABLE")
         return ({**observed, "diagnostic": type(exc).__name__}
