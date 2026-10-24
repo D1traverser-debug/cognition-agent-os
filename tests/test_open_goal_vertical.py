@@ -177,6 +177,17 @@ class OpenGoalVerticalTests(unittest.TestCase):
         self.assertEqual(out["tasks"][0]["status"], "UNKNOWN", out)
         self.assertFalse(self.children(parent))
 
+    def test_explicitly_negated_owner_operation_cannot_become_a_work_item(self):
+        # A local model can return the right-looking method and arguments
+        # while reversing the OWNER's negated intent. Syntactic substring
+        # matching is not goal understanding.
+        parent = self.enqueue(
+            "Do not set owner equal to ops in settings.json; explain risks only.")
+        observed = self.tick(self.suggestion(), max_jobs=1)
+        self.assertEqual(observed["tasks"][0]["status"], "UNKNOWN", observed)
+        self.assertFalse(self.children(parent))
+        self.assertFalse((self.ws / "artifacts").exists())
+
     def test_model_abstention_does_not_fabricate_work(self):
         parent = self.enqueue()
         out = self.tick(self.suggestion() | {"method": "abstain"},
