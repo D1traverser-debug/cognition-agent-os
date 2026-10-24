@@ -34,6 +34,7 @@ ARTIFACT_STORES = frozenset({
     ("capability_dispatch", "_snapshot_diff"),
     ("goal_loop", "run_goal_case"),
     ("investigation", "run_investigation"),
+    ("public_tool_discovery", "run_public_discovery"),
     ("research_gap", "run_research_gap"),
     ("research_assessment", "run_assessment"),
     ("reconciliation", "run_reconciliation"),
