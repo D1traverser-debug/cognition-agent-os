@@ -213,6 +213,33 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["reason"],"UPSTREAM_TASK_INVALID")
         self.assertFalse((self.workspace/"artifacts"/(leaf+".json")).exists())
 
+    def test_blocked_ancestor_prevents_late_sandbox_effect(self):
+        """A review-stage write needs the same live ancestor gate as the worker."""
+        from cognition_agent_os.sandbox_effect import stage_one
+        self.fixtures.joinpath("settings.json").write_text(
+            '{"critical":"preserve"}', encoding="utf-8")
+        with closing(connect(self.db_path)) as db:
+            root = create_task(db, self.structured(), due_at=9999999999)
+            leaf = create_task(
+                db, {"kind": "goal_case", "goal_type": "json_keys",
+                     "input": "settings.json", "desired": {"owner": "ops"}},
+                parent=root)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                       (root,))
+            db.commit()
+        self.assertEqual(run_once(self.db_path, self.workspace, self.fixtures)["status"],
+                         "NEEDS_REVIEW")
+        self.assertEqual(self.task(leaf)["state"], "NEEDS_REVIEW")
+        with closing(connect(self.db_path)) as db:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                       (root,))
+            db.commit()
+        observed = stage_one(self.db_path, self.workspace, self.fixtures, leaf)
+        self.assertNotEqual(observed["status"], "SANDBOX_VERIFIED", observed)
+        self.assertFalse((self.workspace / "sandbox" /
+                          (leaf + ".candidate")).exists())
+        self.assertNotEqual(self.task(leaf)["state"], "SANDBOX_VERIFIED")
+
     def test_task_parent_cycle_is_not_a_legitimate_decomposition(self):
         """A corrupted parent graph cannot supply authorization or effects."""
         from cognition_agent_os.ledger import create_task
