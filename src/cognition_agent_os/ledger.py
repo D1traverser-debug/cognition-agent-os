@@ -165,6 +165,37 @@ def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120)
         raise
 
 
+
+def lineage_guard(db: sqlite3.Connection, task: dict, *, max_depth: int = 512) -> bool:
+    """Fail closed for any invalid ancestor in this exact task's goal lineage.
+
+    A direct-parent-only check allows a DECOMPOSED intermediate task to hide
+    a blocked grandparent. A descendant must not execute when ANY ancestor
+    was blocked, failed, lost, changed goal/grant or formed a cycle. This is
+    inspection of the one existing task ledger, not a second policy store.
+    """
+    if type(max_depth) is not int or not 1 <= max_depth <= 512:
+        raise ValueError("INVALID_LINEAGE_DEPTH")
+    seen = {task["task_id"]}
+    parent_id = task.get("parent_task")
+    for _ in range(max_depth):
+        if parent_id is None:
+            return True
+        if not isinstance(parent_id, str) or parent_id in seen:
+            return False
+        seen.add(parent_id)
+        row = db.execute(
+            "SELECT task_id,parent_task,state,goal_rev,grant_rev "
+            "FROM tasks WHERE task_id=?", (parent_id,)).fetchone()
+        if (row is None
+            or row["state"] in ("BLOCKED", "UNKNOWN", "REJECTED")
+            or row["goal_rev"] != task["goal_rev"]
+            or row["grant_rev"] != task["grant_rev"]):
+            return False
+        parent_id = row["parent_task"]
+    return False
+
+
 def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> tuple[bool, str | None]:
     row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
     if row["goal_rev"] != task["goal_rev"]:
