@@ -119,6 +119,22 @@ class GoalContinuityColdResume(unittest.TestCase):
         self.assertEqual(result["status"], "READY_TO_TICK", result)
         self.assertEqual(result["next_task_id"], owner)
 
+    def test_registered_descendant_resolves_same_open_goal_ancestor(self):
+        """An exact registered child and its original root remain one goal."""
+        with closing(connect(self.db_path)) as db:
+            root = create_task(db, {
+                "kind": "open_goal",
+                "goal": "Compare original evidence under one persistent goal."})
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                       (root,))
+            child = create_task(db, {
+                "kind": "fixture", "old": "before", "new": "after"},
+                parent=root)
+        register_goal(self.db_path, self.contract(next_task_id=child))
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "READY_TO_TICK", result)
+        self.assertEqual(result["next_task_id"], child)
+
     def test_mixed_goal_ambiguity_preserves_readable_roots_after_revoke(self):
         """Revocation prevents action, not goal restoration or visibility."""
         register_goal(self.db_path, self.contract())
