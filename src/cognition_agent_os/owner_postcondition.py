@@ -83,11 +83,11 @@ def _full_owner_scope_is_supported(goal: str, plan: dict) -> bool:
     text = goal.strip().rstrip(".!").strip()
     if plan["objective"] == "compare_records":
         match = re.fullmatch(
-            r"(?:please\\s+)?compare\\s+([A-Za-z0-9_.-]+\\.csv)\\s+"
-            r"(?:with|against|to)\\s+([A-Za-z0-9_.-]+\\.csv)\\s+"
-            r"and\\s+(?:report\\s+(?:the\\s+|all\\s+)?"
+            r"(?:please\s+)?compare\s+([A-Za-z0-9_.-]+\.csv)\s+"
+            r"(?:with|against|to)\s+([A-Za-z0-9_.-]+\.csv)\s+"
+            r"and\s+(?:report\s+(?:the\s+|all\s+)?"
             r"(?:differences|discrepancies)|"
-            r"identify\\s+(?:the\\s+)?discrepancies)",
+            r"identify\s+(?:the\s+)?discrepancies)",
             text, flags=re.IGNORECASE,
         )
         spec = plan["child_source_spec"]
@@ -97,9 +97,9 @@ def _full_owner_scope_is_supported(goal: str, plan: dict) -> bool:
     if plan["objective"] != "ensure_structure":
         return False
     match = re.fullmatch(
-        r"(?:please\\s+)?ensure\\s+(?:a\\s+)?"
-        r"(?:sandbox|isolated)\\s+(?:draft|candidate|proposal)\\s+"
-        r"of\\s+([A-Za-z0-9_.-]+\\.json)\\s+has\\s+(.+)",
+        r"(?:please\s+)?ensure\s+(?:a\s+)?"
+        r"(?:sandbox|isolated)\s+(?:draft|candidate|proposal)\s+"
+        r"of\s+([A-Za-z0-9_.-]+\.json)\s+has\s+(.+)",
         text, flags=re.IGNORECASE,
     )
     if not match or match.group(1) != plan["child_source_spec"]["input"]:
@@ -108,19 +108,19 @@ def _full_owner_scope_is_supported(goal: str, plan: dict) -> bool:
     # Preservation is checked from real source/output by _constraints.
     # Only a bounded, explicitly named non-mutation qualifier is covered.
     clauses = re.sub(
-        r",\\s*(?:preserving|keeping)\\s+(?:the\\s+)?"
-        r"(?:existing|previous)\\s+"
-        r"(?:[A-Za-z_][A-Za-z0-9_-]*|entries)\\s*$",
+        r",\s*(?:preserving|keeping)\s+(?:the\s+)?"
+        r"(?:existing|previous)\s+"
+        r"(?:[A-Za-z_][A-Za-z0-9_-]*|entries)\s*$",
         "", clauses, flags=re.IGNORECASE,
     )
-    fragments = re.split(r"\\s+and\\s+|\\s*,\\s*", clauses, flags=re.IGNORECASE)
+    fragments = re.split(r"\s+and\s+|\s*,\s*", clauses, flags=re.IGNORECASE)
     if not 1 <= len(fragments) <= 16:
         return False
     accepted = {}
     for clause in fragments:
         piece = re.fullmatch(
-            r"([A-Za-z_][A-Za-z0-9_-]{0,63})\\s+"
-            r"(?:equal|equals)\\s+to\\s+"
+            r"([A-Za-z_][A-Za-z0-9_-]{0,63})\s+"
+            r"(?:equal|equals)\s+to\s+"
             r"([A-Za-z][A-Za-z0-9_-]{0,127})",
             clause.strip(), flags=re.IGNORECASE,
         )
