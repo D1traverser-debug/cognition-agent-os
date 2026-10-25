@@ -8,6 +8,7 @@ from contextlib import closing
 import subprocess
 import sys
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -134,8 +135,12 @@ class OpenGoalColdResume(unittest.TestCase):
             [sys.executable, "-m", "cognition_agent_os.cli",
              "--db", str(self.db), "--workspace", str(self.workspace),
              "--fixtures", str(self.fixtures), "goal-resume"],
-            text=True, capture_output=True, check=False)
-        self.assertEqual(process.returncode, 4, process.stdout)
+            text=True, capture_output=True, check=False,
+            # Force a legacy Windows-like output encoding on every CI platform.
+            # The JSON transport must remain ASCII-safe while decoded Chinese
+            # original_goal still matches the input exactly.
+            env={**os.environ, "PYTHONIOENCODING": "cp1252"})
+        self.assertEqual(process.returncode, 4, process.stderr)
         state = json.loads(process.stdout)
         self.assertEqual(state["status"], "AUTHORITY_REVOKED")
         self.assertEqual(state["original_goal"], goal)
