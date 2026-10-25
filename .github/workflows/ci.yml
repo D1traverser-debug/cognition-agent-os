@@ -683,3 +683,30 @@ jobs:
           name: real-local-investigation-model-evidence
           path: real-investigation-eval.json
           if-no-files-found: warn
+
+  native_child_readonly_holdout:
+    # Two real child-main checkouts; no child write, paid model, or migration.
+    # Separate job because live GitHub availability must not be conflated with
+    # the local offline regression and business production acceptance.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Real video and novel native execution with parent Host state re-observation
+        shell: bash
+        env:
+          PYTHONPATH: src
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          python scripts/verify_live_child_holdout.py | tee native_child_readback.json
+      - name: Retain the exact native child / parent comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-two-child-readonly-evidence
+          path: native_child_readback.json
+          if-no-files-found: warn
