@@ -116,6 +116,47 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(state["status"], "HOOK_OUTSIDE_REPOSITORY")
         self.assertNotIn("original_goal", state)
 
+    def test_actual_installed_hook_command_from_nested_directory(self):
+        """Codex can be started inside src/, not only in repository root.
+
+        Run the configured command with real shell parsing. Testing the Python
+        entrypoint directly misses a broken relative hook command path.
+        """
+        goal = "Compare actual.csv with baseline.csv and report differences."
+        with closing(connect(self.db)) as db:
+            root = create_task(db, {"kind": "open_goal", "goal": goal})
+        config = json.loads((ROOT / ".codex" / "hooks.json").read_text())
+        handler = config["hooks"]["SessionStart"][0]["hooks"][0]
+        self.assertLessEqual(handler["additionalContextLimit"], 2500)
+        env = dict(os.environ)
+        env.update({
+            "COGNITION_AGENT_OS_DB": str(self.db),
+            "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+            "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures),
+        })
+        nested = ROOT / "src"
+        payload = json.dumps({
+            "cwd": str(nested), "source": "resume",
+            "hook_event_name": "SessionStart",
+        })
+        if os.name == "nt":
+            command = ["pwsh", "-NoProfile", "-Command", handler["commandWindows"]]
+        else:
+            command = ["/bin/sh", "-c", handler["command"]]
+        call = subprocess.run(
+            command, cwd=nested, input=payload, text=True,
+            capture_output=True, env=env, timeout=8)
+        self.assertEqual(call.returncode, 0, call.stderr)
+        wire = json.loads(call.stdout)
+        self.assertEqual(wire["hookSpecificOutput"]["hookEventName"],
+                         "SessionStart", wire)
+        context = json.loads(
+            wire["hookSpecificOutput"]["additionalContext"].partition(": ")[-1])
+        self.assertEqual(context["root_task_id"], root, context)
+        self.assertEqual(context["original_goal"], goal)
+        self.assertEqual(context["status"], "READY_TO_TICK")
+        self.assertFalse(context["scheduling_or_effects_performed"])
+
     def test_hook_lifecycle_registration_and_entry_path(self):
         config = json.loads((ROOT / ".codex" / "hooks.json").read_text())
         events = config["hooks"]["SessionStart"]
