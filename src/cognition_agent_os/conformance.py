@@ -261,6 +261,19 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 r = audit_investigation(db_path, workspace, fixtures, tid)
                 proof = ("MECHANICALLY_VALID" if r["status"] == "SOURCE_GROUNDED_UNREVIEWED"
                          else r["status"])
+            elif kind=="domain_contract":
+                # Parent only attests a pinned native contract, never child
+                # business task results or a migration to a new controller.
+                from .domain_contract import audit_domain_contract
+                r=audit_domain_contract(db_path,workspace,tid)
+                if r["status"]=="CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED":
+                    proof="MECHANICALLY_VALID"
+                elif r.get("reason")=="LIVE_CHILD_CONTRACT_UNVERIFIABLE":
+                    # Outage is UNKNOWN rather than proven compromise;
+                    # remain unaccepted without quarantining unrelated work.
+                    proof="EVIDENCE_RECHECK_UNAVAILABLE"
+                else:
+                    proof=r.get("reason",r["status"])
             elif kind=="public_tool_discovery":
                 from .public_tool_discovery import audit_public_discovery
                 r=audit_public_discovery(db_path,workspace,tid)
