@@ -5,6 +5,9 @@ existing commit-pinned public-GitHub adapter; it never writes child repositories
 """
 from contextlib import closing
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -185,6 +188,38 @@ class DomainContractHostIntegration(unittest.TestCase):
         with self.mock(docs):
             audit = audit_domain_contract(self.db, self.workspace, tid)
         self.assertEqual(audit["reason"], "AUTHORITY_CHANGED", audit)
+
+    def test_real_cli_seeds_same_worker_domain_readback_without_extra_grant(self):
+        repo = "D1traverser-debug/video-growth-agent"
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+        cmd = [
+            sys.executable, "-m", "cognition_agent_os.cli",
+            "--db", str(self.db),
+            "--workspace", str(self.workspace),
+            "--fixtures", str(self.fixtures),
+            "seed-domain-contract", "--repo", repo,
+            "--ref", SHA, "--domain-id", "video",
+        ]
+        process = subprocess.run(
+            cmd, text=True, capture_output=True, env=env, timeout=12)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        intake = json.loads(process.stdout)
+        self.assertEqual(intake["scope"],
+                         "PUBLIC_CHILD_SOURCE_READ_LOCAL_REVIEW_ONLY")
+        self.assertFalse(intake["parent_replacement_admitted"])
+        tid = intake["task_id"]
+        docs = make_native("video", repo)
+        with self.mock(docs):
+            tick = self.tick()
+            reviewed = audit_domain_contract(self.db, self.workspace, tid)
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertEqual(reviewed["status"],
+                         "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED")
+        self.assertFalse(reviewed["child_business_result_verified"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tasks").fetchone()[0], 1)
 
     def test_only_exact_pinned_sha_and_repo_not_untrusted_url(self):
         tid, spec = self.seed()
