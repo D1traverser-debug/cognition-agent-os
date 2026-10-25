@@ -47,11 +47,18 @@ approved. A parent replacement requires a verified adapter migration,
 unchanged legitimate child tasks, regression of both parent and child
 state/permission/identity, and explicit owner authorization.
 
-**Do not misclassify ChatGPT/Codex development skills as the business
-parent.** Better developer workflows are tools for BUILDING and
-auditing this project; Codex Hooks or native Goals cannot serve as
-independent evidence that a video episode, article, novel or A-share
-business task was guided, improved or independently completed.
+**One cognition parent, two presently distinct technical surfaces.**
+This ChatGPT/tool session participates as the actual parent's interactive
+cognition and orchestration surface; the repository is the SAME parent's
+prospective persistent Host, trusted adapters, state and independent
+outcome-assurance implementation. Do NOT invent a separate preliminary
+"developer cognition OS" or defer parent-cognition reliability to an
+unrelated project. Research, goal fidelity, tool discovery, architecture
+judgment, context rehydration, error correction and cost discipline are
+core parent-system requirements NOW. Codex Goals/Hooks/Skills may help
+implement them, but neither these configurations nor model self-report
+prove reliable integration with the persistent Host, autonomous continuation
+or independently verified video/article/novel/A-share business outcomes.
 
 A successful local JSON draft or CSV comparison under the original contract
 is a real **local scoped** result. It is not a claim that arbitrary owner
