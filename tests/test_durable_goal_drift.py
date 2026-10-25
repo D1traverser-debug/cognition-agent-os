@@ -150,6 +150,30 @@ class DurableOwnerGoalDriftTests(unittest.TestCase):
         self.assertEqual(observe_owner_goal_drift(self.db), [])
         self.assertEqual(len(self.events(tid)), 2)
 
+
+    def test_identical_independent_receipt_does_not_fabricate_new_evidence(self):
+        """Repeated identical audit verdicts are not a new semantic revision."""
+        tid = self.seed(child={"kind":"investigate_goal",
+                               "question":"What is an applicable method?",
+                               "scope":"LOCAL_EVIDENCE_ONLY"})
+        self.assertEqual(len(observe_owner_goal_drift(self.db)),1)
+        with closing(connect(self.db)) as db:
+            from cognition_agent_os.ledger import event
+            child = db.execute(
+                "SELECT task_id FROM tasks WHERE parent_task=?", (tid,)
+            ).fetchone()["task_id"]
+            event(db, child, "INDEPENDENT_RESULT_RECHECKED",
+                  {"verdict":"STILL_UNVERIFIED"})
+            db.commit()
+        self.assertEqual(len(observe_owner_goal_drift(self.db)),1)
+        with closing(connect(self.db)) as db:
+            from cognition_agent_os.ledger import event
+            event(db, child, "INDEPENDENT_RESULT_RECHECKED",
+                  {"verdict":"STILL_UNVERIFIED"})
+            db.commit()
+        self.assertEqual(observe_owner_goal_drift(self.db),[],
+                         "Duplicate evidence contents must not create drift")
+
     def test_changed_child_artifact_and_error_refresh_observation(self):
         """A changed worker receipt without state label change is new evidence."""
         tid = self.seed(child={"kind": "investigate_goal",
