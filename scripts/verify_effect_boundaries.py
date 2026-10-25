@@ -32,6 +32,9 @@ DIRECT_FILE_WRITERS = frozenset({
 
 ARTIFACT_STORES = frozenset({
     ("capability_dispatch", "_snapshot_diff"),
+    # Domain readback produces one immutable LOCAL review artifact only;
+    # existing ledger.finalize(..., artifact_writer) fences the stage.
+    ("domain_contract", "run_domain_contract"),
     ("goal_loop", "run_goal_case"),
     ("investigation", "run_investigation"),
     ("public_tool_discovery", "run_public_discovery"),
