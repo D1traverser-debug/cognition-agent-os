@@ -23,10 +23,23 @@ _REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 _ID = re.compile(r"[a-z][a-z0-9_]{1,79}\Z")
 FILES = (".uaos/MANIFEST.json", ".uaos/ADAPTER.json", ".uaos/CAPABILITIES.json")
 MAX_DOC = 256 * 1024
+MAX_ENTRYPOINT_PATH = 160
 
 
 class DomainContractInvalid(ValueError):
     pass
+
+
+def _skill_entrypoint(manifest: dict) -> str:
+    """Resolve only a declared, repo-local child entrypoint; never a URL."""
+    skill = manifest.get("skill")
+    path = skill.get("entrypoint") if isinstance(skill, dict) else None
+    if (not isinstance(path, str) or not path or len(path) > MAX_ENTRYPOINT_PATH
+        or "\\" in path or path.startswith("/") or not path.endswith(".md")
+        or any(part in ("", ".", "..") for part in path.split("/"))):
+        raise DomainContractInvalid("CHILD_SKILL_ENTRYPOINT_INVALID")
+    return path
+
 
 
 def validate_domain_task(spec: dict) -> dict:
@@ -58,6 +71,24 @@ def _native_contract(documents: dict[str, bytes], spec: dict) -> dict:
         docs[path] = obj
 
     manifest, adapter, caps = (docs[path] for path in FILES)
+    entrypoint = _skill_entrypoint(manifest)
+    skill = documents.get(entrypoint)
+    if not isinstance(skill, bytes) or not skill or len(skill) > MAX_DOC:
+        raise DomainContractInvalid("CHILD_SKILL_ENTRYPOINT_UNVERIFIABLE")
+    try:
+        skill_text = skill.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise DomainContractInvalid("CHILD_SKILL_ENTRYPOINT_INVALID") from exc
+    if not skill_text.strip():
+        raise DomainContractInvalid("CHILD_SKILL_ENTRYPOINT_INVALID")
+    digests[entrypoint] = hashlib.sha256(skill).hexdigest()
+
+    advertised = caps.get("capabilities")
+    ids = [item.get("capability_id") if isinstance(item, dict) else None
+           for item in advertised] if isinstance(advertised, list) else []
+    if (not ids or any(not isinstance(cid, str) or not _ID.fullmatch(cid)
+                       for cid in ids) or len(set(ids)) != len(ids)):
+        raise DomainContractInvalid("CHILD_CAPABILITY_DECLARATION_INVALID")
     binding = manifest.get("binding")
     if (not isinstance(binding, dict)
         or binding.get("adapter_ref") != FILES[1]
@@ -82,7 +113,10 @@ def _native_contract(documents: dict[str, bytes], spec: dict) -> dict:
         "adapter_schema": adapter.get("schema_version"),
         "capability_schema": caps.get("schema_version"),
         "declared_domain_owner": manifest.get("domain_authority"),
-        "capability_count": len(caps["capabilities"]),
+        "capability_count": len(ids),
+        "advertised_capability_ids": ids,
+        "declared_skill_entrypoint": entrypoint,
+        "advertisement_is_not_execution_grant": True,
         "legacy_parent_bound": "universal-agent-os" in manifest["controller"],
         "read_only_source_identity_verified": True,
         "child_business_identity_reissued": False,
@@ -97,6 +131,15 @@ def observe_native_domain(spec: dict) -> dict:
     spec = validate_domain_task(spec)
     docs = {name: github_public_snapshot(spec["repo"], name, spec["ref"])
             for name in FILES}
+    try:
+        manifest = json.loads(docs[FILES[0]])
+        if not isinstance(manifest, dict):
+            raise DomainContractInvalid("CHILD_NATIVE_BINDING_INVALID")
+        entrypoint = _skill_entrypoint(manifest)
+    except (ValueError, UnicodeDecodeError, TypeError) as exc:
+        raise DomainContractInvalid("CHILD_SKILL_ENTRYPOINT_INVALID") from exc
+    docs[entrypoint] = github_public_snapshot(spec["repo"], entrypoint,
+                                               spec["ref"])
     return _native_contract(docs, spec)
 
 
