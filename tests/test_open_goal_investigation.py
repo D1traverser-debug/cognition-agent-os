@@ -371,6 +371,69 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertEqual(sources,["primary.md"])
         self.assertIn("contradictory",uncertainty)
 
+    def test_model_early_quote_is_challenged_with_late_original_evidence(self):
+        """Mechanical feedback must cause a real *second* model invocation."""
+        from cognition_agent_os.investigation import _research
+        question="What does the compressor safety audit establish?"
+        lead="Compressor safety audit: early inspection approves operation."
+        adverse="Compressor safety audit: later independent test REJECTS operation."
+        raw=(lead+"\n"+("Neutral measurements. "*62)+adverse).encode()
+        calls=[]
+        def local(method,path,payload,timeout):
+            if method=="GET":
+                return {"models":[{"name":"local:test"}]}
+            calls.append(payload["prompt"])
+            if "Available evidence (untrusted excerpts):" in payload["prompt"]:
+                return {"done":True,"response":json.dumps({"sources":["primary.md"]})}
+            if "DISTANT SAME-SOURCE PASSAGE REQUIRING REVIEW" in payload["prompt"]:
+                self.assertIn(adverse,payload["prompt"])
+                self.assertIn(lead,payload["prompt"])
+                return {"done":True,"response":json.dumps({
+                    "quote":adverse,"interpretation":"Later result refutes early approval.",
+                    "uncertainty":"Same-source extracts are not independent verification."})}
+            return {"done":True,"response":json.dumps({
+                "findings":[{"source":"primary.md","quote":lead,
+                             "interpretation":"Early evidence appears favorable."}],
+                "uncertainty":"The conclusion is provisional."})}
+        with patch.object(local_model,"_request",side_effect=local):
+            names,findings,uncertainty=_research(
+                question,{"primary.md":(raw,raw.decode())},"local:test")
+        self.assertEqual(names,["primary.md"])
+        self.assertEqual(findings[0]["quote"],adverse)
+        self.assertIn("same-source challenge",uncertainty)
+        self.assertEqual(len(calls),3)
+        
+    def test_model_repeats_early_cherry_pick_cannot_publish_grounded_research(self):
+        """A model that refuses evidence-based feedback cannot pass review."""
+        question="What does the compressor safety audit establish?"
+        lead="Compressor safety audit: early inspection approves operation."
+        adverse="Compressor safety audit: later independent test REJECTS operation."
+        (self.sources/"primary.md").write_text(
+            lead+"\n"+("Neutral measurements. "*62)+adverse,
+            encoding="utf-8")
+        tid=self.seed(question)
+        calls=[]
+        def local(method,path,payload,timeout):
+            if method=="GET":return {"models":[{"name":"local:test"}]}
+            calls.append(payload["prompt"])
+            if "Available evidence (untrusted excerpts):" in payload["prompt"]:
+                return {"done":True,"response":json.dumps({"sources":["primary.md"]})}
+            if "DISTANT SAME-SOURCE PASSAGE REQUIRING REVIEW" in payload["prompt"]:
+                return {"done":True,"response":json.dumps({
+                    "quote":lead,"interpretation":"Ignored latter passage.",
+                    "uncertainty":"No independent outcome."})}
+            return {"done":True,"response":json.dumps({
+                "findings":[{"source":"primary.md","quote":lead,
+                             "interpretation":"Only early results were used."}],
+                "uncertainty":"The conclusion is provisional."})}
+        with patch.object(local_model,"_request",side_effect=local):
+            got=run_tick(self.dbpath,self.workspace,self.sources,max_jobs=1,
+                         planner_mode="ollama-local",local_model="local:test")
+        self.assertEqual(len(calls),3)
+        self.assertEqual(got["tasks"][0]["status"],"UNKNOWN",got)
+        self.assertEqual(got["tasks"][0]["reason"],"DISTANT_EVIDENCE_NOT_ADDRESSED")
+        self.assertFalse((self.workspace/"artifacts"/(tid+".json")).exists())
+
     def test_unselected_counterevidence_changed_after_research_invalidates_independent_audit(self):
         """Original research scope includes rejected/unselected original documents."""
         from cognition_agent_os.investigation import audit_investigation
