@@ -272,7 +272,131 @@ def _no_action(status: str, **extra: object) -> dict:
     return {"status": status, "business_outcome_verified": False, **extra}
 
 
-def resume_goal(db_path: Path, *, resolve_head=None) -> dict:
+
+def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
+                               authority: sqlite3.Row | None, *,
+                               workspace: Path | None,
+                               fixtures: Path | None) -> dict:
+    """Recover original open_goal roots directly, not a hand-authored summary.
+
+    No second queue, grant, registration or state mutation. Multiple current
+    goals require explicit selection rather than silently using the latest.
+    Exact original words come from the immutable ledger task source_spec.
+    """
+    from .open_goal import validate_open_goal, audit_open_goal
+    from .owner_postcondition import inspect_owner_local_outcome
+
+    roots = []
+    for row in db.execute(
+        "SELECT * FROM tasks WHERE parent_task IS NULL "
+        "ORDER BY created_at,task_id LIMIT 257"
+    ):
+        try:
+            source = json.loads(row["source_spec"])
+        except (ValueError, TypeError):
+            continue
+        if isinstance(source, dict) and source.get("kind") == "open_goal":
+            roots.append(row)
+    if not roots:
+        return _no_action("NO_DURABLE_GOAL")
+    if authority is None or len(roots) > 256:
+        return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
+    active = [r for r in roots if r["goal_rev"] == authority["goal_rev"]]
+    if not active:
+        return _no_action("STALE_GOAL_REVISION",
+                          root_task_ids=[r["task_id"] for r in roots])
+    if len(active) != 1:
+        return _no_action("AMBIGUOUS_OPEN_OWNER_GOALS",
+                          root_task_ids=[r["task_id"] for r in active])
+    root = active[0]
+    root_id = root["task_id"]
+    if (not authority["write_allowed"]
+        or root["grant_rev"] != authority["grant_rev"]):
+        return _no_action("AUTHORITY_REVOKED", root_task_id=root_id)
+    try:
+        original = validate_open_goal(json.loads(root["source_spec"]))
+    except (ValueError, TypeError, KeyError):
+        return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
+
+    digest = hashlib.sha256(root["source_spec"].encode("utf-8")).hexdigest()
+    response = {
+        "root_task_id": root_id,
+        "original_goal": original["goal"],
+        "original_contract_sha256": digest,
+        "goal_rev": root["goal_rev"],
+        "grant_rev": root["grant_rev"],
+        "root_state": root["state"],
+        "authority_current": True,
+        "source_of_truth": "ORIGINAL_SQLITE_TASK",
+        "local_owner_outcome_verified": False,
+        "business_outcome_verified": False,
+        "real_external_outcome_verified": False,
+        "unattended_business_completion_proven": False,
+    }
+    now = time.time()
+    if root["state"] in ("PENDING", "RUNNING"):
+        if root["state"] == "PENDING":
+            action = ("NOT_DUE" if root["due_at"] > now else "READY_TO_TICK")
+        else:
+            action = ("READY_TO_RECOVER" if root["lease_until"] is not None
+                      and root["lease_until"] <= now else "AWAITING_WORKER")
+        if action in ("READY_TO_TICK", "READY_TO_RECOVER"):
+            response["next_task_id"] = root_id
+        return {"status": action, **response}
+    if root["state"] != "DECOMPOSED":
+        return {"status": "REPLAN_OR_RECONCILE_ORIGINAL_GOAL", **response,
+                "reason": "ROOT_NOT_ACTIVE_OR_COMPLETED"}
+
+    if workspace is None or fixtures is None:
+        return {"status": "SOURCE_AND_OUTCOME_READBACK_REQUIRED", **response}
+    # Decomposition matters only if source pins, candidate compilation,
+    # original root, exact child and grant replay successfully.
+    audit = audit_open_goal(db_path, fixtures, root_id)
+    if audit["status"] != "METHOD_CANDIDATE_MECHANICALLY_GROUNDED":
+        return {"status": "ORIGINAL_GOAL_LINEAGE_UNVERIFIABLE", **response,
+                "reason": audit["status"]}
+    child_id = audit["child_task_id"]
+    child = db.execute(
+        "SELECT * FROM tasks WHERE task_id=? AND parent_task=?",
+        (child_id, root_id)
+    ).fetchone()
+    if child is None or (child["goal_rev"], child["grant_rev"]) != (
+            root["goal_rev"], root["grant_rev"]):
+        return {"status": "ORIGINAL_GOAL_LINEAGE_UNVERIFIABLE", **response}
+    response.update({
+        "child_task_id": child_id,
+        "child_state": child["state"],
+        "chosen_capability": audit["capability"],
+    })
+    outcome = inspect_owner_local_outcome(
+        db_path, workspace, fixtures, root_id)
+    response["local_outcome_evidence"] = {
+        "status": outcome["status"],
+        "reason": outcome.get("reason"),
+        "outcome_scope": outcome.get("outcome_scope"),
+        "evidence_sha256": outcome.get("evidence_sha256"),
+    }
+    if outcome["local_owner_outcome_verified"]:
+        return {"status": "LOCAL_OWNER_RESULT_VERIFIED", **response,
+                "local_owner_outcome_verified": True}
+    # An unverified local child is not automatically a solved original goal.
+    state = child["state"]
+    if state in ("PENDING", "RUNNING"):
+        action = ("NOT_DUE" if child["due_at"] > now else "READY_TO_TICK"
+                  ) if state == "PENDING" else (
+                    "READY_TO_RECOVER" if child["lease_until"] is not None
+                    and child["lease_until"] <= now else "AWAITING_WORKER")
+        if action in ("READY_TO_TICK", "READY_TO_RECOVER"):
+            response["next_task_id"] = child_id
+        return {"status": action, **response}
+    return {"status": "REPLAN_OR_RESEARCH_OWNER_GAP", **response,
+            "reason": outcome.get("reason") or "ORIGINAL_GOAL_NOT_PROVEN"}
+
+
+
+def resume_goal(db_path: Path, *, resolve_head=None,
+                workspace: Path | None = None,
+                fixtures: Path | None = None) -> dict:
     """No writes, no guessed goals, no implicit trust in a handoff file.
 
     When a GitHub branch is pinned, the head must be checked against a live
@@ -288,12 +412,18 @@ def resume_goal(db_path: Path, *, resolve_head=None) -> dict:
                 "SELECT * FROM authority WHERE singleton=1").fetchone()
             table = db.execute("""SELECT 1 FROM sqlite_master
                  WHERE type='table' AND name='goal_continuity'""").fetchone()
-            if authority is None or not table:
+            if authority is None:
                 return _no_action("NO_DURABLE_GOAL")
+            if not table:
+                return _resume_existing_open_goal(
+                    db_path, db, authority, workspace=workspace,
+                    fixtures=fixtures)
             rows = db.execute(
                 "SELECT * FROM goal_continuity ORDER BY goal_id").fetchall()
             if not rows:
-                return _no_action("NO_DURABLE_GOAL")
+                return _resume_existing_open_goal(
+                    db_path, db, authority, workspace=workspace,
+                    fixtures=fixtures)
             active = [r for r in rows
                       if r["goal_rev"] == authority["goal_rev"]]
             if not active:
