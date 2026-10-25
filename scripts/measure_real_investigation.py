@@ -111,6 +111,26 @@ CASES = (
         "gold_sources": ("document-a.md",),
     },
     {
+        # Original primary source contains support AND a late reversal.
+        # Gold is an exact raw-source statement withheld from both prompts.
+        "id": "single_primary_late_reversal",
+        "domain": "industrial_evidence",
+        "question": "What does the compressor safety audit establish about operation?",
+        "docs": {
+            "document-a.md": (
+                "Compressor safety audit: early inspection approves operation. "
+                + "Archived administrative measurements only. " * 42
+                + "Compressor safety audit: later independent test REJECTS operation."
+            ),
+            "document-b.md": "A food warehouse ordered new storage bins.",
+            "document-c.md": "The cafeteria menu rotates on Tuesday.",
+        },
+        "gold_sources": ("document-a.md",),
+        "late_counterevidence": (
+            "Compressor safety audit: later independent test REJECTS operation."
+        ),
+    },
+    {
         "id": "buried_compressor_threshold_swapped",
         "domain": "industrial_evidence",
         "question": "What is the compressor minimum safe pressure?",
@@ -147,7 +167,14 @@ def _case_trial(case: dict, model: str, protocol: str) -> dict:
         # Reviewer gold is never included in model messages.
         actual_request = local_model._request
         raw_model_replies = []
+        counterexample_visible = False
         def observed_request(method, endpoint, payload, timeout):
+            nonlocal counterexample_visible
+            if (method == "POST" and endpoint == "/api/generate"
+                and "Available evidence (untrusted excerpts):" in payload["prompt"]
+                and case.get("late_counterevidence")):
+                counterexample_visible = (
+                    case["late_counterevidence"] in payload["prompt"])
             if protocol == "json" and method == "POST" and endpoint == "/api/generate":
                 # Retain the exact old JSON-only protocol as an A/B comparator,
                 # even after production adopts source-bound JSON schema.
@@ -216,6 +243,9 @@ def _case_trial(case: dict, model: str, protocol: str) -> dict:
             "source_mechanically_grounded": False,
             "exact_source_selection": False,
             "semantic_business_outcome_verified": False,
+            "late_counterevidence_visible_in_selection": (
+                counterexample_visible if case.get("late_counterevidence") else None),
+            "late_counterevidence_quoted_by_real_model": None,
         }
         if row["status"] == "NEEDS_REVIEW":
             artifact = workspace / "artifacts" / (task_id + ".json")
@@ -229,6 +259,13 @@ def _case_trial(case: dict, model: str, protocol: str) -> dict:
                 result["evidence_quotes"] = [
                     {"source": v["source"], "quote": v["quote"]}
                     for v in candidate["findings"]]
+                if case.get("late_counterevidence"):
+                    result["late_counterevidence_quoted_by_real_model"] = any(
+                        case["late_counterevidence"] in v["quote"]
+                        for v in candidate["findings"])
+        if (case.get("late_counterevidence")
+            and result["late_counterevidence_quoted_by_real_model"] is None):
+            result["late_counterevidence_quoted_by_real_model"] = False
         gold = set(case["gold_sources"])
         selected = set(result["selected_sources"])
         # Preserve quality of the first model step separately from the full
@@ -325,6 +362,10 @@ def main() -> int:
         "trial_count": len(trials),
         "exact_source_selection_count": successes,
         "exact_source_selection_rate": round(successes / len(trials), 4),
+        "late_reversal_visibility_trials": sum(
+            t.get("late_counterevidence_visible_in_selection") is True for t in trials),
+        "late_reversal_quote_trials": sum(
+            t.get("late_counterevidence_quoted_by_real_model") is True for t in trials),
         "false_abstentions": sum(t.get("false_abstention", False) for t in trials),
         "false_evidence_cases": sum(t.get("false_evidence", False) for t in trials),
         "error_code_histogram": dict(Counter(
