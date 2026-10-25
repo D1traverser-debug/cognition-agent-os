@@ -155,7 +155,7 @@ def _evidence_excerpt(text: str, question: str) -> str:
     return _preview_window(text, _question_terms(question))[1]
 
 
-_DISTANT_MARKER = "\\n[SAME SOURCE, DISTANT PASSAGE]\\n"
+_DISTANT_MARKER = "\n[SAME SOURCE, DISTANT PASSAGE]\n"
 
 
 def _contrastive_preview(text: str, terms: dict[str, int]) -> tuple[int, str]:
