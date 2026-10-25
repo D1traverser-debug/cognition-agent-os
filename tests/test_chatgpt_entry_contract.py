@@ -1,7 +1,7 @@
-"""Static protection of the cognition-agent-os first-mile source boundary.
+"""Static guardrails for the multi-repository ChatGPT entry contract.
 
-This is NOT a native ChatGPT invocation test. It prevents accidental
-re-introduction of historical UAOS as the new product's live bootstrap.
+These tests check source configuration only. They do NOT simulate native
+skill selection, ChatGPT account settings, repository authorization, or effects.
 """
 from pathlib import Path
 import unittest
@@ -13,15 +13,26 @@ REPO_INSTRUCTIONS = ROOT / "AGENTS.md"
 
 
 class ChatGPTCurrentEntryBoundary(unittest.TestCase):
-    def test_current_parent_not_bootstrapped_from_historical_uaos(self):
+    def test_single_parent_and_historical_bootstrap_boundary(self):
         content = SKILL.read_text(encoding="utf-8")
-        self.assertIn("Canonical entry: cognition-agent-os, not historical UAOS", content)
+        self.assertIn("The ONE active cognitive parent", content)
         self.assertIn("D1traverser-debug/cognition-agent-os", content)
-        self.assertIn("Do **not** bootstrap from", content)
         self.assertIn("universal-agent-os@main", content)
-        self.assertIn("configuration conflict", content)
-        self.assertIn("not proof of native ChatGPT pre-tool interception", content)
-        self.assertIn("NOT_VERIFIED", content)
+        self.assertIn("never the present parent bootstrap", content)
+        self.assertIn("domain-specific live compatibility documents", content)
+        self.assertIn("not proof", content.lower())
+
+    def test_dynamic_multirepo_routing_without_pinned_pr(self):
+        content = SKILL.read_text(encoding="utf-8")
+        self.assertIn("A bare `继承`", content)
+        self.assertIn("`继承视频`", content)
+        self.assertIn("show a compact evidence-backed choice", content)
+        self.assertIn("connected GitHub repository list/search", content)
+        self.assertIn("ordinary engineering/code repository", content)
+        self.assertIn("current relevant unclosed integration candidate", content)
+        self.assertIn("same", content.lower())
+        self.assertNotRegex(content, r"(?i)(?:PR\s*#|pull/)(?:\d+)")
+        self.assertIn("separate current grants", content)
 
     def test_legacy_migration_not_accidentally_deleted(self):
         content = REPO_INSTRUCTIONS.read_text(encoding="utf-8")
@@ -29,10 +40,11 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
         self.assertIn("explicit cutover approval", content)
         self.assertIn("not a new permanent superior", content)
 
-    def test_live_conflict_counterexample_remains_in_scope_probes(self):
+    def test_route_falsifiers_remain_in_scope_probes(self):
         content = PROBES.read_text(encoding="utf-8")
-        self.assertIn("M. Legacy-entry collision:", content)
-        self.assertIn("do not take old UAOS status as live task authority", content)
+        for title in ("M. Legacy-entry collision:", "N. Bare new-chat inherit:",
+                      "O. Direct child resume:", "P. Newly discovered project:"):
+            self.assertIn(title, content)
         self.assertIn("Native first-call observability", content)
 
 
