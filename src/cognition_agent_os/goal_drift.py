@@ -18,6 +18,7 @@ from .ledger import connect, current_guard, event, require_initialized_ledger
 
 MAX_ROOTS_PER_TICK = 16
 MAX_DESCENDANTS_PER_ROOT = 64
+MAX_LEDGER_EVENTS_PER_GOAL = 4096
 _ALERT_STATES = frozenset({
     "GOAL_IDENTITY_UNVERIFIABLE",
     "REPEATED_CANDIDATE_UNVERIFIED",
@@ -87,22 +88,40 @@ def _select_roots(db: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
     return rows
 
 
-def _lineage_evidence_epoch(db: sqlite3.Connection, task_ids: list[str]) -> int:
-    """Changed ledger receipts must invalidate a stale observation fingerprint.
+def _lineage_evidence_fingerprint(
+    db: sqlite3.Connection, task_ids: list[str]
+) -> tuple[str, bool]:
+    """Hash SEMANTIC evidence transitions, not append-only event IDs.
 
-    Drift signals themselves are excluded: observing a goal must never
-    recursively create 'new evidence' on its next unchanged Host tick.
+    Two identical receipts for the same task/event kind convey no new
+    observation. A→B→A *does* convey a reversal; it must be retained.
+    Observation events produced by this very function never feed back into
+    its fingerprint. Oversized evidence must fail closed as incomplete.
     """
     if not task_ids:
-        return 0
+        return hashlib.sha256(b"[]").hexdigest(), True
     placeholders = ",".join("?" for _ in task_ids)
-    row = db.execute(
-        "SELECT COALESCE(MAX(event_id), 0) FROM events "
-        "WHERE kind NOT IN ('OWNER_GOAL_DRIFT_SIGNAL',"
+    rows = db.execute(
+        "SELECT task_id,kind,details FROM events "
+        "WHERE kind NOT IN ('OWNER_GOAL_DRIFT_SIGNAL', "
         "'OWNER_GOAL_LOCAL_RESULT_OBSERVED') AND task_id IN ("
-        + placeholders + ")", task_ids
-    ).fetchone()
-    return int(row[0])
+        + placeholders + ") ORDER BY event_id LIMIT ?",
+        [*task_ids, MAX_LEDGER_EVENTS_PER_GOAL + 1],
+    ).fetchall()
+    complete = len(rows) <= MAX_LEDGER_EVENTS_PER_GOAL
+    last_by_topic = {}
+    semantic = []
+    for row in rows[:MAX_LEDGER_EVENTS_PER_GOAL]:
+        topic = (row["task_id"], row["kind"])
+        body = row["details"]
+        if last_by_topic.get(topic) == body:
+            continue
+        last_by_topic[topic] = body
+        semantic.append((topic[0], topic[1], body))
+    digest = hashlib.sha256(json.dumps(
+        semantic, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    return digest, complete
 
 
 def _task_evidence_snapshot(task: dict | sqlite3.Row) -> tuple:
@@ -156,11 +175,14 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                     })
                     continue
                 result = check_goal_fidelity(dict(root), descendants)
-                if not complete:
+                evidence_sha, receipts_complete = _lineage_evidence_fingerprint(
+                    db, [root_id] + [d["task_id"] for d in descendants])
+                if not complete or not receipts_complete:
                     result["fidelity_state"] = "GOAL_LINEAGE_INCOMPLETE"
                     result["next_goal_action"] = "INSPECT_COMPLETE_LINEAGE"
                 owner_local = None
-                if complete and workspace is not None and fixtures is not None:
+                if (complete and receipts_complete
+                    and workspace is not None and fixtures is not None):
                     from .owner_postcondition import inspect_owner_local_outcome
                     owner_local = inspect_owner_local_outcome(
                         db_path, workspace, fixtures, root_id)
@@ -184,8 +206,8 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                     "root_task": _task_evidence_snapshot(root),
                     "descendants": sorted(
                         _task_evidence_snapshot(d) for d in descendants),
-                    "lineage_receipt_epoch": _lineage_evidence_epoch(
-                        db, [root_id] + [d["task_id"] for d in descendants]),
+                    "lineage_semantic_receipts_sha256": evidence_sha,
+                    "lineage_receipts_complete": receipts_complete,
                     "state": state,
                     "independent_local_outcome": ({
                         "status": owner_local["status"],
