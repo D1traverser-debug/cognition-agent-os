@@ -346,7 +346,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         question="What does the compressor safety audit establish?"
         lead="Compressor safety audit: early inspection approves operation."
         adverse="Compressor safety audit: later independent test REJECTS operation."
-        raw=(lead+"\\n"+("Neutral measurements. "*62)+adverse).encode()
+        raw=(lead+"\n"+("Neutral measurements. "*62)+adverse).encode()
         seen=[]
         def local(method,path,payload,timeout):
             if method=="GET":
@@ -354,7 +354,7 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             seen.append(payload["prompt"])
             if "Available evidence (untrusted excerpts):" in payload["prompt"]:
                 preview=json.loads(payload["prompt"].split(
-                    "Available evidence (untrusted excerpts):\\n",1)[1])
+                    "Available evidence (untrusted excerpts):\n",1)[1])
                 excerpt=next(x["excerpt"] for x in preview
                              if x["name"]=="primary.md")
                 self.assertIn(lead,excerpt)
