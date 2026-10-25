@@ -118,6 +118,21 @@ class OpenGoalColdResume(unittest.TestCase):
             create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
         self.assertEqual(self.recover()["status"], "NO_DURABLE_GOAL")
 
+    def test_large_unrelated_queue_cannot_hide_actual_owner_goal(self):
+        # Cold recovery must scan *owner roots*, not the first 257 arbitrary
+        # fixture tasks. Otherwise a busy Host loses the owner's identity.
+        with closing(connect(self.db)) as db:
+            for number in range(300):
+                create_task(db, {
+                    "kind":"fixture","old":f"old-{number}",
+                    "new":f"new-{number}"}, commit=False)
+            db.commit()
+        original = "Compare baseline.csv with actual.csv and report differences."
+        root = self.seed(original)
+        recovered = self.recover()
+        self.assertEqual(recovered["root_task_id"], root, recovered)
+        self.assertEqual(recovered["original_goal"], original)
+
     def test_missing_db_is_never_implicitly_initialized(self):
         missing = self.home / "missing.sqlite"
         self.assertEqual(
