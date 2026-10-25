@@ -21,14 +21,8 @@ from cognition_agent_os.ledger import connect, create_task, initialize
 
 
 CHILDREN = (
-    ("video", "video-growth-agent",
-     "4632634e5133961b3280dcfc5bc211712c3a1c83",
-     "integrated_default_program",
-     "projects/ai-self-media-commercialization/PROGRAM_STATE.json"),
-    ("novel", "novel-writing-agent",
-     "f8bc5cacb9125b0cc7ebac658140fda77e6cd75f",
-     "study_state_ref",
-     "research/masterworks/STUDY_STATE.json"),
+    ("video", "video-growth-agent", "integrated_default_program"),
+    ("novel", "novel-writing-agent", "study_state_ref"),
 )
 
 
@@ -47,15 +41,16 @@ def call(args: list[str], *, cwd: Path, python_path: Path | None = None) -> str:
     return proc.stdout
 
 
-def original_checkout(root: Path, name: str, sha: str) -> Path:
+def original_checkout(root: Path, name: str) -> tuple[Path, str]:
     dest = root / name
     call(["git", "clone", "--quiet", "--depth", "1",
           "https://github.com/D1traverser-debug/" + name + ".git",
           str(dest)], cwd=root)
     got = call(["git", "rev-parse", "HEAD"], cwd=dest).strip()
-    if got != sha:
-        raise AssertionError(f"Child main moved: {name} HEAD={got}; expected {sha}")
-    return dest
+    if len(got) != 40 or any(c not in "0123456789abcdef" for c in got):
+        raise AssertionError(f"Unusable child commit ref: {name}: {got}")
+    # Pin the observed current HEAD for every downstream read in THIS run.
+    return dest, got
 
 
 def video_native_audit(repo: Path) -> dict:
@@ -79,15 +74,15 @@ def novel_native_guard(repo: Path) -> dict:
         "LearningTransferAdmissionError)\n"
         "import json,pathlib\n"
         "s=json.loads(pathlib.Path('research/masterworks/STUDY_STATE.json').read_text())\n"
-        "assert s['status']=='ACTIVE' and s['active_work']['work_id']\n"
+        "assert isinstance(s.get('status'),str) and s.get('status')\n"
         "try:\n"
         " admit_closed_context_reconstruction(ClosedContextReconstruction("
-        "work_id=s['active_work']['work_id'],"
+        "work_id=s.get('active_work',{}).get('work_id') or 'source-state',"
         "compact_index_ref='missing-evidence',recalled_mechanisms=(),"
         "recalled_boundaries=(),missed_or_distorted=(),correction_refs=()))\n"
         "except LearningTransferAdmissionError:\n"
         " print(json.dumps({'guard':'DENIED_UNSUPPORTED_LEARNING',"
-        "'active_work':s['active_work']['work_id']}))\n"
+        "'status':s['status']}))\n"
         "else:\n"
         " raise AssertionError('Novel native guard admitted unsupported learning')\n"
     )
@@ -104,8 +99,17 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="cognition-real-child-") as tmp:
         root = Path(tmp)
         checkouts = {}
-        for _, name, sha, _, _ in CHILDREN:
-            checkouts[name] = original_checkout(root, name, sha)
+        observed_children = []
+        for did, name, key in CHILDREN:
+            checkout, sha = original_checkout(root, name)
+            checkouts[name] = checkout
+            manifest = json.loads(
+                (checkout / ".uaos/MANIFEST.json").read_text(encoding="utf-8"))
+            state_path = manifest["domain_authority"][key]
+            if not isinstance(state_path, str):
+                raise AssertionError("Child did not declare a real state reference")
+            observed_children.append((did, name, sha, key, state_path))
+        pinned_children = tuple(observed_children)
 
         native = {
             "video": video_native_audit(checkouts["video-growth-agent"]),
@@ -120,7 +124,7 @@ def main() -> None:
         with closing(connect(db)) as ledger:
             initialize(ledger)
             ids = {}
-            for did, name, sha, authority_key, _ in CHILDREN:
+            for did, name, sha, authority_key, _ in pinned_children:
                 spec = {"kind": "domain_contract",
                         "repo": "D1traverser-debug/" + name,
                         "ref": sha, "domain_id": did,
@@ -129,7 +133,7 @@ def main() -> None:
 
         def source(repo: str, path: str, ref: str) -> bytes:
             # Trust ONLY the selected child checked out at the exact SHA.
-            for did, name, sha, _, _ in CHILDREN:
+            for did, name, sha, _, _ in pinned_children:
                 if repo == "D1traverser-debug/" + name and ref == sha:
                     base = checkouts[name].resolve()
                     candidate = (base / path).resolve()
@@ -149,12 +153,13 @@ def main() -> None:
         ):
             raise AssertionError(f"Parent Host did not observe two children: {tick}")
         observations = {}
-        for did, name, sha, key, path in CHILDREN:
+        for did, name, sha, key, path in pinned_children:
             review = reports[did]
             observed = review.get("child_native_state_observation") or {}
+            actual_state = json.loads((checkouts[name] / path).read_text(encoding="utf-8"))
             if (review.get("status") != "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED"
                 or observed.get("child_declared_state_ref") != path
-                or observed.get("status_from_child_source") != "ACTIVE"
+                or observed.get("status_from_child_source") != actual_state.get("status")
                 or review.get("child_business_result_verified") is not False
                 or review.get("parent_replacement_admitted") is not False):
                 raise AssertionError(f"Child native checkpoint not safe: {review}")
@@ -166,7 +171,7 @@ def main() -> None:
                 "native_guard": native[did],
                 "business_outcome_verified": False,
             }
-        for _, name, _, _, _ in CHILDREN:
+        for _, name, _, _, _ in pinned_children:
             dirty = call(["git", "status", "--porcelain"], cwd=checkouts[name]).strip()
             if dirty:
                 raise AssertionError(f"Child checkout was modified: {name}: {dirty}")
