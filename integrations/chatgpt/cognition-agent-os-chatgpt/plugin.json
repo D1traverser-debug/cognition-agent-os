@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cognition-agent-os-chatgpt",
+  "version": "0.1.0",
+  "description": "Private ChatGPT skills-only plugin for cognition-agent-os goal recovery, tool selection, first-hand research, independent verification and safe correction. Does not itself connect a custom Host API.",
+  "author": {
+    "name": "cognition-agent-os owner"
+  },
+  "repository": "https://github.com/D1traverser-debug/cognition-agent-os",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Cognition Agent OS — ChatGPT",
+        "shortDescription": "认知目标恢复与工具核验",
+        "longDescription": "ChatGPT 原生认知工作流：跨会话恢复、目标纠偏、工具链核对、合法行动与独立验收。未配置 MCP/API Host，不自动取得业务写入权限。",
+        "developerName": "cognition-agent-os owner",
+        "category": "Productivity",
+        "capabilities": [
+          "Interactive"
+        ],
+        "defaultPrompt": "继续 cognition-agent-os：恢复用户原始目标、核查实时工具与 GitHub HEAD/CI，实际推进一项工作并独立验收。"
+      }
+    }
+  }
+}
