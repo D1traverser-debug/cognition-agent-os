@@ -193,10 +193,9 @@ def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
             if (plan != receipt.get("plan") or
                 json.loads(child["source_spec"]) != plan["child_source_spec"]):
                 return _unknown(root_id, "ORIGINAL_GOAL_PLAN_CONTRADICTED")
-            if not _full_owner_scope_is_supported(goal, plan):
-                return _unknown(root_id, "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
-
             if plan["objective"] == "compare_records":
+                if not _full_owner_scope_is_supported(goal, plan):
+                    return _unknown(root_id, "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
                 order = _COMPARE.search(goal)
                 sources = plan["child_source_spec"]
                 if (order is None
@@ -227,6 +226,8 @@ def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
                 or not re.search(r"\b(?:draft|candidate|proposal)\b", goal, re.I)):
                 return _unknown(root_id, "SANDBOX_DRAFT_NOT_ORIGINAL_OWNER_GOAL")
             desired = _owner_required_literals(goal)
+            if not _full_owner_scope_is_supported(goal, plan):
+                return _unknown(root_id, "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
             goal_spec = plan["child_source_spec"]
             if (goal_spec["goal_type"] != "json_keys"
                 or goal_spec["desired"] != desired
