@@ -21,13 +21,19 @@ registered future domain systems. Each child retains native business
 identity, requirements, assets, source/data and execution authority.
 Historical `universal-agent-os` currently appears as parent in child
 `UAOS_SKILL.md` integration contracts; migration is unverified and cannot
-be assumed. ChatGPT/Codex developer reliability is a support capability
-for BUILDING this product, not the parent system's product mission.
+be assumed. **User correction: ONE COGNITION PARENT.** The ChatGPT
+assistant's current cognition, research, decision, coordination and
+correction work belongs to cognition-agent-os itself. The repository is the
+persistent implementation of that SAME parent, not a second lower-priority
+project. Defects in understanding, research, cross-chat continuity, tool
+selection, execution and learning are already defects in the parent.
+Current ChatGPT sessions and the persistent runtime are not falsely claimed
+to be fully integrated or automatically running without a real host.
 
-Before this correction, new cognition-agent-os planning and user-facing
-handoffs wrongly promoted developer self-improvement or an isolated
-generic open-goal runner above the cross-domain parent-child target.
-Treat those formulations as **SUPERSEDED**, not equal competing goals.
+Previous handoffs that framed "first improve an independent ChatGPT
+developer system, THEN build the parent cognition OS" or reduced the parent
+to a generic local-task runner are **SUPERSEDED**. Never restore them as
+competing original user goals.
 The next complete vertical proof must run a parent-guided, child-owned
 domain obligation with native child admission/readback and preserve
 independent child authority; general method planning alone is insufficient.
