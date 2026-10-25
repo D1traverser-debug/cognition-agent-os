@@ -246,6 +246,7 @@ def _case_trial(case: dict, model: str, protocol: str) -> dict:
             "late_counterevidence_visible_in_selection": (
                 counterexample_visible if case.get("late_counterevidence") else None),
             "late_counterevidence_quoted_by_real_model": None,
+            "unresolved_competing_evidence_preserved": False,
         }
         if row["status"] == "NEEDS_REVIEW":
             artifact = workspace / "artifacts" / (task_id + ".json")
@@ -255,6 +256,8 @@ def _case_trial(case: dict, model: str, protocol: str) -> dict:
                 proof = audit_investigation(db_path, workspace, docs, task_id)
                 result["source_mechanically_grounded"] = (
                     proof["status"] == "SOURCE_GROUNDED_UNREVIEWED")
+                result["unresolved_competing_evidence_preserved"] = (
+                    proof["status"] == "SOURCE_GROUNDED_CONTRAST_UNRESOLVED")
                 result["verifier_status"] = proof["status"]
                 result["evidence_quotes"] = [
                     {"source": v["source"], "quote": v["quote"]}
@@ -366,6 +369,8 @@ def main() -> int:
             t.get("late_counterevidence_visible_in_selection") is True for t in trials),
         "late_reversal_quote_trials": sum(
             t.get("late_counterevidence_quoted_by_real_model") is True for t in trials),
+        "unresolved_competing_evidence_preserved_trials": sum(
+            t.get("unresolved_competing_evidence_preserved") is True for t in trials),
         "false_abstentions": sum(t.get("false_abstention", False) for t in trials),
         "false_evidence_cases": sum(t.get("false_evidence", False) for t in trials),
         "error_code_histogram": dict(Counter(
