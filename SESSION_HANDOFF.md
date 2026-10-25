@@ -8,6 +8,30 @@ The one product is `D1traverser-debug/cognition-agent-os`; `universal-agent-os` 
 
 The owner specifically rejected narrow fix-and-test drift, partial goal acceptance, endlessly growing review/checklists, asking the user to supply tools or test every failure, overlong repeated explanations, and pay-first planning. **Prefer free/offline/no-new-metered-cost options**. Engineering order: secure original-goal/authority/continuity/result boundaries proportionally → deliver one actual evidence-driven multi-method original-goal loop → challenge that same loop on unfamiliar held-out domains → only then optimize measured bottlenecks. Material architecture choices need competing alternatives and explicit evidence; routine edits need no ceremonial comparison.
 
+## User-confirmed parent-child architecture (2026-10-25 correction)
+
+**CRITICAL REQUIREMENT, not an assistant proposal:** cognition-agent-os is
+the cognition PARENT, responsible for system-wide reasoning, source learning,
+method evaluation, orchestration, guidance, continual improvement and
+independent acceptance across distinct CHILD business systems. The concrete
+current children are `video-growth-agent` (video), `financial-writing-agent`
+(financial content), `novel-writing-agent` (fiction), and
+`a-share-event-driven-agent` (A-share recommendations/review), plus newly
+registered future domain systems. Each child retains native business
+identity, requirements, assets, source/data and execution authority.
+Historical `universal-agent-os` currently appears as parent in child
+`UAOS_SKILL.md` integration contracts; migration is unverified and cannot
+be assumed. ChatGPT/Codex developer reliability is a support capability
+for BUILDING this product, not the parent system's product mission.
+
+Before this correction, new cognition-agent-os planning and user-facing
+handoffs wrongly promoted developer self-improvement or an isolated
+generic open-goal runner above the cross-domain parent-child target.
+Treat those formulations as **SUPERSEDED**, not equal competing goals.
+The next complete vertical proof must run a parent-guided, child-owned
+domain obligation with native child admission/readback and preserve
+independent child authority; general method planning alone is insufficient.
+
 ## Dated observed development snapshot (NOT a live branch pointer)
 
 At the 2026-10-25 check, integrated [Draft PR #50](https://github.com/D1traverser-debug/cognition-agent-os/pull/50) was based directly on unchanged `main`, unmerged, with reviewed head `d5ef462a30d9dc53d863a0bff907ea1701c125da` and matching [CI #40178050381](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/40178050381): 668 Linux / 668 Windows standard-library tests plus five other mandatory jobs successful. **NOT_READY** remains the product verdict. This SHA and job count are historical facts ONLY; re-fetch live state before acting.
