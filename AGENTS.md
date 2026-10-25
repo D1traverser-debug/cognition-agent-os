@@ -14,6 +14,70 @@ Develop a goal-directed Agent OS that independently understands legitimate owner
 - **Ambiguous requirement, architecture/method choice, repeated failure, conflicting/stale knowledge, or substantial audit:** invoke `.agents/skills/goal-grounded-semantic-review/SKILL.md` if the environment supports repository skills. Recover the original goal, challenge assumptions, research applicable proven methods, map the actual behavior, design independent falsifiers, and compare viable remedies *before* deciding. Avoid a mandatory long report for every task.
 - **Owner requests whole-system semantic verification:** inspect the complete live tree and trace distinct behavior obligations to original requirements, implementation, test and independent outcome. Leave any unverified behavior OPEN; a file hash or green CI cannot close it.
 
+## One product owner, on-demand expertise, observable delivery
+
+The original **owner goal + current grants + independent acceptance** is the
+single product spine across planning, execution, failures and continuation. A
+planning/research/QA specialist is a *role or tool invocation*, not an autonomous
+permission holder, second scheduler or independent goal to optimize. Use roles
+only when different context, expertise or independent judgment materially
+improves the **original** goal's result:
+
+- **Vision/requirements steward:** hold every owner obligation and acceptance
+  criterion intact; map scope changes across all affected tasks.
+- **Architecture and method challenger:** compare viable approaches, interfaces
+  and causal failure explanations. Explicitly test whether a smaller workflow
+  or a redesign is better; don't privilege current modules.
+- **Domain worker(s):** execute accepted, specifically authorized tasks through
+  the sole Host/Worker/SQLite grant/effect barrier. Parallel work requires
+  independent inputs and bounded shared-state effects.
+- **Independent outcome reviewer:** inspect *actual environment effects* against
+  the owner's full acceptance, not a subagent's self-score or CI outcome.
+- **Coordinator:** preserve dependencies, cost/attempt ceilings, evidence,
+  recovery and escalation. These are responsibilities, NOT five mandatory
+  model calls or five new agent processes.
+
+### Deciding what to do next (material decisions only)
+
+For a new architecture, unfamiliar method, recurring failure or major product
+gap, perform the following within the existing PR/task thread; avoid mandatory
+new documents:
+
+1. **Outcome and gap:** reread the current owner's whole goal and the actual
+   code/effect. Name the **one observable owner-level shortfall**, including
+   which obligations remain unsatisfied and what evidence would prove them.
+2. **Independent alternatives:** consider at least a small adaptation of the
+   existing Host, a changed architecture or provider where warranted, and
+   relevant outside primary-source implementations. Compare semantic fit,
+   interface compatibility, evidence strength, reversibility, permission/cost,
+   and impact on other domains. An unfamiliar external project is a candidate,
+   never a directive or a requirement to install it.
+3. **Choice with counterevidence:** select the least complicated *complete*
+   path for the owner outcome, state what would falsify it, and preserve any
+   legitimate neighboring behaviors. If research cannot resolve the material
+   unknown, run the smallest permitted discriminating experiment.
+4. **Execute, externally read back and adapt:** implement in the one runtime
+   owner, observe the actual postcondition, reconsider causes and alternatives
+   after negative feedback, and persist only source-backed reusable findings.
+   Failure to achieve the owner result is not an invitation to inflate CI,
+   tests, roles, documents, or the number of PRs.
+
+For routine, clear edits, do NOT repeat the full architecture comparison.
+Apply a **proportional assurance tier**: lightweight path for low-risk local
+changes, cross-domain review for shared boundaries, independent adversarial
+effect verification for irreversible/externally scoped changes. Risk changes
+the depth of evidence, not the number of ceremonial artifacts. An outside
+example that optimized docs, agent count or green checks rather than the
+delivered result is a cautionary counterexample.
+
+For cross-cutting problems, fix the responsible contract/owner and propagation
+paths first; write new roles, checks or abstractions only where a controlled
+comparison proves that they improve actual outcome, recovery, or security.
+Measure owner-goal completion, unseen-domain transfer, time and cost to a
+working vertical slice, unauthorized effect rate, and owner correction load.
+A working application/result with incomplete paperwork beats complete
+paperwork with no working result (without waiving needed safety evidence).
+
 ## Evidence, context and authority
 
 Use live code, actual run state and source results to determine **what is implemented and observed**; use direct owner instructions/corrections to determine **what should be done and what is permitted**; use archived notes as evidence of older hypotheses only. These are different kinds of authority and cannot be ranked as one undifferentiated list. Read the live PR head and source relevant to the task, not a cached handoff's SHA.
