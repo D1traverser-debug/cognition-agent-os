@@ -119,6 +119,33 @@ class OpenGoalColdResume(unittest.TestCase):
         self.assertEqual(state["root_task_id"], root)
         self.assertEqual(state["original_goal"], goal)
 
+    def test_chinese_multi_clause_goal_survives_revocation_across_process(self):
+        """The actual CLI must recover complete Chinese clauses, no hidden execution."""
+        goal = (
+            "先把GPT会话、技能和工具链做到可信；"
+            "不要先联调视频或小说子系统；"
+            "遇到新领域要独立研究、质疑并核验真实效果；"
+            "跨会话不能丢失原始验收条件。"
+        )
+        root = self.seed(goal)
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        process = subprocess.run(
+            [sys.executable, "-m", "cognition_agent_os.cli",
+             "--db", str(self.db), "--workspace", str(self.workspace),
+             "--fixtures", str(self.fixtures), "goal-resume"],
+            text=True, capture_output=True, check=False)
+        self.assertEqual(process.returncode, 4, process.stdout)
+        state = json.loads(process.stdout)
+        self.assertEqual(state["status"], "AUTHORITY_REVOKED")
+        self.assertEqual(state["original_goal"], goal)
+        self.assertEqual(state["root_task_id"], root)
+        self.assertFalse(state["authority_current"])
+        self.assertNotIn("next_task_id", state)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT write_allowed FROM authority WHERE singleton=1").fetchone()[0], 0)
+
     def test_no_open_goal_does_not_invent_implicit_owner_authority(self):
         with closing(connect(self.db)) as db:
             create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
