@@ -289,7 +289,7 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
     roots = []
     for row in db.execute(
         "SELECT * FROM tasks WHERE parent_task IS NULL "
-        "ORDER BY created_at,task_id LIMIT 257"
+        "ORDER BY created_at,task_id"
     ):
         try:
             source = json.loads(row["source_spec"])
@@ -297,6 +297,8 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
             continue
         if isinstance(source, dict) and source.get("kind") == "open_goal":
             roots.append(row)
+            if len(roots) > 256:
+                return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
     if not roots:
         return _no_action("NO_DURABLE_GOAL")
     if authority is None or len(roots) > 256:
