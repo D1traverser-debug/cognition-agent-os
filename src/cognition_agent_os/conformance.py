@@ -259,8 +259,12 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             elif kind == "investigate_goal":
                 from .investigation import audit_investigation
                 r = audit_investigation(db_path, workspace, fixtures, tid)
-                proof = ("MECHANICALLY_VALID" if r["status"] == "SOURCE_GROUNDED_UNREVIEWED"
-                         else r["status"])
+                proof = (
+                    "MECHANICALLY_VALID"
+                    if r["status"] == "SOURCE_GROUNDED_UNREVIEWED"
+                    else "RESEARCH_CONTRAST_UNRESOLVED"
+                    if r["status"] == "SOURCE_GROUNDED_CONTRAST_UNRESOLVED"
+                    else r["status"])
             elif kind=="domain_contract":
                 # Parent only attests a pinned native contract, never child
                 # business task results or a migration to a new controller.
@@ -317,7 +321,8 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
               "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
-              "SOURCE_CHANGED_SINCE_PROPOSAL","SOURCE_HAS_CHANGED"}
+              "SOURCE_CHANGED_SINCE_PROPOSAL","SOURCE_HAS_CHANGED",
+              "RESEARCH_CONTRAST_UNRESOLVED"}
     # Holdout drift is inconclusive for an unreviewed proposal but is a
     # direct contradiction of a previously accepted repair's positive claim.
     # Do NOT let a generic "unproven" category suppress enforcement here.
