@@ -24,6 +24,8 @@ _ID = re.compile(r"[a-z][a-z0-9_]{1,79}\Z")
 FILES = (".uaos/MANIFEST.json", ".uaos/ADAPTER.json", ".uaos/CAPABILITIES.json")
 MAX_DOC = 256 * 1024
 MAX_ENTRYPOINT_PATH = 160
+_STATE_AUTHORITY_KEY = re.compile(r"[a-z][a-z0-9_]{1,63}\\Z")
+_STATE_REF = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.json\\Z")
 
 
 class DomainContractInvalid(ValueError):
@@ -43,15 +45,37 @@ def _skill_entrypoint(manifest: dict) -> str:
 
 
 def validate_domain_task(spec: dict) -> dict:
-    if (not isinstance(spec, dict) or set(spec) !=
-        {"kind", "repo", "ref", "domain_id"} or spec.get("kind") != "domain_contract"):
+    if (not isinstance(spec, dict) or set(spec) not in (
+        {"kind", "repo", "ref", "domain_id"},
+        {"kind", "repo", "ref", "domain_id", "state_authority_key"}
+    ) or spec.get("kind") != "domain_contract"):
+
         raise DomainContractInvalid("INVALID_DOMAIN_CONTRACT_TASK")
     repo, ref, did = (spec[k] for k in ("repo", "ref", "domain_id"))
     if (not isinstance(repo, str) or not _REPO.fullmatch(repo)
         or not isinstance(ref, str) or not _SHA.fullmatch(ref)
         or not isinstance(did, str) or not _ID.fullmatch(did)):
         raise DomainContractInvalid("INVALID_DOMAIN_CONTRACT_SCOPE")
+    if "state_authority_key" in spec:
+        key = spec["state_authority_key"]
+        if not isinstance(key, str) or not _STATE_AUTHORITY_KEY.fullmatch(key):
+            raise DomainContractInvalid("INVALID_CHILD_STATE_AUTHORITY_KEY")
     return dict(spec)
+
+
+def _state_ref(manifest: dict, spec: dict) -> str | None:
+    """Follow an EXACT child-declared canonical JSON reference, not a parent path."""
+    key = spec.get("state_authority_key")
+    if key is None:
+        return None
+    authority = manifest.get("domain_authority")
+    path = authority.get(key) if isinstance(authority, dict) else None
+    if (not isinstance(path, str) or len(path) > 180
+        or not _STATE_REF.fullmatch(path)
+        or any(part in (".", "..") for part in path.split("/"))
+        or path in FILES):
+        raise DomainContractInvalid("CHILD_STATE_AUTHORITY_UNVERIFIABLE")
+    return path
 
 
 def _native_contract(documents: dict[str, bytes], spec: dict) -> dict:
@@ -82,6 +106,29 @@ def _native_contract(documents: dict[str, bytes], spec: dict) -> dict:
     if not skill_text.strip():
         raise DomainContractInvalid("CHILD_SKILL_ENTRYPOINT_INVALID")
     digests[entrypoint] = hashlib.sha256(skill).hexdigest()
+
+    state_path = _state_ref(manifest, spec)
+    state_observation = None
+    if state_path is not None:
+        state_raw = documents.get(state_path)
+        if not isinstance(state_raw, bytes) or not state_raw or len(state_raw) > MAX_DOC:
+            raise DomainContractInvalid("CHILD_NATIVE_STATE_UNVERIFIABLE")
+        try:
+            state = json.loads(state_raw)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise DomainContractInvalid("CHILD_NATIVE_STATE_NOT_JSON") from exc
+        if (not isinstance(state, dict)
+            or not isinstance(state.get("status"), str)
+            or not 1 <= len(state["status"]) <= 160):
+            raise DomainContractInvalid("CHILD_NATIVE_STATE_NOT_CREDIBLE")
+        digests[state_path] = hashlib.sha256(state_raw).hexdigest()
+        state_observation = {
+            "authority_key": spec["state_authority_key"],
+            "child_declared_state_ref": state_path,
+            "status_from_child_source": state["status"],
+            "status_is_not_parent_business_acceptance": True,
+            "state_content_sha256": digests[state_path],
+        }
 
     advertised = caps.get("capabilities")
     ids = [item.get("capability_id") if isinstance(item, dict) else None
@@ -116,6 +163,7 @@ def _native_contract(documents: dict[str, bytes], spec: dict) -> dict:
         "capability_count": len(ids),
         "advertised_capability_ids": ids,
         "declared_skill_entrypoint": entrypoint,
+        "child_native_state_observation": state_observation,
         "advertisement_is_not_execution_grant": True,
         "legacy_parent_bound": "universal-agent-os" in manifest["controller"],
         "read_only_source_identity_verified": True,
@@ -140,6 +188,10 @@ def observe_native_domain(spec: dict) -> dict:
         raise DomainContractInvalid("CHILD_SKILL_ENTRYPOINT_INVALID") from exc
     docs[entrypoint] = github_public_snapshot(spec["repo"], entrypoint,
                                                spec["ref"])
+    state_path = _state_ref(manifest, spec)
+    if state_path is not None:
+        docs[state_path] = github_public_snapshot(spec["repo"], state_path,
+                                                  spec["ref"])
     return _native_contract(docs, spec)
 
 
@@ -216,6 +268,7 @@ def audit_domain_contract(db_path: Path, workspace: Path, task_id: str) -> dict:
         "repo": spec["repo"],
         "ref": spec["ref"],
         "legacy_parent_bound": actual["legacy_parent_bound"],
+        "child_native_state_observation": actual["child_native_state_observation"],
         "child_business_result_verified": False,
         "parent_replacement_admitted": False,
     }
