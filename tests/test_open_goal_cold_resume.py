@@ -28,11 +28,11 @@ class OpenGoalColdResume(unittest.TestCase):
         self.fixtures = self.home / "fixtures"
         self.fixtures.mkdir()
         (self.fixtures / "settings.json").write_text(
-            '{"timeout":7}\\n', encoding="utf-8")
+            '{"timeout":7}\n', encoding="utf-8")
         (self.fixtures / "baseline.csv").write_text(
-            "id,amount\\nA,4\\n", encoding="utf-8")
+            "id,amount\nA,4\n", encoding="utf-8")
         (self.fixtures / "actual.csv").write_text(
-            "id,amount\\nA,6\\n", encoding="utf-8")
+            "id,amount\nA,6\n", encoding="utf-8")
         with closing(connect(self.db)) as db:
             initialize(db)
 
@@ -78,7 +78,7 @@ class OpenGoalColdResume(unittest.TestCase):
         run_tick(self.db, self.workspace, self.fixtures, max_jobs=2)
         self.assertEqual(self.recover()["status"], "LOCAL_OWNER_RESULT_VERIFIED")
         (self.fixtures / "actual.csv").write_text(
-            "id,amount\\nA,100\\n", encoding="utf-8")
+            "id,amount\nA,100\n", encoding="utf-8")
         state = self.recover()
         self.assertNotEqual(state["status"], "LOCAL_OWNER_RESULT_VERIFIED", state)
         self.assertNotIn("next_task_id", state)
