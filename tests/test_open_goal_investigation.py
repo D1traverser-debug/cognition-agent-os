@@ -339,6 +339,66 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertEqual(len([r for r in calls if r[0] == "POST"]), 2)
 
 
+
+    def test_within_one_original_document_both_early_support_and_late_reversal_reach_model(self):
+        """A single best lexical passage must not conceal contrary primary evidence."""
+        from cognition_agent_os.investigation import _research
+        question="What does the compressor safety audit establish?"
+        lead="Compressor safety audit: early inspection approves operation."
+        adverse="Compressor safety audit: later independent test REJECTS operation."
+        raw=(lead+"\\n"+("Neutral measurements. "*62)+adverse).encode()
+        seen=[]
+        def local(method,path,payload,timeout):
+            if method=="GET":
+                return {"models":[{"name":"local:test"}]}
+            seen.append(payload["prompt"])
+            if "Available evidence (untrusted excerpts):" in payload["prompt"]:
+                preview=json.loads(payload["prompt"].split(
+                    "Available evidence (untrusted excerpts):\\n",1)[1])
+                excerpt=next(x["excerpt"] for x in preview
+                             if x["name"]=="primary.md")
+                self.assertIn(lead,excerpt)
+                self.assertIn(adverse,excerpt,
+                    "Retrieval concealed a late counterexample in the SAME primary source")
+                return {"done":True,"response":json.dumps({"sources":["primary.md"]})}
+            return {"done":True,"response":json.dumps({
+                "findings":[{"source":"primary.md","quote":adverse,
+                             "interpretation":"Late independent evidence rejects the early approval."}],
+                "uncertainty":"One contradictory source; no real-world operation verified."})}
+        with patch.object(local_model,"_request",side_effect=local):
+            sources,findings,uncertainty=_research(question,{"primary.md":(raw,raw.decode())},
+                                                  "local:test")
+        self.assertEqual(sources,["primary.md"])
+        self.assertIn("contradictory",uncertainty)
+
+    def test_unselected_counterevidence_changed_after_research_invalidates_independent_audit(self):
+        """Original research scope includes rejected/unselected original documents."""
+        from cognition_agent_os.investigation import audit_investigation
+        good="The safety proposal is supported only by preliminary lab evidence."
+        (self.sources/"support.md").write_text(good,encoding="utf-8")
+        (self.sources/"counter.md").write_text(
+            "Independent field verification is still pending.",encoding="utf-8")
+        tid=self.seed("Investigate the safety proposal using available original evidence.")
+        def local(method,path,payload,timeout):
+            if method=="GET":return {"models":[{"name":"local:test"}]}
+            if "Available evidence (untrusted excerpts):" in payload["prompt"]:
+                return {"done":True,"response":json.dumps({"sources":["support.md"]})}
+            return {"done":True,"response":json.dumps({
+                "findings":[{"source":"support.md","quote":good,
+                             "interpretation":"Preliminary support, not completed verification."}],
+                "uncertainty":"Other evidence is not semantically approved."})}
+        with patch.object(local_model,"_request",side_effect=local):
+            tick=run_tick(self.dbpath,self.workspace,self.sources,max_jobs=1,
+                          planner_mode="ollama-local",local_model="local:test")
+        self.assertEqual(tick["tasks"][0]["status"],"NEEDS_REVIEW",tick)
+        self.assertEqual(audit_investigation(
+            self.dbpath,self.workspace,self.sources,tid)["status"],"SOURCE_GROUNDED_UNREVIEWED")
+        (self.sources/"counter.md").write_text(
+            "Independent field verification now REJECTS the proposal.",encoding="utf-8")
+        self.assertEqual(audit_investigation(
+            self.dbpath,self.workspace,self.sources,tid)["status"],
+            "SOURCE_CHANGED_SINCE_PROPOSAL")
+
     def test_full_document_preview_recovers_evidence_beyond_prefix(self):
         """Identical initial excerpts must not hide a late decisive fact."""
         from cognition_agent_os.investigation import _evidence_excerpt
