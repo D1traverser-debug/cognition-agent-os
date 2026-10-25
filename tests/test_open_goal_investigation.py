@@ -6,6 +6,7 @@ source quotations. Independent conformance reads back the original bytes.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import tempfile
