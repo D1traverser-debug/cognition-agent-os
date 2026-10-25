@@ -326,6 +326,55 @@ class DomainContractHostIntegration(unittest.TestCase):
             audit = audit_domain_contract(self.db, self.workspace, tid)
         self.assertEqual(audit["reason"], "RECEIPT_TAMPERED", audit)
 
+    def test_renamed_parent_still_reports_old_shared_capability_binding(self):
+        # Real child manifests pin common-capability references independently
+        # of their controller field. Renaming that field cannot certify cutover.
+        repo = "D1traverser-debug/video-growth-agent"
+        tid, spec = self.seed(domain="video", repo=repo)
+        new_parent = "D1traverser-debug/cognition-agent-os@main"
+        docs = make_native("video", repo, controller=new_parent)
+        manifest = json.loads(docs[FILES[0]])
+        manifest["binding"]["common_capabilities_ref"] = (
+            "D1traverser-debug/universal-agent-os@main:"
+            "config/COMMON_CAPABILITIES.json")
+        docs[FILES[0]] = json.dumps(manifest).encode()
+        caps = json.loads(docs[FILES[2]])
+        caps["uaos_common_capabilities_ref"] = (
+            "D1traverser-debug/universal-agent-os@main:"
+            "config/COMMON_CAPABILITIES.json")
+        docs[FILES[2]] = json.dumps(caps).encode()
+        with self.mock(docs):
+            result = self.tick()["tasks"][0]
+            audit = audit_domain_contract(self.db, self.workspace, tid)
+        self.assertEqual(result["status"], "NEEDS_REVIEW", result)
+        self.assertEqual(audit["status"], "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED")
+        self.assertTrue(audit["legacy_parent_bound"])
+        self.assertFalse(audit["parent_replacement_admitted"])
+        obs = json.loads((self.workspace / "artifacts" / (tid + ".json")).read_text())["observation"]
+        self.assertEqual(obs["declared_controller"], new_parent)
+        self.assertEqual(obs["legacy_parent_binding_refs"], [
+            "capabilities.uaos_common_capabilities_ref",
+            "manifest.binding.common_capabilities_ref",
+        ])
+
+    def test_legacy_skill_filename_alone_is_not_false_parent_binding(self):
+        repo = "D1traverser-debug/video-growth-agent"
+        tid, spec = self.seed(domain="video", repo=repo)
+        docs = make_native(
+            "video", repo,
+            controller="D1traverser-debug/cognition-agent-os@main")
+        # Child files can retain migration-compatible names when authority
+        # moves. We must NOT equate a filename with executable old-parent.
+        with self.mock(docs):
+            result = self.tick()["tasks"][0]
+            audit = audit_domain_contract(self.db, self.workspace, tid)
+        self.assertEqual(result["status"], "NEEDS_REVIEW", result)
+        self.assertFalse(audit["legacy_parent_bound"])
+        self.assertFalse(audit["parent_replacement_admitted"])
+        obs = json.loads((self.workspace / "artifacts" / (tid + ".json")).read_text())["observation"]
+        self.assertEqual(obs["declared_skill_entrypoint"], "UAOS_SKILL.md")
+        self.assertEqual(obs["legacy_parent_binding_refs"], [])
+
     def test_conflicting_native_controllers_fail_before_receipt(self):
         tid, spec = self.seed()
         docs = make_native("video", spec["repo"])
