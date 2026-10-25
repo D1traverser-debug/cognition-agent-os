@@ -312,9 +312,6 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
                           root_task_ids=[r["task_id"] for r in active])
     root = active[0]
     root_id = root["task_id"]
-    if (not authority["write_allowed"]
-        or root["grant_rev"] != authority["grant_rev"]):
-        return _no_action("AUTHORITY_REVOKED", root_task_id=root_id)
     try:
         original = validate_open_goal(json.loads(root["source_spec"]))
     except (ValueError, TypeError, KeyError):
@@ -335,6 +332,13 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
         "real_external_outcome_verified": False,
         "unattended_business_completion_proven": False,
     }
+    if (not authority["write_allowed"]
+        or root["grant_rev"] != authority["grant_rev"]):
+        # Read and execution grants are distinct. Revoke must not silently
+        # destroy the owner's immutable goal identity or original words.
+        # No next_task_id is emitted, and NO executable action is recovered.
+        return {"status": "AUTHORITY_REVOKED", **response,
+                "authority_current": False}
     now = time.time()
     if root["state"] in ("PENDING", "RUNNING"):
         if root["state"] == "PENDING":
@@ -431,9 +435,6 @@ def resume_goal(db_path: Path, *, resolve_head=None,
             if not active:
                 return _no_action("STALE_GOAL_REVISION",
                                   goal_ids=[r["goal_id"] for r in rows])
-            if not authority["write_allowed"] or any(
-                r["grant_rev"] != authority["grant_rev"] for r in active):
-                return _no_action("AUTHORITY_REVOKED")
             if len(active) != 1:
                 return _no_action(
                     "AMBIGUOUS_ACTIVE_GOALS",
@@ -456,6 +457,20 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                 or _task_fingerprint(task) != row["task_spec_sha256"]):
                 return _no_action("TASK_LINEAGE_UNVERIFIABLE",
                                   goal_id=row["goal_id"])
+            if (not authority["write_allowed"]
+                or row["grant_rev"] != authority["grant_rev"]):
+                # Recover the authenticated goal CONTRACT on cold restart,
+                # not its runnable task pointer. The grant stays revoked.
+                return _no_action(
+                    "AUTHORITY_REVOKED",
+                    goal_id=row["goal_id"],
+                    objective=spec["objective"],
+                    acceptance=spec["acceptance"],
+                    constraints=spec["constraints"],
+                    task_state=task["state"],
+                    contract_sha256=row["contract_sha256"],
+                    checkpoint_version=row["checkpoint_version"],
+                    authority_current=False)
             if spec["source"] is not None:
                 src = spec["source"]
                 resolver = resolve_head or _public_branch_head
