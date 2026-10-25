@@ -4,14 +4,14 @@ An original owner goal MUST remain discoverable without a second manual
 continuity-registration step. All positive claims are independent local
 readbacks; the command never creates a task or grants permission.
 """
-from contextlib import closing, redirect_stdout
-from io import StringIO
+from contextlib import closing
+import subprocess
+import sys
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from cognition_agent_os.cli import main
 from cognition_agent_os.continuity import resume_goal
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, create_task, initialize, alter_authority
@@ -103,13 +103,14 @@ class OpenGoalColdResume(unittest.TestCase):
     def test_cli_goal_resume_is_a_real_cross_process_entry(self):
         goal = "Compare baseline.csv with actual.csv and report differences."
         root = self.seed(goal)
-        stream = StringIO()
-        with redirect_stdout(stream):
-            code = main(["--db", str(self.db),
-                         "--workspace", str(self.workspace),
-                         "--fixtures", str(self.fixtures), "goal-resume"])
-        self.assertEqual(code, 0, stream.getvalue())
-        state = json.loads(stream.getvalue())
+        process = subprocess.run(
+            [sys.executable, "-m", "cognition_agent_os.cli",
+             "--db", str(self.db),
+             "--workspace", str(self.workspace),
+             "--fixtures", str(self.fixtures), "goal-resume"],
+            text=True, capture_output=True, check=False)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        state = json.loads(process.stdout)
         self.assertEqual(state["root_task_id"], root)
         self.assertEqual(state["original_goal"], goal)
 
