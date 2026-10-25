@@ -81,6 +81,13 @@ class GoalContinuityColdResume(unittest.TestCase):
         result = resume_goal(self.db_path)
         self.assertEqual(result["status"], "AUTHORITY_REVOKED", result)
         self.assertNotIn("next_task_id", result)
+        # Explicit continuation must preserve goal meaning, acceptance, and
+        # boundaries after a REVOKE, while never resuming side effects.
+        self.assertEqual(result["objective"], self.contract()["objective"])
+        self.assertEqual(result["acceptance"], self.contract()["acceptance"])
+        self.assertEqual(result["constraints"], self.contract()["constraints"])
+        self.assertFalse(result["authority_current"])
+        self.assertRegex(result["contract_sha256"], r"^[0-9a-f]{64}$")
 
     def test_new_goal_revision_requires_explicit_reconciliation(self):
         register_goal(self.db_path, self.contract())
