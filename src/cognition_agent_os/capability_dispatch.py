@@ -78,6 +78,13 @@ def _open_goal(c: CapabilityContext) -> dict:
                          local_model_name=c.local_model)
 
 
+def _domain_contract(c: CapabilityContext) -> dict:
+    # Read-only, commit-pinned inspection of child-native adapter/manifests;
+    # no extra controller, business task, grant or remote child write.
+    from .domain_contract import run_domain_contract
+    return run_domain_contract(c.db, c.task, c.workspace)
+
+
 def _public_tool_discovery(c: CapabilityContext) -> dict:
     from .public_tool_discovery import run_public_discovery
     return run_public_discovery(c.db, c.task, c.workspace)
@@ -158,6 +165,7 @@ _HANDLERS = {
     "goal_intent": _intent,
     "open_goal": _open_goal,
     "public_tool_discovery": _public_tool_discovery,
+    "domain_contract": _domain_contract,
     "record_reconciliation": _reconcile,
     "goal_case": _goal_case,
     "fixture": _snapshot_diff,
