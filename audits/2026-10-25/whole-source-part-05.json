@@ -1,0 +1,114 @@
+{
+  "baseline": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+  "role": "FILE_READBACK_NOT_SEMANTIC_PROOF",
+  "files": [
+    {
+      "path": "docs/37-WORKER-RETURN-LEDGER-CONFORMANCE.md",
+      "blob_sha": "9018f3e3c68e9152888181859c8c61faa747fe0b",
+      "read_sha": "9018f3e3c68e9152888181859c8c61faa747fe0b",
+      "match": true,
+      "bytes": 5003,
+      "lines": 33,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/38-DELEGATED-WORKER-LEDGER-CONFORMANCE.md",
+      "blob_sha": "8a59741780de6460b1af49bd89e8c2728481abbd",
+      "read_sha": "8a59741780de6460b1af49bd89e8c2728481abbd",
+      "match": true,
+      "bytes": 6161,
+      "lines": 42,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/39-TRANSACTION-OWNED-FINALIZATION-RECEIPT.md",
+      "blob_sha": "502c08bd46781954f8a49055436b62e23a5f4cec",
+      "read_sha": "502c08bd46781954f8a49055436b62e23a5f4cec",
+      "match": true,
+      "bytes": 5339,
+      "lines": 32,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/40-CLAIM-LEASE-PROVENANCE.md",
+      "blob_sha": "228fdee7136074c31c40cd423f0eeba9b0f56fcc",
+      "read_sha": "228fdee7136074c31c40cd423f0eeba9b0f56fcc",
+      "match": true,
+      "bytes": 5164,
+      "lines": 30,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/41-LIFECYCLE-EVIDENCE-AND-GOLD-ADMISSION.md",
+      "blob_sha": "f33eaa0c2e0e3cd29172b9abe65936e3a8029d34",
+      "read_sha": "f33eaa0c2e0e3cd29172b9abe65936e3a8029d34",
+      "match": true,
+      "bytes": 9298,
+      "lines": 55,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/42-FULL-UPSTREAM-DATEUTIL-7B-REPAIR.md",
+      "blob_sha": "3a4f1555ddf1dd1820d9ab9bde36385712ab6573",
+      "read_sha": "3a4f1555ddf1dd1820d9ab9bde36385712ab6573",
+      "match": true,
+      "bytes": 9374,
+      "lines": 59,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/43-TWO-MODULE-APScheduler-LEASE-7B.md",
+      "blob_sha": "f462ec69c110d44f2d20df83ed41c2b5b0dff1b2",
+      "read_sha": "f462ec69c110d44f2d20df83ed41c2b5b0dff1b2",
+      "match": true,
+      "bytes": 10133,
+      "lines": 70,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/44-KNOWLEDGE-TO-ACTION-REAL-HOST.md",
+      "blob_sha": "83d7e632d4e9a6a32ae55fd0df5638948c2f7bc2",
+      "read_sha": "83d7e632d4e9a6a32ae55fd0df5638948c2f7bc2",
+      "match": true,
+      "bytes": 9402,
+      "lines": 54,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/45-RESEARCH-GAP-FROM-RUNTIME-FEEDBACK.md",
+      "blob_sha": "56c6f784849d39449392a29cc517a78d6caaca0f",
+      "read_sha": "56c6f784849d39449392a29cc517a78d6caaca0f",
+      "match": true,
+      "bytes": 10055,
+      "lines": 51,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/46-SHARED-GOAL-SANDBOX-EFFECT.md",
+      "blob_sha": "fb7c069dd478cae7e778f4faf6596654432f6295",
+      "read_sha": "fb7c069dd478cae7e778f4faf6596654432f6295",
+      "match": true,
+      "bytes": 6890,
+      "lines": 58,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/ACTIVE-CONTROLLER-ASSURANCE.md",
+      "blob_sha": "36dd5b23f7e9557e53af3a19f4ae6e9549955a9a",
+      "read_sha": "36dd5b23f7e9557e53af3a19f4ae6e9549955a9a",
+      "match": true,
+      "bytes": 4736,
+      "lines": 84,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/ASSURANCE-BASELINE.md",
+      "blob_sha": "2d3793f9ccc95afa1ce7e0363c9b19903a62c772",
+      "read_sha": "2d3793f9ccc95afa1ce7e0363c9b19903a62c772",
+      "match": true,
+      "bytes": 3877,
+      "lines": 68,
+      "semantic_proof": false
+    }
+  ]
+}

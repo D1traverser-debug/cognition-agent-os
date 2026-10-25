@@ -1,0 +1,14 @@
+{
+  "type": "verified-public-upstream-commit-pair",
+  "repo": "modelcontextprotocol/modelcontextprotocol",
+  "path": "docs/specification/2026-07-28/changelog.mdx",
+  "old_ref": "b488c16623e5202a3961e551886044577ae0f096",
+  "new_ref": "db4bfcff3d60f5df01a21bdf6b78f7012cac4634",
+  "old_blob_sha": "dc5c9a9cf3e6895504534cf3f300514394d8c6ae",
+  "new_blob_sha": "424b2653ee392eaaede97ec07d35771ad6216c35",
+  "expected_wire_decision": "CHANGE_REQUIRES_REVIEW",
+  "no_change_control": "new_ref equals old_ref",
+  "observation": "Both exact commit refs and blob SHAs read directly from third-party GitHub repository by repository connector on 2026-10-20; source adapter network execution not run in restricted local sandbox.",
+  "authority_boundary": "Blob mismatch means file bytes changed, NOT that the model is correct about architectural impact.",
+  "public_upstream_url": "https://github.com/modelcontextprotocol/modelcontextprotocol"
+}

@@ -1,0 +1,114 @@
+{
+  "baseline": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+  "role": "FILE_READBACK_NOT_SEMANTIC_PROOF",
+  "files": [
+    {
+      "path": "docs/26-PUBLIC-OBSERVED-OUTPUT-REPAIR.md",
+      "blob_sha": "066f4265f19b4124fc31dbf8ccccfc55887ac667",
+      "read_sha": "066f4265f19b4124fc31dbf8ccccfc55887ac667",
+      "match": true,
+      "bytes": 4640,
+      "lines": 89,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/27-NEGATIVE-HYPOTHESIS-RETRY.md",
+      "blob_sha": "2e19f2bd46951e28c56c07c6000764c748a3be61",
+      "read_sha": "2e19f2bd46951e28c56c07c6000764c748a3be61",
+      "match": true,
+      "bytes": 3977,
+      "lines": 74,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/28-REAL-7B-LOCAL-CODER-EXPERIMENT.md",
+      "blob_sha": "061a039bfce150c85f8e061f8e0530799b8c635f",
+      "read_sha": "061a039bfce150c85f8e061f8e0530799b8c635f",
+      "match": true,
+      "bytes": 5526,
+      "lines": 101,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/29-EXPLICIT-OUTCOME-AB-CHECK.md",
+      "blob_sha": "b638b67064fbc5a6fb7e194c601b4d3cd4fdaae6",
+      "read_sha": "b638b67064fbc5a6fb7e194c601b4d3cd4fdaae6",
+      "match": true,
+      "bytes": 6496,
+      "lines": 117,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/30-PROSPECTIVE-UNFAMILIAR-REPAIR-CORPUS.md",
+      "blob_sha": "4c15074172c7e0385f13ffe0de235b2941925469",
+      "read_sha": "4c15074172c7e0385f13ffe0de235b2941925469",
+      "match": true,
+      "bytes": 6836,
+      "lines": 133,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/31-PINNED-EXTERNAL-QUIXBUGS-REPAIR.md",
+      "blob_sha": "b4c8dbcd278d38e7102e8f5fc98fa55529d5dfb3",
+      "read_sha": "b4c8dbcd278d38e7102e8f5fc98fa55529d5dfb3",
+      "match": true,
+      "bytes": 8074,
+      "lines": 144,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/32-LIVE-EXTERNAL-ISSUE-REPAIR-EXPERIMENT.md",
+      "blob_sha": "9332856f42509e6c970e43e120f4ad3f1fa21580",
+      "read_sha": "9332856f42509e6c970e43e120f4ad3f1fa21580",
+      "match": true,
+      "bytes": 15357,
+      "lines": 282,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/33-EXTERNAL-CPYTHON-USERSTRING-REPAIR.md",
+      "blob_sha": "55dad92ec05902bf36dd2b5eae65d58b26e60714",
+      "read_sha": "55dad92ec05902bf36dd2b5eae65d58b26e60714",
+      "match": true,
+      "bytes": 10337,
+      "lines": 58,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/33-SHARED-POSTCONDITION-LOCAL-FEEDBACK.md",
+      "blob_sha": "5c84927a0d96232410d3c4ac6584656addaf5981",
+      "read_sha": "5c84927a0d96232410d3c4ac6584656addaf5981",
+      "match": true,
+      "bytes": 5781,
+      "lines": 78,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/34-OUTSIDE-NUPLAN-PATCH-FORMAT-COMPARISON.md",
+      "blob_sha": "9218ff11b53fe861db80b3b774b82d24df35d99a",
+      "read_sha": "9218ff11b53fe861db80b3b774b82d24df35d99a",
+      "match": true,
+      "bytes": 9321,
+      "lines": 54,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/35-EXTERNAL-FINANCIAL-BREAKEVEN-REPAIR.md",
+      "blob_sha": "1ce27e888b2b7de18525bbf26ff5368bae0758db",
+      "read_sha": "1ce27e888b2b7de18525bbf26ff5368bae0758db",
+      "match": true,
+      "bytes": 9187,
+      "lines": 41,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/36-ACCEPTED-REPAIR-HOLDOUT-CONFORMANCE.md",
+      "blob_sha": "959814dd496529633683dfafc6d8438061eeffb0",
+      "read_sha": "959814dd496529633683dfafc6d8438061eeffb0",
+      "match": true,
+      "bytes": 6002,
+      "lines": 33,
+      "semantic_proof": false
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# Keep immutable archived context byte-identical on Windows and POSIX.
+/archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md text eol=lf
+/SESSION_HANDOFF.md text eol=lf

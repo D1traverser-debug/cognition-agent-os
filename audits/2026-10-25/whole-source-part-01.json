@@ -1,0 +1,140 @@
+{
+  "source_head": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+  "partition": 0,
+  "total_repo_files": 211,
+  "role": "EXACT_FILE_READBACK_NOT_SEMANTIC_CERTIFICATION",
+  "files": [
+    {
+      "path": ".agents/skills/goal-grounded-semantic-review/SKILL.md",
+      "blob_sha": "d25eb99b03615a70c214af4e6c8230df4384941a",
+      "readback_sha": "d25eb99b03615a70c214af4e6c8230df4384941a",
+      "sha_match": true,
+      "bytes": 6970,
+      "chars": 6970,
+      "lines": 55,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 1
+    },
+    {
+      "path": ".gitattributes",
+      "blob_sha": "9e858ea96a7ce27c2ddc0a9d7da7f6c09a99876b",
+      "readback_sha": "9e858ea96a7ce27c2ddc0a9d7da7f6c09a99876b",
+      "sha_match": true,
+      "bytes": 167,
+      "chars": 167,
+      "lines": 4,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 0
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "blob_sha": "6badd70e49412f2d118386209a36983b482fe0f3",
+      "readback_sha": "6badd70e49412f2d118386209a36983b482fe0f3",
+      "sha_match": true,
+      "bytes": 32255,
+      "chars": 32255,
+      "lines": 686,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 0
+    },
+    {
+      "path": ".gitignore",
+      "blob_sha": "57a3d936be5878f1199b727634b0d03178e95dd1",
+      "readback_sha": "57a3d936be5878f1199b727634b0d03178e95dd1",
+      "sha_match": true,
+      "bytes": 128,
+      "chars": 128,
+      "lines": 15,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 0
+    },
+    {
+      "path": "AGENTS.md",
+      "blob_sha": "6eacc3b138b434bacec7430a5afc55008cdc1163",
+      "readback_sha": "6eacc3b138b434bacec7430a5afc55008cdc1163",
+      "sha_match": true,
+      "bytes": 4623,
+      "chars": 4619,
+      "lines": 28,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 1
+    },
+    {
+      "path": "README-P1.md",
+      "blob_sha": "e105b60cbd94e29bb7b4f5e1d5d345e9119cdce8",
+      "readback_sha": "e105b60cbd94e29bb7b4f5e1d5d345e9119cdce8",
+      "sha_match": true,
+      "bytes": 2912,
+      "chars": 2912,
+      "lines": 28,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 0
+    },
+    {
+      "path": "README.md",
+      "blob_sha": "415f1b0509fd2509a0a5a163ebd9c95bb6b036ef",
+      "readback_sha": "415f1b0509fd2509a0a5a163ebd9c95bb6b036ef",
+      "sha_match": true,
+      "bytes": 6982,
+      "chars": 6955,
+      "lines": 53,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 1
+    },
+    {
+      "path": "SESSION_HANDOFF.md",
+      "blob_sha": "47dc94d321191d378bea1e329384d5a18a2813a3",
+      "readback_sha": "47dc94d321191d378bea1e329384d5a18a2813a3",
+      "sha_match": true,
+      "bytes": 7927,
+      "chars": 7881,
+      "lines": 41,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 3
+    },
+    {
+      "path": "archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md",
+      "blob_sha": "6bc6ad3041876916c16886767ce2ff24bfd88b75",
+      "readback_sha": "6bc6ad3041876916c16886767ce2ff24bfd88b75",
+      "sha_match": true,
+      "bytes": 184781,
+      "chars": 184518,
+      "lines": 2188,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 2
+    },
+    {
+      "path": "audits/2026-10-24/WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json",
+      "blob_sha": "6c55ee668bb20429e3140ebef0066367d75751e7",
+      "readback_sha": "6c55ee668bb20429e3140ebef0066367d75751e7",
+      "sha_match": true,
+      "bytes": 97403,
+      "chars": 97399,
+      "lines": 2682,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 0
+    },
+    {
+      "path": "docs/00-PRODUCT-CONOPS.md",
+      "blob_sha": "3f0f41ce3dadff9c1b3474dd07d72e996ee5a4f6",
+      "readback_sha": "3f0f41ce3dadff9c1b3474dd07d72e996ee5a4f6",
+      "sha_match": true,
+      "bytes": 9230,
+      "chars": 4136,
+      "lines": 104,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 0
+    },
+    {
+      "path": "docs/01-ARCHITECTURE-DECISIONS.md",
+      "blob_sha": "d2691b6e33bc4f05acdf038cdcabc66495547c96",
+      "readback_sha": "d2691b6e33bc4f05acdf038cdcabc66495547c96",
+      "sha_match": true,
+      "bytes": 14631,
+      "chars": 7425,
+      "lines": 136,
+      "semantic_proof": "NOT_ESTABLISHED",
+      "traces": 1
+    }
+  ]
+}

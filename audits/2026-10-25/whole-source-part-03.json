@@ -1,0 +1,114 @@
+{
+  "baseline": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+  "role": "FILE_READBACK_NOT_SEMANTIC_PROOF",
+  "files": [
+    {
+      "path": "docs/14-GOAL-INTENT-AND-SEMANTIC-CONTRACTS.md",
+      "blob_sha": "a605a5a49818a9a524244003d5ba48df641425ac",
+      "read_sha": "a605a5a49818a9a524244003d5ba48df641425ac",
+      "match": true,
+      "bytes": 7186,
+      "lines": 157,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/15-RUNTIME-CONFORMANCE-AND-RELEASE-GATE.md",
+      "blob_sha": "5a24de78bf08a4208881a00a255fab9bdbc4ca03",
+      "read_sha": "5a24de78bf08a4208881a00a255fab9bdbc4ca03",
+      "match": true,
+      "bytes": 13815,
+      "lines": 251,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/16-ISOLATED-SOURCE-REPAIR.md",
+      "blob_sha": "4dc92237bc9a67db71be87529629fc673456a8c5",
+      "read_sha": "4dc92237bc9a67db71be87529629fc673456a8c5",
+      "match": true,
+      "bytes": 7257,
+      "lines": 134,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/17-REPAIR-COMMIT-BARRIER-AND-WINDOWS.md",
+      "blob_sha": "bce4555d8cbbd5e696e64af81ca40dd8dfb8a1b1",
+      "read_sha": "bce4555d8cbbd5e696e64af81ca40dd8dfb8a1b1",
+      "match": true,
+      "bytes": 4960,
+      "lines": 94,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/18-WINDOWS-NATIVE-SCHEDULER-ACCEPTANCE.md",
+      "blob_sha": "3a619a5e73902dc0fca2a53a71f65f9b67324125",
+      "read_sha": "3a619a5e73902dc0fca2a53a71f65f9b67324125",
+      "match": true,
+      "bytes": 6489,
+      "lines": 128,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/19-SIGNED-OUTCOME-TRUST-BOUNDARY.md",
+      "blob_sha": "e3c41ad328feee39d594b3ab2af987882f59f7f7",
+      "read_sha": "e3c41ad328feee39d594b3ab2af987882f59f7f7",
+      "match": true,
+      "bytes": 6069,
+      "lines": 116,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/20-SIGNED-FEEDBACK-TO-METHOD-REVISION.md",
+      "blob_sha": "d27b8a118bdf37c14c4ef1d29deb7a54b6b276ad",
+      "read_sha": "d27b8a118bdf37c14c4ef1d29deb7a54b6b276ad",
+      "match": true,
+      "bytes": 6523,
+      "lines": 119,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/21-REVERIFY-SIGNED-METHOD-MEMORY.md",
+      "blob_sha": "7b86420a55e3fe7d4907387fee03970e9a1a0625",
+      "read_sha": "7b86420a55e3fe7d4907387fee03970e9a1a0625",
+      "match": true,
+      "bytes": 5442,
+      "lines": 105,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/22-COUPLED-CROSS-FILE-REPAIR.md",
+      "blob_sha": "fa401ac6addbcc50413d6a888e5d7be205dba851",
+      "read_sha": "fa401ac6addbcc50413d6a888e5d7be205dba851",
+      "match": true,
+      "bytes": 6766,
+      "lines": 134,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/23-OFFLINE-DOCKER-REPO-REPAIR.md",
+      "blob_sha": "4072aa6f8fd8915da2e5a0ec113e9270c05f2b08",
+      "read_sha": "4072aa6f8fd8915da2e5a0ec113e9270c05f2b08",
+      "match": true,
+      "bytes": 8134,
+      "lines": 152,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/24-PUBLIC-REVISION-LOOP.md",
+      "blob_sha": "e58891672873d980423b6c2fbd40c7590d695502",
+      "read_sha": "e58891672873d980423b6c2fbd40c7590d695502",
+      "match": true,
+      "bytes": 6465,
+      "lines": 123,
+      "semantic_proof": false
+    },
+    {
+      "path": "docs/25-GENUINE-LOCAL-MODEL-BENCHMARK.md",
+      "blob_sha": "c58f5c918cfe93a0b1b6aaca5f4a690fa3e0d893",
+      "read_sha": "c58f5c918cfe93a0b1b6aaca5f4a690fa3e0d893",
+      "match": true,
+      "bytes": 6713,
+      "lines": 132,
+      "semantic_proof": false
+    }
+  ]
+}
