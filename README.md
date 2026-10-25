@@ -1,6 +1,6 @@
 # cognition-agent-os
 
-**Status: unified experimental Draft integration — NOT_READY for unattended autonomy, third-party writes or business-outcome claims.** Do not infer live code from this dated README. Resolve actual open Draft PRs and current Git HEAD, ancestry, grants and matching-head CI before resuming. The 2026-10-25 review surface is [Draft PR #50](https://github.com/D1traverser-debug/cognition-agent-os/pull/50) based on unchanged placeholder `main`; any later PR can supersede this observation. Compacted history is retained in `archive/pre-consolidation-cognition-20261025`. No merge, deployment or paid model is authorized by a PR.
+**Status: unified experimental Draft integration — NOT_READY for unattended autonomy, third-party writes or business-outcome claims.** Do not infer live code from this dated README. Resolve live GitHub open Draft PRs and actual HEADs, ancestry, grants and matching-head CI before resuming. The 2026-10-25 review surface is [Draft PR #50](https://github.com/D1traverser-debug/cognition-agent-os/pull/50) based on unchanged placeholder `main`; any later PR can supersede this observation. Compacted history is retained in `archive/pre-consolidation-cognition-20261025`. No merge, deployment or paid model is authorized by a PR.
 
 ## Intended product
 
