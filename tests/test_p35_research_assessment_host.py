@@ -23,7 +23,7 @@ class ResearchAssessmentHostTests(unittest.TestCase):
         (self.fx/"before.csv").write_bytes(b"id,amount\nA,1\n")
         (self.fx/"after.csv").write_bytes(b"id,amount\nA,2\n")
 
-    def setup_research(self, sources=None):
+    def setup_research(self, sources=None, *, third_route=False):
         raw=json.dumps({"schema_version":1,"source_id":"seeded",
             "claims":[{"goal_key":"other","route":"structure","status":"active","source_ref":"initial:1"}]},
             sort_keys=True).encode()
@@ -37,6 +37,11 @@ class ResearchAssessmentHostTests(unittest.TestCase):
                 {"route":"compare","intent":{"kind":"goal_intent","objective":"compare_records",
                 "resources":[{"role":"reference","path":"before.csv"},
                              {"role":"observed","path":"after.csv"}]}}]}
+        if third_route:
+            root_spec["options"].append({"route":"audit","intent":{
+                "kind":"goal_intent","objective":"ensure_structure",
+                "resources":[{"role":"input","path":"structure.json"}],
+                "requirements":[{"field":"reviewer","equals":"qa"}]}})
         if sources is not None:
             root_spec["research_sources"]=sources
         with closing(connect(self.db)) as db:root=create_task(db,root_spec)
@@ -427,6 +432,64 @@ class ResearchAssessmentHostTests(unittest.TestCase):
             count=db.execute("SELECT COUNT(*) FROM tasks WHERE parent_task=?",(child,)).fetchone()[0]
             self.assertEqual(count,1)
 
+
+
+    def test_three_routes_compared_with_independent_refutation_before_action(self):
+        """A third legitimate route cannot be discarded by a binary-only selector."""
+        stances={"structure":"refutes","compare":"refutes","audit":"supports"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        child=self.setup_research([a,b],third_route=True)
+        task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
+        self.assertEqual(report["candidate_route_for_review"],"audit")
+        self.assertEqual(report["knowledge_proposal"]["route"],"audit")
+        self.assertFalse(report["knowledge_proposal"]["approved"])
+        self.assertFalse(report["next_action_authorized"])
+        from cognition_agent_os.research_assessment import audit_assessment
+        self.assertEqual(audit_assessment(self.db,self.work,self.fx,task)["status"],
+                         "ASSESSMENT_MECHANICALLY_VALID")
+        self.assertEqual(run_tick(self.db,self.work,self.fx,max_jobs=2)["processed"],0)
+        self.assertEqual((self.fx/"structure.json").read_bytes(),b'{"keep":42}')
+
+    def test_three_routes_disagreeing_independent_sources_trigger_more_research(self):
+        a=self.put_evidence("independent_a","publisher_one",
+            {"structure":"supports","compare":"refutes","audit":"refutes"})
+        b=self.put_evidence("independent_b","publisher_two",
+            {"structure":"refutes","compare":"refutes","audit":"supports"})
+        child=self.setup_research([a,b],third_route=True)
+        task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
+        self.assertIsNone(report["candidate_route_for_review"])
+        self.assertEqual(report["reason"],"CONFLICTING_SOURCE_CLAIMS")
+        self.assertEqual(report["next_research_action"],"TEST_COMPETING_HYPOTHESES")
+        self.assertFalse(report["next_action_authorized"])
+
+    def test_three_routes_inconclusive_alternative_blocks_premature_best_choice(self):
+        stances={"structure":"refutes","compare":"inconclusive","audit":"supports"}
+        a=self.put_evidence("independent_a","publisher_one",stances)
+        b=self.put_evidence("independent_b","publisher_two",stances)
+        child=self.setup_research([a,b],third_route=True)
+        task,result=self.review(child,a,b)
+        self.assertEqual(result["status"],"NEEDS_REVIEW",result)
+        report=json.loads((self.work/"artifacts"/(task+".json")).read_text())
+        self.assertIsNone(report["candidate_route_for_review"])
+        self.assertEqual(report["reason"],"INSUFFICIENT_CAUSAL_DISCRIMINATION")
+        self.assertFalse(report["production_effect_authorized"])
+
+    def test_route_count_above_eight_is_not_accepted_as_open_ended_execution(self):
+        from cognition_agent_os.knowledge_routing import _checked_spec,KnowledgeRoutingError
+        intent={"kind":"goal_intent","objective":"ensure_structure",
+                "resources":[{"role":"input","path":"structure.json"}],
+                "requirements":[{"field":"reviewer","equals":"qa"}]}
+        options=[{"route":f"route-{n}","intent":intent} for n in range(9)]
+        spec={"kind":"knowledge_intent","goal_key":"repair-goal",
+              "knowledge":{"path":"initial.json","sha256":"a"*64,
+                           "source_id":"seeded"},"options":options}
+        with self.assertRaises(KnowledgeRoutingError):
+            _checked_spec(spec)
 
     def test_manually_attached_child_without_source_grant_is_refused(self):
         child=self.setup_research()
