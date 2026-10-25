@@ -273,6 +273,42 @@ def _no_action(status: str, **extra: object) -> dict:
 
 
 
+def _all_open_goal_roots(db: sqlite3.Connection) -> list[sqlite3.Row] | None:
+    """Scan the one authoritative ledger, with a bounded fail-closed result."""
+    roots = []
+    for row in db.execute(
+        "SELECT * FROM tasks WHERE parent_task IS NULL "
+        "ORDER BY created_at,task_id"
+    ):
+        try:
+            source = json.loads(row["source_spec"])
+        except (ValueError, TypeError):
+            continue
+        if isinstance(source, dict) and source.get("kind") == "open_goal":
+            roots.append(row)
+            if len(roots) > 256:
+                return None
+    return roots
+
+
+def _lineage_root_id(db: sqlite3.Connection, task: sqlite3.Row) -> str | None:
+    """Find the selected registered task's root, without minting authority."""
+    seen = set()
+    node = task
+    for _ in range(513):
+        if node["task_id"] in seen:
+            return None
+        seen.add(node["task_id"])
+        if node["parent_task"] is None:
+            return node["task_id"]
+        node = db.execute(
+            "SELECT task_id,parent_task FROM tasks WHERE task_id=?",
+            (node["parent_task"],)).fetchone()
+        if node is None:
+            return None
+    return None
+
+
 def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
                                authority: sqlite3.Row | None, *,
                                workspace: Path | None,
@@ -286,23 +322,11 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
     from .open_goal import validate_open_goal, audit_open_goal
     from .owner_postcondition import inspect_owner_local_outcome
 
-    roots = []
-    for row in db.execute(
-        "SELECT * FROM tasks WHERE parent_task IS NULL "
-        "ORDER BY created_at,task_id"
-    ):
-        try:
-            source = json.loads(row["source_spec"])
-        except (ValueError, TypeError):
-            continue
-        if isinstance(source, dict) and source.get("kind") == "open_goal":
-            roots.append(row)
-            if len(roots) > 256:
-                return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
+    roots = _all_open_goal_roots(db)
+    if roots is None or authority is None:
+        return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
     if not roots:
         return _no_action("NO_DURABLE_GOAL")
-    if authority is None or len(roots) > 256:
-        return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
     active = [r for r in roots if r["goal_rev"] == authority["goal_rev"]]
     if not active:
         return _no_action("STALE_GOAL_REVISION",
@@ -457,6 +481,49 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                 or _task_fingerprint(task) != row["task_spec_sha256"]):
                 return _no_action("TASK_LINEAGE_UNVERIFIABLE",
                                   goal_id=row["goal_id"])
+            # A registered continuity pointer is not an implicit choice over
+            # a DIFFERENT current owner open_goal. Otherwise a bare cold
+            # "continue" silently loses another valid original objective.
+            # An open_goal on this same task's ancestor chain is one goal,
+            # not a competing one; no duplicate goal registry is introduced.
+            open_roots = _all_open_goal_roots(db)
+            selected_root = _lineage_root_id(db, task)
+            if open_roots is None:
+                return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
+            if selected_root is None:
+                return _no_action("TASK_LINEAGE_UNVERIFIABLE",
+                                  goal_id=row["goal_id"])
+            other_roots = [
+                r for r in open_roots
+                if r["goal_rev"] == authority["goal_rev"]
+                and r["task_id"] != selected_root
+            ]
+            if other_roots:
+                from .open_goal import validate_open_goal
+                originals = []
+                for root in other_roots:
+                    try:
+                        goal = validate_open_goal(
+                            json.loads(root["source_spec"]))["goal"]
+                    except (ValueError, TypeError, KeyError):
+                        return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
+                    originals.append({
+                        "root_task_id": root["task_id"],
+                        "original_goal": goal,
+                    })
+                return _no_action(
+                    "AMBIGUOUS_DURABLE_GOALS",
+                    goal_ids=[row["goal_id"]],
+                    registered_goal={
+                        "goal_id": row["goal_id"],
+                        "objective": spec["objective"],
+                        "acceptance": spec["acceptance"],
+                        "constraints": spec["constraints"],
+                    },
+                    other_original_goals=originals,
+                    authority_current=bool(
+                        authority["write_allowed"]
+                        and row["grant_rev"] == authority["grant_rev"]))
             if (not authority["write_allowed"]
                 or row["grant_rev"] != authority["grant_rev"]):
                 # Recover the authenticated goal CONTRACT on cold restart,
