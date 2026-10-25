@@ -72,6 +72,67 @@ def _owner_required_literals(goal: str) -> dict[str, str]:
     return required
 
 
+def _full_owner_scope_is_supported(goal: str, plan: dict) -> bool:
+    """Prove coverage of the *whole* admitted goal, not one matching clause.
+
+    This deliberately accepts only two small owner-outcome grammars. A
+    partially parsed extra deliverable cannot be accepted just because the
+    chosen child's artifact is mechanically correct. Unsupported language
+    is unverified, not an instruction to grant another capability.
+    """
+    text = goal.strip().rstrip(".!").strip()
+    if plan["objective"] == "compare_records":
+        match = re.fullmatch(
+            r"(?:please\\s+)?compare\\s+([A-Za-z0-9_.-]+\\.csv)\\s+"
+            r"(?:with|against|to)\\s+([A-Za-z0-9_.-]+\\.csv)\\s+"
+            r"and\\s+(?:report\\s+(?:the\\s+|all\\s+)?"
+            r"(?:differences|discrepancies)|"
+            r"identify\\s+(?:the\\s+)?discrepancies)",
+            text, flags=re.IGNORECASE,
+        )
+        spec = plan["child_source_spec"]
+        return bool(match and
+                    (match.group(1), match.group(2)) ==
+                    (spec["reference"], spec["observed"]))
+    if plan["objective"] != "ensure_structure":
+        return False
+    match = re.fullmatch(
+        r"(?:please\\s+)?ensure\\s+(?:a\\s+)?"
+        r"(?:sandbox|isolated)\\s+(?:draft|candidate|proposal)\\s+"
+        r"of\\s+([A-Za-z0-9_.-]+\\.json)\\s+has\\s+(.+)",
+        text, flags=re.IGNORECASE,
+    )
+    if not match or match.group(1) != plan["child_source_spec"]["input"]:
+        return False
+    clauses = match.group(2).strip()
+    # Preservation is checked from real source/output by _constraints.
+    # Only a bounded, explicitly named non-mutation qualifier is covered.
+    clauses = re.sub(
+        r",\\s*(?:preserving|keeping)\\s+(?:the\\s+)?"
+        r"(?:existing|previous)\\s+"
+        r"(?:[A-Za-z_][A-Za-z0-9_-]*|entries)\\s*$",
+        "", clauses, flags=re.IGNORECASE,
+    )
+    fragments = re.split(r"\\s+and\\s+|\\s*,\\s*", clauses, flags=re.IGNORECASE)
+    if not 1 <= len(fragments) <= 16:
+        return False
+    accepted = {}
+    for clause in fragments:
+        piece = re.fullmatch(
+            r"([A-Za-z_][A-Za-z0-9_-]{0,63})\\s+"
+            r"(?:equal|equals)\\s+to\\s+"
+            r"([A-Za-z][A-Za-z0-9_-]{0,127})",
+            clause.strip(), flags=re.IGNORECASE,
+        )
+        if not piece:
+            return False
+        key, value = piece.group(1), piece.group(2)
+        if key in accepted and accepted[key] != value:
+            return False
+        accepted[key] = value
+    return accepted == plan["child_source_spec"]["desired"]
+
+
 def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
                                 root_id: str) -> dict:
     """Fresh, read-only outcome judgment, replayed from independent bytes.
@@ -132,6 +193,8 @@ def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
             if (plan != receipt.get("plan") or
                 json.loads(child["source_spec"]) != plan["child_source_spec"]):
                 return _unknown(root_id, "ORIGINAL_GOAL_PLAN_CONTRADICTED")
+            if not _full_owner_scope_is_supported(goal, plan):
+                return _unknown(root_id, "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
 
             if plan["objective"] == "compare_records":
                 order = _COMPARE.search(goal)
