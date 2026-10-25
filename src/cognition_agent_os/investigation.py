@@ -230,7 +230,9 @@ def _model_reply(model: str, prompt: str, *,
 
 
 def _research(question: str, inventory: dict[str, tuple[bytes, str]],
-              model: str, *, before_request=None) -> tuple[list[str], list[dict], str]:
+              model: str, *, before_request=None,
+              challenge_log: list[dict] | None = None
+              ) -> tuple[list[str], list[dict], str]:
     if (not isinstance(model, str) or not local_model._MODEL_RE.fullmatch(model)
         or "cloud" in model.lower() or ".." in model or "://" in model):
         raise local_model.LocalModelUnavailable("INVALID_INSTALLED_MODEL")
@@ -388,20 +390,42 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
             "Previously surfaced passage: " + primary + "\n"
             "DISTANT SAME-SOURCE PASSAGE REQUIRING REVIEW: " + distant + "\n"
         )
-        revised = _model_reply(model, feedback,
-                               response_schema=revision_schema,
-                               before_request=before_request)
+        try:
+            revised = _model_reply(model, feedback,
+                                   response_schema=revision_schema,
+                                   before_request=before_request)
+        except InvestigationInvalid as exc:
+            # A lease takeover is a control-plane event, not a model mistake.
+            if str(exc) == "INVESTIGATION_LEASE_LOST":
+                raise
+            revised = {}
         q, interp, uncertainty_new = (
             revised.get("quote"), revised.get("interpretation"),
             revised.get("uncertainty"))
-        if (set(revised) != {"quote", "interpretation", "uncertainty"}
-            or not isinstance(q, str) or not 8 <= len(q) <= _MAX_QUOTE
-            or q not in distant or q in primary or q not in selected[name]
-            or not isinstance(interp, str)
-            or not 1 <= len(interp) <= _MAX_INTERPRETATION
-            or not isinstance(uncertainty_new, str)
-            or not 1 <= len(uncertainty_new) <= 450):
-            raise InvestigationInvalid("DISTANT_EVIDENCE_NOT_ADDRESSED")
+        valid_revision = (
+            set(revised) == {"quote", "interpretation", "uncertainty"}
+            and isinstance(q, str) and 8 <= len(q) <= _MAX_QUOTE
+            and q in distant and q not in primary and q in selected[name]
+            and isinstance(interp, str)
+            and 1 <= len(interp) <= _MAX_INTERPRETATION
+            and isinstance(uncertainty_new, str)
+            and 1 <= len(uncertainty_new) <= 450)
+        record = {
+            "source": name, "original_quote": quote,
+            "primary_excerpt": primary, "distant_excerpt": distant,
+            "result": "MODEL_REVISED" if valid_revision else "UNRESOLVED",
+        }
+        if challenge_log is not None:
+            challenge_log.append(record)
+        if not valid_revision:
+            if challenge_log is None:
+                raise InvestigationInvalid("DISTANT_EVIDENCE_NOT_ADDRESSED")
+            # Do not lose all useful investigation simply because a weak
+            # model could not follow feedback. Keep BOTH exact source excerpts,
+            # explicitly unresolved and without semantic or effect authority.
+            uncertainty = ("MODEL COULD NOT ADDRESS DISTINCT SOURCE PASSAGE. "
+                           "No research conclusion approved. " + uncertainty)[:500]
+            continue
         item["quote"] = q
         item["interpretation"] = interp
         uncertainty = ("Original evidence required a same-source challenge; "
@@ -424,9 +448,11 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
             if not renew_claim(db, task, lease_seconds=120):
                 raise InvestigationInvalid("INVESTIGATION_LEASE_LOST")
 
+        challenges: list[dict] = []
         chosen, findings, uncertainty = _research(
             spec["question"], inventory, local_model_name or "",
-            before_request=before_request)
+            before_request=before_request, challenge_log=challenges)
+        unresolved = any(v["result"] == "UNRESOLVED" for v in challenges)
         scope_digest = _scope_digest(inventory)
         hashes = {name: hashlib.sha256(inventory[name][0]).hexdigest()
                   for name in chosen}
@@ -435,8 +461,10 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
             "question": spec["question"], "selected_sources": chosen,
             "source_sha256": hashes,
             "research_scope_sha256": scope_digest, "findings": findings,
+            "evidence_challenges": challenges,
             "uncertainty": uncertainty, "model": "ollama-loopback:" + local_model_name,
-            "status": "MODEL_RESEARCH_NOT_APPROVED",
+            "status": ("MODEL_RESEARCH_CONTRAST_UNRESOLVED" if unresolved
+                       else "MODEL_RESEARCH_NOT_APPROVED"),
             "business_outcome_verified": False, "authorizes_mutation": False
         }
         data = (json.dumps(artifact, ensure_ascii=False,
@@ -449,10 +477,13 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
             return store_once(workspace, task["task_id"], data)
 
         observed = finalize_observed(
-            db, task, "NEEDS_REVIEW", decision="QUOTED_SOURCES_PENDING_REVIEW",
+            db, task, "NEEDS_REVIEW",
+            decision=("UNRESOLVED_COMPETING_PRIMARY_PASSAGES" if unresolved
+                      else "QUOTED_SOURCES_PENDING_REVIEW"),
             artifact_writer=write)
         if observed["status"] == "NEEDS_REVIEW":
             return {**observed, "artifact": f"artifacts/{task['task_id']}.json",
+                    "unresolved_competing_evidence": unresolved,
                     "semantic_outcome_verified": False}
         return observed
     except EvidenceAbstained as exc:
@@ -503,13 +534,15 @@ def audit_investigation(db_path: Path, workspace: Path,
             expected_keys = {
                 "task_id", "goal_rev", "question", "selected_sources",
                 "source_sha256", "research_scope_sha256",
-                "findings", "uncertainty", "model",
+                "findings", "evidence_challenges", "uncertainty", "model",
                 "status", "business_outcome_verified", "authorizes_mutation"
             }
             if (not isinstance(obj, dict) or set(obj) != expected_keys
                 or obj["task_id"] != task_id or obj["goal_rev"] != row["goal_rev"]
                 or obj["question"] != spec["question"]
-                or obj["status"] != "MODEL_RESEARCH_NOT_APPROVED"
+                or obj["status"] not in {
+                    "MODEL_RESEARCH_NOT_APPROVED",
+                    "MODEL_RESEARCH_CONTRAST_UNRESOLVED"}
                 or obj["business_outcome_verified"] is not False
                 or obj["authorizes_mutation"] is not False
                 or not isinstance(obj["model"], str)
@@ -559,10 +592,51 @@ def audit_investigation(db_path: Path, workspace: Path,
                 witnessed.add(name)
             if witnessed != set(names):
                 return failed
-            return {"status": "SOURCE_GROUNDED_UNREVIEWED",
+            challenges = obj["evidence_challenges"]
+            if (not isinstance(challenges, list)
+                or len(challenges) > len(names)):
+                return failed
+            validated = set()
+            unresolved = False
+            for challenge in challenges:
+                if (not isinstance(challenge, dict)
+                    or set(challenge) != {
+                        "source", "original_quote", "primary_excerpt",
+                        "distant_excerpt", "result"}):
+                    return failed
+                name = challenge["source"]
+                if not isinstance(name, str) or name not in names or name in validated:
+                    return failed
+                validated.add(name)
+                text = evidence[name]
+                raw_preview = _contrastive_preview(
+                    text, _question_terms(spec["question"]))[1]
+                primary, separator, distant = raw_preview.partition(_DISTANT_MARKER)
+                if (not separator or not distant
+                    or challenge["primary_excerpt"] != primary
+                    or challenge["distant_excerpt"] != distant
+                    or not isinstance(challenge["original_quote"], str)
+                    or challenge["original_quote"] not in primary):
+                    return failed
+                actual_quote = next(f["quote"] for f in facts if f["source"] == name)
+                if challenge["result"] == "MODEL_REVISED":
+                    if actual_quote not in distant or actual_quote in primary:
+                        return failed
+                elif challenge["result"] == "UNRESOLVED":
+                    unresolved = True
+                    if actual_quote != challenge["original_quote"]:
+                        return failed
+                else:
+                    return failed
+            if (obj["status"] == "MODEL_RESEARCH_CONTRAST_UNRESOLVED") != unresolved:
+                return failed
+            return {
+                    "status": ("SOURCE_GROUNDED_CONTRAST_UNRESOLVED"
+                               if unresolved else "SOURCE_GROUNDED_UNREVIEWED"),
                     "selected_sources": names,
-                    "business_outcome_verified": False,
-                    "semantic_outcome_verified": False}
+                    "unresolved_competing_evidence": unresolved,
+                    "semantic_outcome_verified": False,
+                    "business_outcome_verified": False}
     except (sqlite3.Error, OSError, TypeError, ValueError, KeyError,
             UnicodeError, SourceUnavailable):
         return failed
