@@ -26,9 +26,12 @@ CHILDREN = (
 )
 
 
-def call(args: list[str], *, cwd: Path, python_path: Path | None = None) -> str:
+def call(args: list[str], *, cwd: Path, python_path: Path | None = None,
+         extra_env: dict[str, str] | None = None) -> str:
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    if extra_env is not None:
+        env.update(extra_env)
     if python_path is not None:
         env["PYTHONPATH"] = str(python_path)
     proc = subprocess.run(args, cwd=cwd, env=env,
@@ -53,7 +56,7 @@ def original_checkout(root: Path, name: str) -> tuple[Path, str]:
     return dest, got
 
 
-def video_native_audit(repo: Path) -> dict:
+def video_native_audit(repo: Path, sandbox: Path) -> dict:
     # Execute actual child-owned code, in a disposable checkout. No media API.
     out = call([sys.executable, "-m", "video_growth_agent.cli",
                 "system-audit", "--repo-root", str(repo)],
@@ -61,7 +64,31 @@ def video_native_audit(repo: Path) -> dict:
     verdict = json.loads(out)
     if verdict.get("pass") is not True or verdict.get("failures"):
         raise AssertionError(f"Native video system audit did not pass: {verdict}")
-    return {"native_operation": "vga system-audit", "passed": True,
+    # A REAL child business state transition in an isolated disposable folder.
+    # Do not use a real owner project or child's checkout as the state root.
+    isolated = sandbox / "video-native-projects"
+    project_id = "cognition-native-sandbox-probe"
+    preview = call(
+        [sys.executable, "-m", "video_growth_agent.cli", "init",
+         project_id, "--title", "Isolated Parent-Child Integration Probe"],
+        cwd=repo, python_path=repo,
+        extra_env={"VGA_PROJECTS_DIR": str(isolated)})
+    cli_result = json.loads(preview)
+    state_file = isolated / project_id / "state.json"
+    receipt_dir = isolated / project_id / "receipts"
+    if not state_file.is_file() or not receipt_dir.is_dir():
+        raise AssertionError("Native child did not persist its own sandbox state")
+    independent = json.loads(state_file.read_text(encoding="utf-8"))
+    if (cli_result.get("project_id") != project_id
+        or independent.get("project_id") != project_id
+        or independent.get("stage") != "INTAKE"
+        or not any(receipt_dir.iterdir())):
+        raise AssertionError("Independent state/receipt readback rejected child outcome")
+    return {"native_operation": "vga system-audit + sandbox vga init",
+            "passed": True, "child_owned_project_id": project_id,
+            "child_native_sandbox_state": independent["stage"],
+            "child_native_sandbox_receipts_verified": True,
+            "real_business_sandbox_effect_verified": True,
             "business_media_delivered": False}
 
 
@@ -111,11 +138,6 @@ def main() -> None:
             observed_children.append((did, name, sha, key, state_path))
         pinned_children = tuple(observed_children)
 
-        native = {
-            "video": video_native_audit(checkouts["video-growth-agent"]),
-            "novel": novel_native_guard(checkouts["novel-writing-agent"]),
-        }
-
         db = root / "parent.sqlite"
         ws = root / "parent-work"
         ws.mkdir()
@@ -152,6 +174,12 @@ def main() -> None:
             task["status"] != "NEEDS_REVIEW" for task in tick["tasks"]
         ):
             raise AssertionError(f"Parent Host did not observe two children: {tick}")
+        # Native business sandbox actions only AFTER parent's current-source
+        # preflight succeeded on both child-owned source contracts.
+        native = {
+            "video": video_native_audit(checkouts["video-growth-agent"], root),
+            "novel": novel_native_guard(checkouts["novel-writing-agent"]),
+        }
         observations = {}
         for did, name, sha, key, path in pinned_children:
             review = reports[did]
@@ -181,6 +209,8 @@ def main() -> None:
             "github_tool_transport_in_live_parent": False,
             "parent_host_runtime": True,
             "child_repositories_modified": False,
+            "isolated_native_business_project_created": True,
+            "isolated_native_business_project_independently_verified": True,
             "production_execution_authorized": False,
             "whole_product_ready": False,
             "children": observations,
