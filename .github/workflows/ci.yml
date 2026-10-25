@@ -685,10 +685,10 @@ jobs:
           if-no-files-found: warn
 
   native_child_readonly_holdout:
-    # Two real child-main checkouts; no child write, paid model, or migration.
-    # Separate job because live GitHub availability must not be conflated with
-    # the local offline regression and business production acceptance.
-    if: ${{ github.event.repository.private == false }}
+    # Explicit opt-in ONLY. Cognition maturity is currently the owner's priority;
+    # ordinary cognition changes must not trigger more child-native integration.
+    # No child production permission, paid model, or migration is conferred.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-native-child-holdout]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
