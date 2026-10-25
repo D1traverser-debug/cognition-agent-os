@@ -27,6 +27,7 @@ def make_native(domain_id: str, repo: str, *, controller="D1traverser-debug/univ
         "domain_id": domain_id, "schema_version": "2.5",
         "controller": controller,
         "binding": {"adapter_ref": FILES[1], "capability_ref": FILES[2]},
+        "skill": {"entrypoint": "UAOS_SKILL.md"},
         "domain_authority": {"native_task_state": "child-only", "owner": domain_id},
     }
     adapter = {
@@ -38,8 +39,10 @@ def make_native(domain_id: str, repo: str, *, controller="D1traverser-debug/univ
         "repository": repo,
         "capabilities": [{"capability_id": "native_governed_workflow"}],
     }
-    return {path: json.dumps(doc, sort_keys=True).encode("utf-8")
+    docs = {path: json.dumps(doc, sort_keys=True).encode("utf-8")
             for path, doc in zip(FILES, (manifest, adapter, caps))}
+    docs["UAOS_SKILL.md"] = f"# {domain_id} native entry\n".encode("utf-8")
+    return docs
 
 
 class DomainContractHostIntegration(unittest.TestCase):
@@ -120,7 +123,73 @@ class DomainContractHostIntegration(unittest.TestCase):
                         (ws / "artifacts" / (tid + ".json")).read_text())
                     self.assertEqual(evidence["observation"]["domain_id"], domain)
                     self.assertEqual(evidence["observation"]["capability_count"], 1)
+                    self.assertEqual(evidence["observation"]["advertised_capability_ids"],
+                                     ["native_governed_workflow"])
+                    self.assertEqual(evidence["observation"]["declared_skill_entrypoint"],
+                                     "UAOS_SKILL.md")
+                    self.assertIn("UAOS_SKILL.md",
+                                  evidence["observation"]["source_sha256"])
+                    self.assertTrue(evidence["observation"]
+                                    ["advertisement_is_not_execution_grant"])
                     self.assertFalse(evidence["observation"]["child_business_state_modified"])
+
+    def test_native_entrypoint_missing_is_not_admitted(self):
+        tid, spec = self.seed()
+        docs = make_native("video", spec["repo"])
+        docs["UAOS_SKILL.md"] = b""
+        with self.mock(docs):
+            result = self.tick()["tasks"][0]
+        self.assertEqual(result["status"], "UNKNOWN", result)
+        self.assertFalse((self.workspace / "artifacts").exists())
+
+    def test_native_entrypoint_path_must_not_escape_child_repository(self):
+        tid, spec = self.seed()
+        docs = make_native("video", spec["repo"])
+        manifest = json.loads(docs[FILES[0]])
+        manifest["skill"]["entrypoint"] = "../private.md"
+        docs[FILES[0]] = json.dumps(manifest).encode()
+        with self.mock(docs):
+            result = self.tick()["tasks"][0]
+        self.assertEqual(result["status"], "UNKNOWN", result)
+        self.assertFalse((self.workspace / "artifacts").exists())
+
+    def test_changed_skill_blocks_independent_readback(self):
+        tid, spec = self.seed()
+        docs = make_native("video", spec["repo"])
+        with self.mock(docs):
+            self.tick()
+        altered = dict(docs)
+        altered["UAOS_SKILL.md"] = b"# different entrypoint\\n"
+        with self.mock(altered):
+            verdict = audit_domain_contract(self.db, self.workspace, tid)
+        self.assertEqual(verdict["reason"], "CHILD_CONTRACT_CHANGED", verdict)
+
+    def test_duplicate_or_untyped_capability_not_a_valid_method_catalog(self):
+        for invalid in ("duplicate", "untyped"):
+            with self.subTest(invalid=invalid):
+                with tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    db = root / "ledger.sqlite"
+                    ws = root / "workspace"
+                    ws.mkdir()
+                    fx = root / "fixtures"
+                    fx.mkdir()
+                    with closing(connect(db)) as conn:
+                        initialize(conn)
+                        create_task(conn, {"kind": "domain_contract",
+                            "domain_id": "video", "repo": "D1traverser-debug/video-growth-agent",
+                            "ref": SHA})
+                    docs = make_native("video", "D1traverser-debug/video-growth-agent")
+                    caps = json.loads(docs[FILES[2]])
+                    caps["capabilities"] = ([
+                        {"capability_id": "native_governed_workflow"},
+                        {"capability_id": "native_governed_workflow"}]
+                        if invalid == "duplicate" else ["plain-string-not-interface"])
+                    docs[FILES[2]] = json.dumps(caps).encode()
+                    with self.mock(docs):
+                        got = run_tick(db, ws, fx, max_jobs=1)["tasks"][0]
+                    self.assertEqual(got["status"], "UNKNOWN", got)
+                    self.assertFalse((ws / "artifacts").exists())
 
     def test_child_changes_after_worker_observation_fail_independent_readback(self):
         tid, spec = self.seed()
