@@ -109,6 +109,32 @@ class RealOwnerLocalOutcome(unittest.TestCase):
         self.assertEqual(observe_owner_goal_drift(
             self.db,workspace=self.ws,fixtures=self.fx),[])
 
+
+    def test_installed_cli_host_entry_reports_original_local_result(self):
+        """Exercise the shipped host-tick parser, not just its Python helper."""
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from cognition_agent_os.cli import main
+        root=self.seed(
+            "Please ensure a sandbox draft of settings.json has owner equal "
+            "to ops, preserving the existing timeout.")
+        output=StringIO()
+        with redirect_stdout(output):
+            code=main([
+                "--db",str(self.db),"--workspace",str(self.ws),
+                "--fixtures",str(self.fx),"host-tick",
+                "--max-jobs","2","--auto-stage-goals"])
+        self.assertEqual(code,0,output.getvalue())
+        report=json.loads(output.getvalue())
+        goal=next(x for x in report["goal_progress"]["goals"]
+                  if x["root_task_id"]==root)
+        self.assertEqual(goal["local_owner_result"]["status"],
+                         "LOCAL_OWNER_RESULT_VERIFIED",report)
+        self.assertFalse(goal["local_owner_result"]["business_outcome_verified"])
+        self.assertFalse(any(
+            x.get("status")=="DRIFT_SIGNAL_RECORDED"
+            for x in report["owner_goal_drift"]),report)
+
     def test_original_comparison_is_readonly_report_not_business_truth(self):
         root=self.seed("Compare baseline.csv with actual.csv and report differences.")
         out=run_tick(self.db,self.ws,self.fx,max_jobs=2)
