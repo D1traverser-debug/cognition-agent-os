@@ -91,19 +91,23 @@ class RealOwnerLocalOutcome(unittest.TestCase):
         self.assertEqual(len(drift),1,third)
         self.assertEqual(drift[0]["fidelity_state"],
                          "OWNER_POSTCONDITION_REGRESSED")
-        fourth=run_tick(self.db,self.ws,self.fx,max_jobs=1)
+        # A replay of unchanged evidence cannot re-emit an alert. A separate
+        # Host tick may legitimately produce new conformance evidence, so
+        # isolate observation idempotency from independent Host mutations.
+        from cognition_agent_os.goal_drift import observe_owner_goal_drift
+        self.assertEqual(observe_owner_goal_drift(
+            self.db,workspace=self.ws,fixtures=self.fx),[])
         with closing(connect(self.db)) as db:
-            events=[
-                (r["task_id"],r["kind"],r["details"])
-                for r in db.execute(
-                    "SELECT task_id,kind,details FROM events ORDER BY event_id")]
-            tasks=[
-                (r["task_id"],r["state"],r["state_version"],r["error_code"])
-                for r in db.execute(
-                    "SELECT task_id,state,state_version,error_code FROM tasks")]
-        self.assertEqual(fourth["owner_goal_drift"],[],
-                         {"events":events,"tasks":tasks,"third":third,
-                          "fourth":fourth})
+            from cognition_agent_os.ledger import event
+            event(db, root, "INDEPENDENT_RESULT_RECHECKED",
+                  {"new_evidence": "separate conformance verdict"})
+            db.commit()
+        reopened=observe_owner_goal_drift(
+            self.db,workspace=self.ws,fixtures=self.fx)
+        self.assertEqual(len(reopened),1,reopened)
+        self.assertEqual(reopened[0]["status"],"DRIFT_SIGNAL_RECORDED")
+        self.assertEqual(observe_owner_goal_drift(
+            self.db,workspace=self.ws,fixtures=self.fx),[])
 
     def test_original_comparison_is_readonly_report_not_business_truth(self):
         root=self.seed("Compare baseline.csv with actual.csv and report differences.")
