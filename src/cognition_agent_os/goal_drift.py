@@ -174,7 +174,9 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                 if (owner_local is not None and
                     not owner_local["local_owner_outcome_verified"] and
                     old is not None and
-                    old["fidelity_state"] == "LOCAL_OWNER_RESULT_VERIFIED"):
+                    old["fidelity_state"] in (
+                        "LOCAL_OWNER_RESULT_VERIFIED",
+                        "OWNER_POSTCONDITION_REGRESSED")):
                     result["fidelity_state"] = "OWNER_POSTCONDITION_REGRESSED"
                     result["next_goal_action"] = "REASSESS_OWNER_RESULT_WITH_CURRENT_EVIDENCE"
                 state = result["fidelity_state"]
