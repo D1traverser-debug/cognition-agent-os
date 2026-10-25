@@ -78,6 +78,23 @@ working vertical slice, unauthorized effect rate, and owner correction load.
 A working application/result with incomplete paperwork beats complete
 paperwork with no working result (without waiving needed safety evidence).
 
+## Session-start state rehydration (Codex, bounded and read-only)
+
+The repo-local `.codex/hooks.json` requests a `SessionStart` recheck through
+`scripts/codex_session_context.py` at startup, resume and compaction. The
+operator must explicitly trust the hook on a supported Codex host; having
+the JSON file is NOT evidence that it ran. On start, verify the actual hook
+observation or run the helper read-only with current workspace metadata.
+When an original SQLite goal exists it is the authoritative *source* of
+goal text and next-task lineage; current grant and actual result must still
+be rechecked. Optional `COGNITION_AGENT_OS_DB`,
+`COGNITION_AGENT_OS_WORKSPACE`, `COGNITION_AGENT_OS_FIXTURES` designate
+a previously initialized LOCAL ledger and files; absent/ambiguous state
+means UNKNOWN, never permission or completion. This does NOT configure
+ChatGPT web-memory/custom instructions, deploy a daemon, fetch live GitHub
+or run any tasks. ChatGPT Projects/Memory/connected apps and Codex hooks
+are distinct layers; do not assert that one enables another.
+
 ## Evidence, context and authority
 
 Use live code, actual run state and source results to determine **what is implemented and observed**; use direct owner instructions/corrections to determine **what should be done and what is permitted**; use archived notes as evidence of older hypotheses only. These are different kinds of authority and cannot be ranked as one undifferentiated list. Read the live PR head and source relevant to the task, not a cached handoff's SHA.
