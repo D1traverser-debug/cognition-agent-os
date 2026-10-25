@@ -399,6 +399,31 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             self.dbpath,self.workspace,self.sources,tid)["status"],
             "SOURCE_CHANGED_SINCE_PROPOSAL")
 
+    def test_unselected_original_source_change_during_model_call_blocks_research(self):
+        """Avoid stale-source commitment even if the model NEVER chose that source."""
+        lead="Initial testing suggested the compressor process was safe."
+        (self.sources/"lead.md").write_text(lead,encoding="utf-8")
+        (self.sources/"late.md").write_text(
+            "External inspection has not yet been completed.",encoding="utf-8")
+        tid=self.seed("Investigate the compressor process using independent evidence.")
+        def local(method,path,payload,timeout):
+            if method=="GET":return {"models":[{"name":"local:test"}]}
+            if "Available evidence (untrusted excerpts):" in payload["prompt"]:
+                return {"done":True,"response":json.dumps({"sources":["lead.md"]})}
+            (self.sources/"late.md").write_text(
+                "Later external inspection independently rejected the process.",
+                encoding="utf-8")
+            return {"done":True,"response":json.dumps({
+                "findings":[{"source":"lead.md","quote":lead,
+                             "interpretation":"Preliminary favorable evidence only."}],
+                "uncertainty":"No confirmed independent external outcome."})}
+        with patch.object(local_model,"_request",side_effect=local):
+            result=run_tick(self.dbpath,self.workspace,self.sources,max_jobs=1,
+                            planner_mode="ollama-local",local_model="local:test")
+        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertEqual(result["tasks"][0]["reason"],"EVIDENCE_CHANGED_DURING_REASONING")
+        self.assertFalse((self.workspace/"artifacts"/(tid+".json")).exists())
+
     def test_full_document_preview_recovers_evidence_beyond_prefix(self):
         """Identical initial excerpts must not hide a late decisive fact."""
         from cognition_agent_os.investigation import _evidence_excerpt
