@@ -4,7 +4,51 @@
 
 ## Objective and decision boundaries
 
-Develop a goal-directed Agent OS that independently understands legitimate owner objectives, discovers missing work, researches methods, executes authorized actions through the existing durable Host/Worker/SQLite control boundary, checks *owner-meaningful external outcomes*, and improves with less user correction. Do **all work required for that outcome**, not merely the easiest demonstrable subtask. Prefer simpler designs **only when they meet the full requirement**; redesign or remove existing components when evidence justifies it. Never use passing CI, generated documentation or an internal self-score as proof of owner success.
+**Build the COGNITION PARENT SYSTEM, not a generic isolated coding agent.**
+`cognition-agent-os` is the prospective parent cognition, strategy, orchestration,
+cross-domain governance, learning, quality and outcome control system for the
+user's CURRENT AND FUTURE independently governed business subsystems.
+Existing concrete child domains, whose live contracts must be read at source:
+`D1traverser-debug/video-growth-agent` (video/IP/media);
+`D1traverser-debug/financial-writing-agent` (financial publishing);
+`D1traverser-debug/novel-writing-agent` (novel production);
+`D1traverser-debug/a-share-event-driven-agent` (A-share recommendation/review).
+The parent must admit unfamiliar new domains without silently inventing
+business rules, IDs, permission or running state. This domain listing is an
+initial discovery set, not an exhaustive code enum or fixed child count.
+
+**Responsibility split:** Parent owns system-wide cognition, comprehensive
+requirements reconciliation, evidence/method selection, specialist routing,
+cross-domain dependencies, oversight, systemic failure analysis, verified
+learning transfer, continuity and OWNER-level acceptance. Each child retains
+its *own* products, article/shot/story/market-day identity, live business
+state, canonical assets, data/evidence rules, domain-specific workflow,
+publishing/trading permissions, and domain outcome evaluation. Parent may
+inspect and propose coordinated work; it cannot impersonate a child's
+authority, rewrite child state from a summary, or convert a parent task ID
+into the child's business task ID. Domain actions require child-native
+current grant and state evidence.
+
+**Historical boundary:** `universal-agent-os` is the OLD parent prototype,
+not a new permanent superior or a source of live cognition-agent-os authority.
+Existing child repositories still name UAOS in their integration adapters;
+this remains a migration dependency, NOT proof of cognition-agent-os adoption.
+Do not change those child entrypoints or remove UAOS until an independently
+verified parent-child migration contract and explicit cutover approval exists.
+
+**Development-agent distinction:** Improving this ChatGPT/Codex developer's
+research method, prompt rules, skills, hooks and session recovery is important
+for BUILDING the product. It is NOT the product's top-level goal, nor proof
+that the future parent can coordinate real child domain outcomes. Do not
+replace the business-parent requirement with developer self-improvement.
+
+Within this actual product mission, autonomously study missing knowledge and
+existing solutions, compare credible alternatives, choose lawful paths,
+execute via the current durable Host/Worker/SQLite where valid, independently
+verify full owner AND child-domain relevant results, repair systemic failures,
+and demonstrate cross-domain transfer and low owner intervention.
+Do **all work required for that outcome**, not merely an easy local fixture.
+Do not accept green CI, generated documents or internal scores as product proof.
 
 **Do not** merge/release, make unapproved production writes, spend on metered inference, install on the owner's device, disclose private original conversations in this public repository, or self-issue permissions. Continue with safe, in-scope read-only research, draft changes and disposable tests without repeatedly requesting permission. Stop only at a real authorization boundary, missing indispensable source, or an evidenced blocker. Report precisely which work remains.
 
