@@ -90,6 +90,11 @@ class OpenGoalColdResume(unittest.TestCase):
             alter_authority(db, revoke=True)
         found = self.recover()
         self.assertEqual(found["status"], "AUTHORITY_REVOKED", found)
+        # Revoking a write GRANT cannot erase the read-only original goal.
+        self.assertEqual(found["original_goal"],
+                         "Compare baseline.csv with actual.csv and report differences.")
+        self.assertRegex(found["original_contract_sha256"], r"^[0-9a-f]{64}$")
+        self.assertFalse(found["authority_current"])
         self.assertNotIn("next_task_id", found)
         self.assertFalse(found["business_outcome_verified"])
 
