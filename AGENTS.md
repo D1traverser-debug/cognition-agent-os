@@ -36,11 +36,23 @@ this remains a migration dependency, NOT proof of cognition-agent-os adoption.
 Do not change those child entrypoints or remove UAOS until an independently
 verified parent-child migration contract and explicit cutover approval exists.
 
-**Development-agent distinction:** Improving this ChatGPT/Codex developer's
-research method, prompt rules, skills, hooks and session recovery is important
-for BUILDING the product. It is NOT the product's top-level goal, nor proof
-that the future parent can coordinate real child domain outcomes. Do not
-replace the business-parent requirement with developer self-improvement.
+**ONE cognition parent, not a developer-system precursor.** The assistant
+operating in the current authorized ChatGPT/tool session is the interactive
+cognition, evidence-research, architecture-decision, coordination and
+correction surface of cognition-agent-os itself. The repository implements
+that SAME parent's durable, permissioned and independently verifiable
+runtime, adapters and state. Skills, memory, context restoration, model/tool
+usage and reasoning quality belong to the parent's cognitive capabilities:
+a failure of any of them is a defect in cognition-agent-os work, not a task
+to complete in a separate "ChatGPT developer system" before building this
+product. Fix such defects as part of one coherent product and evaluate the
+real behavior that results.
+
+**Current evidence boundary:** a ChatGPT conversation is not yet wired into
+an always-on product Host merely by claiming a common system identity.
+Do not pretend runtime integration, cross-session lossless memory, child
+effects or unattended execution are proven by a chat, skill or repo commit.
+Parent identity is one; execution surfaces and verified capabilities differ.
 
 Within this actual product mission, autonomously study missing knowledge and
 existing solutions, compare credible alternatives, choose lawful paths,
