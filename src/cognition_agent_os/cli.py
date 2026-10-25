@@ -237,12 +237,14 @@ def main(argv=None) -> int:
             "business_outcome_verified":False},sort_keys=True))
         return 0
     if args.command == "goal-resume":
-        result = resume_goal(args.db)
+        result = resume_goal(
+            args.db, workspace=args.workspace, fixtures=args.fixtures)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if result["status"] in (
             "READY_TO_TICK", "READY_TO_RECOVER",
             "AWAITING_WORKER", "NEEDS_INDEPENDENT_REVIEW",
-            "NEEDS_OWNER_OUTCOME_REVIEW") else 4
+            "NEEDS_OWNER_OUTCOME_REVIEW",
+            "LOCAL_OWNER_RESULT_VERIFIED") else 4
     if args.command in ("seed-continuity", "goal-checkpoint"):
         try:
             if args.command == "seed-continuity":
