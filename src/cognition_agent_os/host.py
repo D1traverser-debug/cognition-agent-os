@@ -293,7 +293,8 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     # Observe objective-level evidence after the same Host has processed
     # approved public research; this does not authorize replanning or effects.
     from .goal_drift import observe_owner_goal_drift
-    goal_drift = observe_owner_goal_drift(db_path, limit=min(max_jobs,8))
+    goal_drift = observe_owner_goal_drift(
+        db_path, limit=min(max_jobs,8), workspace=workspace, fixtures=fixture_root)
     _record_tick(db_path, processed=len(results), finished_at=time.time())
     return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(x["status"] == "DRIFT_SIGNAL_RECORDED" for x in goal_drift) or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
             "watch_observations": watches,
