@@ -86,6 +86,28 @@ class RealOwnerLocalOutcome(unittest.TestCase):
         self.assertFalse(inspect_owner_local_outcome(
             self.db,self.ws,self.fx,root)["local_owner_outcome_verified"])
 
+
+    def test_unsupported_extra_owner_clause_does_not_count_as_complete(self):
+        """A correct subtask is not the whole conjunctive owner goal."""
+        root=self.seed(
+            "Compare baseline.csv with actual.csv and report differences "
+            "and calculate a bar chart of mismatches.")
+        out=run_tick(self.db,self.ws,self.fx,max_jobs=2)
+        self.assertEqual([x["status"] for x in out["tasks"]],
+                         ["DECOMPOSED","NEEDS_REVIEW"],out)
+        verdict=inspect_owner_local_outcome(self.db,self.ws,self.fx,root)
+        self.assertFalse(verdict["local_owner_outcome_verified"],verdict)
+
+    def test_second_sandbox_deliverable_cannot_be_ignored(self):
+        root=self.seed(
+            "Please ensure a sandbox draft of settings.json has owner equal to "
+            "ops and create another backup document.")
+        out=run_tick(self.db,self.ws,self.fx,max_jobs=2,auto_stage_goals=True)
+        self.assertEqual([x["status"] for x in out["tasks"]],
+                         ["DECOMPOSED","NEEDS_REVIEW"],out)
+        verdict=inspect_owner_local_outcome(self.db,self.ws,self.fx,root)
+        self.assertFalse(verdict["local_owner_outcome_verified"],verdict)
+
     def test_unrequested_sandbox_and_revoked_grant_do_not_count(self):
         root=self.seed("Please ensure settings.json has owner equal to ops.")
         result=run_tick(self.db,self.ws,self.fx,max_jobs=2,
