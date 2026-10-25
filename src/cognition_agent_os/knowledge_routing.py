@@ -2,7 +2,7 @@
 
 This is a first runnable knowledge-to-action slice, not an autonomous learner
 or a direct connector to the private ChatGPT Library. Knowledge is untrusted,
-content-addressed evidence; it can select only among two owner-seeded,
+content-addressed evidence; it can select only among two to eight owner-seeded,
 registered, separately validated capabilities. No instructions are executed.
 """
 from __future__ import annotations
@@ -88,7 +88,7 @@ def _checked_spec(spec:dict)->dict:
         or not _bound_id(knowledge["source_id"])):
         raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
     options=spec["options"]
-    if not isinstance(options,list) or len(options)!=2:
+    if not isinstance(options,list) or not 2 <= len(options) <= 8:
         raise KnowledgeRoutingError("KNOWLEDGE_NOT_APPLICABLE")
     validated={}
     for entry in options:
