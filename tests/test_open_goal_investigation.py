@@ -440,7 +440,24 @@ class OpenGoalInvestigationTests(unittest.TestCase):
         self.assertIn(adverse,artifact["evidence_challenges"][0]["distant_excerpt"])
         from cognition_agent_os.investigation import audit_investigation
         audit=audit_investigation(self.dbpath,self.workspace,self.sources,tid)
-        self.assertEqual(audit["status"],"SOURCE_GROUNDED_CONTRAST_UNRESOLVED",audit)
+        if audit["status"] != "SOURCE_GROUNDED_CONTRAST_UNRESOLVED":
+            from cognition_agent_os.investigation import (
+                _contrastive_preview, _question_terms, _DISTANT_MARKER)
+            challenge=artifact["evidence_challenges"][0]
+            raw=(self.sources/"primary.md").read_text(encoding="utf-8")
+            preview=_contrastive_preview(raw,_question_terms(question))[1]
+            primary,separator,distant=preview.partition(_DISTANT_MARKER)
+            self.fail(repr({
+                "audit":audit, "challenge_result":challenge["result"],
+                "has_separator":bool(separator),
+                "first_matches":challenge["primary_excerpt"]==primary,
+                "distant_matches":challenge["distant_excerpt"]==distant,
+                "quote_in_primary":challenge["original_quote"] in primary,
+                "artifact_len":packet.stat().st_size,
+                "status":artifact["status"],
+                "source_equal":raw==(self.sources/"primary.md").read_text(),
+            }))
+
         self.assertFalse(audit["semantic_outcome_verified"])
         self.assertFalse(artifact["business_outcome_verified"])
         self.assertFalse(artifact["authorizes_mutation"])
