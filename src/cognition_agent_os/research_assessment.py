@@ -51,7 +51,7 @@ def _evidence(root: Path, contract: dict, goal: str, routes: set[str]):
     if data["source_id"] != contract["source_id"] or data["publisher_id"] != contract["publisher_id"] or data["goal_key"] != goal:
         raise ValueError("BAD_IDENTITY")
     statements = data["assertions"]
-    if not isinstance(statements, list) or len(statements) != 2:
+    if not isinstance(statements, list) or len(statements) != len(routes):
         raise ValueError("BAD_COVERAGE")
     result = {}
     references = set()
@@ -115,7 +115,7 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         if siblings!=1:
             raise ValueError("DUPLICATE_REVIEW_NOT_ALLOWED")
         routes = set(orig["routes"])
-        if len(routes) != 2:
+        if not 2 <= len(routes) <= 8:
             raise ValueError("BAD_ROUTES")
         (a, refs_a), (b, refs_b) = (_evidence(fixtures, src, orig["goal_key"], routes) for src in sources)
         if (sources[0].get("kind") == "github" and sources[1].get("kind") == "github"
@@ -125,7 +125,7 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
             reason, candidate = "SHARED_UNDERLYING_EVIDENCE", None
         elif a != b:
             reason, candidate = "CONFLICTING_SOURCE_CLAIMS", None
-        elif sorted(a.values()) != ["refutes", "supports"]:
+        elif sorted(a.values()) != ["refutes"] * (len(routes) - 1) + ["supports"]:
             reason, candidate = "INSUFFICIENT_CAUSAL_DISCRIMINATION", None
         else:
             reason = "CONSENSUS_PENDING_EXTERNAL_SEMANTIC_REVIEW"
