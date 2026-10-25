@@ -91,8 +91,19 @@ class RealOwnerLocalOutcome(unittest.TestCase):
         self.assertEqual(len(drift),1,third)
         self.assertEqual(drift[0]["fidelity_state"],
                          "OWNER_POSTCONDITION_REGRESSED")
-        self.assertEqual(run_tick(self.db,self.ws,self.fx,max_jobs=1)
-                         ["owner_goal_drift"],[])
+        fourth=run_tick(self.db,self.ws,self.fx,max_jobs=1)
+        with closing(connect(self.db)) as db:
+            events=[
+                (r["task_id"],r["kind"],r["details"])
+                for r in db.execute(
+                    "SELECT task_id,kind,details FROM events ORDER BY event_id")]
+            tasks=[
+                (r["task_id"],r["state"],r["state_version"],r["error_code"])
+                for r in db.execute(
+                    "SELECT task_id,state,state_version,error_code FROM tasks")]
+        self.assertEqual(fourth["owner_goal_drift"],[],
+                         {"events":events,"tasks":tasks,"third":third,
+                          "fourth":fourth})
 
     def test_original_comparison_is_readonly_report_not_business_truth(self):
         root=self.seed("Compare baseline.csv with actual.csv and report differences.")
