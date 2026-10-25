@@ -1,0 +1,6 @@
+interface:
+  display_name: Cognition Parent — ChatGPT
+  short_description: 跨会话目标恢复与真实工具核验
+  default_prompt: 继续 cognition-agent-os：先核验原始目标、实时工具入口、GitHub HEAD/CI，再执行一项真正推进目标的工作。
+policy:
+  allow_implicit_invocation: true
