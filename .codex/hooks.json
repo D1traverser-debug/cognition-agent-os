@@ -1,0 +1,19 @@
+{
+  "description": "Read-only source-of-truth recovery for cognition-agent-os on new or compacted Codex sessions; no implicit task/effect authorization.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact|clear|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/codex_session_context.py",
+            "timeout": 8,
+            "additionalContextLimit": 7500,
+            "statusMessage": "Reattesting original goal from existing local SQLite"
+          }
+        ]
+      }
+    ]
+  }
+}
