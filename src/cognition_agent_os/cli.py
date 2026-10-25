@@ -78,6 +78,8 @@ def main(argv=None) -> int:
     domain_seed.add_argument("--repo", required=True)
     domain_seed.add_argument("--ref", required=True)
     domain_seed.add_argument("--domain-id", required=True)
+    domain_seed.add_argument("--state-authority-key",
+        help="Optional exact JSON checkpoint key declared by the child Manifest")
     domain_audit = sub.add_parser("domain-contract-audit",
         help="Independently re-read pinned child-native source and review receipt")
     domain_audit.add_argument("--task-id", required=True)
@@ -510,7 +512,9 @@ def main(argv=None) -> int:
         elif args.command == "seed-domain-contract":
             spec = validate_domain_task({
                 "kind":"domain_contract", "repo":args.repo,
-                "ref":args.ref, "domain_id":args.domain_id})
+                "ref":args.ref, "domain_id":args.domain_id,
+                **({"state_authority_key":args.state_authority_key}
+                   if args.state_authority_key else {})})
             owner = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             if not owner or not owner["write_allowed"]:
                 raise PermissionError("No existing authority for local review artifact")
