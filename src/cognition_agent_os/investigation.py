@@ -154,6 +154,54 @@ def _evidence_excerpt(text: str, question: str) -> str:
     return _preview_window(text, _question_terms(question))[1]
 
 
+def _contrastive_preview(text: str, terms: dict[str, int]) -> tuple[int, str]:
+    """Show a distant relevant counter-passage without doubling model calls.
+
+    This is a bounded ORIGINAL-TEXT visibility improvement, not semantic
+    refutation detection or a guarantee that model reasoning is correct.
+    """
+    import unicodedata
+    best_score, best_excerpt = _preview_window(text, terms)
+    if len(text) <= 650 or best_score <= 0:
+        return best_score, best_excerpt
+    last = len(text) - 650
+    starts = list(range(0, last + 1, 325))
+    if starts[-1] != last:
+        starts.append(last)
+    primary = next((i for i in starts
+                    if text[i:i + 650] == best_excerpt), 0)
+    tail = len(text) - 260
+    candidates = list(range(0, tail + 1, 130))
+    if candidates[-1] != tail:
+        candidates.append(tail)
+    other_start, other_score = None, 0
+    for start in candidates:
+        if start < primary + 650 and start + 260 > primary:
+            continue
+        window = unicodedata.normalize("NFKC", text[start:start + 260]).casefold()
+        score = sum(min(window.count(term), 3) * weight
+                    for term, weight in terms.items())
+        if score > other_score or (
+            score == other_score and score > 0 and
+            other_start is not None and start > other_start
+        ):
+            other_start, other_score = start, score
+    if other_start is None or 4 * other_score < best_score:
+        return best_score, best_excerpt
+    # Separate fragments are explicitly one source, not independent publishers.
+    return (best_score, best_excerpt + "\n[SAME SOURCE, DISTANT PASSAGE]\n"
+            + text[other_start:other_start + 260])
+
+
+def _scope_digest(inventory: dict[str, tuple[bytes, str]]) -> str:
+    """Pin ALL originally eligible primary sources, including unselected ones."""
+    digests = {name: hashlib.sha256(data).hexdigest()
+               for name, (data, _text) in inventory.items()}
+    return hashlib.sha256(json.dumps(
+        digests, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+
+
 def _model_reply(model: str, prompt: str, *,
                  response_schema: dict, before_request=None) -> dict:
     if before_request is not None:
@@ -195,7 +243,7 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
     ranked = sorted((
         (-score, name, excerpt)
         for name, (_raw, text) in inventory.items()
-        for score, excerpt in [_preview_window(text, terms)]
+        for score, excerpt in [_contrastive_preview(text, terms)]
     ))
     # A positive OR negative judgment on an early batch cannot establish
     # absence of independent counterevidence in later batches.
@@ -315,12 +363,14 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
         chosen, findings, uncertainty = _research(
             spec["question"], inventory, local_model_name or "",
             before_request=before_request)
+        scope_digest = _scope_digest(inventory)
         hashes = {name: hashlib.sha256(inventory[name][0]).hexdigest()
                   for name in chosen}
         artifact = {
             "task_id": task["task_id"], "goal_rev": task["goal_rev"],
             "question": spec["question"], "selected_sources": chosen,
-            "source_sha256": hashes, "findings": findings,
+            "source_sha256": hashes,
+            "research_scope_sha256": scope_digest, "findings": findings,
             "uncertainty": uncertainty, "model": "ollama-loopback:" + local_model_name,
             "status": "MODEL_RESEARCH_NOT_APPROVED",
             "business_outcome_verified": False, "authorizes_mutation": False
@@ -329,10 +379,9 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
                            sort_keys=True, indent=2) + "\n").encode("utf-8")
 
         def write():
-            # Recheck immutable original sources at the side-effect boundary.
-            for name, digest in hashes.items():
-                if hashlib.sha256(safe_fixture(fixtures, name)).hexdigest() != digest:
-                    raise InvestigationInvalid("EVIDENCE_CHANGED_DURING_REASONING")
+            # Re-read ALL originally eligible sources, not just chosen passages.
+            if _scope_digest(_available_evidence(fixtures)) != scope_digest:
+                raise InvestigationInvalid("EVIDENCE_CHANGED_DURING_REASONING")
             return store_once(workspace, task["task_id"], data)
 
         observed = finalize_observed(
@@ -389,7 +438,8 @@ def audit_investigation(db_path: Path, workspace: Path,
             obj = json.loads(raw)
             expected_keys = {
                 "task_id", "goal_rev", "question", "selected_sources",
-                "source_sha256", "findings", "uncertainty", "model",
+                "source_sha256", "research_scope_sha256",
+                "findings", "uncertainty", "model",
                 "status", "business_outcome_verified", "authorizes_mutation"
             }
             if (not isinstance(obj, dict) or set(obj) != expected_keys
@@ -407,8 +457,15 @@ def audit_investigation(db_path: Path, workspace: Path,
                            and Path(name).suffix.lower() in _FORMATS for name in names)
                 or len(set(names)) != len(names)
                 or not isinstance(obj["source_sha256"], dict)
-                or set(obj["source_sha256"]) != set(names)):
+                or set(obj["source_sha256"]) != set(names)
+                or not isinstance(obj["research_scope_sha256"], str)
+                or not re.fullmatch(r"[0-9a-f]{64}", obj["research_scope_sha256"])):
                 return failed
+            # A discarded source may change the outcome after proposal;
+            # exact selected-source hashes alone are not sufficient.
+            if _scope_digest(_available_evidence(fixtures)) != obj["research_scope_sha256"]:
+                return {"status": "SOURCE_CHANGED_SINCE_PROPOSAL",
+                        "business_outcome_verified": False}
             evidence = {}
             for name in names:
                 b = safe_fixture(fixtures, name)
