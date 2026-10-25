@@ -7,6 +7,13 @@ description: Use for cognition-agent-os work, cold continuation after "继续"/"
 
 This is a concise **triggered workflow** for the ChatGPT conversational cognition surface. The GitHub Host/SQLite is the SAME intended parent's separate prospective runtime, NOT automatically attached to the conversation. A SKILL.md is not weights, an API, a continuous worker, an installed Host, a new permission or a guarantee of automatic invocation.
 
+## Canonical entry: cognition-agent-os, not historical UAOS
+
+- For work selected in the `cognition-agent-os` project or its installed plugin, resolve current objectives and permissions from the owner's original conversation sources plus the **live** `D1traverser-debug/cognition-agent-os` integration Draft/branch HEAD and matching verification. Do **not** bootstrap from `D1traverser-debug/universal-agent-os@main`, its `ENTRYPOINT.md`, `CURRENT_SYSTEM.json` or old task selectors. Those are historical migration evidence, never the active cognitive parent.
+- A bare "继续/继承" in an already identified cognition-agent-os context stays in that project. Resolve the current candidate and original goal rather than reverting to a legacy UAOS controller or choosing an unrelated child task. If older ChatGPT Custom Instructions or Project instructions still require the legacy bootstrap, identify the **configuration conflict** as an unfinished migration; do not present the old repository as current cognition authority. The owner must update settings that this plugin cannot modify.
+- Preserve legitimate existing child adapters and their historical UAOS names solely as **migration compatibility** until independent replacement tests and owner-approved cutover. Do not erase child state or alter grants to make the old references disappear. Read old UAOS material only for a specifically justified compatibility/forensic investigation, explicitly marked historical.
+- This source-routing constraint is an **instruction-level guard**, not proof of native ChatGPT pre-tool interception or automatic Skill invocation. Observe the actual tool path and score unresolved behavior as NOT_VERIFIED.
+
 ## Restore the RIGHT task, even after long chats or deletion
 
 - For "continue", new conversations, ambiguous references or significant scope changes, first retrieve the owner's **original exact utterances** and later corrections through currently accessible prior conversations / private source files. Distinguish direct instructions, approved decisions, retracted designs and assistant-only hypotheses. Mark any inaccessible original `SOURCE_UNAVAILABLE`; never claim a summary is verbatim or a clean memory is authoritative.
