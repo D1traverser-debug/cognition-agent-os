@@ -250,7 +250,7 @@ def main(argv=None) -> int:
     if args.command == "goal-resume":
         result = resume_goal(
             args.db, workspace=args.workspace, fixtures=args.fixtures)
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0 if result["status"] in (
             "READY_TO_TICK", "READY_TO_RECOVER",
             "AWAITING_WORKER", "NEEDS_INDEPENDENT_REVIEW",
@@ -275,19 +275,19 @@ def main(argv=None) -> int:
             print(json.dumps({"status":"CONTINUITY_NOT_ADMITTED",
                 "reason":str(exc)[:120]}, sort_keys=True))
             return 4
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0
     if args.command == "attestation-subject":
         result=prepare_unsigned_outcome(
             args.db,args.workspace,args.fixtures,args.task_id,
             reviewer_principal=args.principal)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="UNSIGNED_REVIEW_SUBJECT" else 4
     if args.command == "attestation-bind-trust":
         result=bind_owner_review_trust(
             args.db,args.workspace,args.fixtures,args.allowed_signers,
             args.expected_allowed_sha256,expected_principal=args.principal)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"] in ("OWNER_TRUST_BOUND",
                                         "OWNER_TRUST_ALREADY_BOUND") else 4
     if args.command == "attestation-record":
@@ -295,7 +295,7 @@ def main(argv=None) -> int:
             args.db,args.workspace,args.fixtures,args.statement,args.signature,
             args.allowed_signers,args.expected_allowed_sha256,
             expected_principal=args.principal)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"] in ("SIGNED_FEEDBACK_RECORDED",
                                         "SIGNED_FEEDBACK_ALREADY_RECORDED") else 4
     if args.command == "attestation-audit":
@@ -303,76 +303,76 @@ def main(argv=None) -> int:
             args.db,args.workspace,args.fixtures,args.statement,args.signature,
             args.allowed_signers,args.expected_allowed_sha256,
             expected_principal=args.principal)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="SIGNATURE_AND_MECHANICAL_SCOPE_VERIFIED" else 4
     if args.command == "repo-refine-local":
         result=refine_repo_public(
             args.db,args.workspace,args.fixtures,args.task_id,
             model=args.model,max_attempts=args.max_attempts)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="REVISED_PUBLIC_CANDIDATE_FROZEN" else 4
     if args.command == "repo-audit":
         result=audit_repo(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="REPO_BYTES_MECHANICALLY_VALID" else 4
     if args.command == "repo-review":
         result=review_repo(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="REPAIR_LAB_VERIFIED" else 4
     if args.command == "pipeline-audit":
         result=audit_pipeline(args.db,args.workspace,args.fixtures,
                   args.task_id,hidden=args.include_holdout)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"] in ("VISIBLE_PIPELINE_VERIFIED",
                                         "HOLDOUT_ACCEPTED") else 4
     if args.command == "pipeline-review":
         result=review_pipeline(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="REPAIR_LAB_VERIFIED" else 4
     if args.command == "repair-audit":
         result=audit_patch(args.db,args.workspace,args.fixtures,args.task_id,
              reveal_holdout=args.include_holdout,
              require_staged=False)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"] in ("VISIBLE_PATCH_MECHANICALLY_VALID",
                                         "HOLDOUT_ACCEPTED") else 4
     if args.command == "repair-review":
         result=review_patch(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="REPAIR_LAB_VERIFIED" else 4
     if args.command == "conformance-audit":
         result=inspect_conformance(args.db,args.workspace,args.fixtures,
                                    enforce=args.enforce,max_cases=args.max_cases)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"] in ("MECHANICAL_EVIDENCE_OBSERVED",
                                         "NO_RUNTIME_EVIDENCE","PARTIAL_EVIDENCE") else 4
     if args.command == "domain-contract-audit":
         result = audit_domain_contract(args.db, args.workspace, args.task_id)
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0 if result["status"] == "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED" else 4
     if args.command == "open-goal-audit":
         result=audit_open_goal(args.db,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="METHOD_CANDIDATE_MECHANICALLY_GROUNDED" else 4
     if args.command == "investigation-audit":
         result = audit_investigation(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"] == "SOURCE_GROUNDED_UNREVIEWED" else 4
     if args.command == "intent-audit":
         result=audit_intent_plan(args.db,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="PLAN_MECHANICALLY_VALID" else 4
     if args.command == "reconciliation-audit":
         result=audit_stored_report(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="REPORT_MECHANICALLY_VERIFIED" else 4
     if args.command == "goal-stage-sandbox":
         result=stage_one(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"]=="SANDBOX_VERIFIED" else 4
     if args.command == "goal-audit":
         result=audit_goal(args.db,args.workspace,args.fixtures,args.task_id)
-        print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["mechanical_audit"] else 4
     if args.command == "worker-once":
         result = run_once(args.db, args.workspace, args.fixtures, fail_at=args.fail_at,
@@ -389,7 +389,7 @@ def main(argv=None) -> int:
         except HostNotConfigured as exc:
             print(json.dumps({"status":"HOST_NOT_CONFIGURED", "error":str(exc)}))
             return 2
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0
     if args.command in ("reference-export", "reference-evaluate", "reference-propose-local"):
         try:
@@ -403,7 +403,7 @@ def main(argv=None) -> int:
         except (EvaluationError, LocalModelUnavailable, OSError) as exc:
             print(json.dumps({"status":"UNVERIFIABLE", "reason":str(exc)}, sort_keys=True))
             return 3
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0 if args.command != "reference-evaluate" or result["status"] == "REFERENCE_MATCH" else 4
     if args.command == "seed-evidence-feedback":
         if not args.db.is_file() or args.db.is_symlink():
@@ -612,7 +612,7 @@ def main(argv=None) -> int:
                 except sqlite3.OperationalError:
                     result["watches"] = []
                     result["watch_observations"] = []
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0
     finally:
         db.close()
