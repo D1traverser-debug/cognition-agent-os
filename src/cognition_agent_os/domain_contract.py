@@ -24,8 +24,8 @@ _ID = re.compile(r"[a-z][a-z0-9_]{1,79}\Z")
 FILES = (".uaos/MANIFEST.json", ".uaos/ADAPTER.json", ".uaos/CAPABILITIES.json")
 MAX_DOC = 256 * 1024
 MAX_ENTRYPOINT_PATH = 160
-_STATE_AUTHORITY_KEY = re.compile(r"[a-z][a-z0-9_]{1,63}\\Z")
-_STATE_REF = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.json\\Z")
+_STATE_AUTHORITY_KEY = re.compile(r"[a-z][a-z0-9_]{1,63}\Z")
+_STATE_REF = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.json\Z")
 
 
 class DomainContractInvalid(ValueError):
@@ -49,7 +49,6 @@ def validate_domain_task(spec: dict) -> dict:
         {"kind", "repo", "ref", "domain_id"},
         {"kind", "repo", "ref", "domain_id", "state_authority_key"}
     ) or spec.get("kind") != "domain_contract"):
-
         raise DomainContractInvalid("INVALID_DOMAIN_CONTRACT_TASK")
     repo, ref, did = (spec[k] for k in ("repo", "ref", "domain_id"))
     if (not isinstance(repo, str) or not _REPO.fullmatch(repo)
