@@ -36,6 +36,28 @@ this remains a migration dependency, NOT proof of cognition-agent-os adoption.
 Do not change those child entrypoints or remove UAOS until an independently
 verified parent-child migration contract and explicit cutover approval exists.
 
+**User-facing multi-repository routing (versionless):** This parent is not a
+mandatory GitHub-code landing page. In a single normal ChatGPT conversation,
+`继承视频`, `继续小说`, a named business task or a named engineering repository
+should route directly to that project's current native state and authority.
+A bare `继续` continues the evidence-backed active objective; a fresh bare
+`继承` discovers available original goals, currently accessible repositories
+and per-domain states, selecting automatically only when unambiguous. With
+competing unresolved targets, offer one compact choice instead of routing by
+newest PR, last search hit or chat summary. New repositories are discovered
+with live connected inventories, not added manually to permanent prompts.
+Distinguish a business child from any other engineering repository; merely
+seeing a repository is not authorization to manage it. Keep parent-level
+cross-domain governance without inserting a second business proxy, extra
+task ID, or owner navigation step. For EACH selected repository, identify the
+relevant current integration branch from live open PR topology and task scope,
+then validate exact-HEAD evidence. Do not encode a changing PR number, SHA
+or branch as the permanent routing rule. Until child migration is
+independently verified, `UAOS_SKILL.md` and `.uaos/*` are still
+child-native compatibility documents, **not** active UAOS parent authority.
+A ChatGPT skill or GitHub documentation change does not reconfigure account
+Custom Instructions, change an installed plugin, or provide a Host connection.
+
 **ONE cognition parent, not a developer-system precursor.** The assistant
 operating in the current authorized ChatGPT/tool session is the interactive
 cognition, evidence-research, architecture-decision, coordination and
