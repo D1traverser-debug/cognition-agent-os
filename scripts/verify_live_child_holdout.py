@@ -174,6 +174,11 @@ def main() -> None:
             task["status"] != "NEEDS_REVIEW" for task in tick["tasks"]
         ):
             raise AssertionError(f"Parent Host did not observe two children: {tick}")
+        # Refuse even disposable child work when parent independent intake
+        # has not actually confirmed the scoped original child source.
+        for did in ids:
+            if reports[did].get("status") != "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED":
+                raise AssertionError("Parent child admission evidence not established")
         # Native business sandbox actions only AFTER parent's current-source
         # preflight succeeded on both child-owned source contracts.
         native = {
