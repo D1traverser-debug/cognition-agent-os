@@ -430,9 +430,32 @@ class OpenGoalInvestigationTests(unittest.TestCase):
             got=run_tick(self.dbpath,self.workspace,self.sources,max_jobs=1,
                          planner_mode="ollama-local",local_model="local:test")
         self.assertEqual(len(calls),3)
-        self.assertEqual(got["tasks"][0]["status"],"UNKNOWN",got)
-        self.assertEqual(got["tasks"][0]["reason"],"DISTANT_EVIDENCE_NOT_ADDRESSED")
-        self.assertFalse((self.workspace/"artifacts"/(tid+".json")).exists())
+        self.assertEqual(got["tasks"][0]["status"],"NEEDS_REVIEW",got)
+        self.assertTrue(got["tasks"][0]["unresolved_competing_evidence"])
+        packet=self.workspace/"artifacts"/(tid+".json")
+        artifact=json.loads(packet.read_text(encoding="utf-8"))
+        self.assertEqual(artifact["status"],"MODEL_RESEARCH_CONTRAST_UNRESOLVED")
+        self.assertEqual(artifact["evidence_challenges"][0]["result"],"UNRESOLVED")
+        self.assertIn(adverse,artifact["evidence_challenges"][0]["distant_excerpt"])
+        from cognition_agent_os.investigation import audit_investigation
+        audit=audit_investigation(self.dbpath,self.workspace,self.sources,tid)
+        self.assertEqual(audit["status"],"SOURCE_GROUNDED_CONTRAST_UNRESOLVED",audit)
+        self.assertFalse(audit["semantic_outcome_verified"])
+        self.assertFalse(artifact["business_outcome_verified"])
+        self.assertFalse(artifact["authorizes_mutation"])
+
+        # Independent replay rejects an attacker-forged supporting passage,
+        # even if a compromised ledger user also repairs the artifact hash.
+        artifact["evidence_challenges"][0]["distant_excerpt"] = (
+            "Only early safety approval existed; later evidence was removed.")
+        replaced=(json.dumps(artifact,sort_keys=True,ensure_ascii=False)+"\n").encode()
+        packet.write_bytes(replaced)
+        with closing(connect(self.dbpath)) as db:
+            db.execute("UPDATE tasks SET artifact_hash=? WHERE task_id=?",
+                       (hashlib.sha256(replaced).hexdigest(),tid))
+            db.commit()
+        self.assertEqual(audit_investigation(
+            self.dbpath,self.workspace,self.sources,tid)["status"],"UNVERIFIABLE")
 
     def test_unselected_counterevidence_changed_after_research_invalidates_independent_audit(self):
         """Original research scope includes rejected/unselected original documents."""
