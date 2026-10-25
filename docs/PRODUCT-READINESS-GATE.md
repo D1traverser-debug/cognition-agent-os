@@ -25,6 +25,34 @@ after interruption and validate transferable learning on unrelated goals.
 It should reduce the owner's work supervising, finding defects and correcting
 the agent's execution.
 
+**Parent-system acceptance supersedes generic task-runner acceptance.**
+The target product is the cognition PARENT for video/IP
+(`video-growth-agent`), financial writing (`financial-writing-agent`),
+novel writing (`novel-writing-agent`), A-share analysis/recommendation
+(`a-share-event-driven-agent`), and future independent business
+subsystems. Each domain retains its canonical product requirements,
+IDs, domain authority, business state, sources, assets, work progress,
+effect permissions and domain outcome oracle. The parent identifies
+and reconciles owner goals, investigates needed knowledge, compares
+applicable cross-domain methods, routes advice/work through the child's
+admitted interface, coordinates dependencies and reads independent
+business outcomes without overwriting child state.
+
+**Old-UAOS migration:** existing child `UAOS_SKILL.md` entries still
+bind `universal-agent-os` to parent cognition/governance. That is the
+historical parent still in use by those integration documents.
+New cognition-agent-os adoption is NOT demonstrated by the current
+Draft PR. No child repo edit, UAOS retirement or production cutover is
+approved. A parent replacement requires a verified adapter migration,
+unchanged legitimate child tasks, regression of both parent and child
+state/permission/identity, and explicit owner authorization.
+
+**Do not misclassify ChatGPT/Codex development skills as the business
+parent.** Better developer workflows are tools for BUILDING and
+auditing this project; Codex Hooks or native Goals cannot serve as
+independent evidence that a video episode, article, novel or A-share
+business task was guided, improved or independently completed.
+
 A successful local JSON draft or CSV comparison under the original contract
 is a real **local scoped** result. It is not a claim that arbitrary owner
 goals, remote-provider effects or a finished OS have passed.
@@ -50,11 +78,18 @@ goals, remote-provider effects or a finished OS have passed.
    readback gate external effects. Systemic defects are repaired at the
    shared responsible contract and tested across legitimate sibling paths;
    reviewer or model text cannot self-authorize or self-certify.
-5. **Generalization, not curated fixtures.** At least two materially different,
-   sealed unfamiliar goal families use the **same** controller, with meaningful
-   alternative evaluation, domain-specific tool adapters and independent
-   real-world goal postconditions. Measure success and failures, owner
-   corrections, time-to-result and resource use together.
+5. **Cross-domain parent-child generalization, not curated fixtures.**
+   The SAME parent cognition loop must discover and cooperate with at least
+   two distinctly governed real child domains, while honoring independent
+   business identity, current domain requirements, permission and source
+   authority. Evaluate conflicting/changed child state, parent guidance
+   rejection, domain-specific independent readback and cross-domain
+   method transfer/non-fit. Audit all four existing domains for no
+   unintended authority or routing regressions, and independently
+   exercise a NEW previously unregistered domain through a stable
+   discovery/adapter contract without product-specific parent-code
+   hardcoding. Measure actual child-relevant outcome and user correction
+   burden; dry-run/read-only advice is not proof of business execution.
 6. **Evidence attribution and product release.** Every result ties current
    original goal and grants to chosen method, actual executed effect, verifier
    identity, provider/source readback and unchanged/restored conditions.
@@ -100,7 +135,14 @@ passed [Linux and Windows 652/652 each, all seven required CI jobs](https://gith
 These checks DO NOT prove owner-level external effects, spontaneous capability
 discovery, or complete independent semantic correctness of every file.
 
-**Actual priority (not next isolated local feature):** achieve gate 1 + gate 2
+**Actual priority (not next isolated local feature):** build the genuine
+parent → child read-only discovery/goal reconciliation → competing
+source-grounded guidance → child-native admission → independent child-domain
+result feedback → parent correction loop on at least one of the existing
+domains, preserving the ability to transfer to another; not a CSV/JSON demo.
+No child mutation or new paid API is authorized by this acceptance target.
+
+For the shared engine, achieve gate 1 + gate 2
 together as one full original-goal vertical slice on the EXISTING Host with
 two competing permitted methods, at least one independently falsified choice,
 durable next-choice/action, original-criterion effect readback, crash/revoke
