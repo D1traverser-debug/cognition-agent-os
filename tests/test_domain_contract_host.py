@@ -106,7 +106,7 @@ class DomainContractHostIntegration(unittest.TestCase):
                     with self.mock(docs):
                         tick = run_tick(dbpath, ws, fx, max_jobs=1)
                         audit = audit_domain_contract(dbpath, ws, tid)
-                    self.assertEqual(tick["processed"][0]["status"],
+                    self.assertEqual(tick["tasks"][0]["status"],
                                      "NEEDS_REVIEW", tick)
                     self.assertEqual(audit["status"],
                                      "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED", audit)
@@ -150,7 +150,7 @@ class DomainContractHostIntegration(unittest.TestCase):
         adapter["controller"] = "future-parent-not-currently-admitted"
         docs[FILES[1]] = json.dumps(adapter).encode()
         with self.mock(docs):
-            processed = self.tick()["processed"][0]
+            processed = self.tick()["tasks"][0]
         self.assertEqual(processed["status"], "UNKNOWN", processed)
         self.assertFalse((self.workspace / "artifacts").exists())
 
@@ -158,7 +158,7 @@ class DomainContractHostIntegration(unittest.TestCase):
         tid, spec = self.seed()
         docs = make_native("ashare", spec["repo"])
         with self.mock(docs):
-            processed = self.tick()["processed"][0]
+            processed = self.tick()["tasks"][0]
         self.assertEqual(processed["status"], "UNKNOWN", processed)
         self.assertNotIn("next_task_id", processed)
         self.assertFalse((self.workspace / "artifacts").exists())
@@ -170,7 +170,7 @@ class DomainContractHostIntegration(unittest.TestCase):
         docs = make_native("video", spec["repo"])
         with self.mock(docs):
             result = self.tick()
-        self.assertEqual(result["processed"][0]["status"], "BLOCKED", result)
+        self.assertEqual(result["tasks"][0]["status"], "BLOCKED", result)
         self.assertFalse((self.workspace / "artifacts").exists())
         self.assertEqual(audit_domain_contract(self.db, self.workspace, tid)
                          ["status"], "NOT_ADMITTED")
