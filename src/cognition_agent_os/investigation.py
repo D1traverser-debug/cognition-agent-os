@@ -53,6 +53,7 @@ _ADMISSIBLE_INVESTIGATION_CODES = frozenset({
     "UNGROUNDED_OR_DUPLICATE_QUOTE", "INCOMPLETE_RESEARCH_EVIDENCE",
     "EVIDENCE_CHANGED_DURING_REASONING",
     "INVESTIGATION_LEASE_LOST", "RESEARCH_SOURCE_BUDGET_EXCEEDED",
+    "DISTANT_EVIDENCE_NOT_ADDRESSED",
 })
 
 
@@ -154,6 +155,9 @@ def _evidence_excerpt(text: str, question: str) -> str:
     return _preview_window(text, _question_terms(question))[1]
 
 
+_DISTANT_MARKER = "\\n[SAME SOURCE, DISTANT PASSAGE]\\n"
+
+
 def _contrastive_preview(text: str, terms: dict[str, int]) -> tuple[int, str]:
     """Show a distant relevant counter-passage without doubling model calls.
 
@@ -189,7 +193,7 @@ def _contrastive_preview(text: str, terms: dict[str, int]) -> tuple[int, str]:
     if other_start is None or 4 * other_score < best_score:
         return best_score, best_excerpt
     # Separate fragments are explicitly one source, not independent publishers.
-    return (best_score, best_excerpt + "\n[SAME SOURCE, DISTANT PASSAGE]\n"
+    return (best_score, best_excerpt + _DISTANT_MARKER
             + text[other_start:other_start + 260])
 
 
@@ -240,10 +244,11 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
     # A lexical shortlist or an early positive selection cannot establish
     # relevance, irrelevance, or absence of contradictions elsewhere.
     terms = _question_terms(question)
+    previews = {name: _contrastive_preview(text, terms)
+                for name, (_raw, text) in inventory.items()}
     ranked = sorted((
         (-score, name, excerpt)
-        for name, (_raw, text) in inventory.items()
-        for score, excerpt in [_contrastive_preview(text, terms)]
+        for name, (score, excerpt) in previews.items()
     ))
     # A positive OR negative judgment on an early batch cannot establish
     # absence of independent counterevidence in later batches.
@@ -342,6 +347,65 @@ def _research(question: str, inventory: dict[str, tuple[bytes, str]],
         seen.add(name)
     if seen != set(chosen):
         raise InvestigationInvalid("INCOMPLETE_RESEARCH_EVIDENCE")
+
+    # If a model took only the favorable/early quote despite a distant
+    # query-relevant passage in the same original document, give it one
+    # bounded evidence-based correction. Never treat "later" as necessarily
+    # truer, nor pretend these are two independent publishers.
+    for item in findings:
+        name = item["source"]
+        preview = previews[name][1]
+        primary, separator, distant = preview.partition(_DISTANT_MARKER)
+        if (not separator or not distant
+            or primary not in selected[name] or distant not in selected[name]):
+            continue
+        # A shared filename/header is not evidence that the second passage
+        # was addressed. A quote must be genuinely unique to that passage.
+        quote = item["quote"]
+        if quote in distant and quote not in primary:
+            continue
+        revision_schema = {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "quote": {"type": "string"},
+                "interpretation": {"type": "string"},
+                "uncertainty": {"type": "string"}},
+            "required": ["quote", "interpretation", "uncertainty"],
+        }
+        feedback = (
+            "Your provisional evidence quote missed a DISTINCT query-relevant "
+            "passage from the SAME original source. This is MECHANICAL "
+            "coverage feedback, not a claim that the later passage is true. "
+            "Inspect its actual text and critically reconsider your first "
+            "interpretation. Provide a new VERBATIM quote uniquely from the "
+            "distant passage, a tentative interpretation considering BOTH "
+            "passages, and explicit uncertainty. If the passages differ, "
+            "do not silently prefer the earlier claim. Do not claim "
+            "independent business outcome or authorization.\n"
+            "User's question: " + question + "\n"
+            "Source: " + name + "\n"
+            "Your earlier quote: " + quote + "\n"
+            "Previously surfaced passage: " + primary + "\n"
+            "DISTANT SAME-SOURCE PASSAGE REQUIRING REVIEW: " + distant + "\n"
+        )
+        revised = _model_reply(model, feedback,
+                               response_schema=revision_schema,
+                               before_request=before_request)
+        q, interp, uncertainty_new = (
+            revised.get("quote"), revised.get("interpretation"),
+            revised.get("uncertainty"))
+        if (set(revised) != {"quote", "interpretation", "uncertainty"}
+            or not isinstance(q, str) or not 8 <= len(q) <= _MAX_QUOTE
+            or q not in distant or q in primary or q not in selected[name]
+            or not isinstance(interp, str)
+            or not 1 <= len(interp) <= _MAX_INTERPRETATION
+            or not isinstance(uncertainty_new, str)
+            or not 1 <= len(uncertainty_new) <= 450):
+            raise InvestigationInvalid("DISTANT_EVIDENCE_NOT_ADDRESSED")
+        item["quote"] = q
+        item["interpretation"] = interp
+        uncertainty = ("Original evidence required a same-source challenge; "
+                       + uncertainty_new)[:500]
     return chosen, findings, uncertainty
 
 
