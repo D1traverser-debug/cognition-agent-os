@@ -32,6 +32,34 @@ class DomainContractInvalid(ValueError):
     pass
 
 
+_HISTORICAL_PARENT = "D1traverser-debug/universal-agent-os"
+
+
+def _legacy_parent_ref_paths(manifest: dict, adapter: dict, caps: dict) -> list[str]:
+    """Report normative parent references, not incidental UAOS prose.
+
+    A manifest.controller change is not migration while the child's
+    declared common capability references point to the old parent.
+    Child Skill paths are compatibility, not parent authority.
+    """
+    refs = []
+    for prefix, fields in (
+        ("manifest.binding", manifest.get("binding")),
+        ("adapter", adapter),
+        ("capabilities", caps),
+    ):
+        if not isinstance(fields, dict):
+            continue
+        for name, value in fields.items():
+            if (isinstance(name, str) and isinstance(value, str)
+                and (prefix == "manifest.binding"
+                     or name in ("controller", "parent_control_plane")
+                     or "ref" in name or "authority" in name)
+                and value.startswith(_HISTORICAL_PARENT)):
+                refs.append(f"{prefix}.{name}")
+    return sorted(refs)
+
+
 def _skill_entrypoint(manifest: dict) -> str:
     """Resolve only a declared, repo-local child entrypoint; never a URL."""
     skill = manifest.get("skill")
@@ -148,6 +176,7 @@ def _native_contract(documents: dict[str, bytes], spec: dict) -> dict:
     # an explicit domain_id is not a grant, nor a reason to invent child state.
     if caps.get("repository") is not None and caps["repository"] != spec["repo"]:
         raise DomainContractInvalid("CHILD_REPOSITORY_MISMATCH")
+    legacy_refs = _legacy_parent_ref_paths(manifest, adapter, caps)
     return {
         "kind": "CHILD_CONTRACT_OBSERVATION_V1",
         "repo": spec["repo"],
@@ -164,7 +193,8 @@ def _native_contract(documents: dict[str, bytes], spec: dict) -> dict:
         "declared_skill_entrypoint": entrypoint,
         "child_native_state_observation": state_observation,
         "advertisement_is_not_execution_grant": True,
-        "legacy_parent_bound": "universal-agent-os" in manifest["controller"],
+        "legacy_parent_binding_refs": legacy_refs,
+        "legacy_parent_bound": bool(legacy_refs) or _HISTORICAL_PARENT in manifest["controller"],
         "read_only_source_identity_verified": True,
         "child_business_identity_reissued": False,
         "child_business_state_modified": False,
