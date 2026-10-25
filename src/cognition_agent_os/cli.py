@@ -23,6 +23,7 @@ from .reconciliation_oracle import audit_stored_report
 from .intent_planner import compile_intent
 from .investigation import validate_investigation, audit_investigation
 from .open_goal import validate_open_goal, audit_open_goal
+from .domain_contract import validate_domain_task, audit_domain_contract
 from .intent_runtime import audit_intent_plan
 from .semantic_contract import load_pinned_relationship
 from .conformance import inspect_conformance
@@ -72,6 +73,14 @@ def main(argv=None) -> int:
     open_input.add_argument("--goal", required=True)
     open_input.add_argument("--allow-public-tool-discovery", action="store_true",
         help="Explicitly allow disclosure of up to three goal-derived search terms to GitHub public repository search")
+    domain_seed = sub.add_parser("seed-domain-contract",
+        help="Inspect a public child-native adapter at a pinned SHA, read-only")
+    domain_seed.add_argument("--repo", required=True)
+    domain_seed.add_argument("--ref", required=True)
+    domain_seed.add_argument("--domain-id", required=True)
+    domain_audit = sub.add_parser("domain-contract-audit",
+        help="Independently re-read pinned child-native source and review receipt")
+    domain_audit.add_argument("--task-id", required=True)
     open_audit = sub.add_parser("open-goal-audit",
         help="Read-only independent check of source-pinned open-goal child provenance")
     open_audit.add_argument("--task-id", required=True)
@@ -335,6 +344,10 @@ def main(argv=None) -> int:
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
         return 0 if result["status"] in ("MECHANICAL_EVIDENCE_OBSERVED",
                                         "NO_RUNTIME_EVIDENCE","PARTIAL_EVIDENCE") else 4
+    if args.command == "domain-contract-audit":
+        result = audit_domain_contract(args.db, args.workspace, args.task_id)
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0 if result["status"] == "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED" else 4
     if args.command == "open-goal-audit":
         result=audit_open_goal(args.db,args.fixtures,args.task_id)
         print(json.dumps(result,ensure_ascii=False,sort_keys=True))
@@ -494,6 +507,17 @@ def main(argv=None) -> int:
             result={"task_id":create_task(db,spec),"state":"PENDING",
                     "holdout_digest_pinned":True,
                     "scope":"local_pure_ast_only"}
+        elif args.command == "seed-domain-contract":
+            spec = validate_domain_task({
+                "kind":"domain_contract", "repo":args.repo,
+                "ref":args.ref, "domain_id":args.domain_id})
+            owner = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+            if not owner or not owner["write_allowed"]:
+                raise PermissionError("No existing authority for local review artifact")
+            result = {"task_id":create_task(db,spec),"state":"PENDING",
+                      "scope":"PUBLIC_CHILD_SOURCE_READ_LOCAL_REVIEW_ONLY",
+                      "parent_replacement_admitted":False,
+                      "business_outcome_verified":False}
         elif args.command == "seed-open-goal":
             spec={"kind":"open_goal","goal":args.goal}
             if args.allow_public_tool_discovery:
