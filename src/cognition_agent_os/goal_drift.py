@@ -27,6 +27,7 @@ _ALERT_STATES = frozenset({
     "LOCAL_WORK_NOT_OWNER_RESULT",
     "COMPONENT_RESULT_NOT_OWNER_RESULT",
     "OWNER_OUTCOME_NOT_INDEPENDENTLY_ESTABLISHED",
+    "OWNER_POSTCONDITION_REGRESSED",
 })
 
 
@@ -97,7 +98,8 @@ def _lineage_evidence_epoch(db: sqlite3.Connection, task_ids: list[str]) -> int:
     placeholders = ",".join("?" for _ in task_ids)
     row = db.execute(
         "SELECT COALESCE(MAX(event_id), 0) FROM events "
-        "WHERE kind!='OWNER_GOAL_DRIFT_SIGNAL' AND task_id IN ("
+        "WHERE kind NOT IN ('OWNER_GOAL_DRIFT_SIGNAL',"
+        "'OWNER_GOAL_LOCAL_RESULT_OBSERVED') AND task_id IN ("
         + placeholders + ")", task_ids
     ).fetchone()
     return int(row[0])
@@ -115,7 +117,9 @@ def _task_evidence_snapshot(task: dict | sqlite3.Row) -> tuple:
     )
 
 
-def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
+def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
+                             workspace: Path | None = None,
+                             fixtures: Path | None = None) -> list[dict]:
     """One event on changed goal-level blockage, never on mere local success.
 
     Only original open_goal roots are monitored. Unknown/unsupported domain
@@ -124,6 +128,8 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
     """
     if type(limit) is not int or not 1 <= limit <= MAX_ROOTS_PER_TICK:
         raise ValueError("INVALID_GOAL_DRIFT_SCAN_LIMIT")
+    if (workspace is None) != (fixtures is None):
+        raise ValueError("OWNER_OUTCOME_REQUIRES_BOTH_SOURCE_AND_WORKSPACE")
     # Observing a goal may not implicitly create a new authority database.
     require_initialized_ledger(db_path)
     results = []
@@ -153,6 +159,24 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
                 if not complete:
                     result["fidelity_state"] = "GOAL_LINEAGE_INCOMPLETE"
                     result["next_goal_action"] = "INSPECT_COMPLETE_LINEAGE"
+                owner_local = None
+                if complete and workspace is not None and fixtures is not None:
+                    from .owner_postcondition import inspect_owner_local_outcome
+                    owner_local = inspect_owner_local_outcome(
+                        db_path, workspace, fixtures, root_id)
+                    if owner_local["local_owner_outcome_verified"]:
+                        result["fidelity_state"] = "LOCAL_OWNER_RESULT_VERIFIED"
+                        result["next_goal_action"] = "MAINTAIN_INDEPENDENT_READBACK"
+                old = db.execute(
+                    "SELECT observation_sha256,fidelity_state FROM owner_goal_drift_seen "
+                    "WHERE root_task_id=?", (root_id,)
+                ).fetchone()
+                if (owner_local is not None and
+                    not owner_local["local_owner_outcome_verified"] and
+                    old is not None and
+                    old["fidelity_state"] == "LOCAL_OWNER_RESULT_VERIFIED"):
+                    result["fidelity_state"] = "OWNER_POSTCONDITION_REGRESSED"
+                    result["next_goal_action"] = "REASSESS_OWNER_RESULT_WITH_CURRENT_EVIDENCE"
                 state = result["fidelity_state"]
                 fingerprint = hashlib.sha256(json.dumps({
                     "root_task": _task_evidence_snapshot(root),
@@ -161,11 +185,14 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
                     "lineage_receipt_epoch": _lineage_evidence_epoch(
                         db, [root_id] + [d["task_id"] for d in descendants]),
                     "state": state,
+                    "independent_local_outcome": ({
+                        "status": owner_local["status"],
+                        "reason": owner_local.get("reason"),
+                        "evidence_sha256": owner_local.get("evidence_sha256"),
+                        "local_owner_outcome_verified":
+                            owner_local["local_owner_outcome_verified"],
+                    } if owner_local is not None else None),
                 }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-                old = db.execute(
-                    "SELECT observation_sha256 FROM owner_goal_drift_seen "
-                    "WHERE root_task_id=?", (root_id,)
-                ).fetchone()
                 if old is not None and old["observation_sha256"] == fingerprint:
                     continue
                 db.execute("""INSERT INTO owner_goal_drift_seen(
@@ -174,6 +201,23 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8) -> list[dict]:
                     observation_sha256=excluded.observation_sha256,
                     fidelity_state=excluded.fidelity_state""",
                     (root_id, fingerprint, state))
+                if state == "LOCAL_OWNER_RESULT_VERIFIED":
+                    details = {
+                        "root_contract_sha256": result["root_contract_digest"],
+                        "observation_sha256": fingerprint,
+                        "local_outcome_scope": owner_local["outcome_scope"],
+                        "evidence_sha256": owner_local["evidence_sha256"],
+                        "local_owner_outcome_verified": True,
+                        "business_outcome_verified": False,
+                        "real_external_outcome_verified": False,
+                    }
+                    event(db, root_id, "OWNER_GOAL_LOCAL_RESULT_OBSERVED", details)
+                    results.append({
+                        "root_task_id": root_id,
+                        "status": "LOCAL_OWNER_RESULT_OBSERVED",
+                        **details,
+                    })
+                    continue
                 if state not in _ALERT_STATES and state != "GOAL_LINEAGE_INCOMPLETE":
                     continue
                 details = {
