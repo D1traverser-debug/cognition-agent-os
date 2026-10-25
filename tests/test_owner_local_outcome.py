@@ -68,6 +68,32 @@ class RealOwnerLocalOutcome(unittest.TestCase):
         self.assertFalse(inspect_owner_local_outcome(
             self.db,self.ws,self.fx,root)["local_owner_outcome_verified"])
 
+
+    def test_real_host_goal_status_and_drift_agree_after_real_effect(self):
+        """A proven local result cannot coexist with a stale local drift alarm."""
+        root=self.seed(
+            "Please ensure a sandbox draft of settings.json has owner equal "
+            "to ops, preserving the existing timeout.")
+        first=run_tick(self.db,self.ws,self.fx,max_jobs=2,auto_stage_goals=True)
+        result=next(x for x in first["goal_progress"]["goals"]
+                    if x["root_task_id"]==root)["local_owner_result"]
+        self.assertTrue(result["local_owner_outcome_verified"])
+        self.assertFalse(any(
+            x.get("status")=="DRIFT_SIGNAL_RECORDED"
+            for x in first["owner_goal_drift"]),first)
+        second=run_tick(self.db,self.ws,self.fx,max_jobs=1)
+        self.assertEqual(second["owner_goal_drift"], [],second)
+        staged=self.ws/"sandbox"/(result["evidence_task_id"]+".candidate")
+        staged.write_text('{"owner":"wrong","timeout":7}\\n')
+        third=run_tick(self.db,self.ws,self.fx,max_jobs=1)
+        drift=[x for x in third["owner_goal_drift"]
+               if x.get("status")=="DRIFT_SIGNAL_RECORDED"]
+        self.assertEqual(len(drift),1,third)
+        self.assertEqual(drift[0]["fidelity_state"],
+                         "OWNER_POSTCONDITION_REGRESSED")
+        self.assertEqual(run_tick(self.db,self.ws,self.fx,max_jobs=1)
+                         ["owner_goal_drift"],[])
+
     def test_original_comparison_is_readonly_report_not_business_truth(self):
         root=self.seed("Compare baseline.csv with actual.csv and report differences.")
         out=run_tick(self.db,self.ws,self.fx,max_jobs=2)
