@@ -64,6 +64,36 @@ A successful local JSON draft or CSV comparison under the original contract
 is a real **local scoped** result. It is not a claim that arbitrary owner
 goals, remote-provider effects or a finished OS have passed.
 
+## Current invocation scope and deferred deployment
+
+**Owner correction (2026-10-26):** ChatGPT remains a general assistant. The
+cognition-parent workflow is opt-in by explicit named requests such as
+`继续 cognition-agent-os`, `继承视频`, `继续小说`, or an unambiguously
+selected project/task context. Unrelated everyday ChatGPT conversations must
+not be forced through cognition-agent-os, run a mandatory controller, or incur
+its research/verification overhead. A reliable keyword/context trigger is
+acceptable; **universal automatic invocation in every ChatGPT conversation
+is NOT a product requirement or current acceptance gate**. The obsolete
+`uaos-controller-runtime` is not a prerequisite and must not be restored.
+
+**Near-term priority:** Improve the opt-in interactive cognition workflow:
+full original goal and correction fidelity, context-appropriate investigation,
+independent comparison, lawful action with currently connected tools,
+real-result readback and correction, without requiring the owner to repeatedly
+enumerate missing checks or integrations. Evaluate actual triggered use, not
+hypothetical blanket ChatGPT interception.
+
+**Deferred, not discarded:** Local/cloud deployment, unattended persistent
+Host scheduling, paid APIs, commercialization and a ChatGPT-to-host MCP/API
+bridge are later engineering/authorization phases. They are not prerequisites
+for testing current opt-in ChatGPT behavior. When a persistent server is
+eventually adopted, storage can preserve goal/state/evidence independently
+of conversation text; new sessions still need scoped identity, goal selection,
+current grants and result-state rehydration. Do not prematurely build an
+extra chat-memory/Host layer or treat server storage alone as verified
+continuation. The six ultimate product gates below remain long-term
+criteria, not a mandate to deploy infrastructure in this phase.
+
 ## Six end-to-end release gates — same candidate, same original goal
 
 1. **Whole goal -> next legal choice.** With owner requirements (including
