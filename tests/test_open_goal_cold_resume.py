@@ -244,6 +244,72 @@ class OpenGoalColdResume(unittest.TestCase):
         self.assertEqual(revoked["original_goal"], goal)
         self.assertNotIn("next_task_id", revoked)
 
+
+    def test_ordered_cold_resume_release_and_forged_evidence_does_not_promote(self):
+        """Recover actual verified successor only while predecessor proof survives."""
+        from unittest.mock import patch
+        from cognition_agent_os.dependency_gate import advance_pending_local_dependencies
+        (self.fixtures / "cause.md").write_text(
+            "The UART reset held the timeout counter for several cycles.\n")
+        goal = ("Investigate the UART timeout using local engineering evidence "
+                "and then ensure a sandbox draft of settings.json has owner equal to ops.")
+        root = self.seed(goal)
+        start = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1,
+                         planner_mode="ollama-local", local_model="installed:test")
+        self.assertEqual(start["tasks"][0]["status"], "DECOMPOSED", start)
+        with closing(connect(self.db)) as db:
+            rows = [dict(x) for x in db.execute(
+                "SELECT task_id,source_spec FROM tasks WHERE parent_task=?", (root,))]
+        ids = {json.loads(x["source_spec"])["kind"]: x["task_id"] for x in rows}
+
+        def model(method, endpoint, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            properties = payload["format"]["properties"]
+            if "sources" in properties:
+                answer = {"sources": ["cause.md"]}
+            elif "findings" in properties:
+                answer = {"findings": [{
+                    "source": "cause.md",
+                    "quote": "The UART reset held the timeout counter for several cycles.",
+                    "interpretation": "Reset is a potential counter pause cause.",
+                }], "uncertainty": "Local fixture evidence is not a hardware outcome."}
+            else:
+                raise AssertionError("Unexpected model output schema")
+            return {"done": True, "response": json.dumps(answer)}
+
+        with patch("cognition_agent_os.local_model._request", side_effect=model):
+            research = run_tick(
+                self.db, self.workspace, self.fixtures, max_jobs=1,
+                planner_mode="ollama-local", local_model="installed:test")
+        self.assertEqual(research["tasks"][0]["task_id"], ids["investigate_goal"])
+        self.assertEqual(research["tasks"][0]["status"], "NEEDS_REVIEW")
+        before_release = self.recover()
+        self.assertEqual(before_release["status"],
+                         "AWAITING_DEPENDENCY_EVIDENCE", before_release)
+        self.assertNotIn("next_task_id", before_release)
+
+        release = advance_pending_local_dependencies(
+            self.db, self.workspace, self.fixtures)
+        self.assertTrue(any(x["status"] == "DEPENDENCY_RELEASED_LOCAL_ONLY"
+                            for x in release), release)
+        legitimate = self.recover()
+        self.assertEqual(legitimate["status"], "READY_TO_TICK", legitimate)
+        self.assertEqual(legitimate["next_task_id"], ids["goal_case"])
+        self.assertEqual(legitimate["runnable_task_ids"], [ids["goal_case"]])
+
+        # A stored release bit cannot resurrect an invalid research receipt.
+        research_artifact = (self.workspace / "artifacts" /
+                             (ids["investigate_goal"] + ".json"))
+        research_artifact.write_bytes(research_artifact.read_bytes() + b" tampered")
+        compromised = self.recover()
+        self.assertEqual(compromised["status"],
+                         "AWAITING_DEPENDENCY_EVIDENCE", compromised)
+        self.assertNotIn("next_task_id", compromised)
+        self.assertEqual(compromised["waiting_dependency_tasks"][0]["reason"],
+                         "PREDECESSOR_EVIDENCE_CHANGED")
+        self.assertFalse(compromised["local_owner_outcome_verified"])
+
     def test_missing_db_is_never_implicitly_initialized(self):
         missing = self.home / "missing.sqlite"
         self.assertEqual(
