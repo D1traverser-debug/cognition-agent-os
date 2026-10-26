@@ -51,6 +51,40 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
         self.assertIn("real ChatGPT conversation", content)
         self.assertIn("Fail if user must repeat", content)
 
+    def test_discovery_description_is_scoped_not_an_everyday_chat_hijack(self):
+        """Source-only metadata contract; native implicit trigger is untested."""
+        content = SKILL.read_text(encoding="utf-8")
+        parts = content.split("---", 2)
+        self.assertEqual(len(parts), 3)
+        header = parts[1]
+        description = next((line.partition(":")[2].strip()
+                            for line in header.splitlines()
+                            if line.startswith("description:")), "")
+        self.assertTrue(0 < len(description) <= 1024)
+        self.assertIn("cognition-agent-os", description)
+        self.assertIn("继承", description)
+        self.assertIn("cross-domain", description)
+        self.assertIn("Do not use for unrelated ordinary requests", description)
+        self.assertIn("Do not assume", description)
+
+    def test_nonexpert_owner_intake_has_outcome_first_evidence_contract(self):
+        """The expert-research burden belongs to the agent, not the owner."""
+        content = SKILL.read_text(encoding="utf-8")
+        self.assertIn("## Outcome-first input/output contract", content)
+        self.assertIn("No owner domain or AI expertise is presumed", content)
+        self.assertIn("independent owner-level postcondition", content)
+        self.assertIn("do not invent missing source facts", content)
+        self.assertIn("ask the owner only for indispensable", content)
+        self.assertIn("No mandatory report format", content)
+
+    def test_trigger_holdouts_include_positive_and_negative_controls(self):
+        probes = PROBES.read_text(encoding="utf-8")
+        self.assertIn("R. In-scope skill selection versus ordinary-chat non-trigger:", probes)
+        self.assertIn("S. Nonexpert original-owner task input/output:", probes)
+        self.assertIn("false-positive trigger", probes)
+        self.assertIn("false-negative trigger", probes)
+        self.assertIn("without an invoked skill", probes)
+
     def test_private_plugin_version_and_no_false_runtime_claim(self):
         root = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
         manifest = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
