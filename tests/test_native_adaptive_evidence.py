@@ -100,13 +100,16 @@ class AdaptiveEvidenceHoldouts(unittest.TestCase):
         self.assertEqual({p.name:p.read_bytes() for p in self.fx.iterdir()}, before)
 
     def test_unregistered_path_or_second_read_round_is_refused_without_task(self):
-        root = register_native_goal(self.db, "Analyze existing original evidence.")
         for request in ({"inspect_sources": [{"path": "../secrets", "offset_chars": 0}]},
                         {"inspect_sources": [{"path": "trace.md", "offset_chars": -1}]},
                         {"inspect_sources": [{"path": "trace.md", "offset_chars": 0},
                                               {"path": "trace.md", "offset_chars": 1},
                                               {"path": "reference.csv", "offset_chars": 0}]}):
             with self.subTest(request=request):
+                # A new root models independent evidence snapshots; the
+                # existing two-refusal budget must not be bypassed.
+                root = register_native_goal(
+                    self.db, "Analyze existing original evidence.")
                 def responder(method, path, payload, timeout):
                     if method == "GET":
                         return {"models": [{"name": "installed:test"}]}
