@@ -624,6 +624,19 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             _ground_decision(
                 candidate, parsed, source_hashes,
                 observed["decisions"][-1]["task_id"] if observed["decisions"] else None)
+            # A proposal can be syntactically executable yet contradict an
+            # UNAMBIGUOUS original local acceptance contract: reversed CSV
+            # roles or unrelated CSV work for an explicitly named JSON draft.
+            # Reject BEFORE creating a child, without claiming general
+            # semantic competence for unknown or compound owner language.
+            # This reuses the SAME parsing contract as the independent owner
+            # postcondition instead of a competing keyword router.
+            from .owner_postcondition import (
+                _explicit_owner_local_contract, _full_owner_scope_is_supported)
+            if (_explicit_owner_local_contract(contract["goal"]) is not None
+                and not _full_owner_scope_is_supported(
+                    contract["goal"], parsed["selected"])):
+                raise ValueError("NATIVE_METHOD_CONTRADICTS_EXPLICIT_OWNER_CONTRACT")
             previous_receipts = db.execute(
                 "SELECT details FROM events WHERE task_id=? "
                 "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
