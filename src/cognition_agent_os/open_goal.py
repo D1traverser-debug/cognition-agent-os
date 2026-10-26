@@ -558,10 +558,10 @@ def _select_independent_conjunction(
     # "then" denotes a dependency; no review/admission gate for research
     # results is established here, so sequential instructions stay unsupported.
     matched = re.fullmatch(
-        r"(?is)\\s*(investigate\\b.{10,350}?)\\s+and\\s+"
-        r"(ensure\\s+(?:a\\s+)?(?:sandbox|isolated)\\s+"
-        r"(?:draft|candidate|proposal)\\s+of\\s+"
-        r"[A-Za-z0-9_.-]+\\.json\\s+has\\s+.+?)\\s*\\.?\\s*",
+        r"(?is)\s*(investigate\b.{10,350}?)\s+and\s+"
+        r"(ensure\s+(?:a\s+)?(?:sandbox|isolated)\s+"
+        r"(?:draft|candidate|proposal)\s+of\s+"
+        r"[A-Za-z0-9_.-]+\.json\s+has\s+.+?)\s*\.?\s*",
         goal,
     )
     if matched is None:
