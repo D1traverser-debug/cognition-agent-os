@@ -144,8 +144,15 @@ def _native_trial(case: dict, home: Path) -> dict:
             step = {"model_plan_status": response.get("status"),
                     "model_plan_reason": response.get("reason")}
             if response["status"] == "NATIVE_METHOD_ENQUEUED":
-                receipt = run_tick(db, work, fixture, max_jobs=1)
+                # Same genuine Host execution semantics as the incumbent:
+                # a correctly chosen JSON structure must be staged in the
+                # authorized isolated sandbox BEFORE owner-level grading.
+                # Otherwise the old benchmark systematically scores even
+                # a perfect native model as a failure on the JSON case.
+                receipt = run_tick(
+                    db, work, fixture, max_jobs=1, auto_stage_goals=True)
                 step["worker_result"] = receipt["tasks"][:1]
+                step["sandbox_reviews"] = receipt.get("sandbox_reviews", [])
             decisions.append(step)
             result = inspect_owner_local_outcome(db, work, fixture, root)
             if result["local_owner_outcome_verified"]:
