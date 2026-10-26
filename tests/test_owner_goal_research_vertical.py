@@ -131,7 +131,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
 
     def test_compound_cold_restart_resumes_two_existing_children(self):
         """Separate Host invocations reuse the same durable original goal."""
-        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the UART timeout using local engineering evidence and "
             "ensure a sandbox draft of settings.json has owner equal to ops.")
