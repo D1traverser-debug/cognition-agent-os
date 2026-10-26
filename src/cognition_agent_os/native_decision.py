@@ -161,7 +161,6 @@ def _proposal(candidate: dict, contract: dict) -> dict:
             and (not isinstance(basis["previous_result_task_id"], str)
                  or not _ID.fullmatch(basis["previous_result_task_id"])))):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
-        raise ValueError("INVALID_NATIVE_DECISION")
     fields = ("decision_reason", "alternative_reason", "expected_evidence")
     if any(not isinstance(candidate[x], str) or
            not 8 <= len(candidate[x].strip()) <= 512 for x in fields):
