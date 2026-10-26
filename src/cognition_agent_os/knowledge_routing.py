@@ -194,12 +194,35 @@ def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->boo
                         or len(evidence["obligations"])!=2):
                         return False
                     entries=evidence["obligations"]
+                    sequence=evidence.get("sequence_rule","INDEPENDENT")
+                    if sequence not in (
+                        "INDEPENDENT","AFTER_INDEPENDENT_RESEARCH_EVIDENCE"):
+                        return False
+                    separator=(" and then " if sequence==
+                               "AFTER_INDEPENDENT_RESEARCH_EVIDENCE" else " and ")
                     if (not all(isinstance(e,dict) and
                                 set(e)=={"child_task_id","clause",
                                         "plan","model_candidate"} for e in entries)
                         or not all(isinstance(e["clause"],str) for e in entries)
                         or parent_spec["goal"].strip().rstrip(".").strip()!=
-                           f"{entries[0]['clause']} and {entries[1]['clause']}"):
+                           f"{entries[0]['clause']}{separator}{entries[1]['clause']}"):
+                        return False
+                    has_table=db.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "AND name='task_dependencies'").fetchone() is not None
+                    edges=(db.execute(
+                        "SELECT task_id,predecessor_task,evidence_kind "
+                        "FROM task_dependencies WHERE task_id IN (?,?)",
+                        (entries[0]["child_task_id"],
+                         entries[1]["child_task_id"])).fetchall()
+                        if has_table else [])
+                    if sequence=="AFTER_INDEPENDENT_RESEARCH_EVIDENCE":
+                        if (len(edges)!=1
+                            or edges[0]["task_id"]!=entries[1]["child_task_id"]
+                            or edges[0]["predecessor_task"]!=entries[0]["child_task_id"]
+                            or edges[0]["evidence_kind"]!="investigate_goal"):
+                            return False
+                    elif edges:
                         return False
                     siblings=db.execute(
                         "SELECT task_id FROM tasks WHERE parent_task=?",
