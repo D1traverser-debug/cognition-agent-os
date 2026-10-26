@@ -20,7 +20,7 @@ class OrderedEvidenceGateTests(unittest.TestCase):
         self.workspace=self.root/"workspace"
         self.fixtures=self.root/"sources"
         self.fixtures.mkdir()
-        (self.fixtures/"config.json").write_text('{"existing":"keep"}\\n')
+        (self.fixtures/"config.json").write_text('{"existing":"keep"}\n')
         with closing(connect(self.db)) as db:
             initialize(db)
 
@@ -57,7 +57,7 @@ class OrderedEvidenceGateTests(unittest.TestCase):
         first,second=self.tasks()
         register_local_dependency(self.db,first,second)
         run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
-        (self.fixtures/"config.json").write_text('{"existing":"changed"}\\n')
+        (self.fixtures/"config.json").write_text('{"existing":"changed"}\n')
         after=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
         self.assertFalse(any(x.get("task_id")==second for x in after["tasks"]))
         self.assertNotEqual(self.get(second)["state"],"NEEDS_REVIEW")
