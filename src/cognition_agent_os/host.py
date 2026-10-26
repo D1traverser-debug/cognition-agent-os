@@ -213,6 +213,14 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                     import json
                     root_spec=json.loads(original["source_spec"])
                     if (isinstance(root_spec, dict)
+                        and root_spec.get("kind") == "native_goal"):
+                        from .native_decision import inspect_native_goal
+                        result=inspect_native_goal(
+                            path,workspace,fixtures,root_id)
+                        item["native_goal_result"]=result
+                        if result.get("status") == "NATIVE_NEXT_DECISION_ADMISSIBLE":
+                            item["next_control_action"]="NATIVE_PLAN_NEXT_WITH_CURRENT_EVIDENCE"
+                    if (isinstance(root_spec, dict)
                         and root_spec.get("kind") == "open_goal"):
                         from .owner_postcondition import inspect_owner_local_outcome
                         owner_result=inspect_owner_local_outcome(
