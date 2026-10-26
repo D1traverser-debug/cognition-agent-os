@@ -187,7 +187,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "the original owner objective. The presence of tools is not evidence "
         "of goal relevance. When all methods are irrelevant, evidence is "
         "insufficient, or a comparison cannot justify the next action, "
-        "return exactly {\\\"abstain\\\":true}; do not manufacture a decision. "
+        "return only the abstain JSON object; do not manufacture a decision. "
         "If ONLY ONE method is currently eligible and is relevant, "
         "selected_intent must use it and alternative_intent must be null; "
         "explain why a competing method is unavailable. If TWO OR MORE are "
