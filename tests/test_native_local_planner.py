@@ -148,6 +148,36 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(files_before,
                          {p.name:p.read_bytes() for p in self.fixtures.iterdir()})
 
+    def test_unknown_goal_model_may_abstain_despite_available_irrelevant_tools(self):
+        original = (
+            "Research a previously unknown media license, compare the "
+            "publisher's legal permissions and rights holders, and publish "
+            "nothing without a current independently reviewed license.")
+        root = register_native_goal(self.db, original)
+        def abstain(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            self.assertEqual(payload["format"], "json")
+            self.assertIn(original, payload["prompt"])
+            self.assertIn("abstain", payload["prompt"])
+            return {"done": True, "response": '{"abstain":true}'}
+        with patch("cognition_agent_os.local_model._request", side_effect=abstain):
+            first = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(first["status"], "NATIVE_LOCAL_MODEL_ABSTAINED", first)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 0)
+        with patch("cognition_agent_os.local_model._request") as model:
+            second = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(second["status"],
+                         "NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED", second)
+        model.assert_not_called()
+
     def test_corrupted_prior_result_blocks_next_model_step_before_new_inference(self):
         root = register_native_goal(self.db, self.goal)
         first = self.transport
