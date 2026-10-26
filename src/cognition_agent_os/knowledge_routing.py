@@ -150,7 +150,9 @@ def ensure_dependencies(db:sqlite3.Connection)->None:
     )""")
 
 
-def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->bool:
+def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path,
+                           *, workspace:Path|None=None,
+                           db_path:Path|None=None)->bool:
     # An open-language owner goal is a model-proposed capability, never a
     # source of new authority. Every file shown to that model stays pinned to
     # the source bytes present when the child was created. This applies to
@@ -171,7 +173,8 @@ def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->boo
             return False
         if isinstance(parent_spec,dict) and parent_spec.get("kind")=="native_goal":
             from .native_decision import native_child_admitted
-            if not native_child_admitted(db, fixtures, task_id):
+            if not native_child_admitted(db, fixtures, task_id,
+                                         workspace=workspace, db_path=db_path):
                 return False
         if isinstance(parent_spec,dict) and parent_spec.get("kind")=="open_goal":
             from .open_goal import validate_open_goal, _manifest
