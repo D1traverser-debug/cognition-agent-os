@@ -91,8 +91,12 @@ jobs:
     # Genuine official MCP client/server subprocess over disposable SQLite.
     # No deployment, owner files, paid model, or new authority.
     if: ${{ github.event.repository.private == false }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 9
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
