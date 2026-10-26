@@ -221,11 +221,15 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                         if result.get("status") == "NATIVE_NEXT_DECISION_ADMISSIBLE":
                             item["next_control_action"]="NATIVE_PLAN_NEXT_WITH_CURRENT_EVIDENCE"
                     if (isinstance(root_spec, dict)
-                        and root_spec.get("kind") == "open_goal"):
+                        and root_spec.get("kind") in ("native_goal", "open_goal")):
                         from .owner_postcondition import inspect_owner_local_outcome
                         owner_result=inspect_owner_local_outcome(
                             path, workspace, fixtures, root_id)
                         item["local_owner_result"]=owner_result
+                        if owner_result["local_owner_outcome_verified"]:
+                            item["next_control_action"]="LOCAL_OWNER_OUTCOME_VERIFIED"
+                    if (isinstance(root_spec, dict)
+                        and root_spec.get("kind") == "open_goal"):
                         # A compound plan is not an owner result. Report each
                         # original clause against its exact guarded child,
                         # using a fresh independent receipt/source audit.
@@ -266,8 +270,6 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                                     "owner_outcome_verified":False,
                                 }
                                 for ob in lineage["original_obligations"]]
-                        if owner_result["local_owner_outcome_verified"]:
-                            item["next_control_action"]="LOCAL_OWNER_OUTCOME_VERIFIED"
                 except (ValueError, TypeError, KeyError, OSError):
                     item["local_owner_result"]={
                         "status":"OWNER_POSTCONDITION_UNVERIFIED",
