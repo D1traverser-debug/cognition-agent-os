@@ -165,7 +165,8 @@ def _native_local_postcondition(db_path: Path, workspace: Path,
     # corrective decision. Preserve every prior replayed child/audit receipt;
     # a local mechanical PASS for an earlier, reversed input pairing remains
     # a historical subtask, NOT the original owner's final answer.
-    if not decisions or decisions[-1]["task_state"] != "NEEDS_REVIEW":
+    if (not decisions or decisions[-1]["task_state"]
+        not in ("NEEDS_REVIEW", "SANDBOX_VERIFIED")):
         return _unknown(root_id, "GOAL_LINEAGE_NOT_UNAMBIGUOUS")
     events = db.execute(
         "SELECT details FROM events WHERE task_id=? "
@@ -177,9 +178,62 @@ def _native_local_postcondition(db_path: Path, workspace: Path,
     intent = receipt.get("proposal", {}).get("selected_intent")
     plan = compile_intent(intent)
     child_id = receipt.get("child_task_id")
-    if (plan["objective"] != "compare_records"
-        or child_id != decisions[-1]["task_id"]
-        or decisions[-1]["selected_objective"] != "compare_records"):
+    if (child_id != decisions[-1]["task_id"]
+        or decisions[-1]["selected_objective"] != plan["objective"]):
+        return _unknown(root_id, "GOAL_LINEAGE_NOT_UNAMBIGUOUS")
+    if plan["objective"] == "ensure_structure":
+        # Reuse the original owner-scope grammar, artifact inspection and
+        # staged sandbox readback from the incumbent open_goal oracle.
+        # A model prediction, a mechanically valid draft embedded in JSON,
+        # or an unstaged NEEDS_REVIEW child never suffices.
+        if not _full_owner_scope_is_supported(spec["goal"], plan):
+            return _unknown(root_id, "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
+        child = db.execute(
+            "SELECT * FROM tasks WHERE task_id=?", (child_id,)).fetchone()
+        source_spec = plan["child_source_spec"]
+        if (child is None or child["state"] != "SANDBOX_VERIFIED"
+            or child["goal_rev"] != db.execute(
+                "SELECT goal_rev FROM tasks WHERE task_id=?",
+                (root_id,)).fetchone()[0]
+            or json.loads(child["source_spec"]) != source_spec):
+            return _unknown(root_id, "SANDBOX_EFFECT_NOT_VERIFIED")
+        staged = db.execute(
+            "SELECT details FROM events WHERE task_id=? "
+            "AND kind='SANDBOX_EFFECT_VERIFIED'", (child_id,)).fetchall()
+        if len(staged) != 1:
+            return _unknown(root_id, "SANDBOX_EFFECT_RECEIPT_MISSING")
+        record_bytes = _bytes(
+            workspace, "artifacts/" + child_id + ".json")
+        if hashlib.sha256(record_bytes).hexdigest() != child["artifact_hash"]:
+            return _unknown(root_id, "CANDIDATE_ARTIFACT_CHANGED")
+        record = json.loads(record_bytes)
+        if (record.get("task_id") != child_id
+            or record.get("goal_spec") != source_spec
+            or record.get("status") != "PROPOSAL_NOT_APPROVED"):
+            return _unknown(root_id, "CANDIDATE_RECEIPT_CONTRADICTION")
+        original = safe_fixture(fixtures, source_spec["input"])
+        if hashlib.sha256(original).hexdigest() != record.get("source_sha256"):
+            return _unknown(root_id, "OWNER_SOURCE_CHANGED")
+        candidate_bytes = _bytes(
+            workspace, "sandbox/" + child_id + ".candidate")
+        candidate_sha = hashlib.sha256(candidate_bytes).hexdigest()
+        event_receipt = json.loads(staged[0]["details"])
+        if (candidate_sha != record.get("candidate_sha256")
+            or candidate_sha != event_receipt.get("effect_sha256")
+            or event_receipt.get("scope") != "isolated_workspace_only"
+            or not _constraints(source_spec, original, candidate_bytes)):
+            return _unknown(root_id, "INDEPENDENT_SANDBOX_POSTCONDITION_FAILED")
+        return {
+            "root_task_id": root_id,
+            "status": "LOCAL_OWNER_RESULT_VERIFIED",
+            "outcome_scope": "ORIGINAL_SANDBOX_DRAFT_POSTCONDITION",
+            "local_owner_outcome_verified": True,
+            "business_outcome_verified": False,
+            "real_external_outcome_verified": False,
+            "evidence_task_id": child_id,
+            "evidence_sha256": candidate_sha,
+        }
+    if plan["objective"] != "compare_records":
         return _unknown(root_id, "NO_INDEPENDENT_OWNER_POSTCONDITION")
     if not _full_owner_scope_is_supported(spec["goal"], plan):
         return _unknown(root_id, "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
