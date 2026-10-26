@@ -55,6 +55,28 @@ class NativeLocalModelLoop(unittest.TestCase):
                 "resources": [{"role": "input", "path": "handoff.json"}],
                 "requirements": [{"field": "audited", "equals": "yes"}]}
 
+    @staticmethod
+    def basis_from_evidence(evidence):
+        refs = [{"path": p, "sha256": sha}
+                for p, sha in sorted(evidence["source_digest_manifest"].items())]
+        past = evidence["past_methods_and_independent_verdicts"]
+        return {
+            "source_refs": refs,
+            "previous_result_task_id": past[-1]["task_id"] if past else None,
+            "challenge": "An apparently valid source comparison may still miss the owner result.",
+            "falsifier": "Independent artifact readback or changed source facts must invalidate this selection.",
+            "uncertainty": "The selected method cannot prove the entire business outcome.",
+        }
+
+    def basis_for_root(self, root):
+        from cognition_agent_os.native_decision import _sources
+        source = _sources(self.fixtures)
+        state = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        return self.basis_from_evidence({
+            "source_digest_manifest": source,
+            "past_methods_and_independent_verdicts": state["decisions"],
+        })
+
     def transport(self, method, path, payload, timeout):
         if method == "GET":
             return {"models": [{"name": "installed:test"}]}
@@ -73,6 +95,7 @@ class NativeLocalModelLoop(unittest.TestCase):
         selected = self.compare() if prior == 0 else self.ensure()
         alternative = self.ensure() if prior == 0 else self.compare()
         answer = {
+            "decision_basis": self.basis_from_evidence(history),
             "selected_intent": selected, "alternative_intent": alternative,
             "decision_reason": "Read the original evidence before preparing handoff.",
             "alternative_reason": "The other method cannot do the first evidence step.",
@@ -151,7 +174,9 @@ class NativeLocalModelLoop(unittest.TestCase):
         def unsupported(method,path,payload,timeout):
             if method == "GET":
                 return {"models": [{"name": "installed:test"}]}
+            evidence = json.loads(payload["prompt"].split("\n\n")[-1])
             return {"done": True, "response": json.dumps({
+                "decision_basis": self.basis_from_evidence(evidence),
                 "selected_intent": {
                     "kind": "goal_intent", "objective": "deploy_production",
                     "resources": []},
@@ -177,6 +202,7 @@ class NativeLocalModelLoop(unittest.TestCase):
                 return {"models": [{"name": "installed:test"}]}
             evidence = json.loads(payload["prompt"].split("\n\n")[-1])
             return {"done": True, "response": json.dumps({
+                "decision_basis": self.basis_from_evidence(evidence),
                 "selected_intent": {
                     "kind": "goal_intent", "objective": "delete_all_files",
                     "resources": []},
@@ -224,6 +250,7 @@ class NativeLocalModelLoop(unittest.TestCase):
                 [x["objective"] for x in evidence["registered_local_methods"]],
                 ["ensure_structure"])
             return {"done": True, "response": json.dumps({
+                "decision_basis": self.basis_from_evidence(evidence),
                 "selected_intent": self.ensure(), "alternative_intent": None,
                 "decision_reason": "Only the local JSON conformance tool fits this evidence.",
                 "alternative_reason": "Other registered tools lack compatible sources.",
@@ -252,6 +279,7 @@ class NativeLocalModelLoop(unittest.TestCase):
                 self.db,self.workspace,self.fixtures,root,{
                     "selected_intent":self.compare(),
                     "alternative_intent":None,
+                    "decision_basis":self.basis_for_root(root),
                     "decision_reason":"Use the local record comparison first.",
                     "alternative_reason":"No other comparison considered.",
                     "expected_evidence":"Independent local report readback.",
