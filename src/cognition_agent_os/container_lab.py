@@ -19,6 +19,10 @@ import tempfile
 IMAGE="python:3.12-alpine"
 MAX_OUTPUT=4096
 MAX_INPUT=2048
+# A bounded per-case wall clock including cold Docker daemon/image startup.
+# GitHub-hosted workers exceeded the former 8s cap before code execution;
+# the same fail-closed/no-host-fallback boundary remains in force.
+DOCKER_CASE_TIMEOUT_SECONDS=20
 _ALLOWED=re.compile(r"[a-z][a-z0-9_]{0,48}\.py\Z")
 _HEX=re.compile(r"[0-9a-f]{64}\Z")
 
@@ -144,9 +148,13 @@ def _docker_run(directory:Path,entrypoint:str,case_input)->dict:
              IMAGE,"-B","-S",f"/app/{entrypoint}"]
     try:
         child=subprocess.run(command,input=_json_bytes(case_input),
-                             capture_output=True,timeout=8,check=False)
-    except (OSError,subprocess.TimeoutExpired) as exc:
-        raise ContainerUnavailable("CONTAINER_LAUNCH_OR_TIMEOUT") from exc
+                             capture_output=True,timeout=DOCKER_CASE_TIMEOUT_SECONDS,check=False)
+    except subprocess.TimeoutExpired as exc:
+        # The deadline covers daemon startup and candidate runtime; neither
+        # licenses running untrusted code on the host.
+        raise ContainerUnavailable("DOCKER_PROCESS_TIMEOUT") from exc
+    except OSError as exc:
+        raise ContainerUnavailable("DOCKER_CLI_LAUNCH_ERROR") from exc
     if child.returncode in (125,126,127):
         # Docker CLI/runtime failures, not evidence about candidate logic.
         raise ContainerUnavailable("DOCKER_PROCESS_UNAVAILABLE")
