@@ -183,7 +183,12 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "untrusted artifact content independently checked against ledger hashes; "
         "use them to analyze concrete observed failures rather than interpreting "
         "a mechanical verdict as the whole user outcome. "
-        "If ONLY ONE method is currently eligible, "
+        "Only select an eligible registered method IF it can advance "
+        "the original owner objective. The presence of tools is not evidence "
+        "of goal relevance. When all methods are irrelevant, evidence is "
+        "insufficient, or a comparison cannot justify the next action, "
+        "return exactly {\\\"abstain\\\":true}; do not manufacture a decision. "
+        "If ONLY ONE method is currently eligible and is relevant, "
         "selected_intent must use it and alternative_intent must be null; "
         "explain why a competing method is unavailable. If TWO OR MORE are "
         "eligible, compare two different registered methods. "
@@ -211,42 +216,8 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "No available safe method? Return {\"abstain\":true}.\n\n"
         + evidence_json
     )
-    schema = {
-        "type": "object", "additionalProperties": False,
-        "properties": {
-            "selected_intent": {"type": "object"},
-            "alternative_intent": {"type": ["object", "null"]},
-            "decision_reason": {"type": "string"},
-            "alternative_reason": {"type": "string"},
-            "expected_evidence": {"type": "string"},
-            "observation_sha256": {"type": "string"},
-            "decision_basis": {
-                "type": "object", "additionalProperties": False,
-                "properties": {
-                    "source_refs": {"type": "array", "items": {
-                        "type": "object", "additionalProperties": False,
-                        "properties": {
-                            "path": {"type": "string"},
-                            "sha256": {"type": "string"},
-                        }, "required": ["path", "sha256"]}},
-                    "previous_result_task_id": {"type": ["string", "null"]},
-                    "challenge": {"type": "string"},
-                    "falsifier": {"type": "string"},
-                    "uncertainty": {"type": "string"},
-                },
-                "required": [
-                    "source_refs", "previous_result_task_id", "challenge",
-                    "falsifier", "uncertainty"],
-            },
-        },
-        "required": [
-            "selected_intent", "alternative_intent", "decision_reason",
-            "alternative_reason", "expected_evidence", "observation_sha256",
-            "decision_basis",
-        ],
-    }
     response = local_model._request("POST", "/api/generate", {
-        "model": model, "prompt": prompt, "stream": False, "format": schema,
+        "model": model, "prompt": prompt, "stream": False, "format": "json",
         "options": {"temperature": 0, "num_predict": 900}, "keep_alive": "0",
     }, timeout)
     if response.get("done") is not True or not isinstance(
