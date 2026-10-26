@@ -142,6 +142,23 @@ async def run():
                         )["currently_eligible"] is False
             assert "native_local_tick" not in {t.name for t in listed}
 
+        # A realistic owner objective can exceed an arbitrary short chat
+        # headline. The contract must round-trip ALL original clauses,
+        # including the final non-mutation and acceptance restrictions.
+        long_goal = (
+            "Audit a multidisciplinary owner objective with all requirements: "
+            + ("preserve independent evidence and challenge assumptions; " * 49)
+            + "FINAL RULE: no original source mutation and no completion "
+              "claim without independent full-owner outcome verification.")
+        assert 2048 < len(long_goal) < 8192
+        async with Client(server(allow_tick=False)) as client:
+            persisted = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": long_goal}))
+            long_root = persisted["root_task_id"]
+            recovered_long = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": long_root}))
+            assert recovered_long["original_goal"] == long_goal
+
         # Source content is NOT remotely exposed by default. A separate
         # operator-opted-in process uses the already bounded and anchored
         # source reader. The client can challenge plans using real source
@@ -327,23 +344,6 @@ async def run():
                 "native_goal_create",
                 {"owner_goal": "This cannot regrant revoked authority."})
             assert new_attempt.is_error, new_attempt
-
-        # A realistic owner objective can exceed an arbitrary short chat
-        # headline. The contract must round-trip ALL original clauses,
-        # including the final non-mutation and acceptance restrictions.
-        long_goal = (
-            "Audit a multidisciplinary owner objective with all requirements: "
-            + ("preserve independent evidence and challenge assumptions; " * 49)
-            + "FINAL RULE: no original source mutation and no completion "
-              "claim without independent full-owner outcome verification.")
-        assert 2048 < len(long_goal) < 8192
-        async with Client(server(allow_tick=False)) as client:
-            persisted = unwrap(await client.call_tool(
-                "native_goal_create", {"owner_goal": long_goal}))
-            long_root = persisted["root_task_id"]
-            recovered_long = unwrap(await client.call_tool(
-                "native_goal_inspect", {"root_task_id": long_root}))
-            assert recovered_long["original_goal"] == long_goal
 
         # Forty-plus unrelated legacy tasks can be generated between
         # sessions. A page cut BEFORE native type filtering would silently
