@@ -212,6 +212,16 @@ class OpenGoalResearchVertical(unittest.TestCase):
             db.commit()
         self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
                          "UNVERIFIABLE")
+        # An authenticated source cannot disappear from the receipt and turn
+        # remaining (possibly matching) hashes into complete evidence.
+        with closing(connect(self.db)) as db:
+            receipt=json.loads(row["details"])
+            receipt["source_sha256"]={}
+            db.execute("UPDATE events SET details=? WHERE event_id=?",
+                       (json.dumps(receipt,sort_keys=True),row["event_id"]))
+            db.commit()
+        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
+                         "SOURCE_CHANGED_SINCE_PROPOSAL")
 
     def test_compound_stale_evidence_cannot_pass_original_parent_audit(self):
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
