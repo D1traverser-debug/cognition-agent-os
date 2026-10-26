@@ -284,7 +284,8 @@ def _all_open_goal_roots(db: sqlite3.Connection) -> list[sqlite3.Row] | None:
             source = json.loads(row["source_spec"])
         except (ValueError, TypeError):
             continue
-        if isinstance(source, dict) and source.get("kind") == "open_goal":
+        if (isinstance(source, dict)
+            and source.get("kind") in ("open_goal", "native_goal")):
             roots.append(row)
             if len(roots) > 256:
                 return None
@@ -425,7 +426,47 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
     root = active[0]
     root_id = root["task_id"]
     try:
-        original = validate_open_goal(json.loads(root["source_spec"]))
+        raw_spec = json.loads(root["source_spec"])
+    except (ValueError, TypeError):
+        return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
+    if isinstance(raw_spec, dict) and raw_spec.get("kind") == "native_goal":
+        from .native_decision import _contract, inspect_native_goal
+        try:
+            expected = _contract(raw_spec["goal"],
+                                 allow_public_discovery=raw_spec["allow_public_discovery"])
+            if expected != raw_spec:
+                raise ValueError("INVALID_NATIVE_GOAL_CONTRACT")
+        except (ValueError, TypeError, KeyError):
+            return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
+        base = {
+            "root_task_id": root_id, "original_goal": raw_spec["goal"],
+            "original_contract_sha256": hashlib.sha256(
+                root["source_spec"].encode("utf-8")).hexdigest(),
+            "goal_rev": root["goal_rev"], "grant_rev": root["grant_rev"],
+            "root_state": root["state"], "source_of_truth": "ORIGINAL_SQLITE_TASK",
+            "local_owner_outcome_verified": False,
+            "business_outcome_verified": False,
+            "real_external_outcome_verified": False,
+        }
+        if (not authority["write_allowed"] or
+            root["grant_rev"] != authority["grant_rev"]):
+            return {"status": "AUTHORITY_REVOKED", **base,
+                    "authority_current": False}
+        if workspace is None or fixtures is None:
+            return {"status": "SOURCE_AND_OUTCOME_READBACK_REQUIRED", **base}
+        native = inspect_native_goal(db_path, workspace, fixtures, root_id)
+        state = native["status"]
+        status = {
+            "NATIVE_NEXT_DECISION_ADMISSIBLE": "READY_FOR_NATIVE_DECISION",
+            "NATIVE_AWAITING_WORKER": "AWAITING_WORKER",
+            "NATIVE_DECISION_BUDGET_EXHAUSTED": "NEEDS_OWNER_OUTCOME_REVIEW",
+        }.get(state, "REPLAN_OR_RECONCILE_ORIGINAL_GOAL")
+        return {"status": status, **base,
+                "authority_current": True, "native_decision_state": native,
+                "native_next_action_authorized": (
+                    state == "NATIVE_NEXT_DECISION_ADMISSIBLE")}
+    try:
+        original = validate_open_goal(raw_spec)
     except (ValueError, TypeError, KeyError):
         return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
 
