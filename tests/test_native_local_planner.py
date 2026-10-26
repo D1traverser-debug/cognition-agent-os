@@ -123,6 +123,34 @@ class NativeLocalModelLoop(unittest.TestCase):
             } for item in history["proposed_method_ideas_to_challenge"]]
         return {"done": True, "response": json.dumps(answer)}
 
+    def test_autonomous_host_does_not_lose_new_owner_beneath_legacy_limit(self):
+        """Long-lived shared ledger must schedule actual native roots first.
+
+        A page of unrelated earlier top-level tasks must not consume the
+        planner's finite scan window and silently starve a newer owner goal.
+        The mocked call checks selection only, not model intelligence.
+        """
+        from cognition_agent_os.ledger import create_task
+        from cognition_agent_os.native_local_planner import advance_native_local_goals
+        with closing(connect(self.db)) as db:
+            for ordinal in range(132):
+                create_task(db, {"kind": "fixture", "ordinal": ordinal},
+                            commit=False)
+            db.commit()
+        native = register_native_goal(self.db, self.goal)
+        with patch("cognition_agent_os.native_local_planner.advance_native_local_once",
+                   return_value={"status": "NATIVE_TEST_SELECTED",
+                                 "root_task_id": native}) as planner:
+            chosen = advance_native_local_goals(
+                self.db, self.workspace, self.fixtures,
+                model="installed:test", limit=1)
+        self.assertEqual(chosen, [{
+            "status": "NATIVE_TEST_SELECTED",
+            "root_task_id": native}])
+        planner.assert_called_once_with(
+            self.db, self.workspace, self.fixtures, native,
+            model="installed:test")
+
     def test_host_autonomous_two_method_loop_and_cold_state(self):
         root = register_native_goal(self.db, self.goal)
         files_before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
