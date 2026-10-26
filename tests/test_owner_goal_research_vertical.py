@@ -187,10 +187,15 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertEqual(goal["next_control_action"],
                          "REPLAN_AFTER_FAILED_INDEPENDENT_CHECK")
         self.assertGreaterEqual(goal["needs_replan"],1)
+        self.assertEqual(len(goal["original_obligation_progress"]),2)
+        self.assertTrue(all(
+            x["mechanically_verified"] is False and
+            x["parent_source_verified"] is False and
+            x["owner_outcome_verified"] is False
+            for x in goal["original_obligation_progress"]))
         self.assertTrue(any(
             x["task_state"]=="NEEDS_REPLAN"
             and x["error_code"]=="PREDECESSOR_EVIDENCE_UNVERIFIABLE"
-            and x["owner_outcome_verified"] is False
             for x in goal["original_obligation_progress"]))
 
     def test_parallel_intents_transfer_to_irrigation_domain_without_code_changes(self):
