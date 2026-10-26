@@ -24,13 +24,13 @@ from .native_decision import (
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                      allow_host_tick: bool = False):
     """Expose only the existing, audited native-goal contract as MCP tools."""
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server import MCPServer
 
     _admit_existing_ledger(db_path)
     if (not workspace.is_dir() or workspace.is_symlink()
         or not fixtures.is_dir() or fixtures.is_symlink()):
         raise ValueError("LOCAL_MCP_PATHS_MUST_ALREADY_EXIST")
-    mcp = FastMCP("cognition-agent-os-local")
+    mcp = MCPServer("cognition-agent-os-local")
 
     @mcp.tool()
     def native_goal_create(owner_goal: str,
