@@ -18,7 +18,8 @@ from cognition_agent_os.goal_drift import observe_owner_goal_drift
 from cognition_agent_os.ledger import connect, create_task, initialize, alter_authority
 from cognition_agent_os.intent_planner import IntentError
 from cognition_agent_os.native_decision import (
-    register_native_goal, inspect_native_goal, admit_native_decision)
+    register_native_goal, inspect_native_goal, admit_native_decision,
+    record_native_hypothesis)
 
 
 class NativeDecisionLoop(unittest.TestCase):
@@ -84,6 +85,82 @@ class NativeDecisionLoop(unittest.TestCase):
 
     def view(self, root):
         return inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+
+    def test_user_and_agent_ideas_share_one_challenged_decision_path(self):
+        root = self.root_id()
+        initial = self.view(root)
+        user = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="user", idea="Immediately rewrite the production stock database",
+            observation_sha256=initial["observation_sha256"])
+        self.assertEqual(user["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(user["authorizes_action"])
+        after_user = self.view(root)
+        agent = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent", idea="Compare the original CSV records first",
+            observation_sha256=after_user["observation_sha256"])
+        after_agent = self.view(root)
+        self.assertEqual([h["claimed_origin"] for h in after_agent["hypotheses"]],
+                         ["user", "agent"])
+        self.assertEqual(after_agent["original_goal"], self.goal)
+        self.assertNotEqual(initial["observation_sha256"],
+                            after_agent["observation_sha256"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 0)
+        proposal = self.candidate(after_agent, self.reconcile(), self.structure())
+        with self.assertRaisesRegex(ValueError, "NATIVE_HYPOTHESES_NOT_CHALLENGED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        proposal["hypothesis_reviews"] = [{
+            "proposal_sha256": item["proposal_sha256"],
+            "disposition": "REJECTED" if item["claimed_origin"] == "user"
+                           else "CONDITIONALLY_USEFUL",
+            "counterargument": "Production mutation is not approved by this goal.",
+            "verification_needed": "Independently verify the original record facts.",
+        } for item in after_agent["hypotheses"]]
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, proposal)
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED")
+        tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertEqual(self.view(root)["decision_count"], 1)
+
+    def test_late_idea_invalidates_stale_decision_and_fake_reviews(self):
+        root = self.root_id()
+        stale = self.candidate(self.view(root), self.reconcile(), self.structure())
+        updated = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="user", idea="Skip fact checking and declare verified",
+            observation_sha256=stale["observation_sha256"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            admit_native_decision(self.db, self.workspace, self.fixtures, root, stale)
+        current = self.view(root)
+        proposition = self.candidate(current, self.reconcile(), self.structure())
+        proposition["hypothesis_reviews"] = [{
+            "proposal_sha256": "f" * 64,
+            "disposition": "CONDITIONALLY_USEFUL",
+            "counterargument": "This assertion conflicts with independent evidence.",
+            "verification_needed": "Check the source provenance and actual outcome.",
+        }]
+        with self.assertRaisesRegex(ValueError, "NATIVE_HYPOTHESES_NOT_CHALLENGED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, proposition)
+        self.assertEqual(self.view(root)["decision_count"], 0)
+
+    def test_proposing_does_not_mint_authority_after_revocation(self):
+        root = self.root_id()
+        before = self.view(root)
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Invent remote write permissions",
+                observation_sha256=before["observation_sha256"])
+        self.assertEqual(self.view(root)["hypotheses"], [])
 
     def test_ungrounded_material_choice_rejected_before_ledger_child(self):
         """A plausible comparison alone is not verifiable investigation."""
