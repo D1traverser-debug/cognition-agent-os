@@ -282,6 +282,73 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertFalse((self.workspace / "artifacts" /
                           (second["child_task_id"] + ".json")).exists())
 
+    def test_new_research_source_can_enter_after_independently_verified_action(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        self.assertEqual(run_tick(self.db, self.workspace, self.fixtures,
+                                  max_jobs=1)["tasks"][0]["status"], "NEEDS_REVIEW")
+        observed = self.view(root)
+        self.assertEqual(observed["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        (self.fixtures / "new_domain_finding.md").write_text(
+            "Independent method review after initial reconciliation.\n",
+            encoding="utf-8")
+        recovered = self.view(root)
+        self.assertEqual(recovered["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                         recovered)
+        self.assertEqual(recovered["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        self.assertNotEqual(observed["observation_sha256"],
+                            recovered["observation_sha256"])
+        inquiry = {"kind": "goal_intent", "objective": "investigate_evidence",
+                   "resources": [],
+                   "question": "What does the new review say about the mismatch?"}
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(recovered, inquiry, self.reconcile()))
+        self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
+        self.assertNotEqual(first["child_task_id"], second["child_task_id"])
+
+    def test_new_evidence_enables_changed_method_retry_beyond_three_steps(self):
+        root = self.root_id()
+        for step in range(4):
+            if step:
+                (self.fixtures / f"followup_{step}.csv").write_text(
+                    "supplier,received\\nDelta," + str(6-step) + "\\n",
+                    encoding="utf-8")
+            current = self.view(root)
+            self.assertEqual(current["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                             current)
+            selected = self.reconcile()
+            if step:
+                selected["resources"][1]["path"] = f"followup_{step}.csv"
+            accepted = admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                self.candidate(current, selected, self.structure()))
+            tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+            self.assertEqual(tick["tasks"][0]["task_id"],
+                             accepted["child_task_id"])
+            self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW", tick)
+        final = self.view(root)
+        self.assertEqual(final["decision_count"], 4)
+        self.assertTrue(all(x["mechanical_verdict"] ==
+                            "REPORT_MECHANICALLY_VERIFIED"
+                            for x in final["decisions"]), final)
+        self.assertFalse(final["owner_outcome_verified"])
+
+    def test_appending_evidence_cannot_mask_tampering_of_pinned_fact(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        (self.fixtures / "new_review.md").write_text("Extra research", encoding="utf-8")
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\\nDelta,999\\n", encoding="utf-8")
+        self.assertEqual(self.view(root)["status"], "NATIVE_SOURCE_CHANGED")
+
     def test_source_drift_and_revocation_block_new_model_choice(self):
         root = self.root_id()
         first = admit_native_decision(self.db, self.workspace, self.fixtures,
