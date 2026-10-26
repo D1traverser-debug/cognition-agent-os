@@ -113,19 +113,25 @@ def _independent_proof(db_path:Path, workspace:Path, fixtures:Path,
 
 
 def dependency_admitted(db:sqlite3.Connection,db_path:Path,
-                        task_id:str,workspace:Path,fixtures:Path) -> bool:
-    """Worker admission rechecks independent proof, not an old release flag."""
+                        task:dict,workspace:Path,fixtures:Path) -> tuple[bool,str|None]:
+    """Recheck real grant + independent proof before local successor dispatch."""
     if not _table_exists(db):
-        return True
+        return True,None
     row=db.execute(
         "SELECT predecessor_task,evidence_kind,released_at "
-        "FROM task_dependencies WHERE task_id=?",(task_id,)).fetchone()
+        "FROM task_dependencies WHERE task_id=?",(task["task_id"],)).fetchone()
     if row is None:
-        return True
+        return True,None
+    from .ledger import current_guard
+    allowed, reason=current_guard(db,task,needs_write=True)
+    if not allowed:
+        return False,reason
     if row["released_at"] is None:
-        return False
-    return _independent_proof(
-        db_path,workspace,fixtures,row["predecessor_task"],row["evidence_kind"])
+        return False,"PREDECESSOR_NOT_RELEASED"
+    if not _independent_proof(
+            db_path,workspace,fixtures,row["predecessor_task"],row["evidence_kind"]):
+        return False,"PREDECESSOR_EVIDENCE_CHANGED"
+    return True,None
 
 
 def advance_pending_local_dependencies(db_path:Path,workspace:Path,
