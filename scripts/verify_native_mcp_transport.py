@@ -181,10 +181,23 @@ async def run():
                 {"owner_goal": "This cannot regrant revoked authority."})
             assert new_attempt.is_error, new_attempt
 
-        # A read-only second restart demonstrates real state continuity.
+        # A brand-new client knows NO root id. It rediscovers the original
+        # user goals via real SQLite before selecting the one whose exact
+        # identity/goal is independently available. Ambiguity is not silently
+        # collapsed to the newest row.
         async with Client(server(allow_tick=False)) as client:
+            inventory = unwrap(await client.call_tool("native_goal_list", {}))
+            assert inventory["status"] == "NATIVE_GOAL_INVENTORY", inventory
+            assert inventory["ambiguous"] is True, inventory
+            assert inventory["selected_root_task_id"] is None, inventory
+            ids = {entry["root_task_id"] for entry in inventory["goals"]}
+            assert ids == {root, second_id}, inventory
+            discovered = next(
+                item for item in inventory["goals"]
+                if item["original_goal"] == goal)
             recovered = unwrap(await client.call_tool(
-                "native_goal_inspect", {"root_task_id": root}))
+                "native_goal_inspect",
+                {"root_task_id": discovered["root_task_id"]}))
             assert recovered["original_goal"] == goal
             assert recovered["decision_count"] == 1
             assert recovered["decisions"][0]["mechanical_verdict"] == (
@@ -194,6 +207,7 @@ async def run():
             "transport": "OFFICIAL_MCP_STDIO_SUBPROCESS",
             "independent_mechanical_verdict": "REPORT_MECHANICALLY_VERIFIED",
             "cold_process_recovery": True,
+            "cold_goal_discovery_without_id": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
             "shared_ledger_worker_refused": True,
