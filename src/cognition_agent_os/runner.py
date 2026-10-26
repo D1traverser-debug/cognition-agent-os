@@ -47,12 +47,12 @@ def verify_artifact(workspace: Path, task: dict) -> bool:
 
 def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str | None = None,
              force_lease_expire: bool = False, planner_mode: str = "deterministic",
-             local_model: str | None = None) -> dict:
+             local_model: str | None = None, only_task_id: str | None = None) -> dict:
     # Direct invocation must obey the same explicit authority admission as host/CLI.
     require_initialized_ledger(db_path)
     db = connect(db_path)
     try:
-        task = claim_one(db)
+        task = claim_one(db, only_task_id=only_task_id)
         if not task:
             return {"status": "IDLE"}
         if fail_at == "after_claim":
