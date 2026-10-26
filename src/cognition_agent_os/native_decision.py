@@ -387,7 +387,8 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             return {"status": "NATIVE_METHOD_ENQUEUED",
                     "root_task_id": root_id, "child_task_id": child,
                     "selected_objective": parsed["selected"]["objective"],
-                    "alternative_objective": parsed["alternative"]["objective"],
+                    "alternative_objective": (parsed["alternative"]["objective"]
+                                              if parsed["alternative"] is not None else None),
                     "business_outcome_verified": False,
                     "owner_outcome_verified": False}
         except BaseException:
