@@ -75,7 +75,7 @@ def _verified_prior_results(db_path: Path, workspace: Path,
             if (not file.is_file() or file.is_symlink()
                 or file.stat().st_size > 150_000):
                 raise ValueError("VERIFIED_RESULT_FILE_UNAVAILABLE")
-            raw = file.read_bytes()
+            raw = safe_fixture(workspace, "artifacts/" + task_id + ".json")
             if hashlib.sha256(raw).hexdigest() != row["artifact_hash"]:
                 raise ValueError("VERIFIED_RESULT_HASH_CHANGED")
             artifact = json.loads(raw)
