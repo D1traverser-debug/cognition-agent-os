@@ -16,6 +16,7 @@ import sqlite3
 from . import local_model
 from .native_decision import (
     inspect_native_goal, capability_catalog, admit_native_decision, _sources)
+from .ledger import connect, event
 from .source import safe_fixture, SourceUnavailable
 
 _MAX_VIEW_FILES = 24
@@ -142,24 +143,102 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     return candidate
 
 
+def _previous_no_progress(db_path: Path, root_id: str,
+                          fingerprint: str, model: str) -> bool:
+    """One model failure per exact same observation, no second controller."""
+    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        rows = db.execute(
+            "SELECT details FROM events WHERE task_id=? "
+            "AND kind='NATIVE_LOCAL_NO_PROGRESS' ORDER BY event_id DESC LIMIT 64",
+            (root_id,)).fetchall()
+    for item in rows:
+        try:
+            entry = json.loads(item[0])
+            if (entry.get("observation_sha256") == fingerprint
+                and entry.get("model") == model):
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _record_no_progress(db_path: Path, workspace: Path, fixtures: Path,
+                        root_id: str, fingerprint: str, model: str,
+                        reason: str) -> None:
+    """Record refusal only if this is still the same grant/evidence snapshot.
+
+    A changed source or corrected user goal naturally permits another attempt.
+    """
+    # Use a read-only source/outcome replay first; never trust the model's hash.
+    current = inspect_native_goal(db_path, workspace, fixtures, root_id)
+    if (current["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE"
+        or current["observation_sha256"] != fingerprint):
+        return
+    with closing(connect(db_path)) as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            authority = db.execute(
+                "SELECT write_allowed,goal_rev,grant_rev FROM authority "
+                "WHERE singleton=1").fetchone()
+            root = db.execute(
+                "SELECT state,goal_rev,grant_rev FROM tasks WHERE task_id=?",
+                (root_id,)).fetchone()
+            if (authority is None or root is None
+                or authority["write_allowed"] != 1
+                or root["state"] != "DECOMPOSED"
+                or (authority["goal_rev"], authority["grant_rev"]) !=
+                   (root["goal_rev"], root["grant_rev"])):
+                db.rollback()
+                return
+            event(db, root_id, "NATIVE_LOCAL_NO_PROGRESS", {
+                "observation_sha256": fingerprint,
+                "model": model, "reason": reason[:120],
+                "owner_outcome_verified": False,
+            })
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+
+
 def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                               root_id: str, *, model: str) -> dict:
     """One bounded model decision followed by ONE existing-ledger admission."""
+    snapshot = inspect_native_goal(db_path, workspace, fixtures, root_id)
+    if snapshot["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+        return {"status": "NATIVE_LOCAL_PLAN_NOT_ADMISSIBLE",
+                "root_task_id": root_id, "reason": snapshot["status"],
+                "owner_outcome_verified": False}
+    fingerprint = snapshot["observation_sha256"]
+    if _previous_no_progress(db_path, root_id, fingerprint, model):
+        return {"status": "NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED",
+                "root_task_id": root_id,
+                "reason": "PREVIOUS_PROPOSAL_FAILED_WITH_SAME_EVIDENCE",
+                "owner_outcome_verified": False}
     try:
         proposed = propose_native_local(
             db_path, workspace, fixtures, root_id, model=model)
         if proposed.get("status") == "NATIVE_LOCAL_MODEL_ABSTAINED":
+            _record_no_progress(
+                db_path,workspace,fixtures,root_id,fingerprint,model,
+                "MODEL_ABSTAINED")
             return proposed
         result = admit_native_decision(
             db_path, workspace, fixtures, root_id, proposed)
         return {**result, "planner": "INSTALLED_LOCAL_MODEL_ONLY",
                 "model_proposal_verified_semantically": False}
     except local_model.LocalModelUnavailable as exc:
+        # A missing model may be installed later. Do not permanently suppress
+        # this observation or initiate a forbidden model download.
         return {"status": "NATIVE_LOCAL_MODEL_UNAVAILABLE",
                 "root_task_id": root_id, "reason": str(exc)[:120],
                 "owner_outcome_verified": False}
     except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
             SourceUnavailable, PermissionError) as exc:
+        _record_no_progress(
+            db_path,workspace,fixtures,root_id,fingerprint,model,
+            type(exc).__name__)
         return {"status": "NATIVE_LOCAL_PLAN_REFUSED",
                 "root_task_id": root_id, "reason": str(exc)[:120],
                 "owner_outcome_verified": False}
