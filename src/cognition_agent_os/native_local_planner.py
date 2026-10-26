@@ -579,10 +579,18 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
         raise ValueError("INVALID_NATIVE_PLAN_BATCH")
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # The shared SQLite ledger contains many nonnative parent
+        # workflows. Type-filter BEFORE the bounded page; otherwise an
+        # unrelated backlog can fill all 128 slots and silently starve every
+        # eligible native owner goal. Prefer latest eligible roots; never
+        # guess from task text or create a second scheduler.
         rows = db.execute(
             "SELECT task_id,source_spec FROM tasks "
             "WHERE parent_task IS NULL AND state='DECOMPOSED' "
-            "ORDER BY created_at,task_id LIMIT 128").fetchall()
+            "AND (CASE WHEN json_valid(source_spec) "
+            "THEN json_extract(source_spec,'$.kind') ELSE NULL END)="
+            "'native_goal' "
+            "ORDER BY created_at DESC,task_id DESC LIMIT 128").fetchall()
     results = []
     for root_id, raw in rows:
         try:
