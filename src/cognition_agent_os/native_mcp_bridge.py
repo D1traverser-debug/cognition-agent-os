@@ -13,7 +13,8 @@ import json
 from pathlib import Path
 import sqlite3
 
-from .host import _admit_existing_ledger, run_tick
+from .host import _admit_existing_ledger
+from .runner import run_once
 from .ledger import require_initialized_ledger
 from .native_decision import (
     admit_native_decision, capability_catalog, inspect_native_goal,
@@ -132,12 +133,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     if allow_host_tick:
         @mcp.tool()
         def native_local_tick(root_task_id: str) -> dict:
-            """OPT-IN isolated ledger only: execute one previously admitted child.
+            """OPT-IN: run EXACTLY the pending child of the requested owner root.
 
-            This is intentionally unavailable by default. This server must have
-            exactly one native root and no other tasks; otherwise advancing a
-            generic Host tick might run an unrelated user's pending operation.
-            The original Worker still checks grants, source pins and receipts.
+            An atomic task-id-filtered claim in the existing Worker prevents
+            an intervening unrelated task/owner from being selected. Does not
+            run generic Host scheduling, create a second authority, or grant
+            broader local/remote effects. Caller still needs explicit opt-in.
             """
             observed = inspect_native_goal(
                 db_path, workspace, fixtures, root_task_id)
@@ -145,19 +146,16 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 return {"status": "NATIVE_TICK_NOT_ADMISSIBLE",
                         "reason": observed["status"],
                         "owner_outcome_verified": False}
-            with closing(_read_only_ledger(db_path)) as db:
-                rows = db.execute(
-                    "SELECT task_id,parent_task FROM tasks").fetchall()
-                isolated = all(
-                    (row["task_id"] == root_task_id
-                     and row["parent_task"] is None)
-                    or row["parent_task"] == root_task_id
-                    for row in rows)
-            if not isolated:
-                return {"status": "NATIVE_TICK_SHARED_LEDGER_REFUSED",
-                        "owner_outcome_verified": False}
-            result = run_tick(db_path, workspace, fixtures, max_jobs=1)
-            return {"status": "NATIVE_TICK_OBSERVED", "host_result": result,
+            last = observed["decisions"][-1]
+            target_id = last["task_id"]
+            result = run_once(
+                db_path, workspace, fixtures, only_task_id=target_id)
+            if (result["status"] != "IDLE"
+                and result.get("task_id") != target_id):
+                raise RuntimeError("TARGETED_WORKER_RETURNED_DIFFERENT_TASK")
+            return {"status": "NATIVE_TICK_OBSERVED",
+                    "target_task_id": target_id,
+                    "worker_result": result,
                     "native_goal_readback": inspect_native_goal(
                         db_path, workspace, fixtures, root_task_id),
                     "owner_outcome_verified": False}
