@@ -5,6 +5,7 @@ skill selection, ChatGPT account settings, repository authorization, or effects.
 """
 from pathlib import Path
 import unittest
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md"
@@ -46,6 +47,17 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
                       "O. Direct child resume:", "P. Newly discovered project:"):
             self.assertIn(title, content)
         self.assertIn("Native first-call observability", content)
+        self.assertIn("Q. Interrupted work / mid-task user question / connection loss:", content)
+        self.assertIn("real ChatGPT conversation", content)
+        self.assertIn("owner must repeat", content.replace("Fail if user must repeat", "owner must repeat") if False else "Fail if user must repeat")
+
+    def test_private_plugin_version_and_no_false_runtime_claim(self):
+        root = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
+        manifest = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], "0.1.2")
+        self.assertIn("Does not itself connect a custom Host API", manifest["description"])
+        self.assertIn("not proof", SKILL.read_text(encoding="utf-8").lower())
+
 
 
 if __name__ == "__main__":
