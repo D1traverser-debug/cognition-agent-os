@@ -170,6 +170,41 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(inspect_native_goal(
             self.db,self.workspace,self.fixtures,root)["decision_count"],0)
 
+    def test_rejected_model_choice_is_not_called_again_until_evidence_changes(self):
+        root = register_native_goal(self.db, self.goal)
+        def invalid(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            evidence = json.loads(payload["prompt"].split("\n\n")[-1])
+            return {"done": True, "response": json.dumps({
+                "selected_intent": {
+                    "kind": "goal_intent", "objective": "delete_all_files",
+                    "resources": []},
+                "alternative_intent": self.compare(),
+                "decision_reason": "Unsafe model invented a new action.",
+                "alternative_reason": "Registered actions are not arbitrary code.",
+                "expected_evidence": "No effects are permitted for invented tools.",
+                "observation_sha256": evidence["observation_sha256"],
+            })}
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=invalid) as provider:
+            bad = advance_native_local_once(
+                self.db,self.workspace,self.fixtures,root,model="installed:test")
+            again = advance_native_local_once(
+                self.db,self.workspace,self.fixtures,root,model="installed:test")
+            self.assertEqual(bad["status"],"NATIVE_LOCAL_PLAN_REFUSED")
+            self.assertEqual(again["status"],
+                             "NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED")
+            self.assertEqual(provider.call_count, 2)  # tags + one response
+            (self.fixtures / "trace.md").write_text(
+                "Updated independent investigation evidence.\n",encoding="utf-8")
+            changed = advance_native_local_once(
+                self.db,self.workspace,self.fixtures,root,model="installed:test")
+            self.assertEqual(changed["status"],"NATIVE_LOCAL_PLAN_REFUSED")
+            self.assertEqual(provider.call_count, 4)
+        self.assertEqual(inspect_native_goal(
+            self.db,self.workspace,self.fixtures,root)["decision_count"],0)
+
     def test_native_auto_needs_explicit_model_selection(self):
         register_native_goal(self.db, self.goal)
         with self.assertRaisesRegex(ValueError, "explicit installed local model"):
