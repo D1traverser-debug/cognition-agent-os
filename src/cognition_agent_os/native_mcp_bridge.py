@@ -42,16 +42,16 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     mcp = MCPServer("cognition-agent-os-local")
 
     @mcp.tool()
-    def native_goal_create(owner_goal: str,
-                           allow_public_discovery: bool = False) -> dict:
+    def native_goal_create(owner_goal: str) -> dict:
         """Register exact original owner goal in existing granted SQLite ledger.
 
         State creation needs an already-current local grant; this does not grant
         external write rights, install a model, or claim the goal is finished.
         """
+        # MCP callers cannot upgrade a goal into external public disclosure.
+        # The native trusted owner interface can separately grant that scope.
         root = register_native_goal(
-            db_path, owner_goal,
-            allow_public_discovery=allow_public_discovery)
+            db_path, owner_goal, allow_public_discovery=False)
         return {"status": "NATIVE_GOAL_REGISTERED", "root_task_id": root,
                 "owner_outcome_verified": False}
 
