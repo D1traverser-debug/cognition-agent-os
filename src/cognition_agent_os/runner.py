@@ -83,10 +83,14 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         # A released predecessor is NOT self-approval. Before any successor
         # executor dispatch, independently reread its original source/result.
         from .dependency_gate import dependency_admitted
-        if not dependency_admitted(
-                db,db_path,task_id,workspace,fixture_root):
+        dependency_ok, dependency_reason = dependency_admitted(
+            db,db_path,task,workspace,fixture_root)
+        if not dependency_ok:
+            blocked=dependency_reason in (
+                "STALE_GOAL","WRITE_GRANT_REVOKED","UPSTREAM_TASK_INVALID")
             return finalize_observed(
-                db,task,"UNKNOWN",error_code="PREDECESSOR_EVIDENCE_CHANGED")
+                db,task,"BLOCKED" if blocked else "UNKNOWN",
+                error_code=dependency_reason)
         from .capability_dispatch import CapabilityContext, dispatch_capability
         # One active task/claim/grant/lineage gate; domain adapters are
         # strictly registered and cannot choose a new authorization source.
