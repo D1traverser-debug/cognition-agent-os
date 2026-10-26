@@ -283,7 +283,8 @@ def _goal_progress(path: Path, workspace: Path | None = None,
 def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: int = 16,
              planner_mode: str = "deterministic", local_model: str | None = None,
              auto_stage_goals: bool = False, auto_review_repos: bool = False,
-             auto_local_goal_control: bool = False) -> dict:
+             auto_local_goal_control: bool = False,
+             auto_native_cognition: bool = False) -> dict:
     """Drain a bounded set of due jobs. Reruns/reboots reuse the same local DB.
 
     Scheduling is external (Windows Task Scheduler, cron, systemd); missed ticks
@@ -297,6 +298,9 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
         raise ValueError("max_jobs must be between 1 and 64")
     if planner_mode not in ("deterministic", "ollama-local"):
         raise ValueError("Unsupported planner mode")
+    if auto_native_cognition and (
+        planner_mode != "ollama-local" or not local_model):
+        raise ValueError("Native cognition needs an explicit installed local model")
     _admit_existing_ledger(db_path)
     # Prior-success evidence is assessed before an opted-in sandbox write.
     # A partial/broken sweep blocks new effects, not ordinary read-only work.
@@ -354,13 +358,23 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             db_path,workspace,fixture_root,limit=min(max_jobs,4)))
     else:
         controlled=[]
+    # Model reasoning is an explicit, optional Host stage, not a daemon
+    # or independent authorization path. A newly admitted child is enqueued
+    # for the NEXT tick and checked again by the original Worker.
+    if auto_native_cognition:
+        from .native_local_planner import advance_native_local_goals
+        native_choices = advance_native_local_goals(
+            db_path, workspace, fixture_root, model=local_model,
+            limit=min(max_jobs,2))
+    else:
+        native_choices=[]
     # Observe objective-level evidence after the same Host has processed
     # approved public research; this does not authorize replanning or effects.
     from .goal_drift import observe_owner_goal_drift
     goal_drift = observe_owner_goal_drift(
         db_path, limit=min(max_jobs,8), workspace=workspace, fixtures=fixture_root)
     _record_tick(db_path, processed=len(results), finished_at=time.time())
-    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(x["status"] in ("DEPENDENCY_RELEASED_LOCAL_ONLY","DEPENDENCY_REPLAN_REQUIRED") for x in dependency_edges) or any(x["status"] == "DRIFT_SIGNAL_RECORDED" for x in goal_drift) or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(x["status"] == "NATIVE_METHOD_ENQUEUED" for x in native_choices) or any(x["status"] in ("DEPENDENCY_RELEASED_LOCAL_ONLY","DEPENDENCY_REPLAN_REQUIRED") for x in dependency_edges) or any(x["status"] == "DRIFT_SIGNAL_RECORDED" for x in goal_drift) or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
             "dependency_observations": dependency_edges,
             "watch_observations": watches,
             "sandbox_reviews": reviews,
@@ -369,6 +383,7 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             "local_evidence_retries": local_retries,
             "pending_research_actions": _pending_research_actions(db_path,workspace),
             "local_goal_control": controlled,
+            "native_cognition": native_choices,
             "goal_progress": _goal_progress(db_path,workspace,fixture_root),
             "owner_goal_drift": goal_drift,
             "conformance": conformance,
