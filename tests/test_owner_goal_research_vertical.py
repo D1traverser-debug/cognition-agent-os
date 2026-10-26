@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
-from cognition_agent_os.host import run_tick
+from cognition_agent_os.host import run_tick, _goal_progress
 from cognition_agent_os.ledger import connect,create_task,initialize
 from cognition_agent_os.investigation import audit_investigation
 from cognition_agent_os.goal_audit import audit_goal
@@ -225,9 +225,8 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
                          "UNVERIFIABLE")
         # A forged receipt cannot be promoted to owner-clause progress.
-        observed=run_tick(self.db,self.ws,self.fx,max_jobs=1)
-        self.assertNotIn("original_obligation_progress",
-                         observed["goal_progress"]["goals"][0])
+        observed=_goal_progress(self.db,self.ws,self.fx)
+        self.assertNotIn("original_obligation_progress",observed["goals"][0])
         # An authenticated source cannot disappear from the receipt and turn
         # remaining (possibly matching) hashes into complete evidence.
         with closing(connect(self.db)) as db:
