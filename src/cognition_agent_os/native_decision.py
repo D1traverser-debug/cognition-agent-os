@@ -645,8 +645,31 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                     and last_feedback["task_state"] == "UNKNOWN"
                     and last_feedback["error_code"] in (
                         "NO_SAFE_GOAL_PLAN", "JOIN_KEY_AMBIGUOUS"))
+                # Mechanical artifact validity is NOT an owner success.
+                # An independently recognizable complete owner postcondition
+                # may expose reversed named inputs even when both CSV reads
+                # and the generated discrepancy report were mechanically valid.
+                # Permit exactly a changed typed plan whose newly pinned
+                # inputs match the COMPLETE original owner wording. This is
+                # not a model-declared failure, source rewrite, new authority,
+                # or permission to repeat an already owner-correct method.
+                corrected_owner_binding = False
+                if (last_feedback
+                    and previous_receipt["child_task_id"] ==
+                        last_feedback["task_id"]
+                    and last_feedback["task_state"] == "NEEDS_REVIEW"
+                    and last_feedback["mechanical_verdict"] ==
+                        "REPORT_MECHANICALLY_VERIFIED"
+                    and parsed["selected"]["objective"] == "compare_records"):
+                    from .owner_postcondition import _full_owner_scope_is_supported
+                    corrected_owner_binding = (
+                        _full_owner_scope_is_supported(
+                            contract["goal"], parsed["selected"])
+                        and not _full_owner_scope_is_supported(
+                            contract["goal"], prior_plan))
                 if not (selected_plan_changed and (
-                        (added and (added & cited)) or failed_method_feedback)):
+                        (added and (added & cited)) or failed_method_feedback
+                        or corrected_owner_binding)):
                     raise ValueError("REPEATED_NATIVE_METHOD_WITHOUT_NEW_EVIDENCE")
             # Tool eligibility is not semantic goal relevance. A model must
             # challenge its selected method and cite live evidence, but must
