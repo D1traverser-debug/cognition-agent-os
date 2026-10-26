@@ -199,8 +199,19 @@ class NativeOwnerAcceptance(unittest.TestCase):
                 },
             }
 
-        bad = admit_native_decision(self.db, self.workspace, self.fixtures, root,
-                                    propose("actual.csv", "baseline.csv", None))
+        # Pre-preflight persistent ledgers may already contain a mechanically
+        # valid wrong-direction child. Construct that historical state by
+        # disabling ONLY the newly added admission preflight in this test;
+        # all subsequent Host/Worker/owner-oracle checks run unmodified.
+        # New entrypoint rejection is tested independently in
+        # test_native_explicit_owner_preflight.py.
+        from unittest.mock import patch
+        with patch(
+                "cognition_agent_os.owner_postcondition._explicit_owner_local_contract",
+                return_value=None):
+            bad = admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                propose("actual.csv", "baseline.csv", None))
         wrong = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
         self.assertEqual(wrong["tasks"][0]["status"], "NEEDS_REVIEW")
         state = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
@@ -211,7 +222,6 @@ class NativeOwnerAcceptance(unittest.TestCase):
         )["local_owner_outcome_verified"])
         # Mechanical success must not conceal owner failure from the NEXT
         # model decision. The oracle reason, not just child PASS, is input.
-        from unittest.mock import patch
         from cognition_agent_os.native_local_planner import propose_native_local
         observed_context = []
         def inspect_model_request(method, path, payload, timeout):
