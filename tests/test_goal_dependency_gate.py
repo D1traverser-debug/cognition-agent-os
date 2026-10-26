@@ -114,7 +114,7 @@ class OrderedEvidenceGateTests(unittest.TestCase):
             observed=advance_pending_local_dependencies(*args,**kwargs)
             self.assertTrue(any(x["status"]=="DEPENDENCY_RELEASED_LOCAL_ONLY"
                                 for x in observed))
-            (self.fixtures/"config.json").write_text('{"existing":"changed"}\\n')
+            (self.fixtures/"config.json").write_text('{"existing":"changed"}\n')
             return observed
         with patch("cognition_agent_os.dependency_gate.advance_pending_local_dependencies",
                    side_effect=invalidate_after_audit):
