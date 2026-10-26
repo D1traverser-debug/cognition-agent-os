@@ -55,7 +55,8 @@ async def run():
         with closing(connect(db)) as ledger:
             initialize(ledger)
 
-        def server(*, allow_tick, allow_source_read=False):
+        def server(*, allow_tick, allow_source_read=False,
+                   allow_model_plan=False):
             args = ["-m", "cognition_agent_os.native_mcp_bridge",
                     "--db", str(db), "--workspace", str(workspace),
                     "--fixtures", str(sources)]
@@ -63,6 +64,8 @@ async def run():
                 args.append("--allow-host-tick")
             if allow_source_read:
                 args.append("--allow-source-read")
+            if allow_model_plan:
+                args.append("--allow-local-model-plan")
             return StdioServerParameters(
                 command=sys.executable, args=args,
                 env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
@@ -76,6 +79,7 @@ async def run():
                 create_spec.input_schema["properties"]), create_spec
             assert "native_local_tick" not in tools, tools
             assert "native_source_read" not in tools, tools
+            assert "native_local_model_plan" not in tools, tools
             assert {"native_goal_create", "native_goal_inspect",
                     "native_decision_admit", "native_capabilities"} <= tools
             goal = ("Reconcile original supplier evidence, prepare isolated "
@@ -88,6 +92,20 @@ async def run():
                 "native_goal_inspect", {"root_task_id": root}))
             assert observed["original_goal"] == goal, observed
             assert observed["decision_count"] == 0, observed
+
+        # Genuine optional planning uses only an installed local Ollama
+        # provider. It is absent by default. An attempt to select a cloud
+        # model/URL is rejected without task admission or provider requests.
+        async with Client(server(allow_tick=False, allow_model_plan=True)) as client:
+            names = {tool.name for tool in (await client.list_tools()).tools}
+            assert "native_local_model_plan" in names
+            refusal = unwrap(await client.call_tool(
+                "native_local_model_plan", {
+                    "root_task_id": root, "model": "cloud://not-allowed"}))
+            assert refusal["status"] == "NATIVE_LOCAL_MODEL_UNAVAILABLE", refusal
+            untouched = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": root}))
+            assert untouched["decision_count"] == 0, untouched
 
         # Source content is NOT remotely exposed by default. A separate
         # operator-opted-in process uses the already bounded and anchored
@@ -306,6 +324,7 @@ async def run():
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
             "source_text_default_hidden_and_opt_in_read_verified": True,
+            "native_local_model_plan_opt_in_and_cloud_rejected": True,
             "external_disclosure_grant_not_model_controlled": True,
             "shared_ledger_exact_target_worker": True,
             "revoked_grant_not_reissued": True,
