@@ -278,6 +278,11 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     # A partial/broken sweep blocks new effects, not ordinary read-only work.
     preflight = (effect_preflight(db_path,workspace,fixture_root)
                  if auto_stage_goals else None)
+    # The same Host activates pre-registered local successors only after a
+    # fresh independent source/result readback. This is not a new scheduler.
+    from .dependency_gate import advance_pending_local_dependencies
+    dependency_edges=advance_pending_local_dependencies(
+        db_path,workspace,fixture_root,limit=min(max_jobs,8))
     # Capture source head before draining newly issued immutable evidence tasks.
     watches = poll_due_watches(db_path)
     results = []
@@ -331,7 +336,8 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
     goal_drift = observe_owner_goal_drift(
         db_path, limit=min(max_jobs,8), workspace=workspace, fixtures=fixture_root)
     _record_tick(db_path, processed=len(results), finished_at=time.time())
-    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(x["status"] == "DRIFT_SIGNAL_RECORDED" for x in goal_drift) or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+    return {"status": "PROCESSED" if results or reviews or repair_reviews or recoveries or local_retries or conformance["quarantined"] or controlled or any(x["status"]=="DEPENDENCY_RELEASED_LOCAL_ONLY" for x in dependency_edges) or any(x["status"] == "DRIFT_SIGNAL_RECORDED" for x in goal_drift) or any(w["status"] != "NOT_DUE" for w in watches) else "IDLE",
+            "dependency_observations": dependency_edges,
             "watch_observations": watches,
             "sandbox_reviews": reviews,
             "repair_lab_reviews": repair_reviews,
