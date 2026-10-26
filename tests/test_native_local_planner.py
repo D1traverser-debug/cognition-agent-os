@@ -148,6 +148,25 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(files_before,
                          {p.name:p.read_bytes() for p in self.fixtures.iterdir()})
 
+    def test_corrupted_prior_result_blocks_next_model_step_before_new_inference(self):
+        root = register_native_goal(self.db, self.goal)
+        first = self.transport
+        with patch("cognition_agent_os.local_model._request", side_effect=first):
+            planned = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(planned["status"], "NATIVE_METHOD_ENQUEUED")
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        artifact = self.workspace / "artifacts" / (planned["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" corrupt")
+        with patch("cognition_agent_os.local_model._request") as model:
+            attempted = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        model.assert_not_called()
+        self.assertEqual(attempted["status"], "NATIVE_LOCAL_PLAN_NOT_ADMISSIBLE")
+        self.assertFalse(attempted["owner_outcome_verified"])
+
     def test_source_change_during_reasoning_refuses_plan_without_child(self):
         root = register_native_goal(self.db, self.goal)
         def source_changed(method, path, payload, timeout):
