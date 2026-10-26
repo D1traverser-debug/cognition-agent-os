@@ -780,10 +780,9 @@ def _audit_independent_obligations(
     hashes = receipt["source_sha256"]
     if not isinstance(hashes, dict):
         return failure
-    for name, digest in hashes.items():
-        if (not isinstance(name, str) or not isinstance(digest, str)
-            or hashlib.sha256(safe_fixture(fixtures, name)).hexdigest() != digest):
-            return {**failure, "status": "SOURCE_CHANGED_SINCE_PROPOSAL"}
+    _, current = _manifest(fixtures, allow_empty=spec.get("allow_public_discovery") is True)
+    if current != hashes:
+        return {**failure, "status": "SOURCE_CHANGED_SINCE_PROPOSAL"}
     return {
         "status": "COMPOUND_METHODS_MECHANICALLY_GROUNDED",
         "child_task_ids": [x["child_task_id"] for x in obligations],
@@ -845,9 +844,12 @@ def audit_open_goal(db_path: Path, fixtures: Path, task_id: str) -> dict:
                 or json.loads(ids[0]["source_spec"]) !=
                    calculated["child_source_spec"]):
                 return fail
-            for name, digest in receipt["source_sha256"].items():
-                if hashlib.sha256(safe_fixture(fixtures, name)).hexdigest() != digest:
-                    return {**fail, "status": "SOURCE_CHANGED_SINCE_PROPOSAL"}
+            if not isinstance(receipt["source_sha256"], dict):
+                return fail
+            _, current = _manifest(
+                fixtures, allow_empty=spec.get("allow_public_discovery") is True)
+            if current != receipt["source_sha256"]:
+                return {**fail, "status": "SOURCE_CHANGED_SINCE_PROPOSAL"}
             return {"status": "METHOD_CANDIDATE_MECHANICALLY_GROUNDED",
                     "child_task_id": ids[0]["task_id"],
                     "capability": calculated["capability"],
