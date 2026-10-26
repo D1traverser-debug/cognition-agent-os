@@ -249,9 +249,20 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             if (result["status"] != "IDLE"
                 and result.get("task_id") != target_id):
                 raise RuntimeError("TARGETED_WORKER_RETURNED_DIFFERENT_TASK")
+            # A JSON candidate is not the owner's isolated draft until the
+            # EXISTING sandbox effect boundary has actually staged and
+            # independently checked it. Stage only this exact child; never
+            # drain a shared queue or write the original source.
+            sandbox_result = None
+            if (result["status"] == "NEEDS_REVIEW"
+                and last["selected_objective"] == "ensure_structure"):
+                from .sandbox_effect import stage_one
+                sandbox_result = stage_one(
+                    db_path, workspace, fixtures, target_id)
             return {"status": "NATIVE_TICK_OBSERVED",
                     "target_task_id": target_id,
                     "worker_result": result,
+                    "sandbox_result": sandbox_result,
                     "native_goal_readback": inspect_native_goal(
                         db_path, workspace, fixtures, root_task_id),
                     "independent_owner_local_result": inspect_owner_local_outcome(
