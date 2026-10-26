@@ -35,6 +35,70 @@ class NativeRealModelEvalContract(unittest.TestCase):
             self.assertNotIn("selected_intent", case)
             self.assertNotIn("decision_basis", case)
 
+    def test_no_action_on_negative_cases_never_counts_as_goal_completion(self):
+        bench = load_benchmark()
+        rows = []
+        for case in bench.CASES:
+            # Two negative cases are left untouched. An old agreement score
+            # reported this as 2/4 correct even when zero owner goals were
+            # delivered. Safety/non-action cannot buy completion credit.
+            row = {
+                "case": case["id"],
+                "withheld_expected_method": case["target"],
+                "withheld_local_owner_required":
+                    case["must_complete_local_owner"],
+                "baseline": {},
+                "native": {},
+            }
+            for name in ("baseline", "native"):
+                row[name] = {
+                    "whole_local_owner_verified": False,
+                    "selected_objectives": [],
+                    "source_preserved": True,
+                    "method_alignment": False,
+                    "progress": [],
+                    "model_calls": 0,
+                }
+            rows.append(row)
+        scores = bench.score_trial_results(rows)
+        for name in ("baseline", "native"):
+            score = scores[name]
+            self.assertEqual(score["owner_goals_completed"], 0)
+            self.assertEqual(score["owner_goals_required"], 2)
+            self.assertEqual(score["unsupported_or_unverified_positive"], 2)
+            self.assertEqual(score["wrong_owner_success_claims"], 0)
+            self.assertEqual(score["explicit_safe_refusals"], 0)
+            self.assertNotIn("exact_owner_oracle_agreement", score)
+            self.assertNotIn("success_rate", score)
+
+    def test_explicit_refusal_requires_model_evidence_not_idle(self):
+        bench = load_benchmark()
+        case = bench.CASES[-1]
+        row = {
+            "case": case["id"],
+            "withheld_expected_method": None,
+            "withheld_local_owner_required": False,
+            "baseline": {
+                "whole_local_owner_verified": False,
+                "selected_objectives": [],
+                "source_preserved": True,
+                "progress": [],
+                "model_calls": 0,
+            },
+            "native": {
+                "whole_local_owner_verified": False,
+                "selected_objectives": [],
+                "source_preserved": True,
+                "progress": [
+                    {"model_plan_status": "NATIVE_LOCAL_MODEL_ABSTAINED"}],
+                "model_calls": 1,
+            },
+        }
+        scores = bench.score_trial_results([row])
+        self.assertEqual(scores["native"]["explicit_safe_refusals"], 1)
+        self.assertEqual(scores["baseline"]["explicit_safe_refusals"], 0)
+        self.assertEqual(scores["native"]["owner_goals_completed"], 0)
+
     def test_incumbent_receives_same_fixtures_without_mutating_sources(self):
         benchmark = load_benchmark()
         with tempfile.TemporaryDirectory() as td:
