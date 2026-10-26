@@ -138,7 +138,7 @@ def _native_trial(case: dict, home: Path) -> dict:
             if before_state["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
                 break
             response = advance_native_local_once(
-                db, work, fixture, root, model=MODEL)
+                db, work, fixture, root, model=MODEL, timeout=120)
             step = {"model_plan_status": response.get("status"),
                     "model_plan_reason": response.get("reason")}
             if response["status"] == "NATIVE_METHOD_ENQUEUED":
