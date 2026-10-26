@@ -87,6 +87,23 @@ jobs:
           path: installed-cli-evidence.json
           if-no-files-found: warn
 
+  native_mcp_stdio_integration:
+    # Genuine official MCP client/server subprocess over disposable SQLite.
+    # No deployment, owner files, paid model, or new authority.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install optional official local MCP transport (CI only)
+        run: python -m pip install --disable-pip-version-check ".[mcp]"
+      - name: Verify real stdio -> Host -> independent readback -> cold restart
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_native_mcp_transport.py
+
   windows_offline_regression:
     # Public-repository hosted Windows runner; tests host compatibility,
     # NOT the user's computer or an actual unattended scheduled task.
