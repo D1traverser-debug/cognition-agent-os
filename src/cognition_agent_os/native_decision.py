@@ -58,7 +58,8 @@ def _valid_contract(spec: dict) -> bool:
 
 
 def _sources_compatible(pinned: dict, current: dict,
-                        selected_kind: str) -> bool:
+                        selected_kind: str, *,
+                        finished: bool = False) -> bool:
     """Append-only knowledge may grow; no pinned historical fact may change.
 
     Some methods consume the entire corpus of a format rather than named files.
@@ -67,7 +68,7 @@ def _sources_compatible(pinned: dict, current: dict,
     if (not isinstance(pinned, dict)
         or any(current.get(name) != digest for name, digest in pinned.items())):
         return False
-    if selected_kind == "investigate_goal" and any(
+    if selected_kind == "investigate_goal" and not finished and any(
             Path(name).suffix.lower() in (".md", ".txt")
             for name in current.keys() - pinned.keys()):
         return False
@@ -349,7 +350,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 raise ValueError("DECISION_CHILD_PROVENANCE_CHANGED")
             if not _sources_compatible(
                     receipt["source_sha256"], current_sources,
-                    selected["child_source_spec"]["kind"]):
+                    selected["child_source_spec"]["kind"],
+                    finished=child["state"] in ("NEEDS_REVIEW", "VERIFIED")):
                 return {**fail, "status": "NATIVE_SOURCE_CHANGED",
                         "original_goal": contract["goal"],
                         "reason": "SOURCE_PIN_DRIFT"}
@@ -373,7 +375,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 elif kind == "investigate_goal":
                     from .investigation import audit_investigation
                     result = audit_investigation(
-                        db_path, workspace, fixtures, child["task_id"])
+                        db_path, workspace, fixtures, child["task_id"],
+                        original_scope_names=frozenset(receipt["source_sha256"]))
                     verdict = result["status"]
                     accepted = verdict == "SOURCE_GROUNDED_UNREVIEWED"
                 elif kind == "public_tool_discovery":
@@ -559,19 +562,18 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
                 or entry["prior_child_task_id"] != previous
                 or entry["owner_outcome_verified"] is not False):
                 return False
-            if not _sources_compatible(
-                    entry["source_sha256"], pinned,
-                    json.loads(db.execute("SELECT source_spec FROM tasks WHERE task_id=?",
-                                          (entry["child_task_id"],)).fetchone()[0])["kind"]):
-                return False
-
             parsed = _proposal(entry["proposal"], contract)
             selected = parsed["selected"]
+            candidate = db.execute(
+                "SELECT source_spec,goal_rev,grant_rev,state "
+                "FROM tasks WHERE task_id=?", (entry["child_task_id"],)).fetchone()
+            if candidate is None or not _sources_compatible(
+                    entry["source_sha256"], pinned,
+                    selected["child_source_spec"]["kind"],
+                    finished=candidate["state"] in ("NEEDS_REVIEW", "VERIFIED")):
+                return False
             _ground_decision(
                 entry["proposal"], parsed, entry["source_sha256"], previous)
-            candidate = db.execute("SELECT source_spec,goal_rev,grant_rev "
-                                   "FROM tasks WHERE task_id=?",
-                                   (entry["child_task_id"],)).fetchone()
             if (candidate is None
                 or json.loads(candidate["source_spec"]) != selected["child_source_spec"]
                 or entry["selected_plan_sha256"] != selected["plan_sha256"]
