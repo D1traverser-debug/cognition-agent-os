@@ -129,6 +129,44 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
         self.assertFalse(self.children(parent))
 
+    def test_parallel_intents_transfer_to_irrigation_domain_without_code_changes(self):
+        """The existing bounded capability contracts must not depend on UART."""
+        (self.fx/"cause.md").write_text(
+            "The irrigation valve remained closed through two readings.\\n")
+        (self.fx/"trace.md").write_text(
+            "A moisture reading reached the dry-state threshold.\\n")
+        (self.fx/"irrigation.json").write_text('{"timeout":7}\\n')
+        parent=self.seed(
+            "Investigate the irrigation moisture anomaly using local engineering "
+            "evidence and ensure a sandbox draft of irrigation.json has "
+            "owner equal to ops.")
+        def provider(method,path,payload,timeout):
+            if method=="GET":
+                return {"models":[{"name":"installed:test"}]}
+            properties=payload["format"]["properties"]
+            if "sources" in properties:
+                answer={"sources":["cause.md","trace.md"]}
+            elif "findings" in properties:
+                answer={"findings":[
+                    {"source":"cause.md",
+                     "quote":"The irrigation valve remained closed through two readings.",
+                     "interpretation":"An unexpected closed valve is a candidate cause."},
+                    {"source":"trace.md",
+                     "quote":"A moisture reading reached the dry-state threshold.",
+                     "interpretation":"The available record shows a dry-state observation."}],
+                    "uncertainty":"Mocked local records do not prove equipment causality."}
+            else:
+                raise AssertionError("unexpected research schema")
+            return {"done":True,"response":json.dumps(answer)}
+        with patch("cognition_agent_os.local_model._request",side_effect=provider):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=3,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual([x["status"] for x in result["tasks"]],
+                         ["DECOMPOSED","NEEDS_REVIEW","NEEDS_REVIEW"],result)
+        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
+                         "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
+        self.assertFalse(result["goal_progress"]["goals"][0]["owner_outcome_verified"])
+
     def test_compound_cold_restart_resumes_two_existing_children(self):
         """Separate Host invocations reuse the same durable original goal."""
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
