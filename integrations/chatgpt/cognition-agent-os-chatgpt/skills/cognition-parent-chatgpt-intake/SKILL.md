@@ -60,3 +60,5 @@ The ONE active cognitive parent is `D1traverser-debug/cognition-agent-os`. It go
 ## Live proof (necessary, not replaced by package validity)
 
 Run unseen, real ChatGPT sessions with and without this installed plugin. Observe: first-turn recovery accuracy, number of lost goal clauses, origin/source attribution, user-correction fidelity, tool calls, competing-method consideration, actual permitted completion, independent readback, change after failure, context-limit restart, expired/revoked grants, deleted chat, multi-goal collisions, and owner-intervention burden. Recheck installed-skill inventory and actual invocation; use private tool traces and source readback. Call each unobserved requirement OPEN, even if unit tests pass.
+
+For skill-trigger and nonexpert-outcome evaluation only, load [real-session scope probes](references/scope-probes.md) on demand; do not load the evaluation catalog into ordinary user tasks.
