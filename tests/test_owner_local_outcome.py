@@ -193,3 +193,45 @@ class RealOwnerLocalOutcome(unittest.TestCase):
             alter_authority(db,revoke=True)
         self.assertFalse(inspect_owner_local_outcome(
             self.db,self.ws,self.fx,draft)["local_owner_outcome_verified"])
+
+
+    def test_workspace_parent_symlink_cannot_forge_owner_outcome(self):
+        """Historical digest-matching bytes outside staging are not a live effect."""
+        root = self.seed(
+            "Please ensure a sandbox draft of settings.json has owner equal "
+            "to ops, preserving the existing timeout.")
+        run_tick(self.db, self.ws, self.fx, max_jobs=2, auto_stage_goals=True)
+        initial = inspect_owner_local_outcome(self.db, self.ws, self.fx, root)
+        self.assertTrue(initial["local_owner_outcome_verified"], initial)
+
+        # Symlink permissions differ by Windows configuration. Detect support
+        # before touching the real staging directories.
+        probe = self.root / "symlink_probe"
+        try:
+            probe.symlink_to(self.ws, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("Directory symlink creation unavailable on this host")
+        else:
+            probe.unlink()
+
+        for name in ("sandbox", "artifacts"):
+            active = self.ws / name
+            outside = self.root / ("outside_" + name)
+            active.rename(outside)
+            try:
+                active.symlink_to(outside, target_is_directory=True)
+                verdict = inspect_owner_local_outcome(
+                    self.db, self.ws, self.fx, root)
+                self.assertFalse(
+                    verdict["local_owner_outcome_verified"],
+                    (name, verdict))
+            finally:
+                if active.is_symlink():
+                    active.unlink()
+                outside.rename(active)
+            # Negative-control reversal: the original on-disk evidence still
+            # passes after restoring the actual workspace directory.
+            recovered = inspect_owner_local_outcome(
+                self.db, self.ws, self.fx, root)
+            self.assertTrue(recovered["local_owner_outcome_verified"],
+                            (name, recovered))
