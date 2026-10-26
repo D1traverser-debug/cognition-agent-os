@@ -161,7 +161,6 @@ def _native_trial(case: dict, home: Path) -> dict:
     ]
     whole = bool(result["local_owner_outcome_verified"])
     eligible = (case["target"] in selected if case["target"] else not selected)
-    expected_owner = bool(case["must_complete_local_owner"])
     return {
         "path": "CURRENT_NATIVE_MODEL_HOST", "case": case["id"],
         "planner": MODEL, "structured_output": STRUCTURED,
@@ -169,7 +168,6 @@ def _native_trial(case: dict, home: Path) -> dict:
         "selected_objectives": selected,
         "independent_owner_result": result["status"],
         "whole_local_owner_verified": whole,
-        "independent_owner_result_matches_hidden_label": whole == expected_owner,
         "source_preserved": _preserved(fixture, before),
         "task_count": state.get("decision_count"),
         "model_calls": len(observed_calls),
@@ -215,7 +213,6 @@ def _baseline_trial(case: dict, home: Path) -> dict:
                 selected.append(objective)
     result = inspect_owner_local_outcome(db, work, fixture, root)
     whole = bool(result["local_owner_outcome_verified"])
-    expected_owner = bool(case["must_complete_local_owner"])
     return {
         "path": "INCUMBENT_DETERMINISTIC_OPEN_GOAL", "case": case["id"],
         "method_alignment": (
@@ -223,12 +220,70 @@ def _baseline_trial(case: dict, home: Path) -> dict:
         "selected_objectives": selected,
         "independent_owner_result": result["status"],
         "whole_local_owner_verified": whole,
-        "independent_owner_result_matches_hidden_label": whole == expected_owner,
         "source_preserved": _preserved(fixture, before),
         "worker_results": task_report, "error_class": fault,
         "elapsed_seconds": round(time.monotonic() - start, 2),
         "external_business_result_verified": False,
     }
+
+
+def score_trial_results(rows: list[dict]) -> dict:
+    """Score DELIVERED positive owner goals, not negative-label agreement.
+
+    A model that does nothing can avoid false owner claims, but earns ZERO
+    completion credit. A safe refusal is credited only if an actual model
+    returned an explicit abstention and no work was admitted. These are
+    deliberately separate measures; neither is whole-product acceptance.
+    """
+    scores = {}
+    for name in ("baseline", "native"):
+        positives = [
+            row for row in rows if row["withheld_local_owner_required"]]
+        negatives = [
+            row for row in rows if not row["withheld_local_owner_required"]]
+        def completed(row: dict) -> bool:
+            trial = row[name]
+            return (
+                trial.get("whole_local_owner_verified") is True
+                and trial.get("source_preserved") is True
+                and not trial.get("error_class"))
+        def safe_refusal(row: dict) -> bool:
+            trial = row[name]
+            return (
+                row["withheld_expected_method"] is None
+                and trial.get("whole_local_owner_verified") is False
+                and trial.get("selected_objectives") == []
+                and trial.get("source_preserved") is True
+                and not trial.get("error_class")
+                and trial.get("model_calls", 0) > 0
+                and any(
+                    item.get("model_plan_status") ==
+                        "NATIVE_LOCAL_MODEL_ABSTAINED"
+                    for item in trial.get("progress", [])))
+        finished = sum(completed(row) for row in positives)
+        scores[name] = {
+            "owner_goals_required": len(positives),
+            "owner_goals_completed": finished,
+            "unsupported_or_unverified_positive": len(positives) - finished,
+            "method_alignment_on_required_work": sum(
+                bool(row[name].get("method_alignment"))
+                for row in positives),
+            "negative_cases": len(negatives),
+            "wrong_owner_success_claims": sum(
+                row[name].get("whole_local_owner_verified") is True
+                for row in negatives),
+            "explicit_safe_refusals": sum(
+                safe_refusal(row) for row in negatives),
+            "no_owner_claim_on_negative_cases": sum(
+                row[name].get("whole_local_owner_verified") is False
+                for row in negatives),
+            "source_preserved": sum(
+                row[name].get("source_preserved") is True for row in rows),
+            "evaluation_errors": sum(
+                bool(row[name].get("error_class")) for row in rows),
+            "independent_business_result_verified": False,
+        }
+    return scores
 
 
 def main() -> None:
@@ -249,7 +304,6 @@ def main() -> None:
                         "error_text": str(exc)[:250],
                         "method_alignment": False,
                         "whole_local_owner_verified": False,
-                        "independent_owner_result_matches_hidden_label": False,
                         "source_preserved": False,
                         "external_business_result_verified": False,
                     }
@@ -267,20 +321,7 @@ def main() -> None:
             "business_outcome_verified": False,
         }, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    def tally(key, name):
-        return sum(bool(row[name].get(key)) for row in results)
-    scores = {name: {
-        "method_alignment": tally("method_alignment", name),
-        "exact_owner_oracle_agreement": tally(
-            "independent_owner_result_matches_hidden_label", name),
-        "owner_pass_on_supported_positive_cases": sum(
-            bool(row[name].get("whole_local_owner_verified"))
-            for row in results if row["withheld_local_owner_required"]),
-        "unexpected_owner_pass_on_other_goals": sum(
-            bool(row[name].get("whole_local_owner_verified"))
-            for row in results if not row["withheld_local_owner_required"]),
-        "source_preserved": tally("source_preserved", name),
-    } for name in ("baseline", "native")}
+    scores = score_trial_results(results)
     report = {
         "status": "REAL_NATIVE_COGNITION_A_B_OBSERVED",
         "model": MODEL, "structured_output": STRUCTURED,
