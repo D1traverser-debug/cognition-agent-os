@@ -115,6 +115,14 @@ class OpenGoalResearchVertical(unittest.TestCase):
                             and x["business_outcome_verified"] is False
                             for x in root["independent_checks"]))
         self.assertFalse(root["local_owner_result"]["local_owner_outcome_verified"])
+        obligations=root["original_obligation_progress"]
+        self.assertEqual(len(obligations),2)
+        self.assertEqual({x["child_task_id"] for x in obligations},
+                         {x["task_id"] for x in children})
+        self.assertTrue(all(x["task_state"]=="NEEDS_REVIEW"
+                            and x["mechanically_verified"]
+                            and x["owner_outcome_verified"] is False
+                            for x in obligations))
 
     def test_sequential_research_then_draft_is_not_parallelized(self):
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
@@ -180,6 +188,10 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertEqual(first["tasks"][0]["status"],"DECOMPOSED",first)
         ids={x["task_id"] for x in self.children(parent)}
         self.assertEqual(len(ids),2)
+        first_obligations=first["goal_progress"]["goals"][0]["original_obligation_progress"]
+        self.assertEqual(len(first_obligations),2)
+        self.assertEqual({x["task_state"] for x in first_obligations},{"PENDING"})
+        self.assertTrue(all(not x["mechanically_verified"] for x in first_obligations))
         with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
             second=run_tick(self.db,self.ws,self.fx,max_jobs=2,
                             planner_mode="ollama-local",local_model="installed:test")
@@ -212,6 +224,10 @@ class OpenGoalResearchVertical(unittest.TestCase):
             db.commit()
         self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
                          "UNVERIFIABLE")
+        # A forged receipt cannot be promoted to owner-clause progress.
+        observed=run_tick(self.db,self.ws,self.fx,max_jobs=1)
+        self.assertNotIn("original_obligation_progress",
+                         observed["goal_progress"]["goals"][0])
         # An authenticated source cannot disappear from the receipt and turn
         # remaining (possibly matching) hashes into complete evidence.
         with closing(connect(self.db)) as db:
