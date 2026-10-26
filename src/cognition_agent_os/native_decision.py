@@ -24,6 +24,10 @@ from .source import safe_fixture, SourceUnavailable
 _ID = re.compile(r"[a-f0-9]{32}\Z")
 _MAX_DECISIONS = 12
 _LEGACY_MAX_DECISIONS = 3
+_MAX_HYPOTHESES = 8
+_HYPOTHESIS_DISPOSITIONS = frozenset({
+    "REJECTED", "CONDITIONALLY_USEFUL", "UNRESOLVED_RESEARCH_REQUIRED",
+})
 _MAX_SOURCE_COUNT = 64
 _VALID_KINDS = frozenset({
     "goal_case", "record_reconciliation", "investigate_goal",
@@ -163,10 +167,12 @@ def _proposal(candidate: dict, contract: dict) -> dict:
     Their prose explanations are untrusted model hypotheses. No model-chosen
     module path, shell command, URL or grant is consumed as executor authority.
     """
-    if (not isinstance(candidate, dict) or set(candidate) !=
-        {"selected_intent", "alternative_intent", "decision_reason",
-         "alternative_reason", "expected_evidence", "observation_sha256",
-         "decision_basis"}):
+    base_fields = {"selected_intent", "alternative_intent", "decision_reason",
+                   "alternative_reason", "expected_evidence",
+                   "observation_sha256", "decision_basis"}
+    if (not isinstance(candidate, dict)
+        or set(candidate) not in (base_fields,
+                                  base_fields | {"hypothesis_reviews"})):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
     if (not isinstance(candidate["decision_basis"], dict)
         or set(candidate["decision_basis"]) !=
@@ -269,6 +275,122 @@ def _ground_decision(candidate: dict, parsed: dict,
 
 
 
+def _native_hypotheses(db: sqlite3.Connection, root_id: str,
+                       contract: dict) -> list[dict]:
+    """One auditable hypothesis queue for BOTH user and agent-origin ideas.
+
+    Claimed origin is informative, not identity proof or a grant. Sources are
+    proposals to CHALLENGE, never executable instructions.
+    """
+    rows = db.execute(
+        "SELECT event_id,details FROM events WHERE task_id=? "
+        "AND kind='NATIVE_HYPOTHESIS_RECORDED' ORDER BY event_id",
+        (root_id,)).fetchall()
+    if len(rows) > _MAX_HYPOTHESES:
+        raise ValueError("NATIVE_HYPOTHESIS_BOUND_EXCEEDED")
+    result = []
+    seen = set()
+    for row in rows:
+        receipt = json.loads(row["details"])
+        if (not isinstance(receipt, dict)
+            or set(receipt) != {"idea", "claimed_origin", "proposal_sha256",
+                                "contract_sha256", "authorizes_action"}
+            or receipt["claimed_origin"] not in ("user", "agent")
+            or not isinstance(receipt["idea"], str)
+            or not 4 <= len(receipt["idea"].strip()) <= 512
+            or receipt["proposal_sha256"] != _digest(receipt["idea"])
+            or receipt["contract_sha256"] != _digest(contract)
+            or receipt["authorizes_action"] is not False
+            or receipt["proposal_sha256"] in seen):
+            raise ValueError("NATIVE_HYPOTHESIS_RECEIPT_INVALID")
+        seen.add(receipt["proposal_sha256"])
+        result.append({"event_id": row["event_id"],
+                       "claimed_origin": receipt["claimed_origin"],
+                       "idea": receipt["idea"],
+                       "proposal_sha256": receipt["proposal_sha256"]})
+    return result
+
+
+def _challenge_hypotheses(candidate: dict, hypotheses: list[dict]) -> None:
+    """Check each observed idea was explicitly challenged, NOT its correctness."""
+    reviews = candidate.get("hypothesis_reviews")
+    if not hypotheses and reviews is None:
+        return
+    if (not isinstance(reviews, list) or len(reviews) != len(hypotheses)
+        or len(reviews) > _MAX_HYPOTHESES):
+        raise ValueError("NATIVE_HYPOTHESES_NOT_CHALLENGED")
+    covered = set()
+    for review in reviews:
+        if (not isinstance(review, dict)
+            or set(review) != {"proposal_sha256", "disposition",
+                               "counterargument", "verification_needed"}
+            or review["disposition"] not in _HYPOTHESIS_DISPOSITIONS
+            or not isinstance(review["counterargument"], str)
+            or not isinstance(review["verification_needed"], str)
+            or not 12 <= len(review["counterargument"].strip()) <= 500
+            or not 12 <= len(review["verification_needed"].strip()) <= 500
+            or not isinstance(review["proposal_sha256"], str)
+            or review["proposal_sha256"] in covered):
+            raise ValueError("NATIVE_HYPOTHESES_NOT_CHALLENGED")
+        covered.add(review["proposal_sha256"])
+    if covered != {h["proposal_sha256"] for h in hypotheses}:
+        raise ValueError("NATIVE_HYPOTHESES_NOT_CHALLENGED")
+
+
+def record_native_hypothesis(db_path: Path, workspace: Path, fixtures: Path,
+                             root_id: str, *, origin: str, idea: str,
+                             observation_sha256: str) -> dict:
+    """Admit a proposed METHOD IDEA for scrutiny without admitting an action.
+
+    Does not claim to authenticate the human or create owner permissions;
+    the existing local caller/grant must already be trusted. Distinguish a
+    binding original owner objective from anyone's proposed implementation.
+    """
+    if (origin not in ("user", "agent")
+        or not isinstance(idea, str)
+        or not 4 <= len(idea.strip()) <= 512
+        or not isinstance(observation_sha256, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", observation_sha256)):
+        raise ValueError("INVALID_NATIVE_HYPOTHESIS")
+    require_initialized_ledger(db_path)
+    with closing(connect(db_path)) as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            observed = _audit(db, db_path, workspace, fixtures, root_id)
+            if observed["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+                raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE:" +
+                                 observed["status"])
+            if observed["observation_sha256"] != observation_sha256:
+                raise ValueError("NATIVE_STALE_OBSERVATION")
+            if len(observed["hypotheses"]) >= _MAX_HYPOTHESES:
+                raise ValueError("NATIVE_HYPOTHESIS_BOUND_EXCEEDED")
+            digest = _digest(idea)
+            if any(h["proposal_sha256"] == digest
+                   for h in observed["hypotheses"]):
+                raise ValueError("DUPLICATE_NATIVE_HYPOTHESIS")
+            root = db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=?",
+                (root_id,)).fetchone()
+            contract = json.loads(root["source_spec"])
+            event(db, root_id, "NATIVE_HYPOTHESIS_RECORDED", {
+                "idea": idea, "claimed_origin": origin,
+                "proposal_sha256": digest,
+                "contract_sha256": _digest(contract),
+                "authorizes_action": False,
+            })
+            db.commit()
+            return {
+                "status": "NATIVE_HYPOTHESIS_RECORDED",
+                "root_task_id": root_id, "proposal_sha256": digest,
+                "authorizes_action": False,
+                "origin_authenticated": False,
+                "owner_outcome_verified": False,
+            }
+        except BaseException:
+            db.rollback()
+            raise
+
+
 def register_native_goal(db_path: Path, goal: str, *,
                          allow_public_discovery: bool = False) -> str:
     """Add the original goal without invoking the fixed-grammar open_goal router."""
@@ -316,8 +438,10 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "contract_sha256": _digest(contract),
             "owner_outcome_verified": False, "external_effect_authorized": False}):
             raise ValueError("ORIGINAL_RECEIPT_CHANGED")
+        hypotheses = _native_hypotheses(db, root_id, contract)
         decisions = db.execute(
-            "SELECT details FROM events WHERE task_id=? AND kind='NATIVE_DECISION_ADMITTED' "
+            "SELECT event_id,details FROM events WHERE task_id=? "
+            "AND kind='NATIVE_DECISION_ADMITTED' "
             "ORDER BY event_id", (root_id,)).fetchall()
         children = db.execute(
             "SELECT * FROM tasks WHERE parent_task=? ORDER BY created_at,task_id",
@@ -341,6 +465,9 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 or receipt["owner_outcome_verified"] is not False):
                 raise ValueError("DECISION_RECEIPT_CHANGED")
             parsed = _proposal(receipt["proposal"], contract)
+            _challenge_hypotheses(
+                receipt["proposal"],
+                [h for h in hypotheses if h["event_id"] < item["event_id"]])
             selected = parsed["selected"]
             child = by_id.get(receipt["child_task_id"])
             if (child is None or child["goal_rev"] != root["goal_rev"]
@@ -411,6 +538,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "goal_rev": root["goal_rev"], "grant_rev": root["grant_rev"],
             "grant_current": grant_current, "sources": current_sources,
             "decisions": [json.loads(e["details"]) for e in decisions],
+            "hypotheses": hypotheses,
             "children": observations})
         waiting = bool(observations and
             observations[-1]["task_state"] in ("PENDING", "RUNNING"))
@@ -424,6 +552,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "original_goal": contract["goal"],
             "observation_sha256": fingerprint,
             "decisions": observations, "decision_count": len(decisions),
+            "hypotheses": hypotheses,
             "owner_outcome_verified": False, "business_outcome_verified": False,
         }
     except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
@@ -466,6 +595,7 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             parsed = _proposal(candidate, contract)
             if candidate["observation_sha256"] != observed["observation_sha256"]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
+            _challenge_hypotheses(candidate, observed["hypotheses"])
             # Compare/grant and exact source snapshot rechecked *inside*
             # the original SQLite write transaction.
             auth = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
@@ -545,7 +675,7 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
             or not _valid_contract(contract)):
             return False
         receipts = db.execute(
-            "SELECT details FROM events WHERE task_id=? "
+            "SELECT event_id,details FROM events WHERE task_id=? "
             "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
             (root["task_id"],)).fetchall()
         children = db.execute("SELECT task_id FROM tasks WHERE parent_task=?",
@@ -554,6 +684,7 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
             or len(children) != len(receipts)):
             return False
         pinned = _sources(fixtures)
+        hypotheses = _native_hypotheses(db, root["task_id"], contract)
         known = set()
         previous = None
         for ordinal, r in enumerate(receipts):
@@ -563,6 +694,9 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
                 or entry["owner_outcome_verified"] is not False):
                 return False
             parsed = _proposal(entry["proposal"], contract)
+            _challenge_hypotheses(
+                entry["proposal"],
+                [h for h in hypotheses if h["event_id"] < r["event_id"]])
             selected = parsed["selected"]
             candidate = db.execute(
                 "SELECT source_spec,goal_rev,grant_rev,state "
