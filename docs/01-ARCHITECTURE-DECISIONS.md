@@ -133,3 +133,47 @@ P1 代码层的候选边界（可调整文件夹名，不应随意改变职责�
 6. 重构完成判据：与旧版合法路径对照、失效注入、全部当前相关回归、Graphify/AST 可追溯结构、真实陌生任务的独立结果及 owner 纠错负担；任一关键义务未验证，明确保留 OPEN 与 NOT_READY。
 
 **状态：架构契约已梳理，运行时能力分发和完整祖先检查作为改造候选进入 Draft；并没有完成整个自主 Agent OS，也没有任何生产部署或新授权。**
+
+## I. 2026-10-26 架构再判定：拆分“认知决策”与“可信执行”，停止用固定语法扩张冒充通用 Agent
+
+**判定状态：对当前全系统架构的否定性评审；提出可证伪的替代组合，不是完成宣告。** 以前的 H2 中“保留原 Host 并渐进迁移”不能解释为什么原始 G1–G8 的核心能力持续没有出现。当前 Draft PR #50 核对点为 `94aea56cff10a598588cb23d2b648f45e05fba22`、对应 CI #40285610220。后续必须动态复查 HEAD/CI；本节的数字只代表这一核对点。
+
+### 观测到的结构问题（不把诊断当作最终实测成功）
+
+- 当前源码约 51 个 `src/` 文件、684 KB；`open_goal.py` 约 916 行，仍通过少量既有 objective / 局部自然语言模式选已注册子任务。近期要支持 `and then` 时，同时改动 parser、SQLite dependency、worker admission、parent audit、child lineage、Host progress 等多处；是**决策表示层耦合**的强信号，而不只是某条正则写错。
+- `capability_dispatch.py` 明确只分派已注册工具，这是**执行安全的优势**，但若由它承担全部认知选择就天然无法在未知问题中自行比较/适配新方案。
+- `host.py` 明确不把研究/候选产物晋升为语义或业务目标完成，这是对的；但没有与之相配套的通用自主规划器、竞争方案试验器、面向真实目标的独立结果验收。
+- 731 项本地回归和七项 CI 作业成功能保护大量既有约束；模型实验、外部效果、真实 ChatGPT 认知执行、真实业务领域迁移并没有因此全部验收。两周持续补丁与 G1–G8 中目标驱动的陌生任务能力之间，仍存在显著偏差。
+- 更早的 `PRODUCT-READINESS-GATE.md` 已于 2026-10-25 选定“目标级 planner/decision policy + on-demand 专家 + 独立 effect reviewer”；后续没有改变主要工程重心。这是**决策到执行的治理失效**，不得再写同一提案掩盖缺口。
+
+### 各竞争方案的对照与明确处置
+
+| 组合 | 直接解决的责任 | 障碍/反例 | 本期处置 |
+| --- | --- | --- | --- |
+| 原样扩张 `open_goal` 关键词、DSL、任务特例 | 窄场景可预测、可测试 | 每个陌生目标需要新增结构，修同一跨步骤契约常涉及多模块，非通用 Agent | **停止作为认知主路线**；仅修阻断安全/兼容性的缺陷 |
+| 全盘重写 Host/SQLite 为 LangGraph/Temporal/托管引擎 | 持久图、事件回放、任务恢复 | 重建授权/独立效果检查，双权威、迁移和运维成本；仍未供给认知或语义验收 | **暂不整体替换**；以真实相同目标和失败注入 A/B 重新评估 |
+| 在 ChatGPT/Codex 原生模型与现有工具上直接执行认知循环，以结构化协议调用受控内核 | 今天即可使用已连接的专业检索、真实 GitHub、文件及执行工具，无新增付费模型 API | 原生 ChatGPT 会话与宿主 SQLite 是不同权威面；跨会话自动调用及稳定结果须实测，不能假称 Host 已连通 | **本期主试验路径**：真实任务先证明认知→行动→独立外部读回的改善 |
+| 保留单一授权账本、隔离执行、来源/证据/审计，引入模型无关的规划器接口，逐步替换固定自然语言编译器 | 旧有合法执行路径兼容；允许目标级动态比较和修正 | 需要可复用的工具能力描述、动作权限/效果契约和真实目标 oracle；不能凭一个 JSON schema 自证 | **目标实现形态**，但先用真实任务验证接口再迁移；不创建第二个总控 |
+| 把 Claude Code Game Studios 的角色/Skill/Hook 直接全套复制 | 工种分离、代码检查、生产流程明确 | 49 专家角色+大量规则对单个父系统可能显著增大协调成本且仍缺可靠业务效果源 | 选择性借鉴职责分离、hook/质量门禁；不复制其数量 |
+| AOCI + Graphify + 代码搜索 / Playwright / Caveman | AOCI 提供版本化“架构语义先验”；Graphify 提供结构关系；Playwright 提供页面操作；Caveman 提供可恢复压缩 | 这些都是**工具能力**而非决策总控；AOCI 描述需源证和更新治理，图不等于语义，压缩可能丢目标约束；Playwright 的UI操作不授予写权限 | 在相关任务按需组合接入，分别测试准确性/费用/合法性；不设为强制依赖 |
+| UVM 式工程验收 | 将 vPlan/coverage、monitor、scoreboard、SVA 与正反故障注入理念用于 Agent 轨迹和结果 | UVM 是硬件验证方法，不负责开放式 Agent 推理；绿色测试也不能代替真实用户最终效果 | **采纳验收方法**，不复制 SystemVerilog 基础设施 |
+
+### 优先级反转（约束后续工程行为）
+
+1. **当前直接使用已授权 ChatGPT/Codex 工具进行真正的认知任务**。每次必须保留原始要求与关键纠正，主动搜到足够一手资料并挑战候选因果解释，在同等成功条件下比较至少两个适用解法，实际选择可行路径，检查真实工具/文件/外部结果，失败继续纠正。简单任务适应性减轻流程，不固定七项表单或 Agent 调用。
+2. 对实际轨迹记录 **`Goal → Unknowns → Sources → Competing Plans → Decision & Grant → Executed Effect → Independent Outcome → Correction`**。决策、权限、实际提供方和 oracle 必须分别标注；每次相关任务的来源和最终用户条件都应可重算，不能只记“CI green”。
+3. 用**同一批未经专门硬编码的真实任务**对照：(A) 现有固定 Host 模式；(B) 原生模型+真实工具+原有可信授权边界；(C) 经过有证据必要性检验的 SDK/图编排适配器。指标是完整原始目标的独立完成率、用户纠正次数、实际效果、非法/重复动作、从失败到纠正、耗时/调用成本、陌生领域迁移。不得把离线模拟模型通过记作模型能力成功。
+4. 只有在 B 的能力边界和工具合同被真实验收后，才将目标级动态计划入口稳定映射到现有 Host/SQLite 的**唯一授权/效果写入权威**。不要让 ChatGPT 会话状态、GitHub 交接或模型生成计划成为新的效果授权真相。
+5. 未出现真实目标端到端效果改进，不再以新造 `open_goal` 语法分支、微型状态机、更多检查器或文档数量来声称进展。旧路径必须继续通过安全/兼容回归，但新工作要么交付一个**可独立验收的真实认知→动作结果**，要么明确揭示架构方案不成立。
+6. 部署、MCP 服务、付费 API、多租户、子域写迁移不属当前必须执行的动作。架构预留接口即可；真实需要时取得对应授权。普通无关 ChatGPT 会话不强制触发 cognition。
+
+### 可推翻本期选择的证据
+
+- 若真实同条件 A/B 表明某个成熟框架在独立成功率、授权约束、恢复与维护成本上稳定优于“原生模型 + 现有可信底座”，则迁移相应**职责层**，必要时整体换掉本地工作流内核。
+- 若同一授权和来源在 Host 多处重复校验造成无法合理证明一致性，优先将共同检查折叠到唯一 Effect/Admission 边界；不能以更多并行检查器解决责任重叠。
+- 若不同子域共享调用确实需要跨宿主 ABI/MCP/API，先形成受控适配器而非强迫所有子系统迁移内部状态。
+- 若实测证明 Caveman/索引摘要引入目标关键约束丢失，默认退回原文和原始工具输出；压缩或索引不获得覆盖原始任务的权威。
+- 需要下一次审核将对比结果填写为 PASS/FAIL/NOT_OBSERVED；本决策目前只获得源码分析与已执行局部回归证据，**尚无真实场景 A/B 通过**。
+
+本轮参考原始官方材料：Anthropic [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)；OpenAI [Agents overview](https://developers.openai.com/api/docs/guides/agents)、[SDK](https://developers.openai.com/api/docs/guides/agents/sdk)、[Evals](https://developers.openai.com/api/docs/guides/agent-evals)；[Temporal](https://docs.temporal.io/workflows)、[LangGraph](https://github.com/langchain-ai/docs/blob/main/src/oss/langgraph/persistence.mdx)、[AOCI-CODE](https://github.com/aoci-spec/aoci-code)、[Graphify](https://github.com/Graphify-Labs/graphify)、[Playwright MCP](https://playwright.dev/docs/next/getting-started-mcp)、[Caveman](https://github.com/caveman-app/caveman)、[Claude Code Game Studios](https://github.com/zerohours/claude-code-game-studios) 和 [IEEE UVM 1800.2](https://standards.ieee.org/ieee/62530-2/11429/)。所列均为研究来源，不代表已安装、兼容、授权或验收。
+
