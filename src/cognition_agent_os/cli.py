@@ -276,7 +276,7 @@ def main(argv=None) -> int:
         return 0
     if args.command in ("seed-native-goal", "native-goal-readback",
                         "native-decision-admit", "native-capability-catalog",
-                        "native-plan-local"):
+                        "native-plan-local", "native-hypothesis"):
         from .native_decision import (
             register_native_goal, inspect_native_goal, admit_native_decision,
             record_native_hypothesis, capability_catalog)
