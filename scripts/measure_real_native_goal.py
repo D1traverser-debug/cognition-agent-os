@@ -26,6 +26,7 @@ from cognition_agent_os.native_local_planner import advance_native_local_once
 from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
 
 MODEL = os.environ.get("COGNITION_EVAL_MODEL", "qwen2.5-coder:0.5b")
+STRUCTURED = os.environ.get("COGNITION_EVAL_STRUCTURED", "0") == "1"
 OUTPUT = Path(os.environ.get(
     "COGNITION_EVAL_OUTPUT", "real-native-cognition-evidence.json"))
 
@@ -138,7 +139,8 @@ def _native_trial(case: dict, home: Path) -> dict:
             if before_state["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
                 break
             response = advance_native_local_once(
-                db, work, fixture, root, model=MODEL, timeout=120)
+                db, work, fixture, root, model=MODEL, timeout=120,
+                structured_output=STRUCTURED)
             step = {"model_plan_status": response.get("status"),
                     "model_plan_reason": response.get("reason")}
             if response["status"] == "NATIVE_METHOD_ENQUEUED":
@@ -162,7 +164,8 @@ def _native_trial(case: dict, home: Path) -> dict:
     expected_owner = bool(case["must_complete_local_owner"])
     return {
         "path": "CURRENT_NATIVE_MODEL_HOST", "case": case["id"],
-        "planner": MODEL, "method_alignment": eligible,
+        "planner": MODEL, "structured_output": STRUCTURED,
+        "method_alignment": eligible,
         "selected_objectives": selected,
         "independent_owner_result": result["status"],
         "whole_local_owner_verified": whole,
@@ -280,7 +283,7 @@ def main() -> None:
     } for name in ("baseline", "native")}
     report = {
         "status": "REAL_NATIVE_COGNITION_A_B_OBSERVED",
-        "model": MODEL,
+        "model": MODEL, "structured_output": STRUCTURED,
         "cases": results, "scores": scores,
         "real_native_model_http_responses": sum(
             len(row["native"].get("model_trace_actual_not_mocked", []))
