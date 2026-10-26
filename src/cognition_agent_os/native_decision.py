@@ -22,7 +22,8 @@ from .ledger import connect, create_task, event, require_initialized_ledger
 from .source import safe_fixture, SourceUnavailable
 
 _ID = re.compile(r"[a-f0-9]{32}\Z")
-_MAX_DECISIONS = 3
+_MAX_DECISIONS = 12
+_LEGACY_MAX_DECISIONS = 3
 _MAX_SOURCE_COUNT = 64
 _VALID_KINDS = frozenset({
     "goal_case", "record_reconciliation", "investigate_goal",
@@ -36,13 +37,41 @@ def _digest(value: object) -> str:
         allow_nan=False).encode("utf-8")).hexdigest()
 
 
-def _contract(goal: str, *, allow_public_discovery: bool = False) -> dict:
+def _contract(goal: str, *, allow_public_discovery: bool = False,
+              legacy: bool = False) -> dict:
     if (not isinstance(goal, str) or not 1 <= len(goal.strip()) <= 2048
-        or type(allow_public_discovery) is not bool):
+        or type(allow_public_discovery) is not bool
+        or type(legacy) is not bool):
         raise ValueError("INVALID_NATIVE_OWNER_GOAL")
-    return {"kind": "native_goal", "version": 1,
+    return {"kind": "native_goal", "version": 1 if legacy else 2,
             "goal": goal, "allow_public_discovery": allow_public_discovery,
-            "max_decisions": _MAX_DECISIONS}
+            "max_decisions": (_LEGACY_MAX_DECISIONS if legacy
+                              else _MAX_DECISIONS)}
+
+
+def _valid_contract(spec: dict) -> bool:
+    """Old seeded goals retain their original finite grant and identity."""
+    return (isinstance(spec, dict) and spec.get("version") in (1, 2)
+            and spec == _contract(spec["goal"],
+                                  allow_public_discovery=spec["allow_public_discovery"],
+                                  legacy=(spec["version"] == 1)))
+
+
+def _sources_compatible(pinned: dict, current: dict,
+                        selected_kind: str) -> bool:
+    """Append-only knowledge may grow; no pinned historical fact may change.
+
+    Some methods consume the entire corpus of a format rather than named files.
+    New material in that format invalidates their original research scope.
+    """
+    if (not isinstance(pinned, dict)
+        or any(current.get(name) != digest for name, digest in pinned.items())):
+        return False
+    if selected_kind == "investigate_goal" and any(
+            Path(name).suffix.lower() in (".md", ".txt")
+            for name in current.keys() - pinned.keys()):
+        return False
+    return True
 
 
 def _sources(fixtures: Path) -> dict[str, str]:
@@ -277,8 +306,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         return {**fail, "reason": "ORIGINAL_GOAL_NOT_ACTIVE"}
     try:
         contract = json.loads(root["source_spec"])
-        if contract != _contract(contract["goal"],
-                                allow_public_discovery=contract["allow_public_discovery"]):
+        if not _valid_contract(contract):
             raise ValueError("INVALID_ORIGINAL_CONTRACT")
         reg = db.execute(
             "SELECT details FROM events WHERE task_id=? AND kind='NATIVE_GOAL_REGISTERED'",
@@ -293,7 +321,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         children = db.execute(
             "SELECT * FROM tasks WHERE parent_task=? ORDER BY created_at,task_id",
             (root_id,)).fetchall()
-        if len(decisions) > _MAX_DECISIONS or len(children) != len(decisions):
+        if len(decisions) > contract["max_decisions"] or len(children) != len(decisions):
             raise ValueError("DECISION_CHILD_CARDINALITY_CHANGED")
         by_id = {row["task_id"]: row for row in children}
         if len(by_id) != len(children):
@@ -319,11 +347,14 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 or json.loads(child["source_spec"]) != selected["child_source_spec"]
                 or receipt["selected_plan_sha256"] != selected["plan_sha256"]):
                 raise ValueError("DECISION_CHILD_PROVENANCE_CHANGED")
-            if receipt["source_sha256"] != current_sources:
+            if not _sources_compatible(
+                    receipt["source_sha256"], current_sources,
+                    selected["child_source_spec"]["kind"]):
                 return {**fail, "status": "NATIVE_SOURCE_CHANGED",
                         "original_goal": contract["goal"],
                         "reason": "SOURCE_PIN_DRIFT"}
-            _ground_decision(receipt["proposal"], parsed, current_sources, previous_id)
+            _ground_decision(
+                receipt["proposal"], parsed, receipt["source_sha256"], previous_id)
             previous_id = child["task_id"]
             verdict = "NOT_YET_INDEPENDENTLY_CHECKED"
             if child["state"] in ("NEEDS_REVIEW", "VERIFIED"):
@@ -385,7 +416,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "status": ("NATIVE_GRANT_REVOKED" if not grant_current
                        else "NATIVE_AWAITING_WORKER" if waiting
                        else "NATIVE_DECISION_BUDGET_EXHAUSTED"
-                            if len(decisions) >= _MAX_DECISIONS
+                            if len(decisions) >= contract["max_decisions"]
                        else "NATIVE_NEXT_DECISION_ADMISSIBLE"),
             "original_goal": contract["goal"],
             "observation_sha256": fingerprint,
@@ -432,9 +463,6 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             parsed = _proposal(candidate, contract)
             if candidate["observation_sha256"] != observed["observation_sha256"]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
-            if any(x["selected_objective"] == parsed["selected"]["objective"]
-                   for x in observed["decisions"]):
-                raise ValueError("REPEATED_NATIVE_METHOD_WITHOUT_NEW_EVIDENCE")
             # Compare/grant and exact source snapshot rechecked *inside*
             # the original SQLite write transaction.
             auth = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
@@ -446,6 +474,23 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             _ground_decision(
                 candidate, parsed, source_hashes,
                 observed["decisions"][-1]["task_id"] if observed["decisions"] else None)
+            previous_receipts = db.execute(
+                "SELECT details FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
+                (root_id,)).fetchall()
+            for receipt_row in previous_receipts:
+                previous_receipt = json.loads(receipt_row["details"])
+                prior_plan = _proposal(previous_receipt["proposal"], contract)["selected"]
+                if prior_plan["objective"] != parsed["selected"]["objective"]:
+                    continue
+                added = set(source_hashes) - set(previous_receipt["source_sha256"])
+                selected_plan_changed = (
+                    previous_receipt["selected_plan_sha256"] !=
+                    parsed["selected"]["plan_sha256"])
+                cited = {item["path"] for item in
+                         candidate["decision_basis"]["source_refs"]}
+                if not (added and (added & cited) and selected_plan_changed):
+                    raise ValueError("REPEATED_NATIVE_METHOD_WITHOUT_NEW_EVIDENCE")
             if parsed["alternative"] is None:
                 catalog = capability_catalog(
                     fixtures, allow_public_discovery=contract["allow_public_discovery"])
@@ -494,8 +539,7 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
                           (task["parent_task"],)).fetchone()
         contract = json.loads(root["source_spec"])
         if (root["state"] != "DECOMPOSED"
-            or contract != _contract(contract["goal"],
-                                     allow_public_discovery=contract["allow_public_discovery"])):
+            or not _valid_contract(contract)):
             return False
         receipts = db.execute(
             "SELECT details FROM events WHERE task_id=? "
@@ -503,7 +547,7 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
             (root["task_id"],)).fetchall()
         children = db.execute("SELECT task_id FROM tasks WHERE parent_task=?",
                               (root["task_id"],)).fetchall()
-        if (not 1 <= len(receipts) <= _MAX_DECISIONS
+        if (not 1 <= len(receipts) <= contract["max_decisions"]
             or len(children) != len(receipts)):
             return False
         pinned = _sources(fixtures)
@@ -513,12 +557,18 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
             entry = json.loads(r["details"])
             if (entry["ordinal"] != ordinal
                 or entry["prior_child_task_id"] != previous
-                or entry["source_sha256"] != pinned
                 or entry["owner_outcome_verified"] is not False):
                 return False
+            if not _sources_compatible(
+                    entry["source_sha256"], pinned,
+                    json.loads(db.execute("SELECT source_spec FROM tasks WHERE task_id=?",
+                                          (entry["child_task_id"],)).fetchone()[0])["kind"]):
+                return False
+
             parsed = _proposal(entry["proposal"], contract)
             selected = parsed["selected"]
-            _ground_decision(entry["proposal"], parsed, pinned, previous)
+            _ground_decision(
+                entry["proposal"], parsed, entry["source_sha256"], previous)
             candidate = db.execute("SELECT source_spec,goal_rev,grant_rev "
                                    "FROM tasks WHERE task_id=?",
                                    (entry["child_task_id"],)).fetchone()
