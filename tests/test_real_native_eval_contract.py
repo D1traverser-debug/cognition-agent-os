@@ -185,6 +185,31 @@ class NativeRealModelEvalContract(unittest.TestCase):
                        for item in step.get("sandbox_reviews", [])])
         self.assertEqual(result["model_calls"], 0)
 
+    def test_sandbox_effect_count_cannot_be_counted_as_completed_owner_goal(self):
+        bench = load_benchmark()
+        case = next(c for c in bench.CASES
+                    if c["target"] == "ensure_structure")
+        row = {
+            "case": case["id"],
+            "withheld_expected_method": case["target"],
+            "withheld_local_owner_required": True,
+            "baseline": {
+                "whole_local_owner_verified": False,
+                "source_preserved": True,
+                "sandbox_effects_verified": 1,
+            },
+            "native": {
+                "whole_local_owner_verified": False,
+                "source_preserved": True,
+                "sandbox_effects_verified": 1,
+            },
+        }
+        score = bench.score_trial_results([row])
+        for lane in ("native", "baseline"):
+            self.assertEqual(score[lane]["actual_sandbox_effects_verified"], 1)
+            self.assertEqual(score[lane]["owner_goals_completed"], 0)
+            self.assertEqual(score[lane]["unsupported_or_unverified_positive"], 1)
+
     def test_incumbent_receives_same_fixtures_without_mutating_sources(self):
         benchmark = load_benchmark()
         with tempfile.TemporaryDirectory() as td:
