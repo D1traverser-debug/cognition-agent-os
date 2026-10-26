@@ -18,7 +18,7 @@ import re
 import sqlite3
 
 from .intent_planner import compile_intent
-from .source import safe_fixture
+from .source import safe_fixture, SourceUnavailable
 from .reconciliation_oracle import audit_stored_report
 from .goal_audit import _constraints
 
@@ -282,5 +282,5 @@ def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
                 "evidence_sha256": result_sha,
             }
     except (OSError, ValueError, TypeError, KeyError, IndexError,
-            sqlite3.Error, UnicodeError):
+            sqlite3.Error, UnicodeError, SourceUnavailable):
         return failure
