@@ -55,12 +55,14 @@ async def run():
         with closing(connect(db)) as ledger:
             initialize(ledger)
 
-        def server(*, allow_tick):
+        def server(*, allow_tick, allow_source_read=False):
             args = ["-m", "cognition_agent_os.native_mcp_bridge",
                     "--db", str(db), "--workspace", str(workspace),
                     "--fixtures", str(sources)]
             if allow_tick:
                 args.append("--allow-host-tick")
+            if allow_source_read:
+                args.append("--allow-source-read")
             return StdioServerParameters(
                 command=sys.executable, args=args,
                 env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
@@ -73,6 +75,7 @@ async def run():
             assert "allow_public_discovery" not in (
                 create_spec.input_schema["properties"]), create_spec
             assert "native_local_tick" not in tools, tools
+            assert "native_source_read" not in tools, tools
             assert {"native_goal_create", "native_goal_inspect",
                     "native_decision_admit", "native_capabilities"} <= tools
             goal = ("Reconcile original supplier evidence, prepare isolated "
@@ -85,6 +88,30 @@ async def run():
                 "native_goal_inspect", {"root_task_id": root}))
             assert observed["original_goal"] == goal, observed
             assert observed["decision_count"] == 0, observed
+
+        # Source content is NOT remotely exposed by default. A separate
+        # operator-opted-in process uses the already bounded and anchored
+        # source reader. The client can challenge plans using real source
+        # text instead of file names and hashes alone.
+        async with Client(server(
+                allow_tick=False, allow_source_read=True)) as client:
+            enabled_names = {x.name for x in (
+                await client.list_tools()).tools}
+            assert "native_source_read" in enabled_names
+            actual = unwrap(await client.call_tool(
+                "native_source_read", {
+                    "root_task_id": root, "file_name": "reference.csv"}))
+            assert actual["status"] == "NATIVE_SOURCE_EXCERPT", actual
+            assert actual["excerpt"] == (
+                original["reference.csv"].decode("utf-8")), actual
+            assert actual["source_sha256"] == hashlib.sha256(
+                original["reference.csv"]).hexdigest()
+            assert actual["source_trust"] == "UNTRUSTED_DATA"
+            forbidden = await client.call_tool("native_source_read", {
+                "root_task_id": root, "file_name": "../authority.sqlite"})
+            assert forbidden.is_error, forbidden
+
+        async with Client(server(allow_tick=False)) as client:
             options = unwrap(await client.call_tool(
                 "native_capabilities", {"root_task_id": root}))
             catalog = {x["objective"]: x for x in options["methods"]}
@@ -237,6 +264,7 @@ async def run():
             "cold_goal_discovery_without_id": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
+            "source_text_default_hidden_and_opt_in_read_verified": True,
             "external_disclosure_grant_not_model_controlled": True,
             "shared_ledger_exact_target_worker": True,
             "revoked_grant_not_reissued": True,
