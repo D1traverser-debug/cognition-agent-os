@@ -135,7 +135,32 @@ def _proposal(candidate: dict, contract: dict) -> dict:
     """
     if (not isinstance(candidate, dict) or set(candidate) !=
         {"selected_intent", "alternative_intent", "decision_reason",
-         "alternative_reason", "expected_evidence", "observation_sha256"}):
+         "alternative_reason", "expected_evidence", "observation_sha256",
+         "decision_basis"}):
+        raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+    if (not isinstance(candidate["decision_basis"], dict)
+        or set(candidate["decision_basis"]) !=
+        {"source_refs", "previous_result_task_id", "challenge", "falsifier",
+         "uncertainty"}):
+        raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+    basis = candidate["decision_basis"]
+    for field in ("challenge", "falsifier", "uncertainty"):
+        if (not isinstance(basis[field], str)
+            or not 12 <= len(basis[field].strip()) <= 500):
+            raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+    refs = basis["source_refs"]
+    if (not isinstance(refs, list) or len(refs) > 16
+        or any(not isinstance(v, dict)
+               or set(v) != {"path", "sha256"}
+               or not isinstance(v["path"], str)
+               or not isinstance(v["sha256"], str)
+               or not re.fullmatch(r"[0-9a-f]{64}", v["sha256"])
+               for v in refs)
+        or len({v["path"] for v in refs}) != len(refs)
+        or (basis["previous_result_task_id"] is not None
+            and (not isinstance(basis["previous_result_task_id"], str)
+                 or not _ID.fullmatch(basis["previous_result_task_id"])))):
+        raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
         raise ValueError("INVALID_NATIVE_DECISION")
     fields = ("decision_reason", "alternative_reason", "expected_evidence")
     if any(not isinstance(candidate[x], str) or
@@ -158,6 +183,58 @@ def _proposal(candidate: dict, contract: dict) -> dict:
     if selected["child_source_spec"]["kind"] not in _VALID_KINDS:
         raise ValueError("UNREGISTERED_NATIVE_CAPABILITY")
     return {"selected": selected, "alternative": alternative}
+
+
+def _method_paths(plan: dict, sources: dict[str, str]) -> set[str]:
+    """Observable file obligations for one registered method, not model prose."""
+    spec = plan["child_source_spec"]
+    kind = spec["kind"]
+    if kind == "record_reconciliation":
+        return {spec["reference"], spec["observed"]}
+    if kind == "goal_case":
+        return {spec["input"]}
+    if kind == "investigate_goal":
+        # The source investigator consumes a bounded local text corpus.
+        # Require at least one independently named source in its citation set.
+        return set()
+    if kind == "public_tool_discovery":
+        return set()
+    raise ValueError("UNREGISTERED_DECISION_METHOD")
+
+
+def _ground_decision(candidate: dict, parsed: dict,
+                     sources: dict[str, str],
+                     prior_child_id: str | None) -> None:
+    """Provenance and falsifiability *admission*, never semantic correctness.
+
+    A self-written rationale alone cannot authorize a material decision.
+    The accepted source IDs+hashes must be independently reread from the live
+    corpus at admission, audit and Worker execution. The cited facts may STILL
+    be semantically irrelevant; only a real outcome evaluation can resolve it.
+    """
+    basis = candidate["decision_basis"]
+    if basis["previous_result_task_id"] != prior_child_id:
+        raise ValueError("PREVIOUS_DECISION_RESULT_NOT_GROUNDED")
+    refs = basis["source_refs"]
+    cited = {ref["path"] for ref in refs}
+    if any(sources.get(ref["path"]) != ref["sha256"] for ref in refs):
+        raise ValueError("DECISION_SOURCE_ID_OR_DIGEST_UNVERIFIABLE")
+    required = _method_paths(parsed["selected"], sources)
+    if parsed["alternative"] is not None:
+        required |= _method_paths(parsed["alternative"], sources)
+    if not required.issubset(cited):
+        raise ValueError("METHOD_RESEARCH_SOURCES_NOT_CITED")
+    if (parsed["selected"]["objective"] == "investigate_evidence"
+        and not any(Path(x).suffix.lower() in (".md", ".txt") for x in cited)):
+        raise ValueError("INVESTIGATION_SOURCE_NOT_GROUNDED")
+    if not refs and not prior_child_id and (
+            parsed["selected"]["objective"] != "discover_public_tools"):
+        raise ValueError("NO_INDEPENDENT_DECISION_INPUT")
+    if not _selected_sources_present(parsed["selected"], sources):
+        raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
+    if (parsed["alternative"] is not None
+        and not _selected_sources_present(parsed["alternative"], sources)):
+        raise ValueError("ALTERNATIVE_NATIVE_SOURCE_UNAVAILABLE")
 
 
 def register_native_goal(db_path: Path, goal: str, *,
@@ -244,6 +321,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 return {**fail, "status": "NATIVE_SOURCE_CHANGED",
                         "original_goal": contract["goal"],
                         "reason": "SOURCE_PIN_DRIFT"}
+            _ground_decision(receipt["proposal"], parsed, current_sources, previous_id)
             previous_id = child["task_id"]
             verdict = "NOT_YET_INDEPENDENTLY_CHECKED"
             if child["state"] in ("NEEDS_REVIEW", "VERIFIED"):
@@ -363,6 +441,9 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                    (root["goal_rev"], root["grant_rev"])):
                 raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             source_hashes = _sources(fixtures)
+            _ground_decision(
+                candidate, parsed, source_hashes,
+                observed["decisions"][-1]["task_id"] if observed["decisions"] else None)
             if parsed["alternative"] is None:
                 catalog = capability_catalog(
                     fixtures, allow_public_discovery=contract["allow_public_discovery"])
@@ -433,7 +514,9 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
                 or entry["source_sha256"] != pinned
                 or entry["owner_outcome_verified"] is not False):
                 return False
-            selected = _proposal(entry["proposal"], contract)["selected"]
+            parsed = _proposal(entry["proposal"], contract)
+            selected = parsed["selected"]
+            _ground_decision(entry["proposal"], parsed, pinned, previous)
             candidate = db.execute("SELECT source_spec,goal_rev,grant_rev "
                                    "FROM tasks WHERE task_id=?",
                                    (entry["child_task_id"],)).fetchone()
