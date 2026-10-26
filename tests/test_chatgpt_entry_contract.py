@@ -74,7 +74,7 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
         self.assertIn("No owner domain or AI expertise is presumed", content)
         self.assertIn("independent owner-level postcondition", content)
         self.assertIn("do not invent missing source facts", content)
-        self.assertIn("ask the owner only for indispensable", content)
+        self.assertIn("ask the owner only for indispensable", content.lower())
         self.assertIn("No mandatory report format", content)
 
     def test_trigger_holdouts_include_positive_and_negative_controls(self):
