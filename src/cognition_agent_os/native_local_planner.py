@@ -225,6 +225,12 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "method ideas. Both "
         "intents must be goal_intent dictionaries with the registered objective "
         "and exact required resources. Do not add authority or success claims. "
+        "If a decisive source passage is missing from bounded previews, "
+        "first return ONLY JSON {\"inspect_sources\":[{\"path\":\"existing_name\","
+        "\"offset_chars\":0}]}, at most two source chunks. Only exact names in "
+        "source_digest_manifest are readable. This is a bounded read-only "
+        "research step, not a grant or executable instruction. The subsequent "
+        "response must be the actual decision or abstain; no further reads. "
         "No available safe method? Return {\"abstain\":true}.\n\n"
         + evidence_json
     )
@@ -242,6 +248,66 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             "NATIVE_MODEL_INVALID_JSON") from exc
     if not isinstance(candidate, dict):
         raise local_model.LocalModelUnavailable("NATIVE_MODEL_INVALID_CHOICE")
+
+    # The installed model can decide what extra evidence to inspect, rather
+    # than being trapped by hardcoded first-350-byte previews. It cannot read
+    # an arbitrary path, invent a new source, trigger another tool or loop.
+    if "inspect_sources" in candidate:
+        reads = candidate.get("inspect_sources")
+        if (set(candidate) != {"inspect_sources"}
+            or not isinstance(reads, list) or not 1 <= len(reads) <= 2):
+            raise ValueError("INVALID_NATIVE_RESEARCH_REQUEST")
+        additional = []
+        for item in reads:
+            if (not isinstance(item, dict)
+                or set(item) != {"path", "offset_chars"}
+                or not isinstance(item["path"], str)
+                or item["path"] not in observed
+                or type(item["offset_chars"]) is not int
+                or not 0 <= item["offset_chars"] <= 1_048_576):
+                raise ValueError("INVALID_NATIVE_RESEARCH_REQUEST")
+            raw = safe_fixture(fixtures, item["path"])
+            if hashlib.sha256(raw).hexdigest() != observed[item["path"]]:
+                raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
+            try:
+                content = raw.decode("utf-8", errors="strict")
+            except UnicodeError as exc:
+                raise ValueError("NATIVE_RESEARCH_NOT_UTF8") from exc
+            offset = item["offset_chars"]
+            if offset >= len(content):
+                raise ValueError("NATIVE_RESEARCH_OFFSET_OUTSIDE_SOURCE")
+            additional.append({
+                "path": item["path"],
+                "sha256": observed[item["path"]],
+                "offset_chars": offset,
+                "untrusted_excerpt": content[offset:offset + 2048],
+                "trust": "UNTRUSTED_DATA",
+            })
+        if _sources(fixtures) != observed:
+            raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
+        expanded = dict(evidence)
+        expanded["additional_verified_source_excerpts"] = additional
+        extended_json = json.dumps(expanded, ensure_ascii=False, sort_keys=True)
+        if len(extended_json) > _MAX_PROMPT:
+            raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
+        # Latest JSON is still the last prompt section, for re-analysis.
+        extended_prompt = prompt.rsplit("\n\n", 1)[0] + "\n\n" + extended_json
+        response = local_model._request("POST", "/api/generate", {
+            "model": model, "prompt": extended_prompt, "stream": False,
+            "format": "json", "options": {"temperature": 0, "num_predict": 900},
+            "keep_alive": "0",
+        }, timeout)
+        if (response.get("done") is not True
+            or not isinstance(response.get("response"), str)):
+            raise local_model.LocalModelUnavailable("NATIVE_MODEL_INCOMPLETE")
+        try:
+            candidate = json.loads(response["response"])
+        except (ValueError, TypeError) as exc:
+            raise local_model.LocalModelUnavailable(
+                "NATIVE_MODEL_INVALID_JSON") from exc
+        if (not isinstance(candidate, dict)
+            or "inspect_sources" in candidate):
+            raise ValueError("NATIVE_RESEARCH_ROUND_LIMIT")
     if candidate == {"abstain": True}:
         return {"status": "NATIVE_LOCAL_MODEL_ABSTAINED",
                 "root_task_id": root_id, "owner_outcome_verified": False}
