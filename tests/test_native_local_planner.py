@@ -136,6 +136,11 @@ class NativeLocalModelLoop(unittest.TestCase):
             for ordinal in range(132):
                 create_task(db, {"kind": "fixture", "ordinal": ordinal},
                             commit=False)
+            # Competing nonnative parent workflows can also reach the
+            # DECOMPOSED state; that is exactly what used to occupy every
+            # slot before the planner even checked the native type.
+            db.execute("UPDATE tasks SET state='DECOMPOSED' "
+                       "WHERE parent_task IS NULL AND state='PENDING'")
             db.commit()
         native = register_native_goal(self.db, self.goal)
         with patch("cognition_agent_os.native_local_planner.advance_native_local_once",
