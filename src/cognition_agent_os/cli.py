@@ -68,6 +68,17 @@ def main(argv=None) -> int:
     report = sub.add_parser("reconciliation-audit",
                             help="Read-only independent SQL check of a proposed diff report")
     report.add_argument("--task-id",required=True)
+    native_seed = sub.add_parser("seed-native-goal",
+        help="Register complete owner text for model-neutral current-tool decisions")
+    native_seed.add_argument("--goal", required=True)
+    native_seed.add_argument("--allow-public-tool-discovery", action="store_true")
+    native_read = sub.add_parser("native-goal-readback",
+        help="Read original native goal, live evidence and next-decision digest")
+    native_read.add_argument("--root-task-id", required=True)
+    native_admit = sub.add_parser("native-decision-admit",
+        help="Admit one compared typed native-tool proposal under existing grant")
+    native_admit.add_argument("--root-task-id", required=True)
+    native_admit.add_argument("--spec", required=True, type=Path)
     open_input = sub.add_parser("seed-open-goal",
         help="Enqueue owner natural-language goal; local installed model selects registered LOCAL proposal method")
     open_input.add_argument("--goal", required=True)
@@ -247,6 +258,38 @@ def main(argv=None) -> int:
             "production_effect_authorized":False,
             "business_outcome_verified":False},sort_keys=True))
         return 0
+    if args.command in ("seed-native-goal", "native-goal-readback",
+                        "native-decision-admit"):
+        from .native_decision import (
+            register_native_goal, inspect_native_goal, admit_native_decision)
+        try:
+            if args.command == "seed-native-goal":
+                tid=register_native_goal(
+                    args.db, args.goal,
+                    allow_public_discovery=args.allow_public_tool_discovery)
+                result={"root_task_id":tid,"status":"NATIVE_GOAL_REGISTERED",
+                        "owner_outcome_verified":False}
+            elif args.command == "native-goal-readback":
+                result=inspect_native_goal(
+                    args.db,args.workspace,args.fixtures,args.root_task_id)
+            else:
+                if (args.spec.is_symlink() or not args.spec.is_file()
+                    or args.spec.stat().st_size>16384):
+                    raise ValueError("INVALID_NATIVE_DECISION_FILE")
+                candidate=json.loads(args.spec.read_text(encoding="utf-8"))
+                result=admit_native_decision(
+                    args.db,args.workspace,args.fixtures,args.root_task_id,candidate)
+        except (ValueError,TypeError,KeyError,PermissionError,
+                OSError,sqlite3.Error) as exc:
+            print(json.dumps({"status":"NATIVE_DECISION_REFUSED",
+                "reason":str(exc)[:120],"owner_outcome_verified":False},
+                sort_keys=True))
+            return 4
+        print(json.dumps(result,ensure_ascii=True,sort_keys=True))
+        return 0 if result["status"] not in (
+            "NATIVE_GOAL_UNVERIFIABLE","NATIVE_SOURCE_CHANGED",
+            "NATIVE_EVIDENCE_UNVERIFIABLE","NATIVE_GRANT_REVOKED"
+        ) else 4
     if args.command == "goal-resume":
         result = resume_goal(
             args.db, workspace=args.workspace, fixtures=args.fixtures)
