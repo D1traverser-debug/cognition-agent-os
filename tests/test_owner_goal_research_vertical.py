@@ -129,6 +129,29 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
         self.assertFalse(self.children(parent))
 
+    def test_compound_cold_restart_resumes_two_existing_children(self):
+        """Separate Host invocations reuse the same durable original goal."""
+        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        parent=self.seed(
+            "Investigate the UART timeout using local engineering evidence and "
+            "ensure a sandbox draft of settings.json has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("literal admission needs no model")):
+            first=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                           planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(first["tasks"][0]["status"],"DECOMPOSED",first)
+        ids={x["task_id"] for x in self.children(parent)}
+        self.assertEqual(len(ids),2)
+        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
+            second=run_tick(self.db,self.ws,self.fx,max_jobs=2,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual([x["status"] for x in second["tasks"]],
+                         ["NEEDS_REVIEW","NEEDS_REVIEW"],second)
+        self.assertEqual({x["task_id"] for x in self.children(parent)},ids)
+        third=run_tick(self.db,self.ws,self.fx,max_jobs=1)
+        self.assertEqual(third["processed"],0,third)
+        self.assertFalse(third["goal_progress"]["goals"][0]["owner_outcome_verified"])
+
     def test_compound_receipt_tampering_fails_independent_parent_audit(self):
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
