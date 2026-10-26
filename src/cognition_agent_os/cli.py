@@ -79,6 +79,10 @@ def main(argv=None) -> int:
     native_read = sub.add_parser("native-goal-readback",
         help="Read original native goal, live evidence and next-decision digest")
     native_read.add_argument("--root-task-id", required=True)
+    native_local = sub.add_parser("native-plan-local",
+        help="One opt-in non-cloud installed Ollama decision under existing grant")
+    native_local.add_argument("--root-task-id", required=True)
+    native_local.add_argument("--model", required=True)
     native_admit = sub.add_parser("native-decision-admit",
         help="Admit one compared typed native-tool proposal under existing grant")
     native_admit.add_argument("--root-task-id", required=True)
@@ -199,6 +203,8 @@ def main(argv=None) -> int:
                       help="Explicitly opt in to local sandbox-only follow-up")
     host.add_argument("--auto-review-repos", action="store_true",
                       help="Separately opt in to untrusted whole-file Python execution IN Docker; also requires --auto-stage-goals")
+    host.add_argument("--auto-native-cognition", action="store_true",
+        help="Opt in to installed local model planning under original Host grant")
     host.add_argument("--auto-local-goal-control", action="store_true",
                       help="Opt in to bounded LOCAL candidate follow-ups, never external effects")
     host.add_argument("--planner-mode", choices=["deterministic", "ollama-local"], default="deterministic")
@@ -263,7 +269,8 @@ def main(argv=None) -> int:
             "business_outcome_verified":False},sort_keys=True))
         return 0
     if args.command in ("seed-native-goal", "native-goal-readback",
-                        "native-decision-admit", "native-capability-catalog"):
+                        "native-decision-admit", "native-capability-catalog",
+                        "native-plan-local"):
         from .native_decision import (
             register_native_goal, inspect_native_goal, admit_native_decision,
             capability_catalog)
@@ -277,6 +284,11 @@ def main(argv=None) -> int:
             elif args.command == "native-goal-readback":
                 result=inspect_native_goal(
                     args.db,args.workspace,args.fixtures,args.root_task_id)
+            elif args.command == "native-plan-local":
+                from .native_local_planner import advance_native_local_once
+                result=advance_native_local_once(
+                    args.db,args.workspace,args.fixtures,args.root_task_id,
+                    model=args.model)
             elif args.command == "native-capability-catalog":
                 observed=inspect_native_goal(
                     args.db,args.workspace,args.fixtures,args.root_task_id)
