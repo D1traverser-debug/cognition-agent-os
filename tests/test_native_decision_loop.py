@@ -136,6 +136,30 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(later["tasks"][0]["status"], "NEEDS_REVIEW")
         self.assertFalse(self.view(root)["owner_outcome_verified"])
 
+    def test_prior_evidence_tampering_after_redecision_must_block_worker(self):
+        """No cached admission can bypass live preceding-method proof."""
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        follow = self.view(root)
+        self.assertEqual(follow["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(follow, self.structure(), self.reconcile()))
+        first_artifact = self.workspace / "artifacts" / (
+            first["child_task_id"] + ".json")
+        first_artifact.write_bytes(first_artifact.read_bytes() + b" tampered")
+        attempted = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(attempted["tasks"][0]["task_id"],
+                         second["child_task_id"], attempted)
+        self.assertNotEqual(attempted["tasks"][0]["status"], "NEEDS_REVIEW",
+                            attempted)
+        self.assertFalse((self.workspace / "artifacts" /
+                          (second["child_task_id"] + ".json")).exists())
+
     def test_source_drift_and_revocation_block_new_model_choice(self):
         root = self.root_id()
         first = admit_native_decision(self.db, self.workspace, self.fixtures,
