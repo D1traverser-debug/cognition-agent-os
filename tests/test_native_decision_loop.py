@@ -282,6 +282,30 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertFalse((self.workspace / "artifacts" /
                           (second["child_task_id"] + ".json")).exists())
 
+    def test_existing_v1_goal_contract_keeps_original_budget_and_can_resume(self):
+        from cognition_agent_os.native_decision import _contract, _digest
+        root = self.root_id()
+        legacy = _contract(self.goal, legacy=True)
+        with closing(connect(self.db)) as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?",
+                       (json.dumps(legacy, ensure_ascii=False), root))
+            db.execute("UPDATE events SET details=? WHERE task_id=? "
+                       "AND kind='NATIVE_GOAL_REGISTERED'",
+                       (json.dumps({
+                           "contract_sha256": _digest(legacy),
+                           "owner_outcome_verified": False,
+                           "external_effect_authorized": False,
+                       }), root))
+            db.commit()
+        state = self.view(root)
+        self.assertEqual(state["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE", state)
+        self.assertEqual(legacy["max_decisions"], 3)
+        admission = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(state, self.reconcile(), self.structure()))
+        self.assertEqual(admission["status"], "NATIVE_METHOD_ENQUEUED")
+
     def test_new_research_source_can_enter_after_independently_verified_action(self):
         root = self.root_id()
         first = admit_native_decision(
