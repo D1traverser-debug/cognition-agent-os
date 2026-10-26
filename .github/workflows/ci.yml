@@ -573,9 +573,17 @@ jobs:
     # Opt-in real Ollama inference on an ephemeral public CI runner.
     # Synthetic independent owner-acceptance labels and actual Host artifacts.
     # No paid inference, model API keys, user data, production grant or deployment.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-real-native-goal]') }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-real-native-schema]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: 'qwen2.5-coder:0.5b'
+            label: coder-05b
+          - model: 'qwen2.5:1.5b'
+            label: instruct-15b
     runs-on: ubuntu-latest
-    timeout-minutes: 22
+    timeout-minutes: 26
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -601,14 +609,15 @@ jobs:
             sleep 2
           done
           test "$ready" = 1
-          timeout 420 ollama pull qwen2.5-coder:0.5b
+          timeout 420 ollama pull "${{ matrix.model }}"
       - name: Actual model -> native goal -> Worker -> independent owner oracle A/B
         shell: bash
         env:
           PYTHONPATH: src
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_NO_CLOUD: '1'
-          COGNITION_EVAL_MODEL: qwen2.5-coder:0.5b
+          COGNITION_EVAL_MODEL: ${{ matrix.model }}
+          COGNITION_EVAL_STRUCTURED: '1'
           COGNITION_EVAL_OUTPUT: real-native-cognition-evidence.json
         run: |
           set -euo pipefail
@@ -617,7 +626,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: real-native-cognition-model-vs-incumbent
+          name: real-native-cognition-schema-${{ matrix.label }}
           path: real-native-cognition-evidence.json
           if-no-files-found: warn
 
