@@ -771,7 +771,7 @@ def _audit_independent_obligations(
             or by_id[child_id]["grant_rev"] != parent["grant_rev"]):
             return failure
         if i == 0:
-            if (not re.fullmatch(r"(?is)investigate\\b.{10,350}", item["clause"])
+            if (not re.fullmatch(r"(?is)investigate\b.{10,350}", item["clause"])
                 or _COMPOSITE_ENGLISH_ACTION.search(item["clause"])
                 or _COMPOSITE_CHINESE_ACTION.search(item["clause"])):
                 return failure
