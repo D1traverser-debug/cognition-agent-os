@@ -148,6 +148,45 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(resumed["native_decision_state"]["decisions"][0]
                          ["mechanical_verdict"], "REPORT_MECHANICALLY_VERIFIED")
 
+    def test_catalog_discovers_real_current_capabilities_and_rejects_ghost_source(self):
+        """A native planner need not ask owner to enumerate files or registered tools."""
+        common = [sys.executable, "-m", "cognition_agent_os.cli",
+                  "--db", str(self.db), "--workspace", str(self.workspace),
+                  "--fixtures", str(self.fixtures)]
+        root = self.root_id()
+        proc = subprocess.run(
+            [*common, "native-capability-catalog", "--root-task-id", root],
+            capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        catalog = json.loads(proc.stdout)
+        self.assertEqual(catalog["status"], "NATIVE_CAPABILITY_CATALOG")
+        methods = {x["objective"]: x for x in catalog["methods"]}
+        self.assertTrue(methods["compare_records"]["currently_eligible"])
+        self.assertTrue(methods["ensure_structure"]["currently_eligible"])
+        self.assertFalse(methods["investigate_evidence"]["currently_eligible"])
+        self.assertFalse(methods["discover_public_tools"]["currently_eligible"])
+        self.assertEqual(methods["compare_records"]["required_resource_roles"],
+                         ["reference", "observed"])
+        self.assertFalse(catalog["business_outcome_verified"])
+        bogus = self.reconcile()
+        bogus["resources"][1]["path"] = "nonexistent.csv"
+        with self.assertRaisesRegex(ValueError, "SELECTED_NATIVE_SOURCE_UNAVAILABLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                self.candidate(self.view(root), bogus, self.structure()))
+        self.assertEqual(self.view(root)["decision_count"], 0)
+        # A fresh supported source changes the observed catalog, not the
+        # original goal or the grant.
+        (self.fixtures / "inspection.md").write_text(
+            "Inspect local shortage causes before choosing a remedy.\n")
+        later = json.loads(subprocess.run(
+            [*common, "native-capability-catalog", "--root-task-id", root],
+            check=True, capture_output=True, text=True).stdout)
+        after = {x["objective"]: x for x in later["methods"]}
+        self.assertTrue(after["investigate_evidence"]["currently_eligible"])
+        self.assertNotEqual(later["source_manifest_sha256"],
+                            catalog["source_manifest_sha256"])
+
     def test_conflict_for_first_method_can_be_followed_by_new_method(self):
         root = self.root_id()
         bad = self.structure()
