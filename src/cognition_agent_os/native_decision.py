@@ -214,6 +214,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 "selected_objective": selected["objective"],
                 "alternative_objective": parsed["alternative"]["objective"],
                 "mechanical_verdict": verdict,
+                "error_code": child["error_code"],
                 "owner_outcome_verified": False})
         auth = db.execute(
             "SELECT * FROM authority WHERE singleton=1").fetchone()
@@ -318,7 +319,9 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
 
 
 def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
-                          task_id: str) -> bool:
+                          task_id: str, *,
+                          workspace: Path | None = None,
+                          db_path: Path | None = None) -> bool:
     """Worker provenance check; refuse forged model-selected child or drift.
 
     Full artifact/outcome audit is performed by the independent Host readback.
@@ -365,7 +368,41 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
                 return False
             known.add(entry["child_task_id"])
             previous = entry["child_task_id"]
-        return known == {x["task_id"] for x in children} and task_id in known
+        if known != {x["task_id"] for x in children} or task_id not in known:
+            return False
+        if workspace is not None and db_path is not None:
+            # The Worker must independently revisit live previous artifacts
+            # AFTER the candidate was admitted. A successful earlier receipt
+            # must not release an unrelated successor after source/artifact
+            # tampering, revocation or mechanical invalidation.
+            checked = _audit(db, db_path, workspace, fixtures, root["task_id"])
+            if checked["status"] not in (
+                "NATIVE_AWAITING_WORKER",
+                "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+                return False
+            observations = checked["decisions"]
+            index = next((i for i, x in enumerate(observations)
+                          if x["task_id"] == task_id), -1)
+            if index < 0:
+                return False
+            for previous in observations[:index]:
+                if previous["task_state"] in ("NEEDS_REVIEW", "VERIFIED"):
+                    if previous["mechanical_verdict"] not in (
+                        "CANDIDATE_MECHANICALLY_VALID",
+                        "REPORT_MECHANICALLY_VERIFIED",
+                        "SOURCE_GROUNDED_UNREVIEWED",
+                        "PUBLIC_TOOL_LEADS_MECHANICALLY_GROUNDED"):
+                        return False
+                elif (previous["task_state"] == "UNKNOWN"
+                      and previous["error_code"] in (
+                        "NO_SAFE_GOAL_PLAN", "JOIN_KEY_AMBIGUOUS")):
+                    # A known bounded local-method failure may justify a
+                    # different local experiment, not an owner success.
+                    continue
+                else:
+                    return False
+        return True
     except (KeyError, ValueError, TypeError, sqlite3.Error, OSError,
             SourceUnavailable, IntentError, PermissionError):
         return False
