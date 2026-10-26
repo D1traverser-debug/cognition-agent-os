@@ -787,6 +787,9 @@ def _audit_independent_obligations(
         "status": "COMPOUND_METHODS_MECHANICALLY_GROUNDED",
         "child_task_ids": [x["child_task_id"] for x in obligations],
         "capabilities": [x["plan"]["capability"] for x in obligations],
+        "original_obligations": [
+            {"clause": x["clause"], "child_task_id": x["child_task_id"]}
+            for x in obligations],
         "semantic_outcome_verified": False,
         "business_outcome_verified": False,
     }
