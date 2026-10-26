@@ -171,6 +171,79 @@ class OpenGoalColdResume(unittest.TestCase):
         self.assertEqual(recovered["root_task_id"], root, recovered)
         self.assertEqual(recovered["original_goal"], original)
 
+
+    def test_parallel_owner_obligations_are_recoverable_from_cold_ledger(self):
+        """One durable owner root must resume BOTH admitted obligations."""
+        (self.fixtures / "cause.md").write_text(
+            "The UART reset held the timeout counter for several cycles.\n")
+        goal = ("Investigate the UART timeout using local engineering evidence "
+                "and ensure a sandbox draft of settings.json has owner equal to ops.")
+        root = self.seed(goal)
+        started = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1,
+            planner_mode="ollama-local", local_model="installed:test")
+        self.assertEqual(started["tasks"][0]["status"], "DECOMPOSED", started)
+        with closing(connect(self.db)) as db:
+            children = [dict(x) for x in db.execute(
+                "SELECT task_id,source_spec FROM tasks WHERE parent_task=?", (root,))]
+        self.assertEqual(len(children), 2)
+        resumed = self.recover()
+        self.assertEqual(resumed["status"], "READY_TO_TICK", resumed)
+        self.assertEqual(resumed["original_goal"], goal)
+        self.assertEqual(resumed["root_task_id"], root)
+        self.assertEqual(set(resumed["child_task_ids"]),
+                         {x["task_id"] for x in children})
+        self.assertEqual(set(resumed["runnable_task_ids"]),
+                         {x["task_id"] for x in children})
+        self.assertEqual(len(resumed["original_obligation_progress"]), 2)
+        self.assertFalse(resumed["local_owner_outcome_verified"])
+        self.assertFalse(resumed["business_outcome_verified"])
+        self.assertEqual(self.recover(), resumed)
+
+    def test_ordered_owner_cold_resume_never_dispatches_gated_successor(self):
+        """Research predecessor is runnable; its original follower stays gated."""
+        (self.fixtures / "cause.md").write_text(
+            "The UART reset held the timeout counter for several cycles.\n")
+        goal = ("Investigate the UART timeout using local engineering evidence "
+                "and then ensure a sandbox draft of settings.json has owner equal to ops.")
+        root = self.seed(goal)
+        started = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1,
+            planner_mode="ollama-local", local_model="installed:test")
+        self.assertEqual(started["tasks"][0]["status"], "DECOMPOSED", started)
+        with closing(connect(self.db)) as db:
+            rows = [dict(x) for x in db.execute(
+                "SELECT task_id,source_spec FROM tasks WHERE parent_task=?", (root,))]
+        ids = {json.loads(x["source_spec"])["kind"]:x["task_id"] for x in rows}
+        resumed = self.recover()
+        self.assertEqual(resumed["status"], "READY_TO_TICK", resumed)
+        self.assertEqual(resumed["next_task_id"], ids["investigate_goal"])
+        self.assertEqual(resumed["runnable_task_ids"], [ids["investigate_goal"]])
+        self.assertNotIn(ids["goal_case"], resumed["runnable_task_ids"])
+        self.assertEqual(resumed["sequence_rule"],
+                         "AFTER_INDEPENDENT_RESEARCH_EVIDENCE")
+
+    def test_compound_cold_resume_rejects_changed_source_and_revocation(self):
+        """Do not turn a stale candidate receipt into an executable pointer."""
+        (self.fixtures / "cause.md").write_text("Recorded local UART cause.\n")
+        goal = ("Investigate the UART timeout using local engineering evidence "
+                "and then ensure a sandbox draft of settings.json has owner equal to ops.")
+        self.seed(goal)
+        started = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1,
+                           planner_mode="ollama-local", local_model="installed:test")
+        self.assertEqual(started["tasks"][0]["status"], "DECOMPOSED", started)
+        (self.fixtures / "cause.md").write_text("Source changed after admission.\n")
+        stale = self.recover()
+        self.assertEqual(stale["status"], "ORIGINAL_GOAL_LINEAGE_UNVERIFIABLE", stale)
+        self.assertNotIn("next_task_id", stale)
+        self.assertNotIn("runnable_task_ids", stale)
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        revoked = self.recover()
+        self.assertEqual(revoked["status"], "AUTHORITY_REVOKED", revoked)
+        self.assertEqual(revoked["original_goal"], goal)
+        self.assertNotIn("next_task_id", revoked)
+
     def test_missing_db_is_never_implicitly_initialized(self):
         missing = self.home / "missing.sqlite"
         self.assertEqual(
