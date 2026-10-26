@@ -62,6 +62,71 @@ def _sources(fixtures: Path) -> dict[str, str]:
     return result
 
 
+def capability_catalog(fixtures: Path, *, allow_public_discovery: bool = False) -> dict:
+    """Current registered methods and source affordances, never model inventing APIs.
+
+    Native ChatGPT/Codex or a later local planner can inspect this before
+    proposing two methods. Catalog membership is capability availability, NOT
+    proof that either method satisfies the full owner goal.
+    """
+    from .intent_planner import SUPPORTED_INTENTS, ALLOWED_ROLES
+    from .capability_dispatch import _HANDLERS
+    manifest = _sources(fixtures)
+    files = sorted(manifest)
+    suffixes = {x: Path(x).suffix.lower() for x in files}
+    kinds = {
+        "ensure_structure": "goal_case",
+        "compare_records": "record_reconciliation",
+        "investigate_evidence": "investigate_goal",
+        "discover_public_tools": "public_tool_discovery",
+    }
+    if set(kinds) != set(SUPPORTED_INTENTS) or not set(kinds.values()).issubset(_HANDLERS):
+        raise ValueError("REGISTERED_NATIVE_CATALOG_CHANGED")
+    options = []
+    for objective in sorted(kinds):
+        compatible = (
+            [x for x in files if suffixes[x] == ".json"]
+            if objective == "ensure_structure"
+            else [x for x in files if suffixes[x] == ".csv"]
+            if objective == "compare_records"
+            else [x for x in files if suffixes[x] in (".md", ".txt")]
+            if objective == "investigate_evidence" else []
+        )
+        available = (
+            len(compatible) >= 2 if objective == "compare_records"
+            else bool(compatible) if objective in (
+                "ensure_structure", "investigate_evidence")
+            else allow_public_discovery
+        )
+        options.append({
+            "objective": objective, "task_kind": kinds[objective],
+            "required_resource_roles": list(ALLOWED_ROLES[objective]),
+            "eligible_sources": compatible,
+            "currently_eligible": bool(available),
+            "outcome_scope": "MECHANICAL_LOCAL_EVIDENCE_ONLY",
+            "business_outcome_verified": False,
+            "external_effect_authorized": False,
+        })
+    return {"status": "NATIVE_CAPABILITY_CATALOG",
+            "methods": options, "source_manifest_sha256": _digest(manifest),
+            "public_disclosure_authorized": allow_public_discovery,
+            "business_outcome_verified": False}
+
+
+def _selected_sources_present(plan: dict, sources: dict[str, str]) -> bool:
+    spec = plan["child_source_spec"]
+    kind = spec["kind"]
+    if kind == "goal_case":
+        return spec["input"] in sources
+    if kind == "record_reconciliation":
+        return spec["reference"] in sources and spec["observed"] in sources
+    if kind == "investigate_goal":
+        return any(Path(x).suffix.lower() in (".md", ".txt") for x in sources)
+    if kind == "public_tool_discovery":
+        return True
+    return False
+
+
 def _proposal(candidate: dict, contract: dict) -> dict:
     """Require independently compilable *competing* local methods.
 
@@ -294,6 +359,8 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                    (root["goal_rev"], root["grant_rev"])):
                 raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             source_hashes = _sources(fixtures)
+            if not _selected_sources_present(parsed["selected"], source_hashes):
+                raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
             child = create_task(db, parsed["selected"]["child_source_spec"],
                                 parent=root_id, commit=False)
             previous = (observed["decisions"][-1]["task_id"]
