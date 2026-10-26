@@ -170,7 +170,7 @@ def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->boo
         except (ValueError, TypeError):
             return False
         if isinstance(parent_spec,dict) and parent_spec.get("kind")=="open_goal":
-            from .open_goal import validate_open_goal
+            from .open_goal import validate_open_goal, _manifest
             from .intent_planner import compile_intent
             try:
                 validate_open_goal(parent_spec)
@@ -241,10 +241,12 @@ def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->boo
                         return False
                 if not isinstance(evidence.get("source_sha256"),dict):
                     return False
-                for name,digest in evidence["source_sha256"].items():
-                    if (not isinstance(name,str) or not isinstance(digest,str)
-                        or hashlib.sha256(safe_fixture(fixtures,name)).hexdigest()!=digest):
-                        return False
+                _, complete_hashes = _manifest(
+                    fixtures,
+                    allow_empty=parent_spec.get("allow_public_discovery") is True)
+                # A truncated receipt must not silently unpin late sources.
+                if complete_hashes != evidence["source_sha256"]:
+                    return False
             except (ValueError,TypeError,KeyError,OSError,SourceUnavailable):
                 return False
     row=db.execute(
