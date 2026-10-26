@@ -90,6 +90,18 @@ class NativeOwnerAcceptance(unittest.TestCase):
         self.assertTrue(verdict["local_owner_outcome_verified"])
         self.assertFalse(verdict["business_outcome_verified"])
         self.assertFalse(verdict["real_external_outcome_verified"])
+        # Normal Host progress MUST share the same owner-level acceptance;
+        # a special MCP-only oracle call is not a complete product fix.
+        tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        owner_state = next(
+            x for x in tick["goal_progress"]["goals"]
+            if x["root_task_id"] == root)
+        self.assertEqual(
+            owner_state["local_owner_result"]["status"],
+            "LOCAL_OWNER_RESULT_VERIFIED", owner_state)
+        self.assertEqual(
+            owner_state["next_control_action"],
+            "LOCAL_OWNER_OUTCOME_VERIFIED", owner_state)
         (self.fixtures / "actual.csv").write_text(
             "id,amount\nA,999\nB,5\n", encoding="utf-8")
         changed = inspect_owner_local_outcome(
