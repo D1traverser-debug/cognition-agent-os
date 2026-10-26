@@ -145,12 +145,15 @@ def _proposal(candidate: dict, contract: dict) -> dict:
         or not re.fullmatch(r"[0-9a-f]{64}", candidate["observation_sha256"])):
         raise ValueError("INVALID_OBSERVATION_FINGERPRINT")
     selected = compile_intent(candidate["selected_intent"])
-    alternative = compile_intent(candidate["alternative_intent"])
-    if selected["objective"] == alternative["objective"]:
+    alternative = (
+        compile_intent(candidate["alternative_intent"])
+        if candidate["alternative_intent"] is not None else None)
+    if alternative is not None and selected["objective"] == alternative["objective"]:
         raise ValueError("COMPETING_METHODS_NOT_DISTINCT")
     if (not contract["allow_public_discovery"]
         and (selected["objective"] == "discover_public_tools"
-             or alternative["objective"] == "discover_public_tools")):
+             or (alternative is not None
+                 and alternative["objective"] == "discover_public_tools"))):
         raise PermissionError("PUBLIC_DISCOVERY_NOT_AUTHORIZED")
     if selected["child_source_spec"]["kind"] not in _VALID_KINDS:
         raise ValueError("UNREGISTERED_NATIVE_CAPABILITY")
@@ -277,7 +280,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             observations.append({
                 "task_id": child["task_id"], "task_state": child["state"],
                 "selected_objective": selected["objective"],
-                "alternative_objective": parsed["alternative"]["objective"],
+                "alternative_objective": (parsed["alternative"]["objective"]
+                                         if parsed["alternative"] is not None else None),
                 "mechanical_verdict": verdict,
                 "error_code": child["error_code"],
                 "owner_outcome_verified": False})
@@ -359,6 +363,12 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                    (root["goal_rev"], root["grant_rev"])):
                 raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             source_hashes = _sources(fixtures)
+            if parsed["alternative"] is None:
+                catalog = capability_catalog(
+                    fixtures, allow_public_discovery=contract["allow_public_discovery"])
+                if sum(method["currently_eligible"]
+                       for method in catalog["methods"]) > 1:
+                    raise ValueError("NATIVE_COMPARISON_REQUIRED_WHEN_METHODS_EXIST")
             if not _selected_sources_present(parsed["selected"], source_hashes):
                 raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
             child = create_task(db, parsed["selected"]["child_source_spec"],
