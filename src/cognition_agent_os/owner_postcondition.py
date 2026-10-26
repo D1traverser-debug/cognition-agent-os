@@ -104,7 +104,7 @@ def _full_owner_scope_is_supported(goal: str, plan: dict) -> bool:
     if plan["objective"] != "ensure_structure":
         return False
     match = re.fullmatch(
-        r"(?:please\s+)?ensure\s+(?:a\s+)?"
+        r"(?:please\s+)?ensure\s+(?:(?:a|an)\s+)?"
         r"(?:sandbox|isolated)\s+(?:draft|candidate|proposal)\s+"
         r"of\s+([A-Za-z0-9_.-]+\.json)\s+has\s+(.+)",
         text, flags=re.IGNORECASE,
