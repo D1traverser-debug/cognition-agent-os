@@ -118,6 +118,79 @@ class NativeOwnerAcceptance(unittest.TestCase):
             self.db, self.workspace, self.fixtures, root)
         self.assertFalse(revoked["local_owner_outcome_verified"], revoked)
 
+    def test_wrong_but_mechanically_verified_report_can_be_corrected(self):
+        """A valid artifact is not the owner's result: repair that boundary.
+
+        Both plans use identical source bytes and the SAME registered method.
+        Only a changed plan that now matches the exact FULL original owner
+        comparison may execute; earlier mechanical success is insufficient.
+        """
+        goal = "Compare baseline.csv with actual.csv and report differences."
+        root = register_native_goal(self.db, goal)
+        source_refs = [{
+            "path": p.name,
+            "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+        } for p in sorted(self.fixtures.iterdir())]
+
+        def propose(reference, observed, previous):
+            state = inspect_native_goal(
+                self.db, self.workspace, self.fixtures, root)
+            return {
+                "selected_intent": {
+                    "kind": "goal_intent", "objective": "compare_records",
+                    "resources": [
+                        {"role": "reference", "path": reference},
+                        {"role": "observed", "path": observed}]},
+                "alternative_intent": None,
+                "decision_reason": "Apply the owner's named comparison direction.",
+                "alternative_reason":
+                    "Unrelated JSON checking cannot report original CSV differences.",
+                "expected_evidence":
+                    "Independently recomputed original-source comparison.",
+                "observation_sha256": state["observation_sha256"],
+                "decision_basis": {
+                    "source_refs": source_refs,
+                    "previous_result_task_id": previous,
+                    "challenge": "The reference and observation roles may be reversed.",
+                    "falsifier":
+                        "The independent owner scope check rejects the direction.",
+                    "uncertainty":
+                        "A CSV mismatch report does not resolve physical inventory.",
+                },
+            }
+
+        bad = admit_native_decision(self.db, self.workspace, self.fixtures, root,
+                                    propose("actual.csv", "baseline.csv", None))
+        wrong = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(wrong["tasks"][0]["status"], "NEEDS_REVIEW")
+        state = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        self.assertEqual(state["decisions"][-1]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root
+        )["local_owner_outcome_verified"])
+        corrected = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            propose("baseline.csv", "actual.csv", bad["child_task_id"]))
+        self.assertEqual(corrected["status"], "NATIVE_METHOD_ENQUEUED")
+        executed = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(executed["tasks"][0]["task_id"],
+                         corrected["child_task_id"])
+        self.assertEqual(executed["tasks"][0]["status"], "NEEDS_REVIEW")
+        result = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertEqual(result["status"], "LOCAL_OWNER_RESULT_VERIFIED", result)
+        self.assertEqual(result["evidence_task_id"],
+                         corrected["child_task_id"])
+        self.assertFalse(result["business_outcome_verified"])
+        # Repeating an already-correct method without new evidence is still
+        # forbidden, even if a model insists.
+        with self.assertRaisesRegex(ValueError,
+                                    "REPEATED_NATIVE_METHOD_WITHOUT_NEW_EVIDENCE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                propose("baseline.csv", "actual.csv", corrected["child_task_id"]))
+
     def test_unrequested_extra_deliverable_is_not_silently_dropped(self):
         root, _ = self.run_case(
             "Compare baseline.csv with actual.csv and report differences "
