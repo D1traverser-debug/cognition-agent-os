@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.goal_drift import observe_owner_goal_drift
@@ -334,6 +335,66 @@ class NativeDecisionLoop(unittest.TestCase):
             self.candidate(recovered, inquiry, self.reconcile()))
         self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertNotEqual(first["child_task_id"], second["child_task_id"])
+
+    def test_new_research_document_after_accepted_investigation_is_not_source_drift(self):
+        from cognition_agent_os import local_model
+        (self.fixtures / "reason_a.md").write_text(
+            "The original evidence must remain attributable.", encoding="utf-8")
+        (self.fixtures / "reason_b.md").write_text(
+            "An external verifier must validate the outcome.", encoding="utf-8")
+        root = self.root_id()
+        inquiry = {"kind": "goal_intent", "objective": "investigate_evidence",
+                   "resources": [], "question":
+                   "How can source attribution and independent verification be preserved?"}
+        start = self.view(root)
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(start, inquiry, self.reconcile()))
+        times = [0]
+        def model(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "local:test"}]}
+            times[0] += 1
+            if times[0] == 1:
+                return {"done": True, "response": json.dumps(
+                    {"sources": ["reason_a.md", "reason_b.md"]})}
+            return {"done": True, "response": json.dumps({
+                "findings": [
+                    {"source": "reason_a.md",
+                     "quote": "The original evidence must remain attributable.",
+                     "interpretation": "Provenance must be checked separately."},
+                    {"source": "reason_b.md",
+                     "quote": "An external verifier must validate the outcome.",
+                     "interpretation": "Check actual acceptance separately."}],
+                "uncertainty": "This research does not verify the whole owner outcome.",
+            })}
+        with patch.object(local_model, "_request", side_effect=model):
+            processed = run_tick(
+                self.db, self.workspace, self.fixtures, max_jobs=1,
+                planner_mode="ollama-local", local_model="local:test")
+        self.assertEqual(processed["tasks"][0]["status"], "NEEDS_REVIEW", processed)
+        baseline = self.view(root)
+        self.assertEqual(baseline["decisions"][0]["mechanical_verdict"],
+                         "SOURCE_GROUNDED_UNREVIEWED", baseline)
+        (self.fixtures / "later_finding.md").write_text(
+            "A newly acquired independent source changes the next search.",
+            encoding="utf-8")
+        evolved = self.view(root)
+        self.assertEqual(evolved["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                         evolved)
+        self.assertEqual(evolved["decisions"][0]["mechanical_verdict"],
+                         "SOURCE_GROUNDED_UNREVIEWED", evolved)
+        next_action = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(evolved, self.reconcile(), self.structure()))
+        subsequent = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(subsequent["tasks"][0]["task_id"],
+                         next_action["child_task_id"])
+        self.assertEqual(subsequent["tasks"][0]["status"],
+                         "NEEDS_REVIEW", subsequent)
+        (self.fixtures / "reason_a.md").write_text(
+            "The originally pinned source was altered.", encoding="utf-8")
+        self.assertEqual(self.view(root)["status"], "NATIVE_SOURCE_CHANGED")
 
     def test_new_evidence_enables_changed_method_retry_beyond_three_steps(self):
         root = self.root_id()
