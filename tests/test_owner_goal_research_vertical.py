@@ -132,10 +132,10 @@ class OpenGoalResearchVertical(unittest.TestCase):
     def test_parallel_intents_transfer_to_irrigation_domain_without_code_changes(self):
         """The existing bounded capability contracts must not depend on UART."""
         (self.fx/"cause.md").write_text(
-            "The irrigation valve remained closed through two readings.\\n")
+            "The irrigation valve remained closed through two readings.\n")
         (self.fx/"trace.md").write_text(
-            "A moisture reading reached the dry-state threshold.\\n")
-        (self.fx/"irrigation.json").write_text('{"timeout":7}\\n')
+            "A moisture reading reached the dry-state threshold.\n")
+        (self.fx/"irrigation.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the irrigation moisture anomaly using local engineering "
             "evidence and ensure a sandbox draft of irrigation.json has "
