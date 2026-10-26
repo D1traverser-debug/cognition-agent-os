@@ -83,7 +83,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
 
     def test_independent_research_and_sandbox_draft_conjunction(self):
         """Both explicit owner obligations must run via the SAME Host and ledger."""
-        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        (self.fx/"settings.json").write_text('{"timeout":7}\n')
         original={p.name:p.read_bytes() for p in self.fx.iterdir()}
         parent=self.seed(
             "Investigate the UART timeout using local engineering evidence and "
@@ -112,7 +112,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertFalse(root["research_only"])
 
     def test_sequential_research_then_draft_is_not_parallelized(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the UART timeout using local evidence and then "
             "ensure a sandbox draft of settings.json has owner equal to ops.")
