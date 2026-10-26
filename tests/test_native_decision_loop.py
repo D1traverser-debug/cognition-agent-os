@@ -13,6 +13,7 @@ import unittest
 
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, create_task, initialize, alter_authority
+from cognition_agent_os.intent_planner import IntentError
 from cognition_agent_os.native_decision import (
     register_native_goal, inspect_native_goal, admit_native_decision)
 
