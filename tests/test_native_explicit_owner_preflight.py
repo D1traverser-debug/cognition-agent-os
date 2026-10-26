@@ -137,5 +137,33 @@ class NativeExplicitOwnerPreflight(unittest.TestCase):
         self.unchanged()
 
 
+    def test_model_prompt_receives_independently_recognized_original_contract(self):
+        """Small model guesses are not the authority for exact owner slots."""
+        import json
+        from unittest.mock import patch
+        from cognition_agent_os.native_local_planner import propose_native_local
+        root = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        observed = []
+        def read_model_request(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            context = json.loads(payload["prompt"].split("\n\n")[-1])
+            observed.append(context["explicit_owner_local_contract_if_recognized"])
+            return {"done": True, "response": '{"abstain":true}'}
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=read_model_request):
+            result = propose_native_local(
+                self.db, self.work, self.sources, root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_LOCAL_MODEL_ABSTAINED")
+        self.assertEqual(observed, [{
+            "objective": "compare_records", "reference": "baseline.csv",
+            "observed": "actual.csv"}])
+        self.assertEqual(inspect_native_goal(
+            self.db, self.work, self.sources, root)["decision_count"], 0)
+        self.unchanged()
+
+
 if __name__ == "__main__":
     unittest.main()
