@@ -214,6 +214,13 @@ def _ground_decision(candidate: dict, parsed: dict,
     basis = candidate["decision_basis"]
     if basis["previous_result_task_id"] != prior_child_id:
         raise ValueError("PREVIOUS_DECISION_RESULT_NOT_GROUNDED")
+    # A method with missing actual inputs is ineligible before comparison:
+    # citing a ghost file would not make that method executable.
+    if not _selected_sources_present(parsed["selected"], sources):
+        raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
+    if (parsed["alternative"] is not None
+        and not _selected_sources_present(parsed["alternative"], sources)):
+        raise ValueError("ALTERNATIVE_NATIVE_SOURCE_UNAVAILABLE")
     refs = basis["source_refs"]
     cited = {ref["path"] for ref in refs}
     if any(sources.get(ref["path"]) != ref["sha256"] for ref in refs):
@@ -229,11 +236,7 @@ def _ground_decision(candidate: dict, parsed: dict,
     if not refs and not prior_child_id and (
             parsed["selected"]["objective"] != "discover_public_tools"):
         raise ValueError("NO_INDEPENDENT_DECISION_INPUT")
-    if not _selected_sources_present(parsed["selected"], sources):
-        raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
-    if (parsed["alternative"] is not None
-        and not _selected_sources_present(parsed["alternative"], sources)):
-        raise ValueError("ALTERNATIVE_NATIVE_SOURCE_UNAVAILABLE")
+
 
 
 def register_native_goal(db_path: Path, goal: str, *,
