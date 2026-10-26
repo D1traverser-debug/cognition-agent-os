@@ -181,7 +181,15 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertEqual(child_by_kind["goal_case"]["state"],"NEEDS_REPLAN")
         self.assertFalse((self.ws/"artifacts"/(
             child_by_kind["goal_case"]["task_id"]+".json")).exists())
-        self.assertFalse(attempted["goal_progress"]["goals"][0]["owner_outcome_verified"])
+        goal=attempted["goal_progress"]["goals"][0]
+        self.assertFalse(goal["owner_outcome_verified"])
+        self.assertEqual(goal["next_control_action"],
+                         "REPLAN_UNMET_ORIGINAL_OBLIGATION")
+        self.assertTrue(any(
+            x["task_state"]=="NEEDS_REPLAN"
+            and x["error_code"]=="PREDECESSOR_EVIDENCE_UNVERIFIABLE"
+            and x["owner_outcome_verified"] is False
+            for x in goal["original_obligation_progress"]))
 
     def test_parallel_intents_transfer_to_irrigation_domain_without_code_changes(self):
         """The existing bounded capability contracts must not depend on UART."""
