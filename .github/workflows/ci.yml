@@ -569,6 +569,58 @@ jobs:
             graphify-out/graph.html
           if-no-files-found: warn
 
+  experimental_real_native_cognition:
+    # Opt-in real Ollama inference on an ephemeral public CI runner.
+    # Synthetic independent owner-acceptance labels and actual Host artifacts.
+    # No paid inference, model API keys, user data, production grant or deployment.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-real-native-goal]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install Ollama on disposable public CI runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/native-ollama-install.sh"
+          sh "$RUNNER_TEMP/native-ollama-install.sh"
+          ollama --version
+      - name: Start loopback-only open model; prevent cloud provider use
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/native-ollama.log" 2>&1 &)
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          timeout 420 ollama pull qwen2.5-coder:0.5b
+      - name: Actual model -> native goal -> Worker -> independent owner oracle A/B
+        shell: bash
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          COGNITION_EVAL_MODEL: qwen2.5-coder:0.5b
+          COGNITION_EVAL_OUTPUT: real-native-cognition-evidence.json
+        run: |
+          set -euo pipefail
+          timeout 900 python scripts/measure_real_native_goal.py
+      - name: Preserve complete real model responses and independently graded failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-native-cognition-model-vs-incumbent
+          path: real-native-cognition-evidence.json
+          if-no-files-found: warn
+
   experimental_live_open_goal_method:
     # Real local inference on disposable hosted Linux. No owner-host install.
     if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-real-open-goal]') }}
