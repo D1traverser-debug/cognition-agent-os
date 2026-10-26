@@ -336,6 +336,27 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertNotEqual(first["child_task_id"], second["child_task_id"])
 
+    def test_new_research_document_before_investigation_execution_fences_old_scope(self):
+        (self.fixtures / "initial.md").write_text(
+            "Only the initial research evidence is approved.", encoding="utf-8")
+        root = self.root_id()
+        investigation = {"kind": "goal_intent", "objective": "investigate_evidence",
+                         "resources": [], "question":
+                         "What is the evidence on source-scope approval?"}
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), investigation, self.reconcile()))
+        (self.fixtures / "later.md").write_text(
+            "A second research source appeared after admission.", encoding="utf-8")
+        self.assertEqual(self.view(root)["status"], "NATIVE_SOURCE_CHANGED")
+        attempted = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1,
+            planner_mode="ollama-local", local_model="installed:test")
+        self.assertNotEqual(attempted["tasks"][0]["status"], "NEEDS_REVIEW",
+                            attempted)
+        self.assertFalse((self.workspace / "artifacts" /
+                          (admitted["child_task_id"] + ".json")).exists())
+
     def test_new_research_document_after_accepted_investigation_is_not_source_drift(self):
         from cognition_agent_os import local_model
         (self.fixtures / "reason_a.md").write_text(
