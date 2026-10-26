@@ -298,6 +298,7 @@ def main(argv=None) -> int:
                     raise ValueError("NATIVE_ROOT_NOT_CURRENT")
                 read_uri=args.db.resolve(strict=True).as_uri()+"?mode=ro"
                 with closing(sqlite3.connect(read_uri,uri=True,timeout=5)) as read_db:
+                    read_db.row_factory=sqlite3.Row
                     root=read_db.execute(
                         "SELECT source_spec FROM tasks WHERE task_id=?",
                         (args.root_task_id,)).fetchone()
