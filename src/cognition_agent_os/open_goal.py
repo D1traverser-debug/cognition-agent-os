@@ -544,6 +544,51 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
     }
     return {"plan": plan, "candidate": candidate}
 
+def _select_independent_conjunction(
+    goal: str, manifest: list[dict], model: str, before_request,
+    fixtures: Path, *, allow_public_discovery: bool = False,
+) -> dict | None:
+    """Admit two INDEPENDENT registered obligations, never inferred sequencing.
+
+    One explicitly bounded research clause + one explicitly bounded sandbox
+    draft clause. Every clause must separately compile through its EXISTING
+    registered intent and pass full-clause coverage; ambiguous or unsupported
+    owner text abstains. No execution, grant, or semantic acceptance here.
+    """
+    # "then" denotes a dependency; no review/admission gate for research
+    # results is established here, so sequential instructions stay unsupported.
+    matched = re.fullmatch(
+        r"(?is)\\s*(investigate\\b.{10,350}?)\\s+and\\s+"
+        r"(ensure\\s+(?:a\\s+)?(?:sandbox|isolated)\\s+"
+        r"(?:draft|candidate|proposal)\\s+of\\s+"
+        r"[A-Za-z0-9_.-]+\\.json\\s+has\\s+.+?)\\s*\\.?\\s*",
+        goal,
+    )
+    if matched is None:
+        return None
+    clauses = [matched.group(1).strip(), matched.group(2).strip()]
+    if any(_COMPOSITE_ENGLISH_ACTION.search(c) or
+           _COMPOSITE_CHINESE_ACTION.search(c) for c in clauses):
+        raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
+    chosen = [
+        _select_method(c, manifest, model, before_request, fixtures,
+                       allow_public_discovery=allow_public_discovery)
+        for c in clauses
+    ]
+    if ([c["plan"]["objective"] for c in chosen]
+        != ["investigate_evidence", "ensure_structure"]):
+        raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
+    # The whole draft clause, not just the owner field, must match a verified
+    # bounded sandbox-output grammar. Unknown qualifiers cannot disappear.
+    from .owner_postcondition import _full_owner_scope_is_supported
+    if not _full_owner_scope_is_supported(clauses[1], chosen[1]["plan"]):
+        raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
+    return {"independent_obligations": [
+        {"clause": clause, **entry}
+        for clause, entry in zip(clauses, chosen)
+    ]}
+
+
 def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
                   *, planner_mode: str, local_model_name: str | None) -> dict:
     if planner_mode not in ("deterministic", "ollama-local"):
@@ -567,10 +612,14 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
         def before_request():
             if not renew_claim(db, task, lease_seconds=120):
                 raise OpenGoalInvalid("OPEN_GOAL_LEASE_LOST")
-        selected = _select_method(spec["goal"], manifest,
-                                  (local_model_name or "") if planner_mode == "ollama-local" else "",
-                                  before_request, fixtures,
-                                  allow_public_discovery=public_allowed)
+        model = (local_model_name or "") if planner_mode == "ollama-local" else ""
+        selected = _select_independent_conjunction(
+            spec["goal"], manifest, model, before_request, fixtures,
+            allow_public_discovery=public_allowed)
+        if selected is None:
+            selected = _select_method(
+                spec["goal"], manifest, model, before_request, fixtures,
+                allow_public_discovery=public_allowed)
     except local_model.LocalModelUnavailable:
         return error_after_model("LOCAL_MODEL_UNAVAILABLE")
     except (OpenGoalInvalid, SourceUnavailable, OSError, ValueError, TypeError) as exc:
@@ -607,6 +656,38 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
             db.commit()
             return {"task_id": task["task_id"], "status": "UNKNOWN",
                     "reason": "OPEN_GOAL_SOURCE_CHANGED"}
+        if "independent_obligations" in selected:
+            # The parent event and BOTH already-registered children are minted
+            # atomically under this SAME root claim, revision and grant. This
+            # supports parallel local evidence/proposals, not "then" semantics
+            # or automatic permission to apply draft source changes.
+            admitted = []
+            for item in selected["independent_obligations"]:
+                child_id = create_task(
+                    db, item["plan"]["child_source_spec"],
+                    parent=task["task_id"], commit=False)
+                admitted.append({
+                    "child_task_id": child_id, "clause": item["clause"],
+                    "plan": item["plan"], "model_candidate": item["candidate"],
+                })
+            db.execute("UPDATE tasks SET state='DECOMPOSED',decision=?,"
+                       "error_code=NULL,state_version=state_version+1,"
+                       "lease_until=NULL,claim_token=NULL WHERE task_id=?",
+                       ("OWNER_GROUNDED_INDEPENDENT_LOCAL_OBLIGATIONS",
+                        task["task_id"]))
+            event(db, task["task_id"], "OPEN_GOAL_INDEPENDENT_OBLIGATIONS", {
+                "obligations": admitted, "source_sha256": hashes,
+                "original_goal": spec["goal"], "semantic_approval": False,
+                "real_owner_outcome_verified": False,
+            })
+            db.commit()
+            return {
+                "task_id": task["task_id"], "status": "DECOMPOSED",
+                "child_task_ids": [x["child_task_id"] for x in admitted],
+                "capabilities": [x["plan"]["capability"] for x in admitted],
+                "semantic_outcome_verified": False,
+                "business_outcome_verified": False,
+            }
         child = create_task(db, selected["plan"]["child_source_spec"],
                             parent=task["task_id"], commit=False)
         db.execute("UPDATE tasks SET state='DECOMPOSED',decision=?,"
