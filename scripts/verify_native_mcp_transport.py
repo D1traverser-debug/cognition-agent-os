@@ -328,6 +328,23 @@ async def run():
                 {"owner_goal": "This cannot regrant revoked authority."})
             assert new_attempt.is_error, new_attempt
 
+        # A realistic owner objective can exceed an arbitrary short chat
+        # headline. The contract must round-trip ALL original clauses,
+        # including the final non-mutation and acceptance restrictions.
+        long_goal = (
+            "Audit a multidisciplinary owner objective with all requirements: "
+            + ("preserve independent evidence and challenge assumptions; " * 49)
+            + "FINAL RULE: no original source mutation and no completion "
+              "claim without independent full-owner outcome verification.")
+        assert 2048 < len(long_goal) < 8192
+        async with Client(server(allow_tick=False)) as client:
+            persisted = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": long_goal}))
+            long_root = persisted["root_task_id"]
+            recovered_long = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": long_root}))
+            assert recovered_long["original_goal"] == long_goal
+
         # Forty-plus unrelated legacy tasks can be generated between
         # sessions. A page cut BEFORE native type filtering would silently
         # hide all earlier genuine owner goals, causing irreversible drift.
@@ -352,7 +369,7 @@ async def run():
             assert inventory["selected_root_task_id"] is None, inventory
             assert inventory["truncated"] is False, inventory
             ids = {entry["root_task_id"] for entry in inventory["goals"]}
-            assert ids == {root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
+            assert ids == {root, long_root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
             discovered = next(
                 item for item in inventory["goals"]
                 if item["original_goal"] == goal)
@@ -383,6 +400,7 @@ async def run():
             "native_original_goal_independent_local_postcondition": True,
             "cold_goal_discovery_without_id": True,
             "mixed_ledger_old_goals_not_hidden": True,
+            "long_original_owner_clause_exact_roundtrip": True,
             "drifted_goal_inventory_does_not_crash_or_claim_success": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
