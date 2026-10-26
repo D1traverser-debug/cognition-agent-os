@@ -64,6 +64,11 @@ def initialize(db: sqlite3.Connection) -> None:
       event_id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL,
       kind TEXT NOT NULL, details TEXT NOT NULL, happened_at REAL NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_tasks_parent_task ON tasks(parent_task);
+    CREATE TABLE IF NOT EXISTS task_dependencies(
+      task_id TEXT PRIMARY KEY REFERENCES tasks(task_id),
+      predecessor_task TEXT NOT NULL REFERENCES tasks(task_id),
+      evidence_kind TEXT NOT NULL,
+      released_at REAL);
     CREATE TABLE IF NOT EXISTS knowledge_dependencies(
        task_id TEXT PRIMARY KEY REFERENCES tasks(task_id),
        evidence_path TEXT NOT NULL,
@@ -102,10 +107,19 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
         # Admit useful work first: stale-goal tasks are still eventually
         # claimed and fenced, but cannot consume the last slot ahead of
         # legitimate work from the current goal revision.
+        # Older installed SQLite databases may predate this same-ledger
+        # dependency table. Do not silently initialize a new authority store.
+        has_dependencies=db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='task_dependencies'").fetchone() is not None
+        pending_gate=(" AND NOT EXISTS (SELECT 1 FROM task_dependencies d "
+                      "WHERE d.task_id=t.task_id AND d.released_at IS NULL)"
+                      if has_dependencies else "")
         row = db.execute("""SELECT t.* FROM tasks t
                        JOIN authority a ON a.singleton=1
                        WHERE t.due_at<=? AND
-                       (t.state='PENDING' OR (t.state='RUNNING' AND t.lease_until<=?))
+                       (t.state='PENDING' OR (t.state='RUNNING' AND t.lease_until<=?))"""
+                       +pending_gate+"""
                        ORDER BY CASE WHEN t.goal_rev=a.goal_rev THEN 0 ELSE 1 END,
                                 t.due_at,t.created_at,t.task_id LIMIT 1""",
                          (now, now)).fetchone()
