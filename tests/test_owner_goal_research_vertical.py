@@ -110,6 +110,11 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertFalse(root["owner_outcome_verified"])
         self.assertFalse(root["semantic_outcome_verified"])
         self.assertFalse(root["research_only"])
+        self.assertEqual(len(root["independent_checks"]),2)
+        self.assertTrue(all(x["mechanically_verified"]
+                            and x["business_outcome_verified"] is False
+                            for x in root["independent_checks"]))
+        self.assertFalse(root["local_owner_result"]["local_owner_outcome_verified"])
 
     def test_sequential_research_then_draft_is_not_parallelized(self):
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
@@ -122,6 +127,55 @@ class OpenGoalResearchVertical(unittest.TestCase):
                             planner_mode="ollama-local",local_model="installed:test")
         self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
         self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
+        self.assertFalse(self.children(parent))
+
+    def test_compound_receipt_tampering_fails_independent_parent_audit(self):
+        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        parent=self.seed(
+            "Investigate the UART timeout using local engineering evidence and "
+            "ensure a sandbox draft of settings.json has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=3,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"DECOMPOSED",result)
+        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
+                         "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
+        with closing(connect(self.db)) as db:
+            row=db.execute(
+                "SELECT rowid,details FROM events WHERE task_id=? "
+                "AND kind='OPEN_GOAL_INDEPENDENT_OBLIGATIONS'",(parent,)).fetchone()
+            receipt=json.loads(row["details"])
+            receipt["obligations"][0]["clause"]="Investigate the UART timeout"
+            db.execute("UPDATE events SET details=? WHERE rowid=?",
+                       (json.dumps(receipt,sort_keys=True),row["rowid"]))
+            db.commit()
+        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
+                         "UNVERIFIABLE")
+
+    def test_compound_stale_evidence_cannot_pass_original_parent_audit(self):
+        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        parent=self.seed(
+            "Investigate the UART timeout using local engineering evidence and "
+            "ensure a sandbox draft of settings.json has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=3,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"DECOMPOSED",result)
+        (self.fx/"cause.md").write_text("Evidence revised after child creation.")
+        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
+                         "SOURCE_CHANGED_SINCE_PROPOSAL")
+
+    def test_compound_unrecognized_extra_owner_requirement_is_not_dropped(self):
+        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        parent=self.seed(
+            "Investigate the UART timeout using local engineering evidence and "
+            "ensure a sandbox draft of settings.json has owner equal to ops "
+            "and publish it to production.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("external action not in local capability")):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
         self.assertFalse(self.children(parent))
 
     def test_compound_research_and_write_must_not_downgrade_owner_goal(self):
