@@ -126,6 +126,65 @@ class NativeRealModelEvalContract(unittest.TestCase):
         self.assertEqual(plan["status"], "NEEDS_REVIEW")
         self.assertEqual(plan["selection"]["action"], "ADD_MISSING_JSON_KEYS")
 
+    def test_native_evaluator_runs_actual_json_sandbox_stage_before_grading(self):
+        """Benchmark the real Host effect, independently of model accuracy.
+
+        The model choice is substituted ONLY in this harness unit test, never
+        in the opt-in real-Ollama performance job. A correct selected method
+        must have a fair opportunity to satisfy the same owner oracle as the
+        deterministic incumbent.
+        """
+        import hashlib
+        from unittest.mock import patch
+        from cognition_agent_os.native_decision import (
+            inspect_native_goal, admit_native_decision)
+        bench = load_benchmark()
+        case = next(c for c in bench.CASES
+                    if c["target"] == "ensure_structure")
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            def choose_correct_method(db, work, fixtures, root, **kwargs):
+                observed = inspect_native_goal(db, work, fixtures, root)
+                refs = [{"path": f.name,
+                         "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
+                        for f in sorted(fixtures.iterdir())]
+                proposal = {
+                    "selected_intent": {
+                        "kind": "goal_intent", "objective": "ensure_structure",
+                        "resources": [{"role": "input", "path": "settings.json"}],
+                        "requirements": [{"field": "owner", "equals": "ops"}]},
+                    "alternative_intent": None,
+                    "decision_reason":
+                        "The original owner requests an isolated JSON draft.",
+                    "alternative_reason":
+                        "An unrelated CSV comparison cannot create that draft.",
+                    "expected_evidence":
+                        "A staged immutable candidate independently checked.",
+                    "observation_sha256": observed["observation_sha256"],
+                    "decision_basis": {
+                        "source_refs": refs,
+                        "previous_result_task_id": None,
+                        "challenge": "An existing owner key could be contradictory.",
+                        "falsifier": "Original fields are changed in the draft.",
+                        "uncertainty":
+                            "A local draft does not prove production deployment.",
+                    },
+                }
+                return admit_native_decision(
+                    db, work, fixtures, root, proposal)
+            with patch.object(bench, "advance_native_local_once",
+                              side_effect=choose_correct_method):
+                result = bench._native_trial(case, home)
+        self.assertTrue(result["whole_local_owner_verified"], result)
+        self.assertTrue(result["source_preserved"], result)
+        self.assertEqual(result["independent_owner_result"],
+                         "LOCAL_OWNER_RESULT_VERIFIED")
+        self.assertIn("SANDBOX_VERIFIED",
+                      [item.get("status")
+                       for step in result["progress"]
+                       for item in step.get("sandbox_reviews", [])])
+        self.assertEqual(result["model_calls"], 0)
+
     def test_incumbent_receives_same_fixtures_without_mutating_sources(self):
         benchmark = load_benchmark()
         with tempfile.TemporaryDirectory() as td:
