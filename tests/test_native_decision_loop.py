@@ -12,6 +12,7 @@ import tempfile
 import unittest
 
 from cognition_agent_os.host import run_tick
+from cognition_agent_os.goal_drift import observe_owner_goal_drift
 from cognition_agent_os.ledger import connect, create_task, initialize, alter_authority
 from cognition_agent_os.intent_planner import IntentError
 from cognition_agent_os.native_decision import (
@@ -258,6 +259,60 @@ class NativeDecisionLoop(unittest.TestCase):
         recovered = json.loads(proc.stdout)
         self.assertEqual(recovered["status"], "AUTHORITY_REVOKED", proc.stderr)
         self.assertEqual(recovered["original_goal"], self.goal)
+
+    def test_native_owner_drift_uses_original_single_ledger_observer(self):
+        """Observe native source drift once; never self-approve owner results."""
+        root = self.root_id()
+        first = observe_owner_goal_drift(
+            self.db, workspace=self.workspace, fixtures=self.fixtures)
+        self.assertTrue(any(
+            x["root_task_id"] == root and x["status"] == "DRIFT_SIGNAL_RECORDED"
+            for x in first), first)
+        self.assertEqual(observe_owner_goal_drift(
+            self.db, workspace=self.workspace, fixtures=self.fixtures), [])
+        initial = self.view(root)
+        admitted = admit_native_decision(
+            self.db,self.workspace,self.fixtures,root,
+            self.candidate(initial,self.reconcile(),self.structure()))
+        ran = run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(ran["tasks"][0]["task_id"],admitted["child_task_id"])
+        self.assertEqual(ran["tasks"][0]["status"],"NEEDS_REVIEW")
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,500\n",encoding="utf-8")
+        changed = observe_owner_goal_drift(
+            self.db,workspace=self.workspace,fixtures=self.fixtures)
+        states = [x["fidelity_state"] for x in changed
+                  if x.get("status")=="DRIFT_SIGNAL_RECORDED"]
+        self.assertIn("NATIVE_OWNER_SOURCE_CHANGED", states, changed)
+        self.assertEqual(observe_owner_goal_drift(
+            self.db,workspace=self.workspace,fixtures=self.fixtures), [])
+        with closing(connect(self.db)) as db:
+            alter_authority(db,revoke=True)
+        revoked = observe_owner_goal_drift(
+            self.db,workspace=self.workspace,fixtures=self.fixtures)
+        self.assertTrue(any(x["status"]=="NOT_ADMITTED" for x in revoked))
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='OWNER_GOAL_LOCAL_RESULT_OBSERVED'",(root,)
+            ).fetchone()[0],0)
+
+    def test_native_accepted_artifact_tamper_sets_objective_drift(self):
+        root=self.root_id()
+        start=self.view(root)
+        child=admit_native_decision(
+            self.db,self.workspace,self.fixtures,root,
+            self.candidate(start,self.reconcile(),self.structure()))["child_task_id"]
+        ran=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(ran["tasks"][0]["status"],"NEEDS_REVIEW")
+        payload=self.workspace/"artifacts"/(child+".json")
+        payload.write_bytes(payload.read_bytes()+b" unexpected bytes")
+        observed=observe_owner_goal_drift(
+            self.db,workspace=self.workspace,fixtures=self.fixtures)
+        self.assertTrue(any(
+            x.get("fidelity_state")=="NATIVE_OWNER_EVIDENCE_UNVERIFIABLE"
+            for x in observed),observed)
+        self.assertFalse(self.view(root)["business_outcome_verified"])
 
     def test_worker_refuses_forged_extra_child(self):
         root = self.root_id()
