@@ -325,7 +325,8 @@ def main(argv=None) -> int:
         print(json.dumps(result,ensure_ascii=True,sort_keys=True))
         return 0 if result["status"] not in (
             "NATIVE_GOAL_UNVERIFIABLE","NATIVE_SOURCE_CHANGED",
-            "NATIVE_EVIDENCE_UNVERIFIABLE","NATIVE_GRANT_REVOKED"
+            "NATIVE_EVIDENCE_UNVERIFIABLE","NATIVE_GRANT_REVOKED",
+            "NATIVE_LOCAL_MODEL_UNAVAILABLE","NATIVE_LOCAL_PLAN_REFUSED"
         ) else 4
     if args.command == "goal-resume":
         result = resume_goal(
@@ -466,7 +467,8 @@ def main(argv=None) -> int:
                               planner_mode=args.planner_mode, local_model=args.local_model,
                               auto_stage_goals=args.auto_stage_goals,
                               auto_review_repos=args.auto_review_repos,
-                              auto_local_goal_control=args.auto_local_goal_control)
+                              auto_local_goal_control=args.auto_local_goal_control,
+                              auto_native_cognition=args.auto_native_cognition)
         except HostNotConfigured as exc:
             print(json.dumps({"status":"HOST_NOT_CONFIGURED", "error":str(exc)}))
             return 2
