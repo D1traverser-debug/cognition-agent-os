@@ -165,12 +165,12 @@ class OpenGoalResearchVertical(unittest.TestCase):
                          "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
         with closing(connect(self.db)) as db:
             row=db.execute(
-                "SELECT rowid,details FROM events WHERE task_id=? "
+                "SELECT event_id,details FROM events WHERE task_id=? "
                 "AND kind='OPEN_GOAL_INDEPENDENT_OBLIGATIONS'",(parent,)).fetchone()
             receipt=json.loads(row["details"])
             receipt["obligations"][0]["clause"]="Investigate the UART timeout"
-            db.execute("UPDATE events SET details=? WHERE rowid=?",
-                       (json.dumps(receipt,sort_keys=True),row["rowid"]))
+            db.execute("UPDATE events SET details=? WHERE event_id=?",
+                       (json.dumps(receipt,sort_keys=True),row["event_id"]))
             db.commit()
         self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
                          "UNVERIFIABLE")
