@@ -56,7 +56,7 @@ async def run():
             initialize(ledger)
 
         def server(*, allow_tick, allow_source_read=False,
-                   allow_model_plan=False):
+                   allow_model_plan=False, allow_public_discovery=False):
             args = ["-m", "cognition_agent_os.native_mcp_bridge",
                     "--db", str(db), "--workspace", str(workspace),
                     "--fixtures", str(sources)]
@@ -66,6 +66,8 @@ async def run():
                 args.append("--allow-source-read")
             if allow_model_plan:
                 args.append("--allow-local-model-plan")
+            if allow_public_discovery:
+                args.append("--allow-public-discovery")
             return StdioServerParameters(
                 command=sys.executable, args=args,
                 env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
@@ -106,6 +108,27 @@ async def run():
             untouched = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
             assert untouched["decision_count"] == 0, untouched
+
+        # A model cannot choose outbound disclosure at tool-call time.
+        # Only an explicitly configured local server is allowed to register
+        # an original root with sanitized GitHub metadata discovery rights.
+        async with Client(server(
+                allow_tick=False, allow_public_discovery=True)) as client:
+            listed = (await client.list_tools()).tools
+            create = next(t for t in listed if t.name == "native_goal_create")
+            assert "allow_public_discovery" not in create.input_schema["properties"]
+            public = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": (
+                    "Research public testbench coverage tools using "
+                    "sanitized GitHub metadata only.")}))
+            public_root = public["root_task_id"]
+            capabilities = unwrap(await client.call_tool(
+                "native_capabilities", {"root_task_id": public_root}))
+            assert capabilities["public_disclosure_authorized"] is True
+            assert next(item for item in capabilities["methods"]
+                        if item["objective"] == "discover_public_tools"
+                        )["currently_eligible"] is True
+            assert "native_local_tick" not in {t.name for t in listed}
 
         # Source content is NOT remotely exposed by default. A separate
         # operator-opted-in process uses the already bounded and anchored
@@ -303,7 +326,7 @@ async def run():
             assert inventory["ambiguous"] is True, inventory
             assert inventory["selected_root_task_id"] is None, inventory
             ids = {entry["root_task_id"] for entry in inventory["goals"]}
-            assert ids == {root, local_id, other_id, second_id}, inventory
+            assert ids == {root, local_id, public_root, other_id, second_id}, inventory
             discovered = next(
                 item for item in inventory["goals"]
                 if item["original_goal"] == goal)
@@ -326,6 +349,7 @@ async def run():
             "source_text_default_hidden_and_opt_in_read_verified": True,
             "native_local_model_plan_opt_in_and_cloud_rejected": True,
             "external_disclosure_grant_not_model_controlled": True,
+            "operator_opt_in_public_research_scope_verified": True,
             "shared_ledger_exact_target_worker": True,
             "revoked_grant_not_reissued": True,
             "owner_outcome_verified": False,
