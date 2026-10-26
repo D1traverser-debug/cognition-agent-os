@@ -60,6 +60,29 @@ class NativeStructuredOutputSafety(unittest.TestCase):
         self.assertNotIn("write_allowed", json.dumps(schema))
         self.assertNotIn("external_effect_authorized", json.dumps(schema))
 
+    def test_schema_cannot_invent_unregistered_hypothesis_reviews(self):
+        # Real 0.5B schema trial incorrectly generated a fabricated review
+        # keyed to the observation hash even though no hypothesis was filed.
+        none = _native_response_schema(
+            [{"objective": "compare_records"}],
+            ["baseline.csv", "actual.csv"], "e"*64, None,
+            pending_hypotheses=[])
+        decision = none["oneOf"][2]
+        self.assertNotIn("hypothesis_reviews", decision["properties"])
+        self.assertNotIn("hypothesis_reviews", decision["required"])
+        proper = _native_response_schema(
+            [{"objective": "compare_records"}],
+            ["baseline.csv", "actual.csv"], "f"*64, None,
+            pending_hypotheses=[{"proposal_sha256": "a"*64},
+                                {"proposal_sha256": "b"*64}])
+        decision = proper["oneOf"][2]
+        reviews = decision["properties"]["hypothesis_reviews"]
+        self.assertIn("hypothesis_reviews", decision["required"])
+        self.assertEqual(reviews["minItems"], 2)
+        self.assertEqual(reviews["maxItems"], 2)
+        self.assertEqual(reviews["items"]["properties"][
+            "proposal_sha256"]["enum"], ["a"*64, "b"*64])
+
     def test_schema_abstain_does_not_create_worker_task(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
