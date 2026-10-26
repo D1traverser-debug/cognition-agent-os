@@ -47,6 +47,37 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 "owner_outcome_verified": False}
 
     @mcp.tool()
+    def native_goal_list() -> dict:
+        """Discover existing original native goals for cold-process continuation.
+
+        This is read-only and never chooses the newest task on the user's
+        behalf. Foreign/invalid roots are not reinterpreted as native goals.
+        """
+        with closing(connect(db_path)) as db:
+            rows = db.execute(
+                "SELECT task_id FROM tasks WHERE parent_task IS NULL "
+                "ORDER BY created_at DESC,task_id DESC LIMIT 51").fetchall()
+        recovered = []
+        for row in rows[:50]:
+            state = inspect_native_goal(
+                db_path, workspace, fixtures, row["task_id"])
+            if (state.get("status") == "NATIVE_GOAL_UNVERIFIABLE"
+                or not isinstance(state.get("original_goal"), str)):
+                continue
+            recovered.append({
+                "root_task_id": row["task_id"],
+                "original_goal": state["original_goal"],
+                "status": state["status"],
+                "decision_count": state["decision_count"],
+                "owner_outcome_verified": False,
+            })
+        return {"status": "NATIVE_GOAL_INVENTORY",
+                "goals": recovered, "truncated": len(rows) > 50,
+                "ambiguous": len(recovered) > 1,
+                "selected_root_task_id": None,
+                "owner_outcome_verified": False}
+
+    @mcp.tool()
     def native_goal_inspect(root_task_id: str) -> dict:
         """Read original owner goal, prior independently audited work and CAS state."""
         return inspect_native_goal(db_path, workspace, fixtures, root_task_id)
