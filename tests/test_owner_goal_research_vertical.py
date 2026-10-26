@@ -158,7 +158,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertFalse(final["goal_progress"]["goals"][0]["owner_outcome_verified"])
 
     def test_ordered_owner_replans_after_research_source_changes(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the UART timeout using local evidence and then "
             "ensure a sandbox draft of settings.json has owner equal to ops.")
