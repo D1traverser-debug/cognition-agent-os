@@ -289,6 +289,61 @@ async def run():
             assert stale["local_owner_outcome_verified"] is False, stale
             (sources / "observed.csv").write_bytes(original["observed.csv"])
 
+        # The same REAL MCP surface must complete an explicitly named
+        # isolated JSON draft, not stop after a local proposal receipt.
+        async with Client(server(allow_tick=True)) as client:
+            json_root = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": (
+                    "Please ensure an isolated draft of handoff.json has "
+                    "audit equal to confirmed.")}))["root_task_id"]
+            state = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": json_root}))
+            json_proposal = {
+                "selected_intent": {
+                    "kind": "goal_intent", "objective": "ensure_structure",
+                    "resources": [{"role": "input", "path": "handoff.json"}],
+                    "requirements": [{"field": "audit", "equals": "confirmed"}]},
+                "alternative_intent": None,
+                "decision_reason": (
+                    "A scoped JSON addition directly meets the named local draft."),
+                "alternative_reason": (
+                    "CSV comparison cannot satisfy the requested JSON field."),
+                "expected_evidence": (
+                    "Actual stage-only JSON artifact and independent original readback."),
+                "observation_sha256": state["observation_sha256"],
+                "decision_basis": {
+                    "source_refs": [
+                        {"path": n, "sha256": hashlib.sha256(data).hexdigest()}
+                        for n, data in sorted(original.items())],
+                    "previous_result_task_id": None,
+                    "challenge": (
+                        "The owner field might already conflict in the source."),
+                    "falsifier": (
+                        "The sandbox candidate changes a preexisting JSON key."),
+                    "uncertainty": (
+                        "A local handoff draft is not an external business effect."),
+                },
+            }
+            queued_json = unwrap(await client.call_tool(
+                "native_decision_admit", {
+                    "root_task_id": json_root, "proposal": json_proposal}))
+            observed_json = unwrap(await client.call_tool(
+                "native_local_tick", {"root_task_id": json_root}))
+            assert observed_json["target_task_id"] == queued_json["child_task_id"]
+            assert observed_json["worker_result"]["status"] == "NEEDS_REVIEW"
+            assert observed_json["sandbox_result"]["status"] == (
+                "SANDBOX_VERIFIED"), observed_json
+            accepted_json = unwrap(await client.call_tool(
+                "native_owner_outcome", {"root_task_id": json_root}))
+            assert accepted_json["status"] == "LOCAL_OWNER_RESULT_VERIFIED", accepted_json
+            assert accepted_json["local_owner_outcome_verified"] is True
+            assert accepted_json["business_outcome_verified"] is False
+            staged_json = (workspace / "sandbox" /
+                           (queued_json["child_task_id"] + ".candidate"))
+            assert json.loads(staged_json.read_text(encoding="utf-8")) == {
+                "retain": "immutable", "audit": "confirmed"}
+            assert {f.name: f.read_bytes() for f in sources.iterdir()} == original
+
         # Multi-owner stress: queue another owner's task FIRST, then
         # request the later second root. The selected worker must claim
         # only its exact child, irrespective of the generic due_at ordering.
@@ -369,7 +424,7 @@ async def run():
             assert inventory["selected_root_task_id"] is None, inventory
             assert inventory["truncated"] is False, inventory
             ids = {entry["root_task_id"] for entry in inventory["goals"]}
-            assert ids == {root, long_root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
+            assert ids == {root, json_root, long_root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
             discovered = next(
                 item for item in inventory["goals"]
                 if item["original_goal"] == goal)
@@ -398,6 +453,7 @@ async def run():
             "independent_mechanical_verdict": "REPORT_MECHANICALLY_VERIFIED",
             "cold_process_recovery": True,
             "native_original_goal_independent_local_postcondition": True,
+            "native_json_sandbox_owner_goal_verified_by_real_mcp": True,
             "cold_goal_discovery_without_id": True,
             "mixed_ledger_old_goals_not_hidden": True,
             "long_original_owner_clause_exact_roundtrip": True,
