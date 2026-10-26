@@ -495,9 +495,9 @@ class RepoLabTest(unittest.TestCase):
              "DOCKER_PROCESS_TIMEOUT"),
             (FileNotFoundError("docker gone"), "DOCKER_CLI_LAUNCH_ERROR"),
         ):
-            with self.subTest(expected=expected), \\
-                 patch.object(lab.shutil,"which",return_value="/usr/bin/docker"), \\
-                 patch.object(lab.subprocess,"run",side_effect=failure) as process:
+            with (self.subTest(expected=expected),
+                  patch.object(lab.shutil,"which",return_value="/usr/bin/docker"),
+                  patch.object(lab.subprocess,"run",side_effect=failure) as process):
                 with self.assertRaisesRegex(lab.ContainerUnavailable, expected):
                     lab._docker_run(self.base,"main.py",{"x":1})
                 self.assertEqual(process.call_count,1)
