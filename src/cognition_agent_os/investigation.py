@@ -507,8 +507,16 @@ def run_investigation(db, task: dict, workspace: Path, fixtures: Path,
 
 
 def audit_investigation(db_path: Path, workspace: Path,
-                        fixtures: Path, task_id: str) -> dict:
-    """Read-only replay from original sources; never approves semantic meaning."""
+                        fixtures: Path, task_id: str, *,
+                        original_scope_names: frozenset[str] | None = None) -> dict:
+    """Read-only replay from the originally acquired evidence corpus.
+
+    An authorized native parent may append NEW research sources later without
+    rewriting a prior, already independently checked finding. The caller must
+    supply its archived complete original source-name scope from the immutable
+    admission receipt; it cannot silently omit sources known at that time.
+    No model or artifact may choose this audit scope.
+    """
     failed = {"status": "UNVERIFIABLE",
               "business_outcome_verified": False}
     if (not isinstance(task_id, str) or not re.fullmatch(r"[0-9a-f]{32}", task_id)
@@ -559,8 +567,17 @@ def audit_investigation(db_path: Path, workspace: Path,
                 or not re.fullmatch(r"[0-9a-f]{64}", obj["research_scope_sha256"])):
                 return failed
             # A discarded source may change the outcome after proposal;
-            # exact selected-source hashes alone are not sufficient.
-            if _scope_digest(_available_evidence(fixtures)) != obj["research_scope_sha256"]:
+            # exact selected-source hashes alone are not sufficient. Reconstruct
+            # the ORIGINAL full investigation corpus from the ledger-pinned
+            # source names, never an arbitrary subset chosen by the model.
+            inventory = _available_evidence(fixtures)
+            if original_scope_names is not None:
+                if (not isinstance(original_scope_names, frozenset)
+                    or any(not isinstance(n, str) for n in original_scope_names)):
+                    return failed
+                inventory = {k: v for k, v in inventory.items()
+                             if k in original_scope_names}
+            if _scope_digest(inventory) != obj["research_scope_sha256"]:
                 return {"status": "SOURCE_CHANGED_SINCE_PROPOSAL",
                         "business_outcome_verified": False}
             evidence = {}
