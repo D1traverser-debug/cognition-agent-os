@@ -157,6 +157,32 @@ class OpenGoalResearchVertical(unittest.TestCase):
                          "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
         self.assertFalse(final["goal_progress"]["goals"][0]["owner_outcome_verified"])
 
+    def test_ordered_owner_replans_after_research_source_changes(self):
+        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        parent=self.seed(
+            "Investigate the UART timeout using local evidence and then "
+            "ensure a sandbox draft of settings.json has owner equal to ops.")
+        first=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                       planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(first["tasks"][0]["status"],"DECOMPOSED",first)
+        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
+            research=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                              planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(research["tasks"][0]["status"],"NEEDS_REVIEW",research)
+        (self.fx/"cause.md").write_text("Evidence changed after investigation.")
+        attempted=run_tick(self.db,self.ws,self.fx,max_jobs=1)
+        self.assertEqual(attempted["processed"],0,attempted)
+        self.assertTrue(any(
+            x["status"]=="DEPENDENCY_REPLAN_REQUIRED"
+            for x in attempted["dependency_observations"]))
+        child_by_kind={
+            json.loads(c["source_spec"])["kind"]:c
+            for c in self.children(parent)}
+        self.assertEqual(child_by_kind["goal_case"]["state"],"NEEDS_REPLAN")
+        self.assertFalse((self.ws/"artifacts"/(
+            child_by_kind["goal_case"]["task_id"]+".json")).exists())
+        self.assertFalse(attempted["goal_progress"]["goals"][0]["owner_outcome_verified"])
+
     def test_parallel_intents_transfer_to_irrigation_domain_without_code_changes(self):
         """The existing bounded capability contracts must not depend on UART."""
         (self.fx/"cause.md").write_text(
