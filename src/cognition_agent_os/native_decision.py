@@ -597,6 +597,15 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             observed = _audit(db, db_path, workspace, fixtures, root_id)
             if observed["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
                 raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE:" + observed["status"])
+            # A still-admissible task budget does NOT grant permission to
+            # keep acting after an independent whole-original LOCAL outcome
+            # has already been proven. This central admission check is inside
+            # the same SQLite BEGIN IMMEDIATE path as other decision grants.
+            from .owner_postcondition import inspect_owner_local_outcome
+            owner_outcome = inspect_owner_local_outcome(
+                db_path, workspace, fixtures, root_id)
+            if owner_outcome["local_owner_outcome_verified"]:
+                raise ValueError("NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED")
             root = db.execute("SELECT * FROM tasks WHERE task_id=?",
                               (root_id,)).fetchone()
             contract = json.loads(root["source_spec"])
