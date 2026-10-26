@@ -376,7 +376,8 @@ def _record_no_progress(db_path: Path, workspace: Path, fixtures: Path,
 
 
 def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
-                              root_id: str, *, model: str) -> dict:
+                              root_id: str, *, model: str,
+                              timeout: int = 45) -> dict:
     """One bounded model decision followed by ONE existing-ledger admission."""
     snapshot = inspect_native_goal(db_path, workspace, fixtures, root_id)
     if snapshot["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
@@ -392,7 +393,8 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                 "owner_outcome_verified": False}
     try:
         proposed = propose_native_local(
-            db_path, workspace, fixtures, root_id, model=model)
+            db_path, workspace, fixtures, root_id,
+            model=model, timeout=timeout)
         if proposed.get("status") == "NATIVE_LOCAL_MODEL_ABSTAINED":
             _record_no_progress(
                 db_path,workspace,fixtures,root_id,fingerprint,model,
