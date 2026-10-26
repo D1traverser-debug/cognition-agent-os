@@ -1,0 +1,81 @@
+"""Holdout: schema mode can constrain SHAPE, never certify method relevance.
+
+No Ollama is invoked here. These are provider-compatibility and invariant
+tests, NOT model-quality evidence.
+"""
+from contextlib import closing
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from cognition_agent_os.ledger import connect, initialize
+from cognition_agent_os.native_decision import register_native_goal, inspect_native_goal
+from cognition_agent_os.native_local_planner import (
+    _native_response_schema, propose_native_local)
+
+
+class NativeStructuredOutputSafety(unittest.TestCase):
+    def test_schema_retains_abstention_and_bounded_source_read(self):
+        schema = _native_response_schema(
+            [{"objective": "compare_records"},
+             {"objective": "ensure_structure"}],
+            ["actual.csv", "expected.csv"], "a" * 64, None)
+        branches = schema["oneOf"]
+        self.assertEqual(len(branches), 3)
+        self.assertEqual(branches[0]["properties"]["abstain"]["const"], True)
+        self.assertEqual(branches[1]["properties"]["inspect_sources"][
+            "items"]["properties"]["path"]["enum"],
+            ["actual.csv", "expected.csv"])
+        decision = branches[2]
+        self.assertEqual(decision["properties"]["observation_sha256"]["const"],
+                         "a" * 64)
+        basis = decision["properties"]["decision_basis"]
+        self.assertEqual(basis["type"], "object")
+        self.assertEqual(basis["properties"]["previous_result_task_id"]["type"],
+                         "null")
+        selected = decision["properties"]["selected_intent"]
+        self.assertEqual(selected["type"], "object")
+        self.assertEqual(selected["properties"]["objective"]["enum"],
+                         ["compare_records", "ensure_structure"])
+        self.assertIn("null", [
+            x["type"] for x in
+            decision["properties"]["alternative_intent"]["anyOf"]])
+        self.assertNotIn("owner_outcome_verified", json.dumps(schema))
+        self.assertNotIn("allow_public_discovery", json.dumps(schema))
+
+    def test_schema_abstain_does_not_create_worker_task(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            db = root / "ledger.sqlite"
+            workspace = root / "workspace"
+            fixtures = root / "fixtures"
+            workspace.mkdir()
+            fixtures.mkdir()
+            (fixtures / "notes.md").write_text(
+                "No authority to publish customer data.\n", encoding="utf-8")
+            with closing(connect(db)) as conn:
+                initialize(conn)
+            goal = register_native_goal(
+                db, "Upload production customer data without authorization.")
+            requests = []
+            def real_transport_boundary(method, endpoint, payload, timeout):
+                if method == "GET":
+                    return {"models": [{"name": "test:installed"}]}
+                requests.append(payload)
+                return {"done": True, "response": '{"abstain":true}'}
+            with patch("cognition_agent_os.local_model._request",
+                       side_effect=real_transport_boundary):
+                result = propose_native_local(
+                    db, workspace, fixtures, goal, model="test:installed",
+                    structured_output=True)
+            self.assertEqual(result["status"], "NATIVE_LOCAL_MODEL_ABSTAINED")
+            self.assertEqual(len(requests), 1)
+            self.assertIsInstance(requests[0]["format"], dict)
+            state = inspect_native_goal(db, workspace, fixtures, goal)
+            self.assertEqual(state["decision_count"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
