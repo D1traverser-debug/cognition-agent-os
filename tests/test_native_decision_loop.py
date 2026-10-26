@@ -316,7 +316,7 @@ class NativeDecisionLoop(unittest.TestCase):
         for step in range(4):
             if step:
                 (self.fixtures / f"followup_{step}.csv").write_text(
-                    "supplier,received\\nDelta," + str(6-step) + "\\n",
+                    "supplier,received\nDelta," + str(6-step) + "\n",
                     encoding="utf-8")
             current = self.view(root)
             self.assertEqual(current["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE",
@@ -346,7 +346,7 @@ class NativeDecisionLoop(unittest.TestCase):
         run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
         (self.fixtures / "new_review.md").write_text("Extra research", encoding="utf-8")
         (self.fixtures / "observed.csv").write_text(
-            "supplier,received\\nDelta,999\\n", encoding="utf-8")
+            "supplier,received\nDelta,999\n", encoding="utf-8")
         self.assertEqual(self.view(root)["status"], "NATIVE_SOURCE_CHANGED")
 
     def test_source_drift_and_revocation_block_new_model_choice(self):
