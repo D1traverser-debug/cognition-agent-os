@@ -39,7 +39,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                      allow_host_tick: bool = False,
                      allow_source_read: bool = False,
                      allow_local_model_plan: bool = False,
-                     allow_public_discovery: bool = False):
+                     public_discovery_goal_sha256: str | None = None):
     """Expose only the existing, audited native-goal contract as MCP tools."""
     from mcp.server import MCPServer
 
@@ -47,6 +47,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     if (not workspace.is_dir() or workspace.is_symlink()
         or not fixtures.is_dir() or fixtures.is_symlink()):
         raise ValueError("LOCAL_MCP_PATHS_MUST_ALREADY_EXIST")
+    if public_discovery_goal_sha256 is not None and (
+            type(public_discovery_goal_sha256) is not str
+            or len(public_discovery_goal_sha256) != 64
+            or any(ch not in "0123456789abcdef"
+                   for ch in public_discovery_goal_sha256)):
+        raise ValueError("INVALID_PUBLIC_GOAL_SCOPE_DIGEST")
     mcp = MCPServer("cognition-agent-os-local")
 
     @mcp.tool()
@@ -56,12 +62,16 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         State creation needs an already-current local grant; this does not grant
         external write rights, install a model, or claim the goal is finished.
         """
-        # MCP clients cannot set outbound disclosure scope themselves.
-        # It is fixed by the operator's server-start option, with a separate
-        # original-root grant. No arbitrary provider/API/URL is admitted.
+        # The operator may bind public metadata disclosure to the exact
+        # original owner goal digest. An MCP client can create OTHER goals,
+        # but can never expand their outbound scope by choosing tool args.
+        pinned_public_scope = (
+            public_discovery_goal_sha256 is not None
+            and hashlib.sha256(owner_goal.encode("utf-8")).hexdigest()
+                == public_discovery_goal_sha256)
         root = register_native_goal(
             db_path, owner_goal,
-            allow_public_discovery=allow_public_discovery)
+            allow_public_discovery=pinned_public_scope)
         return {"status": "NATIVE_GOAL_REGISTERED", "root_task_id": root,
                 "owner_outcome_verified": False}
 
@@ -254,15 +264,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="Operator opts in to disclose local source excerpts to the MCP client")
     parser.add_argument("--allow-local-model-plan", action="store_true",
                         help="Opt into installed loopback Ollama model planning; no cloud/API")
-    parser.add_argument("--allow-public-discovery", action="store_true",
-                        help="Operator opts into sanitized GitHub-public-metadata searches only")
+    parser.add_argument("--public-discovery-goal-sha256", default=None,
+                        help="Operator pins an exact original goal for sanitized public metadata search")
     args = parser.parse_args(argv)
     mcp = build_mcp_server(
         args.db, args.workspace, args.fixtures,
         allow_host_tick=args.allow_host_tick,
         allow_source_read=args.allow_source_read,
         allow_local_model_plan=args.allow_local_model_plan,
-        allow_public_discovery=args.allow_public_discovery)
+        public_discovery_goal_sha256=args.public_discovery_goal_sha256)
     mcp.run(transport="stdio")
     return 0
 
