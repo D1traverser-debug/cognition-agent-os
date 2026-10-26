@@ -208,6 +208,11 @@ def dispatch_capability(context: CapabilityContext, source_spec: dict) -> dict:
                         and parent_spec.get("kind") == "open_goal"
                         and check_child_dependency(
                             context.db, context.task["task_id"], context.fixtures))
+                    if (isinstance(parent_spec, dict)
+                        and parent_spec.get("kind") == "native_goal"):
+                        from_model_goal = check_child_dependency(
+                            context.db, context.task["task_id"], context.fixtures,
+                            workspace=context.workspace, db_path=context.db_path)
                 except (ValueError, TypeError, KeyError):
                     from_model_goal = False
         if not from_model_goal:
