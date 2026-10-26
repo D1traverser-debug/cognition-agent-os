@@ -739,10 +739,13 @@ def _audit_independent_obligations(
     if len(events) != 1:
         return failure
     receipt = json.loads(events[0]["details"])
-    if (not isinstance(receipt, dict) or set(receipt) != {
+    if (not isinstance(receipt, dict) or set(receipt) not in ({
         "obligations", "source_sha256", "original_goal",
         "semantic_approval", "real_owner_outcome_verified"
-    } or receipt["semantic_approval"] is not False
+    }, {
+        "obligations", "source_sha256", "original_goal", "sequence_rule",
+        "semantic_approval", "real_owner_outcome_verified"
+    }) or receipt["semantic_approval"] is not False
         or receipt["real_owner_outcome_verified"] is not False
         or receipt["original_goal"] != spec["goal"]):
         return failure
@@ -760,8 +763,13 @@ def _audit_independent_obligations(
             or not isinstance(item["model_candidate"], dict)):
             return failure
         clauses.append(item["clause"])
+    sequence=receipt.get("sequence_rule","INDEPENDENT")
+    if sequence not in ("INDEPENDENT","AFTER_INDEPENDENT_RESEARCH_EVIDENCE"):
+        return failure
+    separator=(" and then " if sequence=="AFTER_INDEPENDENT_RESEARCH_EVIDENCE"
+               else " and ")
     if (spec["goal"].strip().rstrip(".").strip() !=
-        f"{clauses[0]} and {clauses[1]}"):
+        f"{clauses[0]}{separator}{clauses[1]}"):
         return failure
     from .owner_postcondition import _full_owner_scope_is_supported
     by_id = {row["task_id"]: row for row in db.execute(
@@ -792,6 +800,23 @@ def _audit_independent_obligations(
                 return failure
         elif not _full_owner_scope_is_supported(item["clause"], plan):
             return failure
+    # An ordered original goal must have the exact same-ledger predecessor
+    # edge. A release timestamp is only scheduling state, never an oracle.
+    dependency_table=db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' "
+        "AND name='task_dependencies'").fetchone() is not None
+    edges=(db.execute(
+        "SELECT task_id,predecessor_task,evidence_kind "
+        "FROM task_dependencies WHERE task_id IN (?,?)",
+        (obligations[0]["child_task_id"],obligations[1]["child_task_id"])
+    ).fetchall() if dependency_table else [])
+    if sequence=="AFTER_INDEPENDENT_RESEARCH_EVIDENCE":
+        if (len(edges)!=1 or edges[0]["task_id"]!=obligations[1]["child_task_id"]
+            or edges[0]["predecessor_task"]!=obligations[0]["child_task_id"]
+            or edges[0]["evidence_kind"]!="investigate_goal"):
+            return failure
+    elif edges:
+        return failure
     hashes = receipt["source_sha256"]
     if not isinstance(hashes, dict):
         return failure
@@ -800,6 +825,7 @@ def _audit_independent_obligations(
         return {**failure, "status": "SOURCE_CHANGED_SINCE_PROPOSAL"}
     return {
         "status": "COMPOUND_METHODS_MECHANICALLY_GROUNDED",
+        "sequence_rule": sequence,
         "child_task_ids": [x["child_task_id"] for x in obligations],
         "capabilities": [x["plan"]["capability"] for x in obligations],
         "original_obligations": [
