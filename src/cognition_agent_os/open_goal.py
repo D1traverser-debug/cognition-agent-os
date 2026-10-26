@@ -96,6 +96,36 @@ _NEGATED_LOCAL_ACTION = re.compile(
 )
 
 
+# Owner-goal contract admission, not NLP: these bounded positive/negative
+# grammars must not silently turn a compound goal into a one-method child.
+_COMPOSITE_ENGLISH_ACTION = re.compile(
+    r"(?:\b(?:and|then|also|afterwards?|subsequently)\b|[,;]\s*)"
+    r"\s*(?:(?:and|then|also|please|actually|now|directly)\s+){0,3}"
+    r"(?:set|ensure|add|update|change|modify|compare|reconcile|"
+    r"deploy|publish|upload|send|transfer|delete|implement|fix|repair|"
+    r"patch|execute|run|test|verify|apply|commit|write|create|replace)\b",
+    re.IGNORECASE,
+)
+_COMPOSITE_CHINESE_ACTION = re.compile(
+    r"(?:并且|然后|随后|接着|再|同时|并|继而|之后)\s*"
+    r"(?:请|实际|直接|继续|马上)?\s*"
+    r"(?:实施|实现|修复|修改|改动|提交|发布|部署|执行|"
+    r"编写|写入|更新|删除|发送|创建|测试|验证|运行)"
+)
+_NEGATED_READONLY_ACTION = re.compile(
+    r"\b(?:do\s+not|don't|never|must\s+not|should\s+not|not\s+to)"
+    r"\s+(?:(?:ever|directly|automatically|please)\s+){0,2}"
+    r"(?:investigate|research|analy[sz]e|diagnose|examine|study|"
+    r"search|discover|identify)\b"
+    r"|(?:不要|禁止|不得)\s*(?:调查|研究|排查|分析|搜索|检索)",
+    re.IGNORECASE,
+)
+_READONLY_RESEARCH_FRAME = re.compile(
+    r"^\s*(?:please\s+)?(?:investigate|research|diagnose|"
+    r"examine|study|analy[sz]e)\b|^\s*请?\s*(?:调查|研究|排查|分析)"
+)
+
+
 def _owner_prohibits_method(goal: str, *exact_subjects: str) -> bool:
     """Fail closed when OWNER explicitly negates this exact proposed effect.
 
@@ -104,6 +134,11 @@ def _owner_prohibits_method(goal: str, *exact_subjects: str) -> bool:
     treated as a ban on adding the requested 'owner' field.
     This bounded grammar is a guard, not universal NLU correctness proof.
     """
+    # A ban on MODIFYING files must not forbid a separate read-only
+    # investigation. Without concrete effect subjects, only negative
+    # READ-ONLY verbs can prohibit a read-only capability.
+    if not exact_subjects:
+        return _NEGATED_READONLY_ACTION.search(goal) is not None
     for clause in re.split(r"[;!?\n。！？]+|\.(?=\s|$)", goal.casefold()):
         if (_NEGATED_LOCAL_ACTION.search(clause)
             and all(subject.casefold() in clause for subject in exact_subjects)):
@@ -227,9 +262,16 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
                          + r"(?![a-z0-9_.-])", grounded) is not None
     named_json = [name for name in json_files if mentions(name)]
     named_csv = [name for name in csv_files if mentions(name)]
-    external = re.search(
+    # An informational "research HOW to deploy" is not a deployment
+    # request. Conversely "research X THEN deploy" requires a different,
+    # unregistered effect method: retain all obligations and abstain.
+    mixed_action = bool(_COMPOSITE_ENGLISH_ACTION.search(goal)
+                        or _COMPOSITE_CHINESE_ACTION.search(goal))
+    external_verb = re.search(
         r"\b(?:upload|deploy|publish|email|send|post|transfer|delete)\b",
         grounded) is not None
+    informational = bool(_READONLY_RESEARCH_FRAME.search(goal))
+    external = external_verb and not (informational and not mixed_action)
     explicit_json = (
         not external and len(named_json) == 1 and not named_csv
         and re.search(r"\b(?:ensure|set|add|insert)\b", grounded) is not None)
@@ -244,10 +286,7 @@ def _select_method(goal: str, manifest: list[dict], model: str, before_request,
         r"|(?:调查|研究|排查|分析|寻找证据)", grounded))
     # A task requiring BOTH investigation and a separate mutation/comparison
     # cannot be reduced to one harmless-looking research child.
-    mixed_action = bool(re.search(
-        r"\b(?:and|then|also)\s+(?:please\s+)?"
-        r"(?:set|ensure|add|update|change|modify|compare|deploy|publish)\b",
-        grounded))
+    # Mixed action was classified with owner-effect intent above.
     if inquiry and (mixed_action or explicit_json or explicit_csv):
         raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
     explicit_research = (inquiry and not external and bool(evidence_files)
