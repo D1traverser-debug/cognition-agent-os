@@ -514,6 +514,17 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
         return {"status": "NATIVE_LOCAL_PLAN_NOT_ADMISSIBLE",
                 "root_task_id": root_id, "reason": snapshot["status"],
                 "owner_outcome_verified": False}
+    # Before spending inference or admitting another tool, independently
+    # verify the complete ORIGINAL supported owner-local result. The ledger
+    # admission gate repeats this under BEGIN IMMEDIATE to block races.
+    from .owner_postcondition import inspect_owner_local_outcome
+    owner_result = inspect_owner_local_outcome(
+        db_path, workspace, fixtures, root_id)
+    if owner_result["local_owner_outcome_verified"]:
+        return {"status": "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED",
+                "root_task_id": root_id,
+                "local_owner_outcome_verified": True,
+                "owner_outcome_verified": False}
     fingerprint = snapshot["observation_sha256"]
     refusals = _previous_no_progress(db_path, root_id, fingerprint, model)
     if len(refusals) >= 2 or "MODEL_ABSTAINED" in refusals:
