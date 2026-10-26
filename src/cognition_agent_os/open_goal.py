@@ -555,10 +555,10 @@ def _select_independent_conjunction(
     registered intent and pass full-clause coverage; ambiguous or unsupported
     owner text abstains. No execution, grant, or semantic acceptance here.
     """
-    # "then" denotes a dependency; no review/admission gate for research
-    # results is established here, so sequential instructions stay unsupported.
+    # An explicit "and then" is an ordering condition, not permission for
+    # either child to infer that research validated a particular repair.
     matched = re.fullmatch(
-        r"(?is)\s*(investigate\b.{10,350}?)\s+and\s+"
+        r"(?is)\s*(investigate\b.{10,350}?)\s+and(?P<ordered>\s+then)?\s+"
         r"(ensure\s+(?:a\s+)?(?:sandbox|isolated)\s+"
         r"(?:draft|candidate|proposal)\s+of\s+"
         r"[A-Za-z0-9_.-]+\.json\s+has\s+.+?)\s*\.?\s*",
@@ -566,7 +566,8 @@ def _select_independent_conjunction(
     )
     if matched is None:
         return None
-    clauses = [matched.group(1).strip(), matched.group(2).strip()]
+    clauses = [matched.group(1).strip(), matched.group(3).strip()]
+    ordered = matched.group("ordered") is not None
     if any(_COMPOSITE_ENGLISH_ACTION.search(c) or
            _COMPOSITE_CHINESE_ACTION.search(c) for c in clauses):
         raise OpenGoalInvalid("OPEN_GOAL_METHOD_UNSUPPORTED")
@@ -586,7 +587,8 @@ def _select_independent_conjunction(
     return {"independent_obligations": [
         {"clause": clause, **entry}
         for clause, entry in zip(clauses, chosen)
-    ]}
+    ], "sequence_rule": ("AFTER_INDEPENDENT_RESEARCH_EVIDENCE"
+                         if ordered else "INDEPENDENT")}
 
 
 def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
@@ -670,6 +672,18 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
                     "child_task_id": child_id, "clause": item["clause"],
                     "plan": item["plan"], "model_candidate": item["candidate"],
                 })
+            if selected["sequence_rule"]=="AFTER_INDEPENDENT_RESEARCH_EVIDENCE":
+                # The same SQLite ledger and worker claim gate implement the
+                # durable predecessor edge. It releases LOCAL draft proposal
+                # only after original research evidence is independently read.
+                from .dependency_gate import _TABLE
+                db.execute(_TABLE)
+                db.execute(
+                    "INSERT INTO task_dependencies("
+                    "task_id,predecessor_task,evidence_kind,released_at)"
+                    " VALUES(?,?,?,NULL)",
+                    (admitted[1]["child_task_id"],admitted[0]["child_task_id"],
+                     "investigate_goal"))
             db.execute("UPDATE tasks SET state='DECOMPOSED',decision=?,"
                        "error_code=NULL,state_version=state_version+1,"
                        "lease_until=NULL,claim_token=NULL WHERE task_id=?",
@@ -677,6 +691,7 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
                         task["task_id"]))
             event(db, task["task_id"], "OPEN_GOAL_INDEPENDENT_OBLIGATIONS", {
                 "obligations": admitted, "source_sha256": hashes,
+                "sequence_rule": selected["sequence_rule"],
                 "original_goal": spec["goal"], "semantic_approval": False,
                 "real_owner_outcome_verified": False,
             })
