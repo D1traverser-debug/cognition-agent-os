@@ -213,7 +213,7 @@ async def run():
             # No cached success: a changed original input invalidates the
             # independently re-read outcome even with the same SQLite state.
             (sources / "observed.csv").write_text(
-                "supplier,received\\nDelta,999\\n", encoding="utf-8")
+                "supplier,received\nDelta,999\n", encoding="utf-8")
             stale = unwrap(await client.call_tool(
                 "native_owner_outcome", {"root_task_id": local_id}))
             assert stale["local_owner_outcome_verified"] is False, stale
