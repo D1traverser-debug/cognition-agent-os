@@ -192,16 +192,20 @@ class NativeLocalModelLoop(unittest.TestCase):
                 self.db,self.workspace,self.fixtures,root,model="installed:test")
             again = advance_native_local_once(
                 self.db,self.workspace,self.fixtures,root,model="installed:test")
+            exhausted = advance_native_local_once(
+                self.db,self.workspace,self.fixtures,root,model="installed:test")
             self.assertEqual(bad["status"],"NATIVE_LOCAL_PLAN_REFUSED")
-            self.assertEqual(again["status"],
+            self.assertEqual(again["status"],"NATIVE_LOCAL_PLAN_REFUSED")
+            self.assertEqual(exhausted["status"],
                              "NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED")
-            self.assertEqual(provider.call_count, 2)  # tags + one response
+            self.assertEqual(provider.call_count, 4)  # two bounded attempts
+            self.assertIn("No registered capability", provider.call_args.args[2]["prompt"])
             (self.fixtures / "trace.md").write_text(
                 "Updated independent investigation evidence.\n",encoding="utf-8")
             changed = advance_native_local_once(
                 self.db,self.workspace,self.fixtures,root,model="installed:test")
             self.assertEqual(changed["status"],"NATIVE_LOCAL_PLAN_REFUSED")
-            self.assertEqual(provider.call_count, 4)
+            self.assertEqual(provider.call_count, 6)
         self.assertEqual(inspect_native_goal(
             self.db,self.workspace,self.fixtures,root)["decision_count"],0)
 
