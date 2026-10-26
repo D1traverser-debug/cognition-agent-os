@@ -275,6 +275,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             "untrusted_excerpt": raw[:_MAX_PREVIEW_BYTES].decode(
                 "utf-8", errors="replace"),
         })
+    from .owner_postcondition import inspect_owner_local_outcome
     evidence = {
         "original_owner_goal": current["original_goal"],
         "proposed_method_ideas_to_challenge": current["pending_hypotheses"],
@@ -282,12 +283,8 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         # Independent full-owner local feedback is distinct from mechanical
         # child PASS. Without this, a model can see a valid wrong-direction
         # CSV artifact but never learn WHY the owner's postcondition failed.
-        "independent_original_owner_postcondition": (
-            __import__(
-                "cognition_agent_os.owner_postcondition",
-                fromlist=["inspect_owner_local_outcome"]
-            ).inspect_owner_local_outcome(
-                db_path, workspace, fixtures, root_id)),
+        "independent_original_owner_postcondition": inspect_owner_local_outcome(
+            db_path, workspace, fixtures, root_id),
         "verified_prior_results": _verified_prior_results(
             db_path, workspace, current["decisions"]),
         "prior_model_refusals_for_this_evidence": _previous_no_progress(
