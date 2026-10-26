@@ -29,6 +29,9 @@ _HYPOTHESIS_DISPOSITIONS = frozenset({
     "REJECTED", "CONDITIONALLY_USEFUL", "UNRESOLVED_RESEARCH_REQUIRED",
 })
 _MAX_SOURCE_COUNT = 64
+# Keep original words, including late prohibitions, in ONE canonical SQLite
+# contract. The model must refuse an over-budget prompt rather than truncate.
+_MAX_ORIGINAL_GOAL_CHARS = 8192
 _VALID_KINDS = frozenset({
     "goal_case", "record_reconciliation", "investigate_goal",
     "public_tool_discovery",
@@ -43,7 +46,7 @@ def _digest(value: object) -> str:
 
 def _contract(goal: str, *, allow_public_discovery: bool = False,
               legacy: bool = False) -> dict:
-    if (not isinstance(goal, str) or not 1 <= len(goal.strip()) <= 2048
+    if (not isinstance(goal, str) or not 1 <= len(goal.strip()) <= _MAX_ORIGINAL_GOAL_CHARS
         or type(allow_public_discovery) is not bool
         or type(legacy) is not bool):
         raise ValueError("INVALID_NATIVE_OWNER_GOAL")
