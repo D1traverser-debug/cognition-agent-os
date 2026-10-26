@@ -169,6 +169,10 @@ def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->boo
             parent_spec=json.loads(parent["source_spec"])
         except (ValueError, TypeError):
             return False
+        if isinstance(parent_spec,dict) and parent_spec.get("kind")=="native_goal":
+            from .native_decision import native_child_admitted
+            if not native_child_admitted(db, fixtures, task_id):
+                return False
         if isinstance(parent_spec,dict) and parent_spec.get("kind")=="open_goal":
             from .open_goal import validate_open_goal, _manifest
             from .intent_planner import compile_intent
