@@ -77,7 +77,8 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         # Evidence dependencies are stored in THIS authoritative ledger.
         # Check before dispatch to any executor, not merely during routing.
         from .knowledge_routing import check_child_dependency
-        if not check_child_dependency(db,task_id,fixture_root):
+        if not check_child_dependency(
+                db,task_id,fixture_root,workspace=workspace,db_path=db_path):
             return finalize_observed(db,task,"UNKNOWN",
                                      error_code="KNOWLEDGE_SOURCE_CHANGED")
         # A released predecessor is NOT self-approval. Before any successor
