@@ -84,11 +84,12 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
         self.assertIn("false-positive trigger", probes)
         self.assertIn("false-negative trigger", probes)
         self.assertIn("without an invoked skill", probes)
+        self.assertIn("references/scope-probes.md", SKILL.read_text(encoding="utf-8"))
 
     def test_private_plugin_version_and_no_false_runtime_claim(self):
         root = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
         manifest = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["version"], "0.1.2")
+        self.assertEqual(manifest["version"], "0.1.3")
         self.assertIn("Does not itself connect a custom Host API", manifest["description"])
         self.assertIn("not proof", SKILL.read_text(encoding="utf-8").lower())
 
