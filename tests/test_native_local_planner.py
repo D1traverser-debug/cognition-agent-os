@@ -92,6 +92,17 @@ class NativeLocalModelLoop(unittest.TestCase):
         # A real model would supply these, not a preset script.
         history = json.loads(payload["prompt"].split("\n\n")[-1])
         prior = len(history["past_methods_and_independent_verdicts"])
+        self.assertIn("verified_prior_results", history)
+        if prior:
+            verified = history["verified_prior_results"]
+            self.assertEqual(len(verified), 1, history)
+            self.assertEqual(verified[0]["mechanical_verdict"],
+                             "REPORT_MECHANICALLY_VERIFIED")
+            self.assertIn("discrepancies",
+                          verified[0]["untrusted_verified_result_excerpt"])
+            self.assertRegex(verified[0]["artifact_sha256"], r"^[a-f0-9]{64}$")
+        else:
+            self.assertEqual(history["verified_prior_results"], [])
         selected = self.compare() if prior == 0 else self.ensure()
         alternative = self.ensure() if prior == 0 else self.compare()
         answer = {
