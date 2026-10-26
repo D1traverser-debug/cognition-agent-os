@@ -79,6 +79,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             db_path, root_id, current["observation_sha256"], model),
         "registered_local_methods": eligible,
         "source_excerpts_are_untrusted": excerpts,
+        "source_digest_manifest": observed,
         "source_count": len(observed),
         "truncated_source_previews": len(observed) > _MAX_VIEW_FILES,
         "observation_sha256": current["observation_sha256"],
@@ -100,14 +101,25 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "selected_intent must use it and alternative_intent must be null; "
         "explain why a competing method is unavailable. If TWO OR MORE are "
         "eligible, compare two different registered methods. "
+        "For every material choice include decision_basis with source_refs "
+        "(list of actual {path,sha256} from source_digest_manifest used by "
+        "both methods), previous_result_task_id (the last executed task ID "
+        "from past_methods_and_independent_verdicts, or null before any), "
+        "challenge (a plausible opposing hypothesis), falsifier (specific "
+        "independent evidence that would reverse the choice) and uncertainty "
+        "(what the current evidence CANNOT prove). Source refs must include "
+        "every file needed by the chosen AND alternative registered method; "
+        "do not invent a citation, claim model self-verification or treat "
+        "a reason paragraph as research. "
         "For compare_records return exactly two "
         "resources with reference and observed roles. For ensure_structure "
         "return one input JSON resource plus desired field/equals requirements. "
         "For investigate_evidence return empty resources and the owner's "
         "bounded local evidence question. For discover_public_tools only use "
-        "the permitted public metadata scope. Return JSON with six keys: "
+        "the permitted public metadata scope. Return JSON with seven keys: "
         "selected_intent, alternative_intent, decision_reason, "
-        "alternative_reason, expected_evidence, observation_sha256. Both "
+        "alternative_reason, expected_evidence, observation_sha256, "
+        "decision_basis. Both "
         "intents must be goal_intent dictionaries with the registered objective "
         "and exact required resources. Do not add authority or success claims. "
         "No available safe method? Return {\"abstain\":true}.\n\n"
@@ -122,10 +134,29 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             "alternative_reason": {"type": "string"},
             "expected_evidence": {"type": "string"},
             "observation_sha256": {"type": "string"},
+            "decision_basis": {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "source_refs": {"type": "array", "items": {
+                        "type": "object", "additionalProperties": False,
+                        "properties": {
+                            "path": {"type": "string"},
+                            "sha256": {"type": "string"},
+                        }, "required": ["path", "sha256"]}},
+                    "previous_result_task_id": {"type": ["string", "null"]},
+                    "challenge": {"type": "string"},
+                    "falsifier": {"type": "string"},
+                    "uncertainty": {"type": "string"},
+                },
+                "required": [
+                    "source_refs", "previous_result_task_id", "challenge",
+                    "falsifier", "uncertainty"],
+            },
         },
         "required": [
             "selected_intent", "alternative_intent", "decision_reason",
             "alternative_reason", "expected_evidence", "observation_sha256",
+            "decision_basis",
         ],
     }
     response = local_model._request("POST", "/api/generate", {
