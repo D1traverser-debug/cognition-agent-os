@@ -213,6 +213,35 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                         owner_result=inspect_owner_local_outcome(
                             path, workspace, fixtures, root_id)
                         item["local_owner_result"]=owner_result
+                        # A compound plan is not an owner result. Report each
+                        # original clause against its exact guarded child,
+                        # using a fresh independent receipt/source audit.
+                        from .open_goal import audit_open_goal
+                        lineage=audit_open_goal(path,fixtures,root_id)
+                        if lineage.get("status") == (
+                                "COMPOUND_METHODS_MECHANICALLY_GROUNDED"):
+                            child_by_id={
+                                node["task_id"]:node for node in descendants}
+                            check_by_id={
+                                check["task_id"]:check
+                                for check in item["independent_checks"]}
+                            item["original_obligation_progress"]=[
+                                {
+                                    "owner_clause":ob["clause"],
+                                    "child_task_id":ob["child_task_id"],
+                                    "task_state":(
+                                        child_by_id[ob["child_task_id"]]["state"]
+                                        if ob["child_task_id"] in child_by_id
+                                        else "NOT_IN_OBSERVATION_WINDOW"),
+                                    "mechanical_verdict":check_by_id.get(
+                                        ob["child_task_id"],{}).get(
+                                            "verdict","NOT_YET_INDEPENDENTLY_CHECKED"),
+                                    "mechanically_verified":check_by_id.get(
+                                        ob["child_task_id"],{}).get(
+                                            "mechanically_verified",False),
+                                    "owner_outcome_verified":False,
+                                }
+                                for ob in lineage["original_obligations"]]
                         if owner_result["local_owner_outcome_verified"]:
                             item["next_control_action"]="LOCAL_OWNER_OUTCOME_VERIFIED"
                 except (ValueError, TypeError, KeyError, OSError):
