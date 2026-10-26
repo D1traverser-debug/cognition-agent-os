@@ -142,8 +142,10 @@ def advance_pending_local_dependencies(db_path:Path,workspace:Path,
         if not _table_exists(db):
             return []
         pending=db.execute(
-            "SELECT task_id FROM task_dependencies WHERE released_at IS NULL "
-            "ORDER BY rowid LIMIT ?",(limit,)).fetchall()
+            "SELECT d.task_id FROM task_dependencies d "
+            "JOIN tasks t ON t.task_id=d.task_id "
+            "WHERE d.released_at IS NULL AND t.state='PENDING' "
+            "ORDER BY d.rowid LIMIT ?",(limit,)).fetchall()
     observations=[]
     for ref in pending:
         successor=ref["task_id"]
@@ -177,6 +179,23 @@ def advance_pending_local_dependencies(db_path:Path,workspace:Path,
                     observations.append({"task_id":successor,
                                          "status":"DEPENDENCY_NOT_AUTHORIZED"})
                     continue
+                def fail_to_replan(reason):
+                    # Keep the original task, grant, and unexecuted scope;
+                    # the successor cannot silently disappear in PENDING.
+                    db.execute(
+                        "UPDATE tasks SET state='NEEDS_REPLAN',"
+                        "error_code=?,state_version=state_version+1 "
+                        "WHERE task_id=? AND state='PENDING'",
+                        (reason,successor))
+                    event(db,successor,"LOCAL_DEPENDENCY_REPLAN_REQUIRED",{
+                        "predecessor_task":before["task_id"],
+                        "reason":reason,"owner_outcome_verified":False})
+                    db.commit()
+                    return {"task_id":successor,"status":"DEPENDENCY_REPLAN_REQUIRED",
+                            "reason":reason}
+                if before["state"] in ("UNKNOWN","BLOCKED","NEEDS_REPLAN"):
+                    observations.append(fail_to_replan("PREDECESSOR_NOT_VERIFIED"))
+                    continue
                 if before["state"] not in ("NEEDS_REVIEW","VERIFIED"):
                     db.commit()
                     observations.append({"task_id":successor,
@@ -184,9 +203,8 @@ def advance_pending_local_dependencies(db_path:Path,workspace:Path,
                     continue
                 if not _independent_proof(db_path,workspace,fixtures,
                                           before["task_id"],edge["evidence_kind"]):
-                    db.commit()
-                    observations.append({"task_id":successor,
-                                         "status":"EVIDENCE_UNVERIFIABLE"})
+                    observations.append(fail_to_replan(
+                        "PREDECESSOR_EVIDENCE_UNVERIFIABLE"))
                     continue
                 db.execute(
                     "UPDATE task_dependencies SET released_at=? "
