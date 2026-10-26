@@ -49,7 +49,7 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
         self.assertIn("Native first-call observability", content)
         self.assertIn("Q. Interrupted work / mid-task user question / connection loss:", content)
         self.assertIn("real ChatGPT conversation", content)
-        self.assertIn("owner must repeat", content.replace("Fail if user must repeat", "owner must repeat") if False else "Fail if user must repeat")
+        self.assertIn("Fail if user must repeat", content)
 
     def test_private_plugin_version_and_no_false_runtime_claim(self):
         root = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
