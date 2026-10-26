@@ -123,6 +123,7 @@ def _goal_progress(path: Path, workspace: Path | None = None,
         group=roots.setdefault(root_id,{"root_task_id":root_id,"states":{},
                                        "runnable":0,"awaiting_review":0,
                                        "blocked":0,"unknown":0,
+                                       "needs_replan":0,
                                        "stale_authority":0,
                                        "independent_checks":[],
                                        "failed_independent_checks":0})
@@ -177,7 +178,10 @@ def _goal_progress(path: Path, workspace: Path | None = None,
             group["stale_authority"]+=1
         elif state in ("PENDING","RUNNING"):
             group["runnable"]+=1
-        elif state in ("NEEDS_REVIEW","RESEARCH_NEEDED","NEEDS_REPLAN"):
+        elif state=="NEEDS_REPLAN":
+            group["needs_replan"]+=1
+            group["awaiting_review"]+=1
+        elif state in ("NEEDS_REVIEW","RESEARCH_NEEDED"):
             group["awaiting_review"]+=1
         elif state=="BLOCKED":
             group["blocked"]+=1
@@ -190,6 +194,7 @@ def _goal_progress(path: Path, workspace: Path | None = None,
             "REAUTHORIZE_OR_SUPERSEDE" if item["stale_authority"] else
             "CONTINUE_ADMITTED_WORK" if item["runnable"] else
             "REPLAN_AFTER_FAILED_INDEPENDENT_CHECK" if item["failed_independent_checks"] else
+            "REPLAN_UNMET_ORIGINAL_OBLIGATION" if item["needs_replan"] else
             "REVIEW_UNRESOLVED_EVIDENCE" if item["awaiting_review"] else
             "DIAGNOSE_BLOCKER" if item["blocked"] or item["unknown"] else
             "REQUIRE_INDEPENDENT_OUTCOME_CHECK")
@@ -231,6 +236,10 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                                     "child_task_id":ob["child_task_id"],
                                     "task_state":(
                                         child_by_id[ob["child_task_id"]]["state"]
+                                        if ob["child_task_id"] in child_by_id
+                                        else "NOT_IN_OBSERVATION_WINDOW"),
+                                    "error_code":(
+                                        child_by_id[ob["child_task_id"]]["error_code"]
                                         if ob["child_task_id"] in child_by_id
                                         else "NOT_IN_OBSERVATION_WINDOW"),
                                     "mechanical_verdict":check_by_id.get(
