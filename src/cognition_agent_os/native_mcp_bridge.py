@@ -23,6 +23,7 @@ from .native_decision import (
     admit_native_decision, capability_catalog, inspect_native_goal,
     record_native_hypothesis, register_native_goal,
 )
+from .owner_postcondition import inspect_owner_local_outcome
 
 
 def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
@@ -95,6 +96,17 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     def native_goal_inspect(root_task_id: str) -> dict:
         """Read original owner goal, prior independently audited work and CAS state."""
         return inspect_native_goal(db_path, workspace, fixtures, root_task_id)
+
+    @mcp.tool()
+    def native_owner_outcome(root_task_id: str) -> dict:
+        """Independently check the entire original owner LOCAL postcondition.
+
+        A valid child artifact/plan is not enough. Full local named comparison
+        can PASS only under the existing independent owner oracle. Composite
+        goals, research and real-world outcomes remain UNVERIFIED.
+        """
+        return inspect_owner_local_outcome(
+            db_path, workspace, fixtures, root_task_id)
 
     @mcp.tool()
     def native_capabilities(root_task_id: str) -> dict:
@@ -203,6 +215,8 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                     "target_task_id": target_id,
                     "worker_result": result,
                     "native_goal_readback": inspect_native_goal(
+                        db_path, workspace, fixtures, root_task_id),
+                    "independent_owner_local_result": inspect_owner_local_outcome(
                         db_path, workspace, fixtures, root_task_id),
                     "owner_outcome_verified": False}
 
