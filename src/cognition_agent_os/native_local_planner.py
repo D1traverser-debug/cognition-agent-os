@@ -25,6 +25,115 @@ _MAX_PREVIEW_BYTES = 350
 _MAX_PROMPT = 14500
 
 
+def _native_response_schema(eligible: list[dict], source_ids: list[str],
+                            observation_sha256: str,
+                            previous_id: str | None) -> dict:
+    """Official Ollama constrained decoding, NOT a trusted decision or oracle.
+
+    Keep the shape small. Runtime's existing typed intent compiler, ledger CAS,
+    provenance/authorization checks and independent source audit still decide
+    whether an emitted proposal may have any effect. Abstain and source-read
+    branches remain genuinely expressible; schema must never force action.
+    """
+    objectives = sorted({x["objective"] for x in eligible})
+    resource = {
+        "type": "object",
+        "required": ["role", "path"],
+        "additionalProperties": False,
+        "properties": {
+            "role": {"type": "string",
+                     "enum": ["reference", "observed", "input"]},
+            "path": {"type": "string", "enum": source_ids},
+        },
+    }
+    intent = {
+        "type": "object", "additionalProperties": False,
+        "required": ["kind", "objective", "resources"],
+        "properties": {
+            "kind": {"type": "string", "const": "goal_intent"},
+            "objective": {"type": "string", "enum": objectives},
+            "resources": {"type": "array", "items": resource, "maxItems": 2},
+            "requirements": {"type": "array", "maxItems": 16,
+                "items": {"type": "object", "additionalProperties": False,
+                          "required": ["field", "equals"],
+                          "properties": {
+                              "field": {"type": "string"},
+                              "equals": {"type": "string"}}}},
+            "question": {"type": "string"},
+            "terms": {"type": "array", "items": {"type": "string"},
+                      "maxItems": 4},
+        },
+    }
+    reasons = {"type": "string", "minLength": 8, "maxLength": 512}
+    basis = {
+        "type": "object", "additionalProperties": False,
+        "required": ["source_refs", "previous_result_task_id",
+                     "challenge", "falsifier", "uncertainty"],
+        "properties": {
+            "source_refs": {
+                "type": "array", "maxItems": 16,
+                "items": {"type": "object",
+                    "additionalProperties": False,
+                    "required": ["path", "sha256"],
+                    "properties": {
+                        "path": {"type": "string", "enum": source_ids},
+                        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}},
+            "previous_result_task_id": (
+                {"type": "null"} if previous_id is None
+                else {"type": "string", "const": previous_id}),
+            "challenge": reasons, "falsifier": reasons,
+            "uncertainty": reasons,
+        },
+    }
+    decision = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["selected_intent", "alternative_intent",
+                     "decision_reason", "alternative_reason",
+                     "expected_evidence", "observation_sha256",
+                     "decision_basis"],
+        "properties": {
+            "selected_intent": intent,
+            "alternative_intent": {"anyOf": [intent, {"type": "null"}]},
+            "decision_reason": reasons,
+            "alternative_reason": reasons,
+            "expected_evidence": reasons,
+            "observation_sha256": {
+                "type": "string", "const": observation_sha256},
+            "decision_basis": basis,
+            "hypothesis_reviews": {"type": "array", "maxItems": 8,
+                "items": {"type": "object",
+                    "additionalProperties": False,
+                    "required": ["proposal_sha256", "disposition",
+                                 "counterargument", "verification_needed"],
+                    "properties": {
+                        "proposal_sha256": {"type": "string"},
+                        "disposition": {"type": "string", "enum": [
+                            "REJECTED", "CONDITIONALLY_USEFUL",
+                            "UNRESOLVED_RESEARCH_REQUIRED"]},
+                        "counterargument": reasons,
+                        "verification_needed": reasons}}},
+        },
+    }
+    return {"oneOf": [
+        {"type": "object", "additionalProperties": False,
+         "required": ["abstain"],
+         "properties": {"abstain": {"type": "boolean", "const": True}}},
+        {"type": "object", "additionalProperties": False,
+         "required": ["inspect_sources"],
+         "properties": {"inspect_sources": {
+             "type": "array", "minItems": 1, "maxItems": 2,
+             "items": {"type": "object", "additionalProperties": False,
+                       "required": ["path", "offset_chars"],
+                       "properties": {
+                           "path": {"type": "string", "enum": source_ids},
+                           "offset_chars": {"type": "integer",
+                                            "minimum": 0, "maximum": 1048576}}}}},
+        decision,
+    ]}
+
+
+
 def _installed_model(name: str) -> None:
     if (not isinstance(name, str)
         or not local_model._MODEL_RE.fullmatch(name)
@@ -118,7 +227,8 @@ def _verified_prior_results(db_path: Path, workspace: Path,
 
 
 def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
-                         root_id: str, *, model: str, timeout: int = 45) -> dict:
+                         root_id: str, *, model: str, timeout: int = 45,
+                         structured_output: bool = False) -> dict:
     """Read original objective/current source/previous outcomes; ask one model.
 
     This is a proposal, not task admission or a semantic evaluator. A changed
@@ -234,8 +344,13 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "No available safe method? Return {\"abstain\":true}.\n\n"
         + evidence_json
     )
+    result_format = (
+        _native_response_schema(
+            eligible, sorted(observed), current["observation_sha256"],
+            current["decisions"][-1]["task_id"] if current["decisions"] else None)
+        if structured_output else "json")
     response = local_model._request("POST", "/api/generate", {
-        "model": model, "prompt": prompt, "stream": False, "format": "json",
+        "model": model, "prompt": prompt, "stream": False, "format": result_format,
         "options": {"temperature": 0, "num_predict": 900}, "keep_alive": "0",
     }, timeout)
     if response.get("done") is not True or not isinstance(
@@ -294,7 +409,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         extended_prompt = prompt.rsplit("\n\n", 1)[0] + "\n\n" + extended_json
         response = local_model._request("POST", "/api/generate", {
             "model": model, "prompt": extended_prompt, "stream": False,
-            "format": "json", "options": {"temperature": 0, "num_predict": 900},
+            "format": result_format, "options": {"temperature": 0, "num_predict": 900},
             "keep_alive": "0",
         }, timeout)
         if (response.get("done") is not True
@@ -377,7 +492,8 @@ def _record_no_progress(db_path: Path, workspace: Path, fixtures: Path,
 
 def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                               root_id: str, *, model: str,
-                              timeout: int = 45) -> dict:
+                              timeout: int = 45,
+                              structured_output: bool = False) -> dict:
     """One bounded model decision followed by ONE existing-ledger admission."""
     snapshot = inspect_native_goal(db_path, workspace, fixtures, root_id)
     if snapshot["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
@@ -394,7 +510,8 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
     try:
         proposed = propose_native_local(
             db_path, workspace, fixtures, root_id,
-            model=model, timeout=timeout)
+            model=model, timeout=timeout,
+            structured_output=structured_output)
         if proposed.get("status") == "NATIVE_LOCAL_MODEL_ABSTAINED":
             _record_no_progress(
                 db_path,workspace,fixtures,root_id,fingerprint,model,
