@@ -363,6 +363,18 @@ async def run():
             assert recovered["decision_count"] == 1
             assert recovered["decisions"][0]["mechanical_verdict"] == (
                 "REPORT_MECHANICALLY_VERIFIED")
+            # A still-identifiable original goal with DRIFTED source bytes
+            # must appear as unverified, not crash discovery because the
+            # read-only native audit intentionally withholds decision_count.
+            (sources / "observed.csv").write_text(
+                "supplier,received\nDelta,999\n", encoding="utf-8")
+            drifted = unwrap(await client.call_tool("native_goal_list", {}))
+            entry = next(
+                g for g in drifted["goals"] if g["root_task_id"] == root)
+            assert entry["status"] == "NATIVE_SOURCE_CHANGED", entry
+            assert entry["decision_count"] is None, entry
+            assert entry["owner_outcome_verified"] is False, entry
+            (sources / "observed.csv").write_bytes(original["observed.csv"])
         print(json.dumps({
             "status": "LOCAL_MCP_HOST_READBACK_VERIFIED",
             "transport": "OFFICIAL_MCP_STDIO_SUBPROCESS",
@@ -371,6 +383,7 @@ async def run():
             "native_original_goal_independent_local_postcondition": True,
             "cold_goal_discovery_without_id": True,
             "mixed_ledger_old_goals_not_hidden": True,
+            "drifted_goal_inventory_does_not_crash_or_claim_success": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
             "source_text_default_hidden_and_opt_in_read_verified": True,
