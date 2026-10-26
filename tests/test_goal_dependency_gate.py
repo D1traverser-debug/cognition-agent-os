@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
 import unittest
+from unittest.mock import patch
 
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, create_task, initialize, alter_authority
@@ -103,6 +104,26 @@ class OrderedEvidenceGateTests(unittest.TestCase):
             alter_authority(db,revoke=True)
         run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
         self.assertEqual(self.get(second)["state"],"PENDING")
+
+    def test_source_race_after_gate_release_is_rechecked_by_worker(self):
+        first,second=self.tasks()
+        register_local_dependency(self.db,first,second)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        from cognition_agent_os.dependency_gate import advance_pending_local_dependencies
+        def invalidate_after_audit(*args,**kwargs):
+            observed=advance_pending_local_dependencies(*args,**kwargs)
+            self.assertTrue(any(x["status"]=="DEPENDENCY_RELEASED_LOCAL_ONLY"
+                                for x in observed))
+            (self.fixtures/"config.json").write_text('{"existing":"changed"}\\n')
+            return observed
+        with patch("cognition_agent_os.dependency_gate.advance_pending_local_dependencies",
+                   side_effect=invalidate_after_audit):
+            result=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(result["tasks"][0]["task_id"],second)
+        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN")
+        self.assertEqual(self.get(second)["error_code"],
+                         "PREDECESSOR_EVIDENCE_CHANGED")
+        self.assertFalse((self.workspace/"artifacts"/(second+".json")).exists())
 
     def test_duplicate_and_reverse_dependency_refused(self):
         first,second=self.tasks()
