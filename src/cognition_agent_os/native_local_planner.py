@@ -275,9 +275,15 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             "untrusted_excerpt": raw[:_MAX_PREVIEW_BYTES].decode(
                 "utf-8", errors="replace"),
         })
-    from .owner_postcondition import inspect_owner_local_outcome
+    from .owner_postcondition import (
+        inspect_owner_local_outcome, _explicit_owner_local_contract)
     evidence = {
         "original_owner_goal": current["original_goal"],
+        # Machine-checkable user bindings are evidence, not model opinions:
+        # the owner specified the source direction and desired literals.
+        # Unknown/compound instructions remain null rather than guessed.
+        "explicit_owner_local_contract_if_recognized":
+            _explicit_owner_local_contract(current["original_goal"]),
         "proposed_method_ideas_to_challenge": current["pending_hypotheses"],
         "past_methods_and_independent_verdicts": current["decisions"],
         # Independent full-owner local feedback is distinct from mechanical
@@ -324,7 +330,12 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "counterargument and verification_needed; do not omit one. "
         "No ideas means hypothesis_reviews may be omitted. "
         "Only select an eligible registered method IF it can advance "
-        "the original owner objective. The presence of tools is not evidence "
+        "the original owner objective. When a complete "
+        "explicit_owner_local_contract_if_recognized is provided, preserve "
+        "its exact objective, input names, reference/observed order and desired "
+        "field/value bindings in selected_intent: these are original owner "
+        "requirements, not model choices. Admission rejects contradictions. "
+        "The presence of tools is not evidence "
         "of goal relevance. When all methods are irrelevant, evidence is "
         "insufficient, or a comparison cannot justify the next action, "
         "return only the abstain JSON object; do not manufacture a decision. "
