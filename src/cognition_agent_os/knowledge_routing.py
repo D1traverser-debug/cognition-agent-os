@@ -178,23 +178,68 @@ def check_child_dependency(db:sqlite3.Connection,task_id:str,fixtures:Path)->boo
                     "SELECT details FROM events WHERE task_id=? "
                     "AND kind='OPEN_GOAL_DECOMPOSED'",
                     (candidate["parent_task"],)).fetchall()
-                if len(proofs)!=1:
-                    return False
-                evidence=json.loads(proofs[0]["details"])
-                if (not isinstance(evidence,dict)
-                    or evidence.get("child_task_id")!=task_id
-                    or evidence.get("semantic_approval") is not False
-                    or not isinstance(evidence.get("source_sha256"),dict)
-                    or (not evidence["source_sha256"] and not (
-                        parent_spec.get("allow_public_discovery") is True
-                        and json.loads(candidate["source_spec"]).get("kind")
-                            == "public_tool_discovery"))
-                    or not isinstance(evidence.get("model_candidate"),dict)
-                    or evidence["model_candidate"].get("intent") is None):
-                    return False
-                compiled=compile_intent(evidence["model_candidate"]["intent"])
-                if (compiled!=evidence.get("plan")
-                    or compiled["child_source_spec"]!=json.loads(candidate["source_spec"])):
+                compound=db.execute(
+                    "SELECT details FROM events WHERE task_id=? "
+                    "AND kind='OPEN_GOAL_INDEPENDENT_OBLIGATIONS'",
+                    (candidate["parent_task"],)).fetchall()
+                if compound:
+                    if proofs or len(compound)!=1:
+                        return False
+                    evidence=json.loads(compound[0]["details"])
+                    if (not isinstance(evidence,dict)
+                        or evidence.get("semantic_approval") is not False
+                        or evidence.get("real_owner_outcome_verified") is not False
+                        or evidence.get("original_goal")!=parent_spec["goal"]
+                        or not isinstance(evidence.get("obligations"),list)
+                        or len(evidence["obligations"])!=2):
+                        return False
+                    entries=evidence["obligations"]
+                    if (not all(isinstance(e,dict) and
+                                set(e)=={"child_task_id","clause",
+                                        "plan","model_candidate"} for e in entries)
+                        or not all(isinstance(e["clause"],str) for e in entries)
+                        or parent_spec["goal"].strip().rstrip(".").strip()!=
+                           f"{entries[0]['clause']} and {entries[1]['clause']}"):
+                        return False
+                    siblings=db.execute(
+                        "SELECT task_id FROM tasks WHERE parent_task=?",
+                        (candidate["parent_task"],)).fetchall()
+                    if ({row["task_id"] for row in siblings} !=
+                        {e["child_task_id"] for e in entries}
+                        or len(siblings)!=2):
+                        return False
+                    for index,e in enumerate(entries):
+                        c=compile_intent(e["model_candidate"]["intent"])
+                        objective=("investigate_evidence" if index==0
+                                   else "ensure_structure")
+                        if (c.get("objective")!=objective
+                            or c!=e["plan"]):
+                            return False
+                        if e["child_task_id"]==task_id:
+                            if c["child_source_spec"]!=json.loads(candidate["source_spec"]):
+                                return False
+                    if task_id not in {e["child_task_id"] for e in entries}:
+                        return False
+                else:
+                    if len(proofs)!=1:
+                        return False
+                    evidence=json.loads(proofs[0]["details"])
+                    if (not isinstance(evidence,dict)
+                        or evidence.get("child_task_id")!=task_id
+                        or evidence.get("semantic_approval") is not False
+                        or not isinstance(evidence.get("source_sha256"),dict)
+                        or (not evidence["source_sha256"] and not (
+                            parent_spec.get("allow_public_discovery") is True
+                            and json.loads(candidate["source_spec"]).get("kind")
+                                == "public_tool_discovery"))
+                        or not isinstance(evidence.get("model_candidate"),dict)
+                        or evidence["model_candidate"].get("intent") is None):
+                        return False
+                    compiled=compile_intent(evidence["model_candidate"]["intent"])
+                    if (compiled!=evidence.get("plan")
+                        or compiled["child_source_spec"]!=json.loads(candidate["source_spec"])):
+                        return False
+                if not isinstance(evidence.get("source_sha256"),dict):
                     return False
                 for name,digest in evidence["source_sha256"].items():
                     if (not isinstance(name,str) or not isinstance(digest,str)
