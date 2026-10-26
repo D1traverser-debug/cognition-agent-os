@@ -218,7 +218,8 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 result=audit_intent_plan(db_path,tid)
             proof=("MECHANICALLY_VALID" if result["status"] in (
                 "PLAN_MECHANICALLY_VALID",
-                "METHOD_CANDIDATE_MECHANICALLY_GROUNDED")
+                "METHOD_CANDIDATE_MECHANICALLY_GROUNDED",
+                "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
                    else result.get("reason",result.get("status","PLAN_AUDIT_FAILED")))
         elif state=="RESEARCH_NEEDED":
             if kind=="knowledge_intent":
