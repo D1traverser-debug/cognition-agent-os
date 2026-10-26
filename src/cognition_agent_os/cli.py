@@ -83,6 +83,12 @@ def main(argv=None) -> int:
         help="One opt-in non-cloud installed Ollama decision under existing grant")
     native_local.add_argument("--root-task-id", required=True)
     native_local.add_argument("--model", required=True)
+    native_hypothesis = sub.add_parser("native-hypothesis",
+        help="Submit user/agent method idea for equal challenge; NEVER execute it")
+    native_hypothesis.add_argument("--root-task-id", required=True)
+    native_hypothesis.add_argument("--origin", choices=("user", "agent"), required=True)
+    native_hypothesis.add_argument("--idea", required=True)
+    native_hypothesis.add_argument("--observation-sha256", required=True)
     native_admit = sub.add_parser("native-decision-admit",
         help="Admit one compared typed native-tool proposal under existing grant")
     native_admit.add_argument("--root-task-id", required=True)
@@ -273,7 +279,7 @@ def main(argv=None) -> int:
                         "native-plan-local"):
         from .native_decision import (
             register_native_goal, inspect_native_goal, admit_native_decision,
-            capability_catalog)
+            record_native_hypothesis, capability_catalog)
         try:
             if args.command == "seed-native-goal":
                 tid=register_native_goal(
@@ -281,6 +287,11 @@ def main(argv=None) -> int:
                     allow_public_discovery=args.allow_public_tool_discovery)
                 result={"root_task_id":tid,"status":"NATIVE_GOAL_REGISTERED",
                         "owner_outcome_verified":False}
+            elif args.command == "native-hypothesis":
+                result=record_native_hypothesis(
+                    args.db,args.workspace,args.fixtures,args.root_task_id,
+                    origin=args.origin,idea=args.idea,
+                    observation_sha256=args.observation_sha256)
             elif args.command == "native-goal-readback":
                 result=inspect_native_goal(
                     args.db,args.workspace,args.fixtures,args.root_task_id)
