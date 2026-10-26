@@ -14,11 +14,20 @@ from pathlib import Path
 import sqlite3
 
 from .host import _admit_existing_ledger, run_tick
-from .ledger import connect
+from .ledger import require_initialized_ledger
 from .native_decision import (
     admit_native_decision, capability_catalog, inspect_native_goal,
     record_native_hypothesis, register_native_goal,
 )
+
+
+def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
+    """A model-visible read must never create or silently revive the ledger."""
+    require_initialized_ledger(db_path)
+    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
+    db = sqlite3.connect(uri, uri=True, timeout=5)
+    db.row_factory = sqlite3.Row
+    return db
 
 
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
@@ -53,7 +62,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         This is read-only and never chooses the newest task on the user's
         behalf. Foreign/invalid roots are not reinterpreted as native goals.
         """
-        with closing(connect(db_path)) as db:
+        with closing(_read_only_ledger(db_path)) as db:
             rows = db.execute(
                 "SELECT task_id FROM tasks WHERE parent_task IS NULL "
                 "ORDER BY created_at DESC,task_id DESC LIMIT 51").fetchall()
@@ -89,7 +98,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             db_path, workspace, fixtures, root_task_id)
         if observed["status"] == "NATIVE_GOAL_UNVERIFIABLE":
             return observed
-        with closing(connect(db_path)) as db:
+        with closing(_read_only_ledger(db_path)) as db:
             row = db.execute(
                 "SELECT source_spec FROM tasks WHERE task_id=? AND parent_task IS NULL",
                 (root_task_id,)).fetchone()
@@ -136,7 +145,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 return {"status": "NATIVE_TICK_NOT_ADMISSIBLE",
                         "reason": observed["status"],
                         "owner_outcome_verified": False}
-            with closing(connect(db_path)) as db:
+            with closing(_read_only_ledger(db_path)) as db:
                 rows = db.execute(
                     "SELECT task_id,parent_task FROM tasks").fetchall()
                 isolated = all(
