@@ -107,11 +107,36 @@ def _goal_progress(path: Path, workspace: Path | None = None,
         db.row_factory=sqlite3.Row
         authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
         count=db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        # Display newest work within a finite cost window. The previous
+        # oldest-first LIMIT made every current task disappear once the
+        # shared ledger grew, precisely when parallel teams need visibility.
         rows=db.execute("""SELECT task_id,parent_task,state,goal_rev,grant_rev,
                                   due_at,error_code,source_spec FROM tasks
-                           ORDER BY created_at,task_id LIMIT ?""",
+                           WHERE task_id IN (
+                               SELECT task_id FROM tasks
+                               ORDER BY created_at DESC,task_id DESC LIMIT ?)
+                           ORDER BY created_at,task_id""",
                         (max_tasks,)).fetchall()
-    by_id={row["task_id"]:row for row in rows}
+        # Resolve original owner roots from the SAME read-only snapshot.
+        # Ancestors supply identity, not fabricated observations/extra task
+        # counts. Recursive UNION is cycle-safe and shares the task ledger;
+        # there is no new coordinator, writable index or state authority.
+        closure=db.execute("""WITH RECURSIVE
+            recent(task_id,parent_task) AS (
+                SELECT task_id,parent_task FROM tasks
+                ORDER BY created_at DESC,task_id DESC LIMIT ?),
+            ancestry(task_id,parent_task) AS (
+                SELECT task_id,parent_task FROM recent
+                UNION
+                SELECT parent.task_id,parent.parent_task
+                FROM tasks AS parent
+                JOIN ancestry AS child ON parent.task_id=child.parent_task)
+            SELECT t.task_id,t.parent_task,t.state,t.goal_rev,t.grant_rev,
+                   t.due_at,t.error_code,t.source_spec
+            FROM tasks AS t JOIN ancestry AS a ON t.task_id=a.task_id
+            """,(max_tasks,)).fetchall()
+    by_id={row["task_id"]:row for row in closure}
+    extra_ancestors=max(0,len(by_id)-len(rows))
     roots={}
     for row in rows:
         visited=set()
@@ -190,6 +215,9 @@ def _goal_progress(path: Path, workspace: Path | None = None,
     summary=[]
     for root_id in sorted(roots):
         item=roots[root_id]
+        # A dashboard/leader view is only a bounded projection. It must not
+        # declare the unseen part of a busy multi-agent project complete.
+        item["lineage_window_complete"] = count <= max_tasks
         item["next_control_action"]=(
             "REAUTHORIZE_OR_SUPERSEDE" if item["stale_authority"] else
             "CONTINUE_ADMITTED_WORK" if item["runnable"] else
@@ -278,6 +306,7 @@ def _goal_progress(path: Path, workspace: Path | None = None,
         item["semantic_outcome_verified"]=False
         summary.append(item)
     return {"goals":summary,"scanned_tasks":len(rows),
+            "ancestor_rows":extra_ancestors,
             "truncated":count>max_tasks,
             "semantic_outcome_verified":False}
 
