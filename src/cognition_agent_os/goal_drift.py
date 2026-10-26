@@ -29,6 +29,9 @@ _ALERT_STATES = frozenset({
     "COMPONENT_RESULT_NOT_OWNER_RESULT",
     "OWNER_OUTCOME_NOT_INDEPENDENTLY_ESTABLISHED",
     "OWNER_POSTCONDITION_REGRESSED",
+    "NATIVE_OWNER_SOURCE_CHANGED",
+    "NATIVE_OWNER_EVIDENCE_UNVERIFIABLE",
+    "NATIVE_METHOD_BUDGET_EXHAUSTED",
 })
 
 
@@ -141,8 +144,8 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                              fixtures: Path | None = None) -> list[dict]:
     """One event on changed goal-level blockage, never on mere local success.
 
-    Only original open_goal roots are monitored. Unknown/unsupported domain
-    roots are NOT quietly reinterpreted as owner goals. No source content,
+    Only original open_goal/native_goal roots are monitored. Unknown
+    domain roots are NOT quietly reinterpreted as owner goals. No source content,
     model completions or private objective strings enter event details.
     """
     if type(limit) is not int or not 1 <= limit <= MAX_ROOTS_PER_TICK:
@@ -163,7 +166,7 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                 except (ValueError, TypeError):
                     continue
                 if (not isinstance(source, dict)
-                    or source.get("kind") != "open_goal"):
+                    or source.get("kind") not in ("open_goal", "native_goal")):
                     continue
                 root_id = root["task_id"]
                 descendants, complete = _descendants(db, root_id)
@@ -181,14 +184,31 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                     result["fidelity_state"] = "GOAL_LINEAGE_INCOMPLETE"
                     result["next_goal_action"] = "INSPECT_COMPLETE_LINEAGE"
                 owner_local = None
+                native_observation = None
                 if (complete and receipts_complete
                     and workspace is not None and fixtures is not None):
-                    from .owner_postcondition import inspect_owner_local_outcome
-                    owner_local = inspect_owner_local_outcome(
-                        db_path, workspace, fixtures, root_id)
-                    if owner_local["local_owner_outcome_verified"]:
-                        result["fidelity_state"] = "LOCAL_OWNER_RESULT_VERIFIED"
-                        result["next_goal_action"] = "MAINTAIN_INDEPENDENT_READBACK"
+                    if source["kind"] == "open_goal":
+                        from .owner_postcondition import inspect_owner_local_outcome
+                        owner_local = inspect_owner_local_outcome(
+                            db_path, workspace, fixtures, root_id)
+                        if owner_local["local_owner_outcome_verified"]:
+                            result["fidelity_state"] = "LOCAL_OWNER_RESULT_VERIFIED"
+                            result["next_goal_action"] = "MAINTAIN_INDEPENDENT_READBACK"
+                    else:
+                        from .native_decision import inspect_native_goal
+                        native_observation = inspect_native_goal(
+                            db_path, workspace, fixtures, root_id)
+                        native_status = native_observation["status"]
+                        if native_status == "NATIVE_SOURCE_CHANGED":
+                            result["fidelity_state"] = "NATIVE_OWNER_SOURCE_CHANGED"
+                            result["next_goal_action"] = "REVALIDATE_SOURCE_BEFORE_NEXT_METHOD"
+                        elif native_status in ("NATIVE_EVIDENCE_UNVERIFIABLE",
+                                               "NATIVE_GOAL_UNVERIFIABLE"):
+                            result["fidelity_state"] = "NATIVE_OWNER_EVIDENCE_UNVERIFIABLE"
+                            result["next_goal_action"] = "RECHECK_ORIGINAL_GOAL_AND_RESULT"
+                        elif native_status == "NATIVE_DECISION_BUDGET_EXHAUSTED":
+                            result["fidelity_state"] = "NATIVE_METHOD_BUDGET_EXHAUSTED"
+                            result["next_goal_action"] = "REASSESS_METHODS_VS_ORIGINAL_GOAL"
                 old = db.execute(
                     "SELECT observation_sha256,fidelity_state FROM owner_goal_drift_seen "
                     "WHERE root_task_id=?", (root_id,)
@@ -209,6 +229,13 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                     "lineage_semantic_receipts_sha256": evidence_sha,
                     "lineage_receipts_complete": receipts_complete,
                     "state": state,
+                    "native_decision_observation": ({
+                        "status": native_observation["status"],
+                        "observation_sha256": native_observation.get(
+                            "observation_sha256"),
+                        "reason": native_observation.get("reason"),
+                        "owner_outcome_verified": False,
+                    } if native_observation is not None else None),
                     "independent_local_outcome": ({
                         "status": owner_local["status"],
                         "reason": owner_local.get("reason"),
