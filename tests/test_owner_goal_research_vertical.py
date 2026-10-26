@@ -85,6 +85,37 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertEqual(out["tasks"][0]["status"],"UNKNOWN",out)
         self.assertFalse(self.children(parent))
 
+    def test_composite_english_research_then_implement_preserves_all_obligations(self):
+        parent=self.seed(
+            "Investigate the UART timeout using local evidence and then implement a code fix.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("composite goal must not be downgraded")):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertFalse(self.children(parent))
+
+    def test_composite_chinese_research_and_fix_preserves_all_obligations(self):
+        parent=self.seed("排查 UART 超时，并修复对应代码，不能只输出分析报告。")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("unsupported full owner goal")):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertFalse(self.children(parent))
+
+    def test_informational_deployment_research_is_not_execution_intent(self):
+        parent=self.seed(
+            "Research how to deploy the UART fix safely using local engineering evidence.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("explicit research should not need method inference")):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"DECOMPOSED",result)
+        self.assertEqual(len(self.children(parent)),1)
+        self.assertEqual(json.loads(self.children(parent)[0]["source_spec"])["scope"],
+                         "LOCAL_EVIDENCE_ONLY")
+
     def test_no_model_means_no_fake_investigation(self):
         parent=self.seed()
         with patch("cognition_agent_os.local_model._request",
