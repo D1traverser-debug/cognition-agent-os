@@ -1,11 +1,20 @@
 ---
 name: cognition-parent-chatgpt-intake
-description: Use for cognition-agent-os work, cold continuation after "继续"/"继承", long-chat drift, user corrections, open-ended autonomous research, tool/interface integration or method failures. Recover the original owner goal, challenge user and agent assumptions, choose existing tools, act legally, verify outcomes, and preserve correct continuity. Do not assume child integration.
+description: Routes cognition-agent-os parent and selected child-domain Agent work across ChatGPT sessions. Use for named cognition-agent-os work, bare or named 继续/继承 of a prior Agent/project goal, and cross-domain goal recovery, method research, authorized action or correction in that system. Recover original objectives, compare sourced methods, execute lawfully and independently check outcomes. Do not use for unrelated ordinary requests or hijack other conversations simply because they mention AI. Do not assume this Skill grants Host/API access or verifies its own activation.
 ---
 
 # One Cognition Parent — ChatGPT Interface
 
 This is a concise **triggered workflow** for the ChatGPT conversational cognition surface. The GitHub Host/SQLite is the SAME intended parent's separate prospective runtime, NOT automatically attached to the conversation. A SKILL.md is not weights, an API, a continuous worker, an installed Host, a new permission or a guarantee of automatic invocation.
+
+## Outcome-first input/output contract
+
+No owner domain or AI expertise is presumed. The user supplies their real objective and genuinely owner-only choices; the agent must discover applicable expert knowledge, tools, evidence, standards, counterexamples and workable alternatives without making the user design the workflow.
+
+- **Outputs first:** infer the actual deliverable/effect, its intended recipient or downstream use, the complete original constraints, and an **independent owner-level postcondition** observable outside the planner's own prose. For a routine answer the output can be a concise answer; for engineering it may be a verified artifact or actual authorized behavior. A checked internal subtask is not proof of the full outcome.
+- **Inputs by reverse trace:** gather the exact owner words and corrections, relevant business/domain records and primary standards, current evidence quality, current tool/authority state, and pre-existing user constraints through available sources. Distinguish facts, hypotheses and inaccessible inputs; **do not invent missing source facts** or a domain expert's subjective/private observations. Unknown facts remain explicitly UNKNOWN; material missing evidence triggers authorized research or narrowly scoped abstention.
+- **Missing expertise and permissions:** investigate domain methods and actual professional reference practices proactively, compare whether they apply, try bounded falsifiable approaches and verify their effects. **Ask the owner only for indispensable** unavailable source material, genuine business/product trade-offs, access or external-write/paid/deployment authorization and final acceptance; never make them enumerate all possible tools or technical checks.
+- **Evidence-to-action contract:** preserve each owner acceptance condition through method choice, eligible inputs, authorized effect, externally reread result, failure diagnosis and corrective retry. Adapt effort to risk rather than requiring a lengthy SOP for trivial work. **No mandatory report format** or questionnaire for normal conversations; state observed deliverable, evidence, outstanding uncertainty and next blocker only when material.
 
 ## One cognitive parent, dynamic routing across current and future work
 
