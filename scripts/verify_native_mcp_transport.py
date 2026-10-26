@@ -67,7 +67,11 @@ async def run():
 
         # Real negotiated MCP transport, not a direct Python function test.
         async with Client(server(allow_tick=False)) as client:
-            tools = {x.name for x in (await client.list_tools()).tools}
+            registered = (await client.list_tools()).tools
+            tools = {x.name for x in registered}
+            create_spec = next(x for x in registered if x.name == "native_goal_create")
+            assert "allow_public_discovery" not in (
+                create_spec.input_schema["properties"]), create_spec
             assert "native_local_tick" not in tools, tools
             assert {"native_goal_create", "native_goal_inspect",
                     "native_decision_admit", "native_capabilities"} <= tools
@@ -210,6 +214,7 @@ async def run():
             "cold_goal_discovery_without_id": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
+            "external_disclosure_grant_not_model_controlled": True,
             "shared_ledger_worker_refused": True,
             "revoked_grant_not_reissued": True,
             "owner_outcome_verified": False,
