@@ -14,7 +14,7 @@ from unittest.mock import patch
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, initialize
 from cognition_agent_os.native_decision import (
-    register_native_goal, inspect_native_goal)
+    register_native_goal, inspect_native_goal, record_native_hypothesis)
 from cognition_agent_os.native_local_planner import advance_native_local_once
 
 
@@ -113,6 +113,14 @@ class NativeLocalModelLoop(unittest.TestCase):
             "expected_evidence": "Independent local audit of this specific result.",
             "observation_sha256": history["observation_sha256"],
         }
+        if history["proposed_method_ideas_to_challenge"]:
+            answer["hypothesis_reviews"] = [{
+                "proposal_sha256": item["proposal_sha256"],
+                "disposition": ("REJECTED" if item["claimed_origin"] == "user"
+                                else "CONDITIONALLY_USEFUL"),
+                "counterargument": "Neither proposal alone establishes the owner result.",
+                "verification_needed": "Read original evidence and independently check results.",
+            } for item in history["proposed_method_ideas_to_challenge"]]
         return {"done": True, "response": json.dumps(answer)}
 
     def test_host_autonomous_two_method_loop_and_cold_state(self):
@@ -147,6 +155,30 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertFalse(final["owner_outcome_verified"])
         self.assertEqual(files_before,
                          {p.name:p.read_bytes() for p in self.fixtures.iterdir()})
+
+    def test_installed_planner_challenges_both_user_and_agent_suggestions(self):
+        root = register_native_goal(self.db, self.goal)
+        first = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="user", idea="Erase the original CSV before checking the mismatch",
+            observation_sha256=first["observation_sha256"])
+        second = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent", idea="Reconcile the original CSV inputs without mutation",
+            observation_sha256=second["observation_sha256"])
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=self.transport):
+            planned = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(planned["status"], "NATIVE_METHOD_ENQUEUED", planned)
+        outcome = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(outcome["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertEqual(len(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["hypotheses"]), 2)
+        self.assertTrue((self.fixtures / "reference.csv").is_file())
 
     def test_unknown_goal_model_may_abstain_despite_available_irrelevant_tools(self):
         original = (
