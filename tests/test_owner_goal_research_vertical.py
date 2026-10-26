@@ -8,6 +8,7 @@ from unittest.mock import patch
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect,create_task,initialize
 from cognition_agent_os.investigation import audit_investigation
+from cognition_agent_os.goal_audit import audit_goal
 from cognition_agent_os.open_goal import audit_open_goal
 
 class OpenGoalResearchVertical(unittest.TestCase):
@@ -79,6 +80,49 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertIs(research["business_outcome_verified"],False)
         self.assertIs(research["authorizes_mutation"],False)
         self.assertEqual({p.name:p.read_bytes() for p in self.fx.iterdir()},prior)
+
+    def test_independent_research_and_sandbox_draft_conjunction(self):
+        """Both explicit owner obligations must run via the SAME Host and ledger."""
+        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        original={p.name:p.read_bytes() for p in self.fx.iterdir()}
+        parent=self.seed(
+            "Investigate the UART timeout using local engineering evidence and "
+            "ensure a sandbox draft of settings.json has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=3,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual([x["status"] for x in result["tasks"]],
+                         ["DECOMPOSED","NEEDS_REVIEW","NEEDS_REVIEW"],result)
+        children=self.children(parent)
+        self.assertEqual(len(children),2)
+        by_kind={json.loads(x["source_spec"])["kind"]:x for x in children}
+        self.assertEqual(set(by_kind),{"investigate_goal","goal_case"})
+        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
+                         "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
+        self.assertEqual(audit_investigation(
+            self.db,self.ws,self.fx,by_kind["investigate_goal"]["task_id"])["status"],
+                         "SOURCE_GROUNDED_UNREVIEWED")
+        self.assertEqual(audit_goal(
+            self.db,self.ws,self.fx,by_kind["goal_case"]["task_id"])["status"],
+                         "CANDIDATE_MECHANICALLY_VALID")
+        self.assertEqual({p.name:p.read_bytes() for p in self.fx.iterdir()},original)
+        root=result["goal_progress"]["goals"][0]
+        self.assertFalse(root["owner_outcome_verified"])
+        self.assertFalse(root["semantic_outcome_verified"])
+        self.assertFalse(root["research_only"])
+
+    def test_sequential_research_then_draft_is_not_parallelized(self):
+        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        parent=self.seed(
+            "Investigate the UART timeout using local evidence and then "
+            "ensure a sandbox draft of settings.json has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("sequence has unproven dependency")):
+            result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                            planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
+        self.assertFalse(self.children(parent))
 
     def test_compound_research_and_write_must_not_downgrade_owner_goal(self):
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
