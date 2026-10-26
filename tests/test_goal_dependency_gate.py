@@ -60,7 +60,40 @@ class OrderedEvidenceGateTests(unittest.TestCase):
         (self.fixtures/"config.json").write_text('{"existing":"changed"}\n')
         after=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
         self.assertFalse(any(x.get("task_id")==second for x in after["tasks"]))
-        self.assertNotEqual(self.get(second)["state"],"NEEDS_REVIEW")
+        self.assertEqual(self.get(second)["state"],"NEEDS_REPLAN")
+        self.assertEqual(self.get(second)["error_code"],
+                         "PREDECESSOR_EVIDENCE_UNVERIFIABLE")
+        self.assertTrue(any(x["status"]=="DEPENDENCY_REPLAN_REQUIRED"
+                            for x in after["dependency_observations"]))
+
+    def test_unknown_predecessor_does_not_leave_successor_waiting_forever(self):
+        first,second=self.tasks()
+        register_local_dependency(self.db,first,second)
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET state='UNKNOWN',error_code='NO_SAFE_GOAL_PLAN' "
+                       "WHERE task_id=?",(first,))
+            db.commit()
+        observed=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(self.get(second)["state"],"NEEDS_REPLAN")
+        self.assertTrue(any(
+            x.get("reason")=="PREDECESSOR_NOT_VERIFIED"
+            for x in observed["dependency_observations"]))
+
+    def test_forged_release_cannot_bypass_independent_worker_readback(self):
+        first,second=self.tasks()
+        register_local_dependency(self.db,first,second)
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE task_dependencies SET released_at=1 "
+                       "WHERE task_id=?",(second,))
+            db.commit()
+        observed=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(observed["tasks"][0]["task_id"],first)
+        final=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(final["tasks"][0]["task_id"],second)
+        self.assertEqual(final["tasks"][0]["status"],"UNKNOWN")
+        self.assertEqual(self.get(second)["error_code"],
+                         "PREDECESSOR_EVIDENCE_CHANGED")
+        self.assertFalse((self.workspace/"artifacts"/(second+".json")).exists())
 
     def test_revocation_never_releases_dependency(self):
         first,second=self.tasks()
