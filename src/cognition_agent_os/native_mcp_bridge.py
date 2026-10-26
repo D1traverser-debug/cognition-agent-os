@@ -37,7 +37,8 @@ def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
 
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                      allow_host_tick: bool = False,
-                     allow_source_read: bool = False):
+                     allow_source_read: bool = False,
+                     allow_local_model_plan: bool = False):
     """Expose only the existing, audited native-goal contract as MCP tools."""
     from mcp.server import MCPServer
 
@@ -188,6 +189,21 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return admit_native_decision(
             db_path, workspace, fixtures, root_task_id, proposal)
 
+    if allow_local_model_plan:
+        @mcp.tool()
+        def native_local_model_plan(root_task_id: str, model: str) -> dict:
+            """Explicit opt-in to existing installed local Ollama cognition.
+
+            Existing model planner reads owner goal, live evidence and audit
+            feedback, proposes alternatives, and admits only grounded typed
+            work through the same SQLite grant. No cloud, API billing, model
+            downloads or autonomous permission escalation is available.
+            A model proposal is NEVER an independently verified outcome.
+            """
+            from .native_local_planner import advance_native_local_once
+            return advance_native_local_once(
+                db_path, workspace, fixtures, root_task_id, model=model)
+
     if allow_host_tick:
         @mcp.tool()
         def native_local_tick(root_task_id: str) -> dict:
@@ -233,11 +249,14 @@ def main(argv: list[str] | None = None) -> int:
                         help="Explicitly allow one targeted native child execution")
     parser.add_argument("--allow-source-read", action="store_true",
                         help="Operator opts in to disclose local source excerpts to the MCP client")
+    parser.add_argument("--allow-local-model-plan", action="store_true",
+                        help="Opt into installed loopback Ollama model planning; no cloud/API")
     args = parser.parse_args(argv)
     mcp = build_mcp_server(
         args.db, args.workspace, args.fixtures,
         allow_host_tick=args.allow_host_tick,
-        allow_source_read=args.allow_source_read)
+        allow_source_read=args.allow_source_read,
+        allow_local_model_plan=args.allow_local_model_plan)
     mcp.run(transport="stdio")
     return 0
 
