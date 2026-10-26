@@ -327,7 +327,9 @@ def main(argv=None) -> int:
         return 0 if result["status"] not in (
             "NATIVE_GOAL_UNVERIFIABLE","NATIVE_SOURCE_CHANGED",
             "NATIVE_EVIDENCE_UNVERIFIABLE","NATIVE_GRANT_REVOKED",
-            "NATIVE_LOCAL_MODEL_UNAVAILABLE","NATIVE_LOCAL_PLAN_REFUSED"
+            "NATIVE_LOCAL_MODEL_UNAVAILABLE","NATIVE_LOCAL_PLAN_REFUSED",
+            "NATIVE_LOCAL_MODEL_ABSTAINED","NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED",
+            "NATIVE_LOCAL_PLAN_NOT_ADMISSIBLE"
         ) else 4
     if args.command == "goal-resume":
         result = resume_goal(
