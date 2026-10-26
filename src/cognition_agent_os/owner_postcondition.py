@@ -43,10 +43,17 @@ def _unknown(root_id: str, reason: str) -> dict:
     }
 
 
-def _bytes(path: Path, max_size: int = _MAX_ARTIFACT) -> bytes:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > max_size:
+def _bytes(workspace: Path, relative: str,
+           max_size: int = _MAX_ARTIFACT) -> bytes:
+    """Read staged evidence anchored to the workspace, not through path aliases.
+
+    Reuse the source reader's opened-handle containment check so a swapped
+    sandbox/artifacts parent directory cannot point the owner verifier at
+    matching bytes outside the authorized workspace.
+    """
+    if workspace.is_symlink() or (workspace / relative).is_symlink():
         raise ValueError("UNSAFE_OR_MISSING_OUTPUT")
-    raw = path.read_bytes()
+    raw = safe_fixture(workspace, relative)
     if len(raw) > max_size:
         raise ValueError("OUTPUT_EXCEEDS_BOUND")
     return raw
@@ -244,7 +251,7 @@ def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
             if len(effects) != 1:
                 return _unknown(root_id, "SANDBOX_EFFECT_RECEIPT_MISSING")
             artifact = _bytes(
-                workspace / "artifacts" / (child["task_id"] + ".json"))
+                workspace, "artifacts/" + child["task_id"] + ".json")
             if hashlib.sha256(artifact).hexdigest() != child["artifact_hash"]:
                 return _unknown(root_id, "CANDIDATE_ARTIFACT_CHANGED")
             record = json.loads(artifact)
@@ -256,7 +263,7 @@ def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
             if hashlib.sha256(original).hexdigest() != record.get("source_sha256"):
                 return _unknown(root_id, "OWNER_SOURCE_CHANGED")
             actual = _bytes(
-                workspace / "sandbox" / (child["task_id"] + ".candidate"))
+                workspace, "sandbox/" + child["task_id"] + ".candidate")
             result_sha = hashlib.sha256(actual).hexdigest()
             effect = json.loads(effects[0]["details"])
             if (record.get("candidate_sha256") != result_sha
