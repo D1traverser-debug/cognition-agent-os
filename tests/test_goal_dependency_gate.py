@@ -125,6 +125,38 @@ class OrderedEvidenceGateTests(unittest.TestCase):
                          "PREDECESSOR_EVIDENCE_CHANGED")
         self.assertFalse((self.workspace/"artifacts"/(second+".json")).exists())
 
+    def test_legacy_authoritative_db_without_dependency_table_still_runs(self):
+        # Existing installed ledgers did not have this table. This cannot
+        # silently create a second database or break the original worker.
+        with closing(connect(self.db)) as db:
+            db.execute("DROP TABLE task_dependencies")
+            db.commit()
+        first,second=self.tasks()
+        result=run_tick(self.db,self.workspace,self.fixtures,max_jobs=2)
+        self.assertEqual([x["status"] for x in result["tasks"]],
+                         ["NEEDS_REVIEW","NEEDS_REVIEW"],result)
+        self.assertEqual(self.get(first)["state"],"NEEDS_REVIEW")
+        self.assertEqual(self.get(second)["state"],"NEEDS_REVIEW")
+
+    def test_revoke_after_release_before_worker_blocks_effect(self):
+        first,second=self.tasks()
+        register_local_dependency(self.db,first,second)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        from cognition_agent_os.dependency_gate import advance_pending_local_dependencies
+        def revoke_after_audit(*args,**kwargs):
+            observed=advance_pending_local_dependencies(*args,**kwargs)
+            self.assertTrue(any(
+                x["status"]=="DEPENDENCY_RELEASED_LOCAL_ONLY" for x in observed))
+            with closing(connect(self.db)) as db:
+                alter_authority(db,revoke=True)
+            return observed
+        with patch("cognition_agent_os.dependency_gate.advance_pending_local_dependencies",
+                   side_effect=revoke_after_audit):
+            result=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(result["tasks"][0]["task_id"],second)
+        self.assertEqual(result["tasks"][0]["status"],"BLOCKED")
+        self.assertFalse((self.workspace/"artifacts"/(second+".json")).exists())
+
     def test_duplicate_and_reverse_dependency_refused(self):
         first,second=self.tasks()
         register_local_dependency(self.db,first,second)
