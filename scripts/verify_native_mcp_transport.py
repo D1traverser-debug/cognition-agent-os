@@ -328,6 +328,19 @@ async def run():
                 {"owner_goal": "This cannot regrant revoked authority."})
             assert new_attempt.is_error, new_attempt
 
+        # Forty-plus unrelated legacy tasks can be generated between
+        # sessions. A page cut BEFORE native type filtering would silently
+        # hide all earlier genuine owner goals, causing irreversible drift.
+        # These rows are NOT native roots and must never enter the native list.
+        from cognition_agent_os.ledger import create_task
+        with closing(connect(db)) as ledger:
+            for ordinal in range(58):
+                create_task(ledger, {
+                    "kind": "fixture",
+                    "ref": "unrelated-" + str(ordinal),
+                }, commit=False)
+            ledger.commit()
+
         # A brand-new client knows NO root id. It rediscovers the original
         # user goals via real SQLite before selecting the one whose exact
         # identity/goal is independently available. Ambiguity is not silently
@@ -337,6 +350,7 @@ async def run():
             assert inventory["status"] == "NATIVE_GOAL_INVENTORY", inventory
             assert inventory["ambiguous"] is True, inventory
             assert inventory["selected_root_task_id"] is None, inventory
+            assert inventory["truncated"] is False, inventory
             ids = {entry["root_task_id"] for entry in inventory["goals"]}
             assert ids == {root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
             discovered = next(
@@ -356,6 +370,7 @@ async def run():
             "cold_process_recovery": True,
             "native_original_goal_independent_local_postcondition": True,
             "cold_goal_discovery_without_id": True,
+            "mixed_ledger_old_goals_not_hidden": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
             "source_text_default_hidden_and_opt_in_read_verified": True,
