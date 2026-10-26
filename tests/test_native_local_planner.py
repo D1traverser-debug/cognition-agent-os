@@ -362,23 +362,53 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertFalse(observed["owner_outcome_verified"])
         self.assertEqual((self.fixtures/"handoff.json").read_bytes(),original)
 
-    def test_single_method_shortcut_forbidden_when_real_alternative_exists(self):
-        from cognition_agent_os.native_decision import admit_native_decision
-        root=register_native_goal(self.db,self.goal)
-        observed=inspect_native_goal(self.db,self.workspace,self.fixtures,root)
-        with self.assertRaisesRegex(ValueError,"NATIVE_COMPARISON_REQUIRED"):
-            admit_native_decision(
-                self.db,self.workspace,self.fixtures,root,{
-                    "selected_intent":self.compare(),
-                    "alternative_intent":None,
-                    "decision_basis":self.basis_for_root(root),
-                    "decision_reason":"Use the local record comparison first.",
-                    "alternative_reason":"No other comparison considered.",
-                    "expected_evidence":"Independent local report readback.",
-                    "observation_sha256":observed["observation_sha256"],
-                })
-        self.assertEqual(inspect_native_goal(
-            self.db,self.workspace,self.fixtures,root)["decision_count"],0)
+    def test_available_but_irrelevant_tool_not_forced_as_competitor(self):
+        """Eligibility by file suffix is not relevance to the original owner goal.
+
+        JSON conformance happens to be executable, but this task is about the
+        disputed CSV evidence. Mandatory two-tool comparison is false evidence.
+        The same grant, grounded proposal, Worker, and independent audit apply.
+        """
+        from cognition_agent_os.native_decision import (
+            admit_native_decision, capability_catalog)
+        root = register_native_goal(
+            self.db, "Identify the actual CSV inventory discrepancy; leave "
+                     "all local sources unchanged and independently verify "
+                     "the resulting discrepancy report.")
+        original = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
+        methods = capability_catalog(self.fixtures)["methods"]
+        eligible = [x["objective"] for x in methods if x["currently_eligible"]]
+        self.assertIn("compare_records", eligible)
+        self.assertIn("ensure_structure", eligible)  # eligible != relevant
+        observed = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        queued = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, {
+                "selected_intent": self.compare(),
+                "alternative_intent": None,
+                "decision_basis": self.basis_for_root(root),
+                "decision_reason": (
+                    "CSV reconciliation tests the actual owner discrepancy."),
+                "alternative_reason": (
+                    "The other available JSON tool is mechanically eligible "
+                    "but irrelevant to reconciling the CSV business records."),
+                "expected_evidence": (
+                    "Independent recomputation of an immutable local report."),
+                "observation_sha256": observed["observation_sha256"],
+            })
+        self.assertEqual(queued["status"], "NATIVE_METHOD_ENQUEUED")
+        actual = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(actual["tasks"][0]["status"], "NEEDS_REVIEW")
+        after = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertEqual(after["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        self.assertIsNone(after["decisions"][0]["alternative_objective"])
+        self.assertFalse(after["owner_outcome_verified"])
+        self.assertEqual(
+            {p.name: p.read_bytes() for p in self.fixtures.iterdir()},
+            original)
 
     def test_native_auto_needs_explicit_model_selection(self):
         register_native_goal(self.db, self.goal)
