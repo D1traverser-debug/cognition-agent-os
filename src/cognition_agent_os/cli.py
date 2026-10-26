@@ -283,7 +283,8 @@ def main(argv=None) -> int:
                     "NATIVE_NEXT_DECISION_ADMISSIBLE", "NATIVE_AWAITING_WORKER",
                     "NATIVE_DECISION_BUDGET_EXHAUSTED"):
                     raise ValueError("NATIVE_ROOT_NOT_CURRENT")
-                with closing(connect(args.db)) as read_db:
+                read_uri=args.db.resolve(strict=True).as_uri()+"?mode=ro"
+                with closing(sqlite3.connect(read_uri,uri=True,timeout=5)) as read_db:
                     root=read_db.execute(
                         "SELECT source_spec FROM tasks WHERE task_id=?",
                         (args.root_task_id,)).fetchone()
