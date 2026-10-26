@@ -208,7 +208,10 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
                 "HOLDOUT_ACCEPTED","REPO_BYTES_MECHANICALLY_VALID")
                    else report.get("reason",report["status"]))
         elif state=="DECOMPOSED":
-            if kind=="knowledge_intent":
+            if kind=="native_goal":
+                from .native_decision import inspect_native_goal
+                result=inspect_native_goal(db_path,workspace,fixtures,tid)
+            elif kind=="knowledge_intent":
                 from .knowledge_routing import audit_knowledge_intent_plan
                 result=audit_knowledge_intent_plan(db_path,fixtures,tid)
             elif kind=="open_goal":
@@ -219,7 +222,11 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             proof=("MECHANICALLY_VALID" if result["status"] in (
                 "PLAN_MECHANICALLY_VALID",
                 "METHOD_CANDIDATE_MECHANICALLY_GROUNDED",
-                "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
+                "COMPOUND_METHODS_MECHANICALLY_GROUNDED",
+                "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                "NATIVE_AWAITING_WORKER",
+                "NATIVE_DECISION_BUDGET_EXHAUSTED",
+                "NATIVE_GRANT_REVOKED")
                    else result.get("reason",result.get("status","PLAN_AUDIT_FAILED")))
         elif state=="RESEARCH_NEEDED":
             if kind=="knowledge_intent":
