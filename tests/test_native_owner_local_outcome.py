@@ -209,6 +209,28 @@ class NativeOwnerAcceptance(unittest.TestCase):
         self.assertFalse(inspect_owner_local_outcome(
             self.db, self.workspace, self.fixtures, root
         )["local_owner_outcome_verified"])
+        # Mechanical success must not conceal owner failure from the NEXT
+        # model decision. The oracle reason, not just child PASS, is input.
+        from unittest.mock import patch
+        from cognition_agent_os.native_local_planner import propose_native_local
+        observed_context = []
+        def inspect_model_request(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            observed_context.append(json.loads(
+                payload["prompt"].split("\n\n")[-1]))
+            return {"done": True, "response": '{"abstain":true}'}
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=inspect_model_request):
+            suggested = propose_native_local(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(suggested["status"],
+                         "NATIVE_LOCAL_MODEL_ABSTAINED")
+        self.assertEqual(
+            observed_context[0]["independent_original_owner_postcondition"]
+                ["reason"],
+            "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
         corrected = admit_native_decision(
             self.db, self.workspace, self.fixtures, root,
             propose("baseline.csv", "actual.csv", bad["child_task_id"]))
