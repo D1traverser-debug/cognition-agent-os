@@ -90,6 +90,46 @@ class NativeOwnerAcceptance(unittest.TestCase):
         self.assertTrue(verdict["local_owner_outcome_verified"])
         self.assertFalse(verdict["business_outcome_verified"])
         self.assertFalse(verdict["real_external_outcome_verified"])
+        # A COMPLETE local owner goal must stop new work at the shared
+        # native decision boundary. The model cannot spend another call or
+        # take a different registered tool simply because budget remains.
+        from unittest.mock import patch
+        from cognition_agent_os.native_local_planner import advance_native_local_once
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("MODEL_CALLED_AFTER_OWNER_SUCCESS")):
+            stopped = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root, model="any:local")
+        self.assertEqual(stopped["status"],
+                         "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED", stopped)
+        next_state = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        fingerprints = [
+            {"path": item.name,
+             "sha256": hashlib.sha256(item.read_bytes()).hexdigest()}
+            for item in sorted(self.fixtures.iterdir())]
+        irrelevant = {
+            "selected_intent": {
+                "kind": "goal_intent", "objective": "ensure_structure",
+                "resources": [{"role": "input", "path": "handoff.json"}],
+                "requirements": [{"field": "audit", "equals": "confirmed"}],
+            },
+            "alternative_intent": None,
+            "decision_reason": "Try more work although owner goal is already complete.",
+            "alternative_reason": "Another tool does not improve the completed CSV result.",
+            "expected_evidence": "A separate local JSON proposal.",
+            "observation_sha256": next_state["observation_sha256"],
+            "decision_basis": {
+                "source_refs": fingerprints,
+                "previous_result_task_id": admitted["child_task_id"],
+                "challenge": "This may be unrelated to the original goal.",
+                "falsifier": "The owner oracle reports the original goal complete.",
+                "uncertainty": "Further work could introduce unnecessary effects.",
+            },
+        }
+        with self.assertRaisesRegex(ValueError,
+                                    "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, irrelevant)
         # Normal Host progress MUST share the same owner-level acceptance;
         # a special MCP-only oracle call is not a complete product fix.
         tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
@@ -186,7 +226,7 @@ class NativeOwnerAcceptance(unittest.TestCase):
         # Repeating an already-correct method without new evidence is still
         # forbidden, even if a model insists.
         with self.assertRaisesRegex(ValueError,
-                                    "REPEATED_NATIVE_METHOD_WITHOUT_NEW_EVIDENCE"):
+                                    "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED"):
             admit_native_decision(
                 self.db, self.workspace, self.fixtures, root,
                 propose("baseline.csv", "actual.csv", corrected["child_task_id"]))
