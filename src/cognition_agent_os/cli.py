@@ -298,7 +298,8 @@ def main(argv=None) -> int:
             "READY_TO_TICK", "READY_TO_RECOVER",
             "AWAITING_WORKER", "NEEDS_INDEPENDENT_REVIEW",
             "NEEDS_OWNER_OUTCOME_REVIEW",
-            "LOCAL_OWNER_RESULT_VERIFIED") else 4
+            "LOCAL_OWNER_RESULT_VERIFIED",
+            "READY_FOR_NATIVE_DECISION") else 4
     if args.command in ("seed-continuity", "goal-checkpoint"):
         try:
             if args.command == "seed-continuity":
