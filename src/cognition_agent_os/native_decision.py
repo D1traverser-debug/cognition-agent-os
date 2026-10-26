@@ -616,6 +616,8 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                 "SELECT details FROM events WHERE task_id=? "
                 "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
                 (root_id,)).fetchall()
+            last_feedback = (observed["decisions"][-1]
+                             if observed["decisions"] else None)
             for receipt_row in previous_receipts:
                 previous_receipt = json.loads(receipt_row["details"])
                 prior_plan = _proposal(previous_receipt["proposal"], contract)["selected"]
@@ -627,7 +629,21 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                     parsed["selected"]["plan_sha256"])
                 cited = {item["path"] for item in
                          candidate["decision_basis"]["source_refs"]}
-                if not (added and (added & cited) and selected_plan_changed):
+                # A verified failure IS new result evidence. Correcting the
+                # immediately failed registered method need not fabricate a new
+                # source file; it must actually change the typed plan and the
+                # Worker still checks earlier task lineage and current grant.
+                # A successful prior method never permits a no-evidence rerun.
+                failed_method_feedback = bool(
+                    last_feedback
+                    and previous_receipt["child_task_id"] == last_feedback["task_id"]
+                    and last_feedback["selected_objective"] ==
+                        parsed["selected"]["objective"]
+                    and last_feedback["task_state"] == "UNKNOWN"
+                    and last_feedback["error_code"] in (
+                        "NO_SAFE_GOAL_PLAN", "JOIN_KEY_AMBIGUOUS"))
+                if not (selected_plan_changed and (
+                        (added and (added & cited)) or failed_method_feedback)):
                     raise ValueError("REPEATED_NATIVE_METHOD_WITHOUT_NEW_EVIDENCE")
             if parsed["alternative"] is None:
                 catalog = capability_catalog(
