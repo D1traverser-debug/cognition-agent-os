@@ -245,6 +245,32 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(recovered["original_goal"], self.goal)
         self.assertEqual(recovered["native_decision_state"]["decision_count"], 2)
 
+    def test_cold_process_native_cli_challenges_untrusted_user_method(self):
+        common = [sys.executable, "-m", "cognition_agent_os.cli",
+                  "--db", str(self.db), "--workspace", str(self.workspace),
+                  "--fixtures", str(self.fixtures)]
+        root = self.root_id()
+        initial = json.loads(subprocess.run(
+            [*common, "native-goal-readback", "--root-task-id", root],
+            check=True, capture_output=True, text=True).stdout)
+        result = subprocess.run([
+            *common, "native-hypothesis", "--root-task-id", root,
+            "--origin", "user", "--idea",
+            "Assume the discrepancy is harmless without checking originals",
+            "--observation-sha256", initial["observation_sha256"],
+        ], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(json.loads(result.stdout)["status"],
+                         "NATIVE_HYPOTHESIS_RECORDED")
+        recovered = json.loads(subprocess.run(
+            [*common, "native-goal-readback", "--root-task-id", root],
+            check=True, capture_output=True, text=True).stdout)
+        self.assertEqual(recovered["original_goal"], self.goal)
+        self.assertEqual(recovered["hypotheses"][0]["claimed_origin"], "user")
+        self.assertFalse((self.workspace / "artifacts").exists())
+        self.assertNotEqual(initial["observation_sha256"],
+                            recovered["observation_sha256"])
+
     def test_unfamiliar_chinese_goal_cross_process_native_cli(self):
         """The real CLI, not a Python-only method call, performs admission/readback."""
         chinese = ("核对供应商出入库差异并保留原始数据；随后为审计准备隔离草案，"
