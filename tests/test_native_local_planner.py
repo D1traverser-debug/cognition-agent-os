@@ -209,6 +209,57 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(inspect_native_goal(
             self.db,self.workspace,self.fixtures,root)["decision_count"],0)
 
+    def test_single_eligible_method_runs_without_fabricated_competitor(self):
+        """Adaptive effort: one viable capability never requires two fake tools."""
+        (self.fixtures / "reference.csv").unlink()
+        (self.fixtures / "observed.csv").unlink()
+        root = register_native_goal(
+            self.db, "Prepare a local JSON handoff with audited=yes, preserve all originals.")
+        original = (self.fixtures / "handoff.json").read_bytes()
+        def model(method, path, payload, timeout):
+            if method == "GET":
+                return {"models":[{"name":"installed:test"}]}
+            evidence=json.loads(payload["prompt"].split("\n\n")[-1])
+            self.assertEqual(
+                [x["objective"] for x in evidence["registered_local_methods"]],
+                ["ensure_structure"])
+            return {"done": True, "response": json.dumps({
+                "selected_intent": self.ensure(), "alternative_intent": None,
+                "decision_reason": "Only the local JSON conformance tool fits this evidence.",
+                "alternative_reason": "Other registered tools lack compatible sources.",
+                "expected_evidence": "An independently checked preserved JSON proposal.",
+                "observation_sha256": evidence["observation_sha256"],
+            })}
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=model):
+            planned = advance_native_local_once(
+                self.db,self.workspace,self.fixtures,root,model="installed:test")
+        self.assertEqual(planned["status"],"NATIVE_METHOD_ENQUEUED",planned)
+        result=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1,
+                        planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(result["tasks"][0]["status"],"NEEDS_REVIEW",result)
+        observed=inspect_native_goal(self.db,self.workspace,self.fixtures,root)
+        self.assertIsNone(observed["decisions"][0]["alternative_objective"])
+        self.assertFalse(observed["owner_outcome_verified"])
+        self.assertEqual((self.fixtures/"handoff.json").read_bytes(),original)
+
+    def test_single_method_shortcut_forbidden_when_real_alternative_exists(self):
+        from cognition_agent_os.native_decision import admit_native_decision
+        root=register_native_goal(self.db,self.goal)
+        observed=inspect_native_goal(self.db,self.workspace,self.fixtures,root)
+        with self.assertRaisesRegex(ValueError,"NATIVE_COMPARISON_REQUIRED"):
+            admit_native_decision(
+                self.db,self.workspace,self.fixtures,root,{
+                    "selected_intent":self.compare(),
+                    "alternative_intent":None,
+                    "decision_reason":"Use the local record comparison first.",
+                    "alternative_reason":"No other comparison considered.",
+                    "expected_evidence":"Independent local report readback.",
+                    "observation_sha256":observed["observation_sha256"],
+                })
+        self.assertEqual(inspect_native_goal(
+            self.db,self.workspace,self.fixtures,root)["decision_count"],0)
+
     def test_native_auto_needs_explicit_model_selection(self):
         register_native_goal(self.db, self.goal)
         with self.assertRaisesRegex(ValueError, "explicit installed local model"):
