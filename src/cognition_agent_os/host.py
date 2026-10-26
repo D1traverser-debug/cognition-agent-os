@@ -145,6 +145,12 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                     from .public_tool_discovery import audit_public_discovery
                     audit=audit_public_discovery(path,workspace,row["task_id"])
                     check=audit["status"]=="PUBLIC_TOOL_LEADS_MECHANICALLY_GROUNDED"
+                elif kind=="investigate_goal":
+                    from .investigation import audit_investigation
+                    audit=audit_investigation(
+                        path,workspace,fixtures,row["task_id"])
+                    # Source-grounded, NOT owner-approved findings.
+                    check=audit["status"]=="SOURCE_GROUNDED_UNREVIEWED"
                 else:
                     kind=None
                 if kind is not None:
