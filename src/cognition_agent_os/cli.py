@@ -72,6 +72,9 @@ def main(argv=None) -> int:
         help="Register complete owner text for model-neutral current-tool decisions")
     native_seed.add_argument("--goal", required=True)
     native_seed.add_argument("--allow-public-tool-discovery", action="store_true")
+    native_catalog = sub.add_parser("native-capability-catalog",
+        help="Read actual registered Host method availability before cognitive plan")
+    native_catalog.add_argument("--root-task-id", required=True)
     native_read = sub.add_parser("native-goal-readback",
         help="Read original native goal, live evidence and next-decision digest")
     native_read.add_argument("--root-task-id", required=True)
@@ -259,9 +262,10 @@ def main(argv=None) -> int:
             "business_outcome_verified":False},sort_keys=True))
         return 0
     if args.command in ("seed-native-goal", "native-goal-readback",
-                        "native-decision-admit"):
+                        "native-decision-admit", "native-capability-catalog"):
         from .native_decision import (
-            register_native_goal, inspect_native_goal, admit_native_decision)
+            register_native_goal, inspect_native_goal, admit_native_decision,
+            capability_catalog)
         try:
             if args.command == "seed-native-goal":
                 tid=register_native_goal(
@@ -272,6 +276,25 @@ def main(argv=None) -> int:
             elif args.command == "native-goal-readback":
                 result=inspect_native_goal(
                     args.db,args.workspace,args.fixtures,args.root_task_id)
+            elif args.command == "native-capability-catalog":
+                observed=inspect_native_goal(
+                    args.db,args.workspace,args.fixtures,args.root_task_id)
+                if observed["status"] not in (
+                    "NATIVE_NEXT_DECISION_ADMISSIBLE", "NATIVE_AWAITING_WORKER",
+                    "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+                    raise ValueError("NATIVE_ROOT_NOT_CURRENT")
+                with closing(connect(args.db)) as read_db:
+                    root=read_db.execute(
+                        "SELECT source_spec FROM tasks WHERE task_id=?",
+                        (args.root_task_id,)).fetchone()
+                    if root is None:
+                        raise ValueError("NATIVE_ROOT_NOT_FOUND")
+                    original=json.loads(root["source_spec"])
+                result=capability_catalog(
+                    args.fixtures,allow_public_discovery=(
+                        original.get("allow_public_discovery") is True))
+                result["root_task_id"]=args.root_task_id
+                result["observation_sha256"]=observed["observation_sha256"]
             else:
                 if (args.spec.is_symlink() or not args.spec.is_file()
                     or args.spec.stat().st_size>16384):
