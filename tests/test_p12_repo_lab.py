@@ -482,8 +482,27 @@ class RepoLabTest(unittest.TestCase):
         self.assertIn("--security-opt=no-new-privileges",command)
         self.assertIn("--user=65534:65534",command)
         self.assertIn("readonly",command[command.index("--mount")+1])
-        self.assertEqual(options["timeout"],8)
+        self.assertEqual(options["timeout"],lab.DOCKER_CASE_TIMEOUT_SECONDS)
+        self.assertEqual(options["timeout"],20)
         self.assertNotIn("shell",options)
+
+
+    def test_docker_timeout_and_cli_os_error_are_distinct_no_fallback(self):
+        from cognition_agent_os import container_lab as lab
+        import subprocess
+        for failure, expected in (
+            (subprocess.TimeoutExpired(cmd=["docker","run"],timeout=20),
+             "DOCKER_PROCESS_TIMEOUT"),
+            (FileNotFoundError("docker gone"), "DOCKER_CLI_LAUNCH_ERROR"),
+        ):
+            with self.subTest(expected=expected), \\
+                 patch.object(lab.shutil,"which",return_value="/usr/bin/docker"), \\
+                 patch.object(lab.subprocess,"run",side_effect=failure) as process:
+                with self.assertRaisesRegex(lab.ContainerUnavailable, expected):
+                    lab._docker_run(self.base,"main.py",{"x":1})
+                self.assertEqual(process.call_count,1)
+                self.assertEqual(process.call_args.kwargs["timeout"],20)
+
 
 
 if __name__=="__main__":
