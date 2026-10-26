@@ -34,6 +34,11 @@ class OpenGoalResearchVertical(unittest.TestCase):
             return [dict(r) for r in db.execute(
                 "SELECT * FROM tasks WHERE parent_task=?",(parent,))]
 
+    def root_error_code(self,parent):
+        with closing(connect(self.db)) as db:
+            row=db.execute("SELECT error_code FROM tasks WHERE task_id=?",(parent,)).fetchone()
+            return row["error_code"]
+
     def respond(self,method,path,payload,timeout):
         if method=="GET":
             return {"models":[{"name":"installed:test"}]}
@@ -93,6 +98,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
             result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
                             planner_mode="ollama-local",local_model="installed:test")
         self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
         self.assertFalse(self.children(parent))
 
     def test_composite_chinese_research_and_fix_preserves_all_obligations(self):
@@ -102,6 +108,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
             result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
                             planner_mode="ollama-local",local_model="installed:test")
         self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
         self.assertFalse(self.children(parent))
 
     def test_informational_deployment_research_is_not_execution_intent(self):
@@ -134,6 +141,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
             result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
                             planner_mode="ollama-local",local_model="installed:test")
         self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
+        self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
         self.assertFalse(self.children(parent))
 
     def test_readonly_inquiry_about_fix_is_not_implementation(self):
