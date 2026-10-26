@@ -141,7 +141,7 @@ The 2026-10-25 external reference review found the following:
 | --- | --- | --- | --- |
 | Copy Claude Code Game Studios' 49 specialist prompts, 74 commands and game-studio gates | Strong role separation, adaptive rigor, traceability and delivery-oriented reviews | It is a human-guided Claude Code *workflow template*, not a proven autonomous persistent Host or an independent remote business oracle. A fixed 49-agent organization adds coordination/context cost | **REUSE PRINCIPLES ONLY** |
 | Replace the runtime wholesale with a new multi-agent/graph/workflow framework | Richer routing and some durable workflow infrastructure may help unfamiliar goals | Discards the verified single grant/ledger, risks split authority and provider effects, and does not itself prove goal semantics. Requires comparative end-to-end evidence first | **RESERVE IF MEASURED NECESSARY** |
-| Keep the one existing Host/Worker/SQLite; add a goal-level planner/decision policy, registered on-demand expert workers, independent effect reviewer and result-driven continuation | Preserves tested authority, durable evidence and current adapters; allows dynamic unfamiliar method selection with bounded effect admission | Existing open_goal, outcome_feedback and bounded_goal_control do not yet compose into this whole-goal cycle | **SELECT AS NEXT CANDIDATE, NOT PRODUCT PASS** |
+| Keep the **verified authority/effect kernel**, but **replace the fixed-grammar natural-language decision path** with a model/agent-driven goal-level planner and independently checked result-feedback contract | Current ChatGPT/Codex native reasoning and available tools can attempt unfamiliar tasks now; registered effect gateway, single SQLite authority and existing oracle contracts retain narrow safe execution semantics | Not yet demonstrated as one executable native model→tools→real result loop; current Host cannot consume arbitrary new plans or certify semantic outcomes. Extra parser regexes do not close that gap | **2026-10-26 ARCHITECTURE PIVOT: TRY THIS FIRST WITH REAL A/B TRACES. NOT READY.** |
 
 Design principle: roles are **responsibilities**, not 49 mandatory
 model calls. One objective owner/vision check, an architecture/method challenger,
@@ -190,6 +190,8 @@ responsible architecture and repeat the whole-task experiment. Introduce a
 provider-neutral external-effect sandbox as the next evidence boundary; do
 not infer real provider safety from local files. No metered or production
 third-party execution without approval.
+
+**New architecture evidence rule (2026-10-26):** An architecture choice is not validated by preserving existing CI alone. For the next material engineering change, first record one authentic previously uncurated owner goal and its real executed/native-tool trace, actual independent result and alternative decisions. Compare fixed incumbent vs a native-agent candidate under equal authorization and constraints; record UNKNOWN rather than declaring that a mock proves novel-domain capability. Until this is done, no further keyword-specific `open_goal` expansion should be treated as product progress. The underlying sandbox/grants remain protected. See [architecture ADR §I](01-ARCHITECTURE-DECISIONS.md).
 
 **Stop measuring progress in new tests, agents, documents, PR numbers or
 completion of a research stage.** Tests prove contracts or discriminate
