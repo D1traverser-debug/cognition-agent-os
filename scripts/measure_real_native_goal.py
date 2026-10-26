@@ -179,7 +179,11 @@ def _native_trial(case: dict, home: Path) -> dict:
         "task_count": state.get("decision_count"),
         "model_calls": len(observed_calls),
         "model_trace_actual_not_mocked": observed_calls,
-        "progress": decisions, "final_native_state": state.get("status"),
+        "progress": decisions,
+        "sandbox_effects_verified": sum(
+            review.get("status") == "SANDBOX_VERIFIED"
+            for step in decisions for review in step.get("sandbox_reviews", [])),
+        "final_native_state": state.get("status"),
         "elapsed_seconds": round(time.monotonic() - start, 2),
         "external_business_result_verified": False,
     }
@@ -229,6 +233,10 @@ def _baseline_trial(case: dict, home: Path) -> dict:
         "whole_local_owner_verified": whole,
         "source_preserved": _preserved(fixture, before),
         "worker_results": task_report, "error_class": fault,
+        "sandbox_effects_verified": sum(
+            review.get("status") == "SANDBOX_VERIFIED"
+            for review in report.get("sandbox_reviews", []))
+            if fault is None else 0,
         "elapsed_seconds": round(time.monotonic() - start, 2),
         "external_business_result_verified": False,
     }
@@ -288,6 +296,10 @@ def score_trial_results(rows: list[dict]) -> dict:
                 row[name].get("source_preserved") is True for row in rows),
             "evaluation_errors": sum(
                 bool(row[name].get("error_class")) for row in rows),
+            # Context only: a mechanical stage is NOT whole-goal success.
+            "actual_sandbox_effects_verified": sum(
+                row[name].get("sandbox_effects_verified", 0)
+                for row in rows),
             "independent_business_result_verified": False,
         }
     return scores
