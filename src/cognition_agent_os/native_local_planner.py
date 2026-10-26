@@ -27,7 +27,8 @@ _MAX_PROMPT = 14500
 
 def _native_response_schema(eligible: list[dict], source_ids: list[str],
                             observation_sha256: str,
-                            previous_id: str | None) -> dict:
+                            previous_id: str | None,
+                            pending_hypotheses: list[dict] | None = None) -> dict:
     """Official Ollama constrained decoding, NOT a trusted decision or oracle.
 
     Keep the shape small. Runtime's existing typed intent compiler, ledger CAS,
@@ -101,20 +102,32 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
             "observation_sha256": {
                 "type": "string", "const": observation_sha256},
             "decision_basis": basis,
-            "hypothesis_reviews": {"type": "array", "maxItems": 8,
-                "items": {"type": "object",
-                    "additionalProperties": False,
-                    "required": ["proposal_sha256", "disposition",
-                                 "counterargument", "verification_needed"],
-                    "properties": {
-                        "proposal_sha256": {"type": "string"},
-                        "disposition": {"type": "string", "enum": [
-                            "REJECTED", "CONDITIONALLY_USEFUL",
-                            "UNRESOLVED_RESEARCH_REQUIRED"]},
-                        "counterargument": reasons,
-                        "verification_needed": reasons}}},
         },
     }
+    # Reviews are legitimate only for ideas that actually exist in the
+    # current ledger. The first real 0.5B trial fabricated a review for the
+    # observation hash and the existing verifier correctly rejected it.
+    # Constrain the OPTIONAL model output to actual proposal IDs rather than
+    # weakening the validator or writing fake model critiques to the ledger.
+    ids = [row["proposal_sha256"] for row in (pending_hypotheses or [])]
+    if ids:
+        decision["required"].append("hypothesis_reviews")
+        decision["properties"]["hypothesis_reviews"] = {
+            "type": "array", "minItems": len(ids), "maxItems": len(ids),
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["proposal_sha256", "disposition",
+                             "counterargument", "verification_needed"],
+                "properties": {
+                    "proposal_sha256": {"type": "string", "enum": ids},
+                    "disposition": {"type": "string", "enum": [
+                        "REJECTED", "CONDITIONALLY_USEFUL",
+                        "UNRESOLVED_RESEARCH_REQUIRED"]},
+                    "counterargument": reasons,
+                    "verification_needed": reasons,
+                },
+            },
+        }
     return {"oneOf": [
         {"type": "object", "additionalProperties": False,
          "required": ["abstain"],
@@ -347,7 +360,8 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     result_format = (
         _native_response_schema(
             eligible, sorted(observed), current["observation_sha256"],
-            current["decisions"][-1]["task_id"] if current["decisions"] else None)
+            current["decisions"][-1]["task_id"] if current["decisions"] else None,
+            pending_hypotheses=current["pending_hypotheses"])
         if structured_output else "json")
     response = local_model._request("POST", "/api/generate", {
         "model": model, "prompt": prompt, "stream": False, "format": result_format,
