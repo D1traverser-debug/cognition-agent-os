@@ -128,6 +128,31 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
         self.assertEqual(self.view(root)["decision_count"], 1)
 
+    def test_unchanged_hypothesis_is_not_repeated_as_ceremony_each_step(self):
+        root = self.root_id()
+        opening = self.view(root)
+        record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="user", idea="Compare actual inputs before changing anything",
+            observation_sha256=opening["observation_sha256"])
+        fresh = self.view(root)
+        proposal = self.candidate(fresh, self.reconcile(), self.structure())
+        proposal["hypothesis_reviews"] = [{
+            "proposal_sha256": fresh["hypotheses"][0]["proposal_sha256"],
+            "disposition": "CONDITIONALLY_USEFUL",
+            "counterargument": "A CSV comparison cannot establish downstream business truth.",
+            "verification_needed": "Independently verify the source discrepancy report.",
+        }]
+        admit_native_decision(self.db, self.workspace, self.fixtures, root, proposal)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        later = self.view(root)
+        self.assertEqual(later["pending_hypotheses"], [])
+        followup = self.candidate(later, self.structure(), self.reconcile())
+        next_choice = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, followup)
+        self.assertEqual(next_choice["status"], "NATIVE_METHOD_ENQUEUED")
+        self.assertEqual(self.view(root)["decision_count"], 2)
+
     def test_late_idea_invalidates_stale_decision_and_fake_reviews(self):
         root = self.root_id()
         stale = self.candidate(self.view(root), self.reconcile(), self.structure())
