@@ -71,6 +71,20 @@ class NativeDecisionLoop(unittest.TestCase):
     def view(self, root):
         return inspect_native_goal(self.db, self.workspace, self.fixtures, root)
 
+    def test_ungrounded_material_choice_rejected_before_ledger_child(self):
+        """A plausible comparison alone is not verifiable investigation."""
+        root = self.root_id()
+        observed = self.view(root)
+        proposal = self.candidate(observed, self.reconcile(), self.structure())
+        self.assertNotIn("decision_basis", proposal)
+        with self.assertRaisesRegex(ValueError, "UNSUPPORTED_UNGROUNDED_DECISION"):
+            admit_native_decision(self.db, self.workspace, self.fixtures,
+                                  root, proposal)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 0)
+
     def test_novel_full_owner_goal_dynamic_competing_methods_real_host(self):
         original = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
         root = self.root_id()
