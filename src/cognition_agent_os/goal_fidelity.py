@@ -42,6 +42,9 @@ def check_goal_fidelity(root: dict, descendants: list[dict]) -> dict:
     research = any(
         _kind(d) in ("investigate_goal", "public_tool_discovery")
         for d in descendants)
+    research_only = bool(descendants) and all(
+        _kind(d) in ("investigate_goal", "public_tool_discovery")
+        for d in descendants)
     if duplicate and not pending:
         status, next_action = (
             "REPEATED_CANDIDATE_UNVERIFIED",
@@ -53,7 +56,7 @@ def check_goal_fidelity(root: dict, descendants: list[dict]) -> dict:
             "OWNER_GOAL_BLOCKED_WITHOUT_RESULT", "RESEARCH_OR_REPLAN_WITH_CURRENT_GRANT")
     elif root["state"] == "DECOMPOSED" and not descendants:
         status, next_action = "NO_ADMITTED_CHILD", "RECONCILE_PLAN_AND_LEDGER"
-    elif research and root_kind == "open_goal":
+    elif research_only and root_kind == "open_goal":
         status, next_action = (
             "EVIDENCE_RESEARCH_ONLY_NOT_OWNER_RESULT",
             "COMPARE_SUPPORTED_METHODS_WITH_ORIGINAL_GOAL")
@@ -75,7 +78,7 @@ def check_goal_fidelity(root: dict, descendants: list[dict]) -> dict:
         "next_goal_action": next_action,
         "owner_outcome_verified": False,
         "repeated_source_spec_count": len(specs)-len(set(specs)),
-        "research_only": research,
+        "research_only": research_only,
     }
 
 
