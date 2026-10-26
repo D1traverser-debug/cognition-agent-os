@@ -154,7 +154,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         })
     evidence = {
         "original_owner_goal": current["original_goal"],
-        "proposed_method_ideas_to_challenge": current["hypotheses"],
+        "proposed_method_ideas_to_challenge": current["pending_hypotheses"],
         "past_methods_and_independent_verdicts": current["decisions"],
         "verified_prior_results": _verified_prior_results(
             db_path, workspace, current["decisions"]),
