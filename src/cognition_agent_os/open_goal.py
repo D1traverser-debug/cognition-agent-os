@@ -822,7 +822,18 @@ def _audit_independent_obligations(
         return failure
     _, current = _manifest(fixtures, allow_empty=spec.get("allow_public_discovery") is True)
     if current != hashes:
-        return {**failure, "status": "SOURCE_CHANGED_SINCE_PROPOSAL"}
+        # Owner clauses and exact child lineage were mechanically checked
+        # ABOVE; their sources are now stale. Retain ONLY diagnostic identity,
+        # not admission, verified results, or semantic approval.
+        return {
+            **failure, "status": "SOURCE_CHANGED_SINCE_PROPOSAL",
+            "original_obligations": [
+                {"clause": x["clause"], "child_task_id": x["child_task_id"]}
+                for x in obligations],
+            "source_manifest_verified": False,
+            "semantic_outcome_verified": False,
+            "business_outcome_verified": False,
+        }
     return {
         "status": "COMPOUND_METHODS_MECHANICALLY_GROUNDED",
         "sequence_rule": sequence,
