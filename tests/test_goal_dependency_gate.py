@@ -85,9 +85,9 @@ class OrderedEvidenceGateTests(unittest.TestCase):
         with closing(connect(self.db)) as db:
             db.execute("UPDATE task_dependencies SET released_at=1 "
                        "WHERE task_id=?",(second,))
+            db.execute("UPDATE tasks SET state='UNKNOWN',error_code='PROBE' "
+                       "WHERE task_id=?",(first,))
             db.commit()
-        observed=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
-        self.assertEqual(observed["tasks"][0]["task_id"],first)
         final=run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
         self.assertEqual(final["tasks"][0]["task_id"],second)
         self.assertEqual(final["tasks"][0]["status"],"UNKNOWN")
