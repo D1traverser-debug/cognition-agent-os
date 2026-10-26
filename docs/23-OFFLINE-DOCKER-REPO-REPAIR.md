@@ -47,7 +47,7 @@ execution fallback. Real Docker runs use:
 - stdin attachment `-i` so the candidate receives actual case input;
 - no network, read-only source mount, read-only root, no extra
   capabilities, `no-new-privileges`, non-root UID/GID 65534,
-  PID/CPU/memory limits and 8-second launch timeout;
+  PID/CPU/memory limits and a bounded 20-second per-case subprocess deadline (including cold CI container startup); timeout stays `ISOLATION_UNAVAILABLE` with diagnostic `DOCKER_PROCESS_TIMEOUT`, not a candidate or business success; CLI launch errors report `DOCKER_CLI_LAUNCH_ERROR`;
 - input JSON only. Neither expected public outputs nor withheld expected
   outputs nor hidden file bytes are mounted or passed to the candidate.
   The host comparison process alone owns reference expectations.
