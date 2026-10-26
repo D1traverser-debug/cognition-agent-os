@@ -147,6 +147,40 @@ async def run():
                 "native_local_tick", {"root_task_id": root}))
             assert refused["status"] == "NATIVE_TICK_NOT_ADMISSIBLE", refused
 
+        # A second pending owner on the same Host DB must never be
+        # accidentally advanced by a request for an unrelated root.
+        async with Client(server(allow_tick=True)) as client:
+            second = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": (
+                    "Independently reconcile a second supplier case "
+                    "without touching any other goal.")}))
+            second_id = second["root_task_id"]
+            new_state = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": second_id}))
+            second_proposal = json.loads(json.dumps(proposal))
+            second_proposal["observation_sha256"] = new_state["observation_sha256"]
+            second_queued = unwrap(await client.call_tool(
+                "native_decision_admit", {
+                    "root_task_id": second_id, "proposal": second_proposal}))
+            isolated_denied = unwrap(await client.call_tool(
+                "native_local_tick", {"root_task_id": second_id}))
+            assert isolated_denied["status"] == (
+                "NATIVE_TICK_SHARED_LEDGER_REFUSED"), isolated_denied
+            with closing(connect(db)) as ledger:
+                state = ledger.execute(
+                    "SELECT state FROM tasks WHERE task_id=?",
+                    (second_queued["child_task_id"],)).fetchone()["state"]
+                assert state == "PENDING", state
+                from cognition_agent_os.ledger import alter_authority
+                alter_authority(ledger, revoke=True)
+            revoked = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": second_id}))
+            assert revoked["status"] == "NATIVE_GRANT_REVOKED", revoked
+            new_attempt = await client.call_tool(
+                "native_goal_create",
+                {"owner_goal": "This cannot regrant revoked authority."})
+            assert new_attempt.is_error, new_attempt
+
         # A read-only second restart demonstrates real state continuity.
         async with Client(server(allow_tick=False)) as client:
             recovered = unwrap(await client.call_tool(
@@ -162,6 +196,8 @@ async def run():
             "cold_process_recovery": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
+            "shared_ledger_worker_refused": True,
+            "revoked_grant_not_reissued": True,
             "owner_outcome_verified": False,
             "production_effect": False}, sort_keys=True))
 
