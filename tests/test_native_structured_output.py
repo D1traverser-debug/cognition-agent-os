@@ -45,6 +45,21 @@ class NativeStructuredOutputSafety(unittest.TestCase):
         self.assertNotIn("owner_outcome_verified", json.dumps(schema))
         self.assertNotIn("allow_public_discovery", json.dumps(schema))
 
+    def test_schema_pins_prior_result_and_never_mints_permissions(self):
+        child_id = "b" * 32
+        schema = _native_response_schema(
+            [{"objective": "investigate_evidence"}],
+            ["notes.md"], "c" * 64, child_id)
+        decision = schema["oneOf"][2]
+        prior = decision["properties"]["decision_basis"][
+            "properties"]["previous_result_task_id"]
+        self.assertEqual(prior, {"type": "string", "const": child_id})
+        self.assertEqual(
+            decision["properties"]["selected_intent"]["properties"][
+                "objective"]["enum"], ["investigate_evidence"])
+        self.assertNotIn("write_allowed", json.dumps(schema))
+        self.assertNotIn("external_effect_authorized", json.dumps(schema))
+
     def test_schema_abstain_does_not_create_worker_task(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
