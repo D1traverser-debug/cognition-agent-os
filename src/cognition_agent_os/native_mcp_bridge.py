@@ -38,7 +38,8 @@ def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                      allow_host_tick: bool = False,
                      allow_source_read: bool = False,
-                     allow_local_model_plan: bool = False):
+                     allow_local_model_plan: bool = False,
+                     allow_public_discovery: bool = False):
     """Expose only the existing, audited native-goal contract as MCP tools."""
     from mcp.server import MCPServer
 
@@ -55,10 +56,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         State creation needs an already-current local grant; this does not grant
         external write rights, install a model, or claim the goal is finished.
         """
-        # MCP callers cannot upgrade a goal into external public disclosure.
-        # The native trusted owner interface can separately grant that scope.
+        # MCP clients cannot set outbound disclosure scope themselves.
+        # It is fixed by the operator's server-start option, with a separate
+        # original-root grant. No arbitrary provider/API/URL is admitted.
         root = register_native_goal(
-            db_path, owner_goal, allow_public_discovery=False)
+            db_path, owner_goal,
+            allow_public_discovery=allow_public_discovery)
         return {"status": "NATIVE_GOAL_REGISTERED", "root_task_id": root,
                 "owner_outcome_verified": False}
 
@@ -251,12 +254,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="Operator opts in to disclose local source excerpts to the MCP client")
     parser.add_argument("--allow-local-model-plan", action="store_true",
                         help="Opt into installed loopback Ollama model planning; no cloud/API")
+    parser.add_argument("--allow-public-discovery", action="store_true",
+                        help="Operator opts into sanitized GitHub-public-metadata searches only")
     args = parser.parse_args(argv)
     mcp = build_mcp_server(
         args.db, args.workspace, args.fixtures,
         allow_host_tick=args.allow_host_tick,
         allow_source_read=args.allow_source_read,
-        allow_local_model_plan=args.allow_local_model_plan)
+        allow_local_model_plan=args.allow_local_model_plan,
+        allow_public_discovery=args.allow_public_discovery)
     mcp.run(transport="stdio")
     return 0
 
