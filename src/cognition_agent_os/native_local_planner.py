@@ -128,7 +128,7 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
                        "properties": {
                            "path": {"type": "string", "enum": source_ids},
                            "offset_chars": {"type": "integer",
-                                            "minimum": 0, "maximum": 1048576}}}}},
+                                            "minimum": 0, "maximum": 1048576}}}}}},
         decision,
     ]}
 
