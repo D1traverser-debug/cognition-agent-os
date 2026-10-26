@@ -645,12 +645,12 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                 if not (selected_plan_changed and (
                         (added and (added & cited)) or failed_method_feedback)):
                     raise ValueError("REPEATED_NATIVE_METHOD_WITHOUT_NEW_EVIDENCE")
-            if parsed["alternative"] is None:
-                catalog = capability_catalog(
-                    fixtures, allow_public_discovery=contract["allow_public_discovery"])
-                if sum(method["currently_eligible"]
-                       for method in catalog["methods"]) > 1:
-                    raise ValueError("NATIVE_COMPARISON_REQUIRED_WHEN_METHODS_EXIST")
+            # Tool eligibility is not semantic goal relevance. A model must
+            # challenge its selected method and cite live evidence, but must
+            # not fabricate an irrelevant competitor merely because a JSON
+            # and CSV tool both happen to find compatible local file types.
+            # An omitted alternative remains an untrusted model judgment,
+            # never independent proof that the method matches owner intent.
             if not _selected_sources_present(parsed["selected"], source_hashes):
                 raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
             child = create_task(db, parsed["selected"]["child_source_spec"],
