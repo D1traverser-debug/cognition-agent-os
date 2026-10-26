@@ -83,8 +83,15 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         behalf. Foreign/invalid roots are not reinterpreted as native goals.
         """
         with closing(_read_only_ledger(db_path)) as db:
+            # Filter BEFORE limiting the page. Mixed legacy and native
+            # workloads share one authoritative ledger, so the 50 latest
+            # generic tasks must never hide an older original owner goal.
+            # CASE prevents malformed historical JSON from aborting lookup.
             rows = db.execute(
                 "SELECT task_id FROM tasks WHERE parent_task IS NULL "
+                "AND (CASE WHEN json_valid(source_spec) "
+                "THEN json_extract(source_spec, '$.kind') "
+                "ELSE NULL END)='native_goal' "
                 "ORDER BY created_at DESC,task_id DESC LIMIT 51").fetchall()
         recovered = []
         for row in rows[:50]:
@@ -97,7 +104,9 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 "root_task_id": row["task_id"],
                 "original_goal": state["original_goal"],
                 "status": state["status"],
-                "decision_count": state["decision_count"],
+                # A source-drift status can still establish the original
+                # goal identity but cannot truthfully audit its decision count.
+                "decision_count": state.get("decision_count"),
                 "owner_outcome_verified": False,
             })
         return {"status": "NATIVE_GOAL_INVENTORY",
