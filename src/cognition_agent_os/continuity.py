@@ -309,6 +309,94 @@ def _lineage_root_id(db: sqlite3.Connection, task: sqlite3.Row) -> str | None:
     return None
 
 
+
+def _resume_compound_owner_goal(
+    db_path: Path, db: sqlite3.Connection, audit: dict, response: dict,
+    workspace: Path, fixtures: Path, now: float,
+) -> dict:
+    """Cold-resume every admitted owner clause through independent evidence.
+
+    Pure read-only projection. Worker still owns the final effect admission.
+    """
+    ids = audit.get("child_task_ids")
+    clauses = audit.get("original_obligations")
+    sequence = audit.get("sequence_rule")
+    if (not isinstance(ids, list) or len(ids) != 2
+        or len(set(ids)) != 2 or not isinstance(clauses, list)
+        or len(clauses) != 2
+        or sequence not in ("INDEPENDENT",
+                            "AFTER_INDEPENDENT_RESEARCH_EVIDENCE")
+        or any(not isinstance(x, dict) or
+               set(x) != {"clause", "child_task_id"}
+               for x in clauses)
+        or [x["child_task_id"] for x in clauses] != ids):
+        return {"status": "ORIGINAL_GOAL_LINEAGE_UNVERIFIABLE", **response,
+                "reason": "COMPOUND_LINEAGE_UNRECOGNIZED"}
+    children = db.execute(
+        "SELECT * FROM tasks WHERE parent_task=?", (response["root_task_id"],)
+    ).fetchall()
+    by_id = {x["task_id"]: x for x in children}
+    if (len(children) != 2 or set(by_id) != set(ids)
+        or any((by_id[task_id]["goal_rev"], by_id[task_id]["grant_rev"])
+               != (response["goal_rev"], response["grant_rev"])
+               for task_id in ids)):
+        return {"status": "ORIGINAL_GOAL_LINEAGE_UNVERIFIABLE", **response,
+                "reason": "COMPOUND_CHILDREN_CHANGED"}
+    response.update({
+        "child_task_ids": ids,
+        "sequence_rule": sequence,
+        "original_obligation_progress": [{
+            "owner_clause": obligation["clause"],
+            "child_task_id": task_id,
+            "task_state": by_id[task_id]["state"],
+            "error_code": by_id[task_id]["error_code"],
+            "owner_outcome_verified": False,
+        } for task_id, obligation in zip(ids, clauses)],
+    })
+    ready, recoverable, pending_dependency, waiting = [], [], [], []
+    for index, task_id in enumerate(ids):
+        child = by_id[task_id]
+        state = child["state"]
+        if state == "PENDING":
+            # Release timestamp is not independent proof. Recheck the same
+            # current grant and predecessor oracle that the Worker uses.
+            if index == 1 and sequence == "AFTER_INDEPENDENT_RESEARCH_EVIDENCE":
+                from .dependency_gate import dependency_admitted
+                allowed, reason = dependency_admitted(
+                    db, db_path, dict(child), workspace, fixtures)
+                if not allowed:
+                    pending_dependency.append({
+                        "task_id": task_id, "reason": reason})
+                    continue
+            if child["due_at"] <= now:
+                ready.append(task_id)
+            else:
+                waiting.append(task_id)
+        elif state == "RUNNING":
+            if (child["lease_until"] is not None
+                and child["lease_until"] <= now):
+                recoverable.append(task_id)
+            else:
+                waiting.append(task_id)
+    runnable = ready + recoverable
+    response["runnable_task_ids"] = runnable
+    response["waiting_dependency_tasks"] = pending_dependency
+    if runnable:
+        # Independent siblings remain visible; never pick a hidden winner.
+        if len(runnable) == 1:
+            response["next_task_id"] = runnable[0]
+        else:
+            response["next_task_ids"] = runnable
+        return {"status": ("READY_TO_TICK" if ready else "READY_TO_RECOVER"),
+                **response}
+    if pending_dependency:
+        return {"status": "AWAITING_DEPENDENCY_EVIDENCE", **response}
+    if waiting:
+        return {"status": "AWAITING_WORKER_OR_DUE_TIME", **response}
+    return {"status": "REPLAN_OR_RESEARCH_OWNER_GAP", **response,
+            "reason": "COMPOUND_OWNER_OUTCOME_NOT_VERIFIED"}
+
+
 def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
                                authority: sqlite3.Row | None, *,
                                workspace: Path | None,
@@ -382,6 +470,9 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
     # Decomposition matters only if source pins, candidate compilation,
     # original root, exact child and grant replay successfully.
     audit = audit_open_goal(db_path, fixtures, root_id)
+    if audit["status"] == "COMPOUND_METHODS_MECHANICALLY_GROUNDED":
+        return _resume_compound_owner_goal(
+            db_path, db, audit, response, workspace, fixtures, now)
     if audit["status"] != "METHOD_CANDIDATE_MECHANICALLY_GROUNDED":
         return {"status": "ORIGINAL_GOAL_LINEAGE_UNVERIFIABLE", **response,
                 "reason": audit["status"]}
