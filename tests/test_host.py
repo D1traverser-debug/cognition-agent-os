@@ -64,6 +64,36 @@ class LocalHostTests(unittest.TestCase):
         self.assertTrue(all(g["next_control_action"]=="REAUTHORIZE_OR_SUPERSEDE"
                             for g in revoked["goals"]))
 
+    def test_recent_parallel_work_keeps_true_original_owner_identity(self):
+        """A bounded live team view must never invent a child as a new goal.
+
+        Interleaved newer roots push the oldest legitimate owner root outside
+        the observed page; the latest child still belongs to that original.
+        The view must admit that omitted tasks make counts partial.
+        """
+        from cognition_agent_os.host import _goal_progress
+        with closing(connect(self.db)) as db:
+            initialize(db)
+            owner = create_task(db, {
+                "kind": "fixture", "old": "old.txt", "new": "new.txt"})
+            for _ in range(5):
+                create_task(db, {
+                    "kind": "fixture", "old": "old.txt", "new": "new.txt"})
+            newest = create_task(db, {
+                "kind": "fixture", "old": "old.txt", "new": "new.txt"},
+                parent=owner)
+        report = _goal_progress(self.db, max_tasks=3)
+        self.assertTrue(report["truncated"])
+        self.assertEqual(report["scanned_tasks"], 3)
+        self.assertGreaterEqual(report["ancestor_rows"], 1)
+        view = {g["root_task_id"]: g for g in report["goals"]}
+        self.assertIn(owner, view)
+        self.assertNotIn(newest, view)
+        self.assertFalse(view[owner]["lineage_window_complete"])
+        self.assertEqual(view[owner]["states"]["PENDING"], 1)
+        self.assertEqual(view[owner]["runnable"], 1)
+        self.assertFalse(report["semantic_outcome_verified"])
+
     def test_host_prioritizes_current_goal_over_older_stale_task(self):
         with closing(connect(self.db)) as db:
             initialize(db)
