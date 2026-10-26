@@ -80,6 +80,13 @@ def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str
         if not check_child_dependency(db,task_id,fixture_root):
             return finalize_observed(db,task,"UNKNOWN",
                                      error_code="KNOWLEDGE_SOURCE_CHANGED")
+        # A released predecessor is NOT self-approval. Before any successor
+        # executor dispatch, independently reread its original source/result.
+        from .dependency_gate import dependency_admitted
+        if not dependency_admitted(
+                db,db_path,task_id,workspace,fixture_root):
+            return finalize_observed(
+                db,task,"UNKNOWN",error_code="PREDECESSOR_EVIDENCE_CHANGED")
         from .capability_dispatch import CapabilityContext, dispatch_capability
         # One active task/claim/grant/lineage gate; domain adapters are
         # strictly registered and cannot choose a new authorization source.
