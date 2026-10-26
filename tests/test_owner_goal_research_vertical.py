@@ -130,7 +130,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
         self.assertFalse(self.children(parent))
 
     def test_compound_receipt_tampering_fails_independent_parent_audit(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the UART timeout using local engineering evidence and "
             "ensure a sandbox draft of settings.json has owner equal to ops.")
@@ -153,7 +153,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
                          "UNVERIFIABLE")
 
     def test_compound_stale_evidence_cannot_pass_original_parent_audit(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the UART timeout using local engineering evidence and "
             "ensure a sandbox draft of settings.json has owner equal to ops.")
@@ -166,7 +166,7 @@ class OpenGoalResearchVertical(unittest.TestCase):
                          "SOURCE_CHANGED_SINCE_PROPOSAL")
 
     def test_compound_unrecognized_extra_owner_requirement_is_not_dropped(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\\n')
+        (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the UART timeout using local engineering evidence and "
             "ensure a sandbox draft of settings.json has owner equal to ops "
