@@ -161,29 +161,32 @@ def _native_local_postcondition(db_path: Path, workspace: Path,
         or observed.get("original_goal") != spec.get("goal")):
         return _unknown(root_id, "GOAL_LINEAGE_OR_EVIDENCE_UNVERIFIABLE")
     decisions = observed["decisions"]
-    # A multi-action goal may contain unfulfilled obligations even when one
-    # child produced a valid report. Never promote a partial child receipt.
-    if len(decisions) != 1 or decisions[0]["task_state"] != "NEEDS_REVIEW":
+    # A complete EXACT owner postcondition may become true only after a
+    # corrective decision. Preserve every prior replayed child/audit receipt;
+    # a local mechanical PASS for an earlier, reversed input pairing remains
+    # a historical subtask, NOT the original owner's final answer.
+    if not decisions or decisions[-1]["task_state"] != "NEEDS_REVIEW":
         return _unknown(root_id, "GOAL_LINEAGE_NOT_UNAMBIGUOUS")
     events = db.execute(
         "SELECT details FROM events WHERE task_id=? "
-        "AND kind='NATIVE_DECISION_ADMITTED'", (root_id,)).fetchall()
-    if len(events) != 1:
+        "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
+        (root_id,)).fetchall()
+    if len(events) != len(decisions):
         return _unknown(root_id, "GOAL_LINEAGE_NOT_UNAMBIGUOUS")
-    receipt = json.loads(events[0]["details"])
+    receipt = json.loads(events[-1]["details"])
     intent = receipt.get("proposal", {}).get("selected_intent")
     plan = compile_intent(intent)
     child_id = receipt.get("child_task_id")
     if (plan["objective"] != "compare_records"
-        or child_id != decisions[0]["task_id"]
-        or decisions[0]["selected_objective"] != "compare_records"):
+        or child_id != decisions[-1]["task_id"]
+        or decisions[-1]["selected_objective"] != "compare_records"):
         return _unknown(root_id, "NO_INDEPENDENT_OWNER_POSTCONDITION")
     if not _full_owner_scope_is_supported(spec["goal"], plan):
         return _unknown(root_id, "OWNER_OBLIGATION_COVERAGE_INCOMPLETE")
     audit = audit_stored_report(
         db_path, workspace, fixtures, child_id)
     if (audit.get("status") != "REPORT_MECHANICALLY_VERIFIED"
-        or decisions[0]["mechanical_verdict"] !=
+        or decisions[-1]["mechanical_verdict"] !=
            "REPORT_MECHANICALLY_VERIFIED"):
         return _unknown(root_id, "COMPARISON_OUTPUT_NOT_INDEPENDENTLY_VALID")
     return {
