@@ -138,7 +138,8 @@ async def run():
             executed = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": root}))
             assert executed["status"] == "NATIVE_TICK_OBSERVED", executed
-            assert executed["host_result"]["tasks"][0]["status"] == "NEEDS_REVIEW"
+            assert executed["worker_result"]["status"] == "NEEDS_REVIEW"
+            assert executed["target_task_id"] == admitted["child_task_id"]
             after = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
             assert after["decision_count"] == 1, after
@@ -151,9 +152,21 @@ async def run():
                 "native_local_tick", {"root_task_id": root}))
             assert refused["status"] == "NATIVE_TICK_NOT_ADMISSIBLE", refused
 
-        # A second pending owner on the same Host DB must never be
-        # accidentally advanced by a request for an unrelated root.
+        # Multi-owner stress: queue another owner's task FIRST, then
+        # request the later second root. The selected worker must claim
+        # only its exact child, irrespective of the generic due_at ordering.
         async with Client(server(allow_tick=True)) as client:
+            other = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": (
+                    "First queued independent supplier evidence objective.")}))
+            other_id = other["root_task_id"]
+            other_snapshot = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": other_id}))
+            other_proposal = json.loads(json.dumps(proposal))
+            other_proposal["observation_sha256"] = other_snapshot["observation_sha256"]
+            other_queued = unwrap(await client.call_tool(
+                "native_decision_admit", {
+                    "root_task_id": other_id, "proposal": other_proposal}))
             second = unwrap(await client.call_tool(
                 "native_goal_create", {"owner_goal": (
                     "Independently reconcile a second supplier case "
@@ -166,15 +179,25 @@ async def run():
             second_queued = unwrap(await client.call_tool(
                 "native_decision_admit", {
                     "root_task_id": second_id, "proposal": second_proposal}))
-            isolated_denied = unwrap(await client.call_tool(
+            selected_tick = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": second_id}))
-            assert isolated_denied["status"] == (
-                "NATIVE_TICK_SHARED_LEDGER_REFUSED"), isolated_denied
+            assert selected_tick["status"] == "NATIVE_TICK_OBSERVED", selected_tick
+            assert selected_tick["target_task_id"] == (
+                second_queued["child_task_id"]), selected_tick
+            assert selected_tick["worker_result"]["status"] == (
+                "NEEDS_REVIEW"), selected_tick
             with closing(connect(db)) as ledger:
-                state = ledger.execute(
+                earlier_state = ledger.execute(
                     "SELECT state FROM tasks WHERE task_id=?",
-                    (second_queued["child_task_id"],)).fetchone()["state"]
-                assert state == "PENDING", state
+                    (other_queued["child_task_id"],)).fetchone()["state"]
+                assert earlier_state == "PENDING", earlier_state
+            earlier_tick = unwrap(await client.call_tool(
+                "native_local_tick", {"root_task_id": other_id}))
+            assert earlier_tick["target_task_id"] == (
+                other_queued["child_task_id"]), earlier_tick
+            assert earlier_tick["worker_result"]["status"] == (
+                "NEEDS_REVIEW"), earlier_tick
+            with closing(connect(db)) as ledger:
                 from cognition_agent_os.ledger import alter_authority
                 alter_authority(ledger, revoke=True)
             revoked = unwrap(await client.call_tool(
@@ -195,7 +218,7 @@ async def run():
             assert inventory["ambiguous"] is True, inventory
             assert inventory["selected_root_task_id"] is None, inventory
             ids = {entry["root_task_id"] for entry in inventory["goals"]}
-            assert ids == {root, second_id}, inventory
+            assert ids == {root, other_id, second_id}, inventory
             discovered = next(
                 item for item in inventory["goals"]
                 if item["original_goal"] == goal)
@@ -215,7 +238,7 @@ async def run():
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
             "external_disclosure_grant_not_model_controlled": True,
-            "shared_ledger_worker_refused": True,
+            "shared_ledger_exact_target_worker": True,
             "revoked_grant_not_reissued": True,
             "owner_outcome_verified": False,
             "production_effect": False}, sort_keys=True))
