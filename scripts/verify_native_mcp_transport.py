@@ -173,11 +173,51 @@ async def run():
             assert after["decisions"][0]["mechanical_verdict"] == (
                 "REPORT_MECHANICALLY_VERIFIED"), after
             assert after["owner_outcome_verified"] is False, after
+            compound = unwrap(await client.call_tool(
+                "native_owner_outcome", {"root_task_id": root}))
+            assert compound["status"] == "OWNER_POSTCONDITION_UNVERIFIED", compound
+            assert not compound["local_owner_outcome_verified"], compound
             assert {f.name: f.read_bytes() for f in sources.iterdir()} == original
             # Same process must refuse a gratuitous duplicate tick.
             refused = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": root}))
             assert refused["status"] == "NATIVE_TICK_NOT_ADMISSIBLE", refused
+
+        # Complete original local owner goal, including STRICT grammar,
+        # through real separate MCP processes and the existing independent
+        # postcondition oracle. The earlier compound goal must stay UNKNOWN.
+        async with Client(server(allow_tick=True)) as client:
+            local_goal = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": (
+                    "Compare reference.csv with observed.csv and report differences.")}))
+            local_id = local_goal["root_task_id"]
+            pre_outcome = unwrap(await client.call_tool(
+                "native_owner_outcome", {"root_task_id": local_id}))
+            assert not pre_outcome["local_owner_outcome_verified"], pre_outcome
+            local_state = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": local_id}))
+            local_proposal = json.loads(json.dumps(proposal))
+            local_proposal["observation_sha256"] = local_state["observation_sha256"]
+            local_queued = unwrap(await client.call_tool(
+                "native_decision_admit", {
+                    "root_task_id": local_id, "proposal": local_proposal}))
+            local_tick = unwrap(await client.call_tool(
+                "native_local_tick", {"root_task_id": local_id}))
+            assert local_tick["target_task_id"] == local_queued["child_task_id"]
+            owner = unwrap(await client.call_tool(
+                "native_owner_outcome", {"root_task_id": local_id}))
+            assert owner["status"] == "LOCAL_OWNER_RESULT_VERIFIED", owner
+            assert owner["local_owner_outcome_verified"] is True, owner
+            assert owner["business_outcome_verified"] is False, owner
+            assert owner["real_external_outcome_verified"] is False, owner
+            # No cached success: a changed original input invalidates the
+            # independently re-read outcome even with the same SQLite state.
+            (sources / "observed.csv").write_text(
+                "supplier,received\\nDelta,999\\n", encoding="utf-8")
+            stale = unwrap(await client.call_tool(
+                "native_owner_outcome", {"root_task_id": local_id}))
+            assert stale["local_owner_outcome_verified"] is False, stale
+            (sources / "observed.csv").write_bytes(original["observed.csv"])
 
         # Multi-owner stress: queue another owner's task FIRST, then
         # request the later second root. The selected worker must claim
@@ -245,7 +285,7 @@ async def run():
             assert inventory["ambiguous"] is True, inventory
             assert inventory["selected_root_task_id"] is None, inventory
             ids = {entry["root_task_id"] for entry in inventory["goals"]}
-            assert ids == {root, other_id, second_id}, inventory
+            assert ids == {root, local_id, other_id, second_id}, inventory
             discovered = next(
                 item for item in inventory["goals"]
                 if item["original_goal"] == goal)
@@ -261,6 +301,7 @@ async def run():
             "transport": "OFFICIAL_MCP_STDIO_SUBPROCESS",
             "independent_mechanical_verdict": "REPORT_MECHANICALLY_VERIFIED",
             "cold_process_recovery": True,
+            "native_original_goal_independent_local_postcondition": True,
             "cold_goal_discovery_without_id": True,
             "stale_proposal_rejected": True,
             "default_worker_tool_absent": True,
