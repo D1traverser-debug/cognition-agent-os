@@ -93,6 +93,20 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
         self.assertIn("Does not itself connect a custom Host API", manifest["description"])
         self.assertIn("not proof", SKILL.read_text(encoding="utf-8").lower())
 
+    def test_native_skill_release_overlay_is_version_pinned(self):
+        """A source package is NOT proof that ChatGPT installed the update."""
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8")
+        self.assertIn("chatgpt_plugin_release_bundle:", workflow)
+        self.assertIn("[bundle-chatgpt-plugin]", workflow)
+        self.assertIn("'skills/cognition-parent-chatgpt-intake/SKILL.md'", workflow)
+        self.assertIn(
+            "'skills/cognition-parent-chatgpt-intake/references/scope-probes.md'",
+            workflow)
+        self.assertIn("assert manifest['version'] == '0.1.3'", workflow)
+        self.assertIn("No installation or owner account mutation occurs in CI",
+                      workflow)
+
 
 
 if __name__ == "__main__":
