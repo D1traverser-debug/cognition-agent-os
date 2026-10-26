@@ -4,6 +4,7 @@ These exercise model-neutral plan intake over two dissimilar registered local
 capabilities. Candidate rationale is deliberately NOT a semantic oracle.
 """
 from contextlib import closing
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -57,7 +58,19 @@ class NativeDecisionLoop(unittest.TestCase):
                 "requirements": [{"field": "audit", "equals": "confirmed"}]}
 
     def candidate(self, state, selected, alternative):
+        refs = [
+            {"path": path.name,
+             "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            for path in sorted(self.fixtures.iterdir(), key=lambda p: p.name)]
+        previous = (state["decisions"][-1]["task_id"]
+                    if state["decisions"] else None)
         return {
+            "decision_basis": {
+                "source_refs": refs, "previous_result_task_id": previous,
+                "challenge": "The proposed method might not satisfy all original clauses.",
+                "falsifier": "Independent mechanical results or original source drift could refute this choice.",
+                "uncertainty": "Mechanical success cannot establish the whole owner outcome.",
+            },
             "observation_sha256": state["observation_sha256"],
             "selected_intent": selected, "alternative_intent": alternative,
             "decision_reason": "This registered method directly checks original local evidence first.",
@@ -76,6 +89,7 @@ class NativeDecisionLoop(unittest.TestCase):
         root = self.root_id()
         observed = self.view(root)
         proposal = self.candidate(observed, self.reconcile(), self.structure())
+        proposal.pop("decision_basis")
         self.assertNotIn("decision_basis", proposal)
         with self.assertRaisesRegex(ValueError, "UNSUPPORTED_UNGROUNDED_DECISION"):
             admit_native_decision(self.db, self.workspace, self.fixtures,
@@ -84,6 +98,28 @@ class NativeDecisionLoop(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM tasks WHERE parent_task=?",
                 (root,)).fetchone()[0], 0)
+
+    def test_hallucinated_or_stale_investigation_refs_are_not_admitted(self):
+        root = self.root_id()
+        observed = self.view(root)
+        proposal = self.candidate(observed, self.reconcile(), self.structure())
+        proposal["decision_basis"]["source_refs"][0]["sha256"] = "f" * 64
+        with self.assertRaisesRegex(ValueError, "DECISION_SOURCE_ID_OR_DIGEST_UNVERIFIABLE"):
+            admit_native_decision(self.db, self.workspace, self.fixtures, root, proposal)
+        proposed = self.candidate(observed, self.reconcile(), self.structure())
+        proposed["decision_basis"]["source_refs"] = []
+        with self.assertRaisesRegex(ValueError, "METHOD_RESEARCH_SOURCES_NOT_CITED"):
+            admit_native_decision(self.db, self.workspace, self.fixtures, root, proposed)
+        self.assertEqual(self.view(root)["decision_count"], 0)
+
+    def test_prior_result_must_be_same_verified_decision_chain(self):
+        root = self.root_id()
+        observed = self.view(root)
+        candidate = self.candidate(observed, self.reconcile(), self.structure())
+        candidate["decision_basis"]["previous_result_task_id"] = "f" * 32
+        with self.assertRaisesRegex(ValueError, "PREVIOUS_DECISION_RESULT_NOT_GROUNDED"):
+            admit_native_decision(self.db, self.workspace, self.fixtures, root, candidate)
+        self.assertEqual(self.view(root)["decision_count"], 0)
 
     def test_novel_full_owner_goal_dynamic_competing_methods_real_host(self):
         original = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
