@@ -48,7 +48,7 @@ CASES = [
         "goal": ("Please ensure an isolated draft of settings.json has "
                  "owner equal to ops."),
         "files": {
-            "settings.json": '{"owner":"unknown","timeout":12}\n',
+            "settings.json": '{"timeout":12}\n',
             "irrelevant.csv": "x,y\n1,2\n",
             "third.csv": "x,y\n1,3\n",
         },
