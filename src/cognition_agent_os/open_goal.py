@@ -122,7 +122,8 @@ _NEGATED_READONLY_ACTION = re.compile(
 )
 _READONLY_RESEARCH_FRAME = re.compile(
     r"^\s*(?:please\s+)?(?:investigate|research|diagnose|"
-    r"examine|study|analy[sz]e)\b|^\s*请?\s*(?:调查|研究|排查|分析)"
+    r"examine|study|analy[sz]e)\b|^\s*请?\s*(?:调查|研究|排查|分析)",
+    re.IGNORECASE,
 )
 
 
