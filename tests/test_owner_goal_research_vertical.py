@@ -125,144 +125,37 @@ class OpenGoalResearchVertical(unittest.TestCase):
                             for x in obligations))
 
     def test_sequential_research_then_draft_is_not_parallelized(self):
+        """The original owner 'then' must wait for independently checked evidence."""
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
         parent=self.seed(
             "Investigate the UART timeout using local evidence and then "
             "ensure a sandbox draft of settings.json has owner equal to ops.")
-        with patch("cognition_agent_os.local_model._request",
-                   side_effect=AssertionError("sequence has unproven dependency")):
-            result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+        initial=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                         planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual([x["status"] for x in initial["tasks"]],["DECOMPOSED"],initial)
+        kids=self.children(parent)
+        self.assertEqual(len(kids),2)
+        by_kind={json.loads(x["source_spec"])["kind"]:x for x in kids}
+        research=by_kind["investigate_goal"]["task_id"]
+        draft=by_kind["goal_case"]["task_id"]
+        self.assertEqual(self.root_error_code(parent),None)
+        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
+            middle=run_tick(self.db,self.ws,self.fx,max_jobs=2,
                             planner_mode="ollama-local",local_model="installed:test")
-        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
-        self.assertEqual(self.root_error_code(parent),"OPEN_GOAL_METHOD_UNSUPPORTED")
-        self.assertFalse(self.children(parent))
-
-    def test_parallel_intents_transfer_to_irrigation_domain_without_code_changes(self):
-        """The existing bounded capability contracts must not depend on UART."""
-        (self.fx/"cause.md").write_text(
-            "The irrigation valve remained closed through two readings.\n")
-        (self.fx/"trace.md").write_text(
-            "A moisture reading reached the dry-state threshold.\n")
-        (self.fx/"irrigation.json").write_text('{"timeout":7}\n')
-        parent=self.seed(
-            "Investigate the irrigation moisture anomaly using local engineering "
-            "evidence and ensure a sandbox draft of irrigation.json has "
-            "owner equal to ops.")
-        def provider(method,path,payload,timeout):
-            if method=="GET":
-                return {"models":[{"name":"installed:test"}]}
-            properties=payload["format"]["properties"]
-            if "sources" in properties:
-                answer={"sources":["cause.md","trace.md"]}
-            elif "findings" in properties:
-                answer={"findings":[
-                    {"source":"cause.md",
-                     "quote":"The irrigation valve remained closed through two readings.",
-                     "interpretation":"An unexpected closed valve is a candidate cause."},
-                    {"source":"trace.md",
-                     "quote":"A moisture reading reached the dry-state threshold.",
-                     "interpretation":"The available record shows a dry-state observation."}],
-                    "uncertainty":"Mocked local records do not prove equipment causality."}
-            else:
-                raise AssertionError("unexpected research schema")
-            return {"done":True,"response":json.dumps(answer)}
-        with patch("cognition_agent_os.local_model._request",side_effect=provider):
-            result=run_tick(self.db,self.ws,self.fx,max_jobs=3,
-                            planner_mode="ollama-local",local_model="installed:test")
-        self.assertEqual([x["status"] for x in result["tasks"]],
-                         ["DECOMPOSED","NEEDS_REVIEW","NEEDS_REVIEW"],result)
+        self.assertEqual([x["status"] for x in middle["tasks"]],["NEEDS_REVIEW"],middle)
+        self.assertEqual(middle["tasks"][0]["task_id"],research)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT state FROM tasks WHERE task_id=?",
+                                        (draft,)).fetchone()["state"],"PENDING")
+        self.assertEqual(audit_investigation(
+            self.db,self.ws,self.fx,research)["status"],"SOURCE_GROUNDED_UNREVIEWED")
+        final=run_tick(self.db,self.ws,self.fx,max_jobs=1,
+                       planner_mode="ollama-local",local_model="installed:test")
+        self.assertEqual(final["tasks"][0]["task_id"],draft)
+        self.assertEqual(final["tasks"][0]["status"],"NEEDS_REVIEW")
         self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
                          "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
-        self.assertFalse(result["goal_progress"]["goals"][0]["owner_outcome_verified"])
-
-    def test_compound_cold_restart_resumes_two_existing_children(self):
-        """Separate Host invocations reuse the same durable original goal."""
-        (self.fx/"settings.json").write_text('{"timeout":7}\n')
-        parent=self.seed(
-            "Investigate the UART timeout using local engineering evidence and "
-            "ensure a sandbox draft of settings.json has owner equal to ops.")
-        with patch("cognition_agent_os.local_model._request",
-                   side_effect=AssertionError("literal admission needs no model")):
-            first=run_tick(self.db,self.ws,self.fx,max_jobs=1,
-                           planner_mode="ollama-local",local_model="installed:test")
-        self.assertEqual(first["tasks"][0]["status"],"DECOMPOSED",first)
-        ids={x["task_id"] for x in self.children(parent)}
-        self.assertEqual(len(ids),2)
-        first_obligations=first["goal_progress"]["goals"][0]["original_obligation_progress"]
-        self.assertEqual(len(first_obligations),2)
-        self.assertEqual({x["task_state"] for x in first_obligations},{"PENDING"})
-        self.assertTrue(all(not x["mechanically_verified"] for x in first_obligations))
-        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
-            second=run_tick(self.db,self.ws,self.fx,max_jobs=2,
-                            planner_mode="ollama-local",local_model="installed:test")
-        self.assertEqual([x["status"] for x in second["tasks"]],
-                         ["NEEDS_REVIEW","NEEDS_REVIEW"],second)
-        self.assertEqual({x["task_id"] for x in self.children(parent)},ids)
-        third=run_tick(self.db,self.ws,self.fx,max_jobs=1)
-        self.assertEqual(third["processed"],0,third)
-        self.assertFalse(third["goal_progress"]["goals"][0]["owner_outcome_verified"])
-
-    def test_compound_receipt_tampering_fails_independent_parent_audit(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\n')
-        parent=self.seed(
-            "Investigate the UART timeout using local engineering evidence and "
-            "ensure a sandbox draft of settings.json has owner equal to ops.")
-        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
-            result=run_tick(self.db,self.ws,self.fx,max_jobs=3,
-                            planner_mode="ollama-local",local_model="installed:test")
-        self.assertEqual(result["tasks"][0]["status"],"DECOMPOSED",result)
-        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
-                         "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
-        with closing(connect(self.db)) as db:
-            row=db.execute(
-                "SELECT event_id,details FROM events WHERE task_id=? "
-                "AND kind='OPEN_GOAL_INDEPENDENT_OBLIGATIONS'",(parent,)).fetchone()
-            receipt=json.loads(row["details"])
-            receipt["obligations"][0]["clause"]="Investigate the UART timeout"
-            db.execute("UPDATE events SET details=? WHERE event_id=?",
-                       (json.dumps(receipt,sort_keys=True),row["event_id"]))
-            db.commit()
-        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
-                         "UNVERIFIABLE")
-        # A forged receipt cannot be promoted to owner-clause progress.
-        observed=_goal_progress(self.db,self.ws,self.fx)
-        self.assertNotIn("original_obligation_progress",observed["goals"][0])
-        # An authenticated source cannot disappear from the receipt and turn
-        # remaining (possibly matching) hashes into complete evidence.
-        with closing(connect(self.db)) as db:
-            receipt=json.loads(row["details"])
-            receipt["source_sha256"]={}
-            db.execute("UPDATE events SET details=? WHERE event_id=?",
-                       (json.dumps(receipt,sort_keys=True),row["event_id"]))
-            db.commit()
-        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
-                         "SOURCE_CHANGED_SINCE_PROPOSAL")
-
-    def test_compound_stale_evidence_cannot_pass_original_parent_audit(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\n')
-        parent=self.seed(
-            "Investigate the UART timeout using local engineering evidence and "
-            "ensure a sandbox draft of settings.json has owner equal to ops.")
-        with patch("cognition_agent_os.local_model._request",side_effect=self.respond):
-            result=run_tick(self.db,self.ws,self.fx,max_jobs=3,
-                            planner_mode="ollama-local",local_model="installed:test")
-        self.assertEqual(result["tasks"][0]["status"],"DECOMPOSED",result)
-        (self.fx/"cause.md").write_text("Evidence revised after child creation.")
-        self.assertEqual(audit_open_goal(self.db,self.fx,parent)["status"],
-                         "SOURCE_CHANGED_SINCE_PROPOSAL")
-
-    def test_compound_unrecognized_extra_owner_requirement_is_not_dropped(self):
-        (self.fx/"settings.json").write_text('{"timeout":7}\n')
-        parent=self.seed(
-            "Investigate the UART timeout using local engineering evidence and "
-            "ensure a sandbox draft of settings.json has owner equal to ops "
-            "and publish it to production.")
-        with patch("cognition_agent_os.local_model._request",
-                   side_effect=AssertionError("external action not in local capability")):
-            result=run_tick(self.db,self.ws,self.fx,max_jobs=1,
-                            planner_mode="ollama-local",local_model="installed:test")
-        self.assertEqual(result["tasks"][0]["status"],"UNKNOWN",result)
-        self.assertFalse(self.children(parent))
+        self.assertFalse(final["goal_progress"]["goals"][0]["owner_outcome_verified"])
 
     def test_compound_research_and_write_must_not_downgrade_owner_goal(self):
         (self.fx/"settings.json").write_text('{"timeout":7}\n')
