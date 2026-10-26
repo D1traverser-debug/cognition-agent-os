@@ -155,8 +155,18 @@ def run_public_discovery(db: sqlite3.Connection, task: dict,
         if parent is None:
             raise PublicDiscoveryInvalid("MISSING_ORIGINAL_OWNER_GRANT")
         original = json.loads(parent["source_spec"])
-        if (original.get("kind") != "open_goal"
-            or original.get("allow_public_discovery") is not True):
+        if not isinstance(original, dict):
+            raise PublicDiscoveryInvalid("MISSING_ORIGINAL_OWNER_GRANT")
+        if original.get("kind") == "native_goal":
+            # Native model decisions use the same bounded original scope.
+            # A forged native contract or model-created child alone cannot
+            # grant permission for an outbound metadata disclosure.
+            from .native_decision import _valid_contract
+            if not _valid_contract(original):
+                raise PublicDiscoveryInvalid("MISSING_ORIGINAL_OWNER_GRANT")
+        elif original.get("kind") != "open_goal":
+            raise PublicDiscoveryInvalid("MISSING_ORIGINAL_OWNER_GRANT")
+        if original.get("allow_public_discovery") is not True:
             raise PublicDiscoveryInvalid("MISSING_ORIGINAL_OWNER_GRANT")
         allowed, reason = current_guard(db, task, needs_write=True)
         if not allowed:
