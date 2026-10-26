@@ -116,6 +116,38 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(recovered["original_goal"], self.goal)
         self.assertEqual(recovered["native_decision_state"]["decision_count"], 2)
 
+    def test_unfamiliar_chinese_goal_cross_process_native_cli(self):
+        """The real CLI, not a Python-only method call, performs admission/readback."""
+        chinese = ("核对供应商出入库差异并保留原始数据；随后为审计准备隔离草案，"
+                   "不要改写任何生产账户或原始来源。")
+        common = [sys.executable, "-m", "cognition_agent_os.cli",
+                  "--db", str(self.db), "--workspace", str(self.workspace),
+                  "--fixtures", str(self.fixtures)]
+        def invoke(*command):
+            run = subprocess.run([*common, *command], text=True,
+                                 capture_output=True)
+            self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+            return json.loads(run.stdout)
+        created = invoke("seed-native-goal", "--goal", chinese)
+        root = created["root_task_id"]
+        self.assertEqual(created["status"], "NATIVE_GOAL_REGISTERED")
+        initial = invoke("native-goal-readback", "--root-task-id", root)
+        self.assertEqual(initial["original_goal"], chinese)
+        proposal = self.candidate(initial, self.reconcile(), self.structure())
+        path = self.root / "decision.json"
+        path.write_text(json.dumps(proposal, ensure_ascii=False), encoding="utf-8")
+        admitted = invoke("native-decision-admit", "--root-task-id", root,
+                          "--spec", str(path))
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED")
+        executed = invoke("host-tick", "--max-jobs", "1")
+        self.assertEqual(executed["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(executed["tasks"][0]["status"], "NEEDS_REVIEW")
+        resumed = invoke("goal-resume")
+        self.assertEqual(resumed["status"], "READY_FOR_NATIVE_DECISION")
+        self.assertEqual(resumed["original_goal"], chinese)
+        self.assertEqual(resumed["native_decision_state"]["decisions"][0]
+                         ["mechanical_verdict"], "REPORT_MECHANICALLY_VERIFIED")
+
     def test_conflict_for_first_method_can_be_followed_by_new_method(self):
         root = self.root_id()
         bad = self.structure()
