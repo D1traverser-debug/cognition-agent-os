@@ -454,6 +454,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         current_sources = _sources(fixtures)
         observations = []
         previous_id = None
+        previous_decision_event_id = -1
         for index, item in enumerate(decisions):
             receipt = json.loads(item["details"])
             if (not isinstance(receipt, dict)
@@ -467,7 +468,9 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             parsed = _proposal(receipt["proposal"], contract)
             _challenge_hypotheses(
                 receipt["proposal"],
-                [h for h in hypotheses if h["event_id"] < item["event_id"]])
+                [h for h in hypotheses if (previous_decision_event_id <
+                    h["event_id"] < item["event_id"])])
+            previous_decision_event_id = item["event_id"]
             selected = parsed["selected"]
             child = by_id.get(receipt["child_task_id"])
             if (child is None or child["goal_rev"] != root["goal_rev"]
@@ -553,6 +556,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "observation_sha256": fingerprint,
             "decisions": observations, "decision_count": len(decisions),
             "hypotheses": hypotheses,
+            "pending_hypotheses": [
+                h for h in hypotheses if h["event_id"] > previous_decision_event_id],
             "owner_outcome_verified": False, "business_outcome_verified": False,
         }
     except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
@@ -595,7 +600,7 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             parsed = _proposal(candidate, contract)
             if candidate["observation_sha256"] != observed["observation_sha256"]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
-            _challenge_hypotheses(candidate, observed["hypotheses"])
+            _challenge_hypotheses(candidate, observed["pending_hypotheses"])
             # Compare/grant and exact source snapshot rechecked *inside*
             # the original SQLite write transaction.
             auth = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
@@ -687,6 +692,7 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
         hypotheses = _native_hypotheses(db, root["task_id"], contract)
         known = set()
         previous = None
+        previous_decision_event_id = -1
         for ordinal, r in enumerate(receipts):
             entry = json.loads(r["details"])
             if (entry["ordinal"] != ordinal
@@ -695,8 +701,9 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
                 return False
             parsed = _proposal(entry["proposal"], contract)
             _challenge_hypotheses(
-                entry["proposal"],
-                [h for h in hypotheses if h["event_id"] < r["event_id"]])
+                entry["proposal"], [h for h in hypotheses
+                    if previous_decision_event_id < h["event_id"] < r["event_id"]])
+            previous_decision_event_id = r["event_id"]
             selected = parsed["selected"]
             candidate = db.execute(
                 "SELECT source_spec,goal_rev,grant_rev,state "
