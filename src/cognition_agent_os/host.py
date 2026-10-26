@@ -223,8 +223,11 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                         # using a fresh independent receipt/source audit.
                         from .open_goal import audit_open_goal
                         lineage=audit_open_goal(path,fixtures,root_id)
-                        if lineage.get("status") == (
-                                "COMPOUND_METHODS_MECHANICALLY_GROUNDED"):
+                        lineage_admitted=(lineage.get("status")==
+                            "COMPOUND_METHODS_MECHANICALLY_GROUNDED")
+                        if (lineage_admitted or
+                            (lineage.get("status")=="SOURCE_CHANGED_SINCE_PROPOSAL"
+                             and "original_obligations" in lineage)):
                             child_by_id={
                                 node["task_id"]:node for node in descendants}
                             check_by_id={
@@ -245,9 +248,13 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                                     "mechanical_verdict":check_by_id.get(
                                         ob["child_task_id"],{}).get(
                                             "verdict","NOT_YET_INDEPENDENTLY_CHECKED"),
-                                    "mechanically_verified":check_by_id.get(
-                                        ob["child_task_id"],{}).get(
-                                            "mechanically_verified",False),
+                                    # A child-only audit cannot promote an
+                                    # original goal after parent source drift.
+                                    "mechanically_verified":(
+                                        lineage_admitted and check_by_id.get(
+                                            ob["child_task_id"],{}).get(
+                                                "mechanically_verified",False)),
+                                    "parent_source_verified":lineage_admitted,
                                     "owner_outcome_verified":False,
                                 }
                                 for ob in lineage["original_obligations"]]
