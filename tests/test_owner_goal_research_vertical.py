@@ -183,8 +183,10 @@ class OpenGoalResearchVertical(unittest.TestCase):
             child_by_kind["goal_case"]["task_id"]+".json")).exists())
         goal=attempted["goal_progress"]["goals"][0]
         self.assertFalse(goal["owner_outcome_verified"])
+        # The independent evidence check is the immediate causal failure.
         self.assertEqual(goal["next_control_action"],
-                         "REPLAN_UNMET_ORIGINAL_OBLIGATION")
+                         "REPLAN_AFTER_FAILED_INDEPENDENT_CHECK")
+        self.assertGreaterEqual(goal["needs_replan"],1)
         self.assertTrue(any(
             x["task_state"]=="NEEDS_REPLAN"
             and x["error_code"]=="PREDECESSOR_EVIDENCE_UNVERIFIABLE"
