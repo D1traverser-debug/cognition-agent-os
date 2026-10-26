@@ -712,6 +712,87 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
         raise
 
 
+def _audit_independent_obligations(
+    db: sqlite3.Connection, parent, spec: dict, fixtures: Path,
+    task_id: str, failure: dict,
+) -> dict:
+    """Read-only independent recomputation of BOTH admitted child contracts."""
+    events = db.execute(
+        "SELECT details FROM events WHERE task_id=? "
+        "AND kind='OPEN_GOAL_INDEPENDENT_OBLIGATIONS'",
+        (task_id,)).fetchall()
+    if len(events) != 1:
+        return failure
+    receipt = json.loads(events[0]["details"])
+    if (not isinstance(receipt, dict) or set(receipt) != {
+        "obligations", "source_sha256", "original_goal",
+        "semantic_approval", "real_owner_outcome_verified"
+    } or receipt["semantic_approval"] is not False
+        or receipt["real_owner_outcome_verified"] is not False
+        or receipt["original_goal"] != spec["goal"]):
+        return failure
+    obligations = receipt["obligations"]
+    if not isinstance(obligations, list) or len(obligations) != 2:
+        return failure
+    # A full owner-text round trip rejects any omitted tail or appended
+    # unacknowledged requirement; no model can write this event as evidence.
+    clauses = []
+    for item in obligations:
+        if (not isinstance(item, dict)
+            or set(item) != {
+                "child_task_id", "clause", "plan", "model_candidate"
+            } or not isinstance(item["clause"], str)
+            or not isinstance(item["model_candidate"], dict)):
+            return failure
+        clauses.append(item["clause"])
+    if (spec["goal"].strip().rstrip(".").strip() !=
+        f"{clauses[0]} and {clauses[1]}"):
+        return failure
+    from .owner_postcondition import _full_owner_scope_is_supported
+    by_id = {row["task_id"]: row for row in db.execute(
+        "SELECT task_id,source_spec,goal_rev,grant_rev "
+        "FROM tasks WHERE parent_task=?", (task_id,)).fetchall()}
+    if len(by_id) != 2:
+        return failure
+    checked_ids = set()
+    for i, item in enumerate(obligations):
+        child_id = item["child_task_id"]
+        if (child_id not in by_id or child_id in checked_ids
+            or item["model_candidate"].get("intent") is None
+            or item["model_candidate"].get("goal_quote") not in item["clause"]):
+            return failure
+        checked_ids.add(child_id)
+        plan = compile_intent(item["model_candidate"]["intent"])
+        expected = "investigate_evidence" if i == 0 else "ensure_structure"
+        if (plan["objective"] != expected or plan != item["plan"]
+            or json.loads(by_id[child_id]["source_spec"]) !=
+               plan["child_source_spec"]
+            or by_id[child_id]["goal_rev"] != parent["goal_rev"]
+            or by_id[child_id]["grant_rev"] != parent["grant_rev"]):
+            return failure
+        if i == 0:
+            if (not re.fullmatch(r"(?is)investigate\\b.{10,350}", item["clause"])
+                or _COMPOSITE_ENGLISH_ACTION.search(item["clause"])
+                or _COMPOSITE_CHINESE_ACTION.search(item["clause"])):
+                return failure
+        elif not _full_owner_scope_is_supported(item["clause"], plan):
+            return failure
+    hashes = receipt["source_sha256"]
+    if not isinstance(hashes, dict):
+        return failure
+    for name, digest in hashes.items():
+        if (not isinstance(name, str) or not isinstance(digest, str)
+            or hashlib.sha256(safe_fixture(fixtures, name)).hexdigest() != digest):
+            return {**failure, "status": "SOURCE_CHANGED_SINCE_PROPOSAL"}
+    return {
+        "status": "COMPOUND_METHODS_MECHANICALLY_GROUNDED",
+        "child_task_ids": [x["child_task_id"] for x in obligations],
+        "capabilities": [x["plan"]["capability"] for x in obligations],
+        "semantic_outcome_verified": False,
+        "business_outcome_verified": False,
+    }
+
+
 def audit_open_goal(db_path: Path, fixtures: Path, task_id: str) -> dict:
     """Independent ledger/source replay, not a semantic or business oracle."""
     fail = {"status": "UNVERIFIABLE", "semantic_outcome_verified": False}
@@ -728,9 +809,20 @@ def audit_open_goal(db_path: Path, fixtures: Path, task_id: str) -> dict:
             receipts = db.execute("SELECT details FROM events WHERE task_id=? "
                                   "AND kind='OPEN_GOAL_DECOMPOSED'",
                                   (task_id,)).fetchall()
-            if parent is None or parent["state"] != "DECOMPOSED" or len(receipts) != 1:
+            if parent is None or parent["state"] != "DECOMPOSED":
                 return fail
             spec = validate_open_goal(json.loads(parent["source_spec"]))
+            parallel_receipts = db.execute(
+                "SELECT 1 FROM events WHERE task_id=? "
+                "AND kind='OPEN_GOAL_INDEPENDENT_OBLIGATIONS'",
+                (task_id,)).fetchall()
+            if parallel_receipts:
+                if receipts:
+                    return fail
+                return _audit_independent_obligations(
+                    db, parent, spec, fixtures, task_id, fail)
+            if len(receipts) != 1:
+                return fail
             receipt = json.loads(receipts[0]["details"])
             if (not isinstance(receipt, dict)
                 or set(receipt) != {"child_task_id", "source_sha256", "plan",
