@@ -100,7 +100,8 @@ def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0
     return tid
 
 
-def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds: int = 40) -> dict | None:
+def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds: int = 40,
+              only_task_id: str | None = None) -> dict | None:
     now = time.time() if now is None else now
     db.execute("BEGIN IMMEDIATE")
     try:
@@ -119,10 +120,12 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
                        JOIN authority a ON a.singleton=1
                        WHERE t.due_at<=? AND
                        (t.state='PENDING' OR (t.state='RUNNING' AND t.lease_until<=?))"""
-                       +pending_gate+"""
+                       +pending_gate+
+                       (" AND t.task_id=?" if only_task_id is not None else "")+"""
                        ORDER BY CASE WHEN t.goal_rev=a.goal_rev THEN 0 ELSE 1 END,
                                 t.due_at,t.created_at,t.task_id LIMIT 1""",
-                         (now, now)).fetchone()
+                         ((now, now, only_task_id) if only_task_id is not None
+                          else (now, now))).fetchone()
         if row is None:
             db.commit()
             return None
