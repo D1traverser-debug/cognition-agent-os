@@ -191,6 +191,75 @@ class NativeOwnerAcceptance(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, root,
                 propose("baseline.csv", "actual.csv", corrected["child_task_id"]))
 
+    def test_native_json_draft_full_owner_result_after_actual_sandbox_readback(self):
+        """Same exact owner oracle should accept an independently staged
+        isolated JSON addition, NEVER a model's own completion claim."""
+        (self.fixtures / "settings.json").write_text(
+            '{"timeout":12}\n', encoding="utf-8")
+        goal = ("Please ensure an isolated draft of settings.json has "
+                "owner equal to ops.")
+        root = register_native_goal(self.db, goal)
+        state = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        refs = [{"path": p.name, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+                for p in sorted(self.fixtures.iterdir())]
+        proposal = {
+            "selected_intent": {
+                "kind": "goal_intent", "objective": "ensure_structure",
+                "resources": [{"role": "input", "path": "settings.json"}],
+                "requirements": [{"field": "owner", "equals": "ops"}]},
+            "alternative_intent": None,
+            "decision_reason": "The exact named original source needs one added key.",
+            "alternative_reason": "CSV checking cannot make a JSON draft.",
+            "expected_evidence": "A sandbox candidate and independent source readback.",
+            "observation_sha256": state["observation_sha256"],
+            "decision_basis": {
+                "source_refs": refs, "previous_result_task_id": None,
+                "challenge": "The original JSON might contain a conflicting owner key.",
+                "falsifier": "The independent JSON draft contradicts original keys.",
+                "uncertainty": "The local draft cannot prove a deployed configuration.",
+            },
+        }
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root
+        )["local_owner_outcome_verified"])
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, proposal)
+        before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
+        actual = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1,
+                          auto_stage_goals=True)
+        child_id = admitted["child_task_id"]
+        self.assertEqual(actual["tasks"][0]["task_id"], child_id, actual)
+        self.assertEqual(actual["sandbox_reviews"][0]["status"],
+                         "SANDBOX_VERIFIED", actual)
+        result = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertEqual(result["status"], "LOCAL_OWNER_RESULT_VERIFIED", result)
+        self.assertEqual(result["evidence_task_id"], child_id)
+        self.assertEqual(result["outcome_scope"],
+                         "ORIGINAL_SANDBOX_DRAFT_POSTCONDITION")
+        self.assertFalse(result["business_outcome_verified"])
+        self.assertEqual(
+            {p.name: p.read_bytes() for p in self.fixtures.iterdir()}, before)
+        sandbox = self.workspace / "sandbox" / (child_id + ".candidate")
+        self.assertEqual(json.loads(sandbox.read_text(encoding="utf-8")),
+                         {"timeout": 12, "owner": "ops"})
+        sandbox.write_text('{"timeout":999,"owner":"ops"}', encoding="utf-8")
+        changed = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertFalse(changed["local_owner_outcome_verified"], changed)
+        sandbox.write_text('{"owner":"ops","timeout":12}\n', encoding="utf-8")
+        # Original source drift must also invalidate the result.
+        (self.fixtures / "settings.json").write_text(
+            '{"timeout":13}\n', encoding="utf-8")
+        drift = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertFalse(drift["local_owner_outcome_verified"], drift)
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        revoked = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertFalse(revoked["local_owner_outcome_verified"], revoked)
+
     def test_unrequested_extra_deliverable_is_not_silently_dropped(self):
         root, _ = self.run_case(
             "Compare baseline.csv with actual.csv and report differences "
