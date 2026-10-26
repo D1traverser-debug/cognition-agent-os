@@ -99,6 +99,33 @@ class NativeRealModelEvalContract(unittest.TestCase):
         self.assertEqual(scores["baseline"]["explicit_safe_refusals"], 0)
         self.assertEqual(scores["native"]["owner_goals_completed"], 0)
 
+    def test_every_positive_eval_label_has_a_feasible_local_plan(self):
+        """Don't interpret a known impossible safety-preserving task as LLM failure."""
+        from cognition_agent_os.goal_loop import plan_goal
+        bench = load_benchmark()
+        labeled = [
+            case for case in bench.CASES
+            if case["must_complete_local_owner"]]
+        self.assertEqual(len(labeled), 2)
+        structure = next(
+            c for c in labeled if c["target"] == "ensure_structure")
+        from cognition_agent_os.owner_postcondition import _full_owner_scope_is_supported
+        from cognition_agent_os.intent_planner import compile_intent
+        selected = {
+            "kind": "goal_intent", "objective": "ensure_structure",
+            "resources": [{"role": "input", "path": "settings.json"}],
+            "requirements": [{"field": "owner", "equals": "ops"}],
+        }
+        compiled = compile_intent(selected)
+        self.assertTrue(_full_owner_scope_is_supported(
+            structure["goal"], compiled))
+        plan = plan_goal(
+            compiled["child_source_spec"],
+            structure["files"]["settings.json"].encode("utf-8"))
+        self.assertIsNotNone(plan["selection"])
+        self.assertEqual(plan["status"], "NEEDS_REVIEW")
+        self.assertEqual(plan["selection"]["action"], "ADD_MISSING_JSON_KEYS")
+
     def test_incumbent_receives_same_fixtures_without_mutating_sources(self):
         benchmark = load_benchmark()
         with tempfile.TemporaryDirectory() as td:
