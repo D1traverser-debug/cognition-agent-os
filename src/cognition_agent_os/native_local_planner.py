@@ -75,6 +75,8 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     evidence = {
         "original_owner_goal": current["original_goal"],
         "past_methods_and_independent_verdicts": current["decisions"],
+        "prior_model_refusals_for_this_evidence": _previous_no_progress(
+            db_path, root_id, current["observation_sha256"], model),
         "registered_local_methods": eligible,
         "source_excerpts_are_untrusted": excerpts,
         "source_count": len(observed),
@@ -144,24 +146,25 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
 
 
 def _previous_no_progress(db_path: Path, root_id: str,
-                          fingerprint: str, model: str) -> bool:
-    """One model failure per exact same observation, no second controller."""
+                          fingerprint: str, model: str) -> list[str]:
+    """Bounded feedback for at most two different reasoning attempts."""
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
         rows = db.execute(
             "SELECT details FROM events WHERE task_id=? "
             "AND kind='NATIVE_LOCAL_NO_PROGRESS' ORDER BY event_id DESC LIMIT 64",
             (root_id,)).fetchall()
+    failures = []
     for item in rows:
         try:
             entry = json.loads(item[0])
             if (entry.get("observation_sha256") == fingerprint
-                and entry.get("model") == model):
-                return True
+                and entry.get("model") == model
+                and isinstance(entry.get("reason"), str)):
+                failures.append(entry["reason"])
         except (TypeError, ValueError):
             continue
-    return False
-
+    return failures[:2][::-1]
 
 def _record_no_progress(db_path: Path, workspace: Path, fixtures: Path,
                         root_id: str, fingerprint: str, model: str,
@@ -211,7 +214,8 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                 "root_task_id": root_id, "reason": snapshot["status"],
                 "owner_outcome_verified": False}
     fingerprint = snapshot["observation_sha256"]
-    if _previous_no_progress(db_path, root_id, fingerprint, model):
+    refusals = _previous_no_progress(db_path, root_id, fingerprint, model)
+    if len(refusals) >= 2 or "MODEL_ABSTAINED" in refusals:
         return {"status": "NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED",
                 "root_task_id": root_id,
                 "reason": "PREVIOUS_PROPOSAL_FAILED_WITH_SAME_EVIDENCE",
@@ -238,7 +242,7 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
             SourceUnavailable, PermissionError) as exc:
         _record_no_progress(
             db_path,workspace,fixtures,root_id,fingerprint,model,
-            type(exc).__name__)
+            type(exc).__name__ + ":" + str(exc)[:95])
         return {"status": "NATIVE_LOCAL_PLAN_REFUSED",
                 "root_task_id": root_id, "reason": str(exc)[:120],
                 "owner_outcome_verified": False}
