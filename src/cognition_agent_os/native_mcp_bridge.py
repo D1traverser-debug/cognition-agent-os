@@ -56,8 +56,14 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     mcp = MCPServer("cognition-agent-os-local")
 
     @mcp.tool()
-    def native_goal_create(owner_goal: str) -> dict:
-        """Register exact original owner goal in existing granted SQLite ledger.
+    def native_goal_create(owner_goal: str,
+                           client_request_id: str | None = None) -> dict:
+        """Register exact original owner goal, safely replaying a lost ACK.
+
+        A caller that may retry a creation should reuse one stable request
+        token for the same intent; never reuse it for a changed goal.
+        Tokens do not grant permission or choose a different root.
+        
 
         State creation needs an already-current local grant; this does not grant
         external write rights, install a model, or claim the goal is finished.
@@ -71,7 +77,8 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 == public_discovery_goal_sha256)
         root = register_native_goal(
             db_path, owner_goal,
-            allow_public_discovery=pinned_public_scope)
+            allow_public_discovery=pinned_public_scope,
+            client_request_id=client_request_id)
         return {"status": "NATIVE_GOAL_REGISTERED", "root_task_id": root,
                 "owner_outcome_verified": False}
 
