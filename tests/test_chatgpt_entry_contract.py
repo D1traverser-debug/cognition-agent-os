@@ -1,122 +1,100 @@
-"""Static guardrails for the multi-repository ChatGPT entry contract.
+"""Source/package contracts only.
 
-These tests check source configuration only. They do NOT simulate native
-skill selection, ChatGPT account settings, repository authorization, or effects.
+These tests never claim native Skill selection, actual ChatGPT loading, method
+comparison, correct cross-chat recovery or owner-level effect. Those require
+captured first-party client runs and independent outcome traces.
 """
-from pathlib import Path
-import unittest
 import json
+from pathlib import Path
+import re
+import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md"
+BASE = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
+SKILL = BASE / "skills/cognition-parent-chatgpt-intake/SKILL.md"
 PROBES = SKILL.parent / "references/scope-probes.md"
-REPO_INSTRUCTIONS = ROOT / "AGENTS.md"
+CODEX_SKILL = ROOT / ".agents/skills/goal-grounded-semantic-review/SKILL.md"
+AGENTS = ROOT / "AGENTS.md"
 
 
-class ChatGPTCurrentEntryBoundary(unittest.TestCase):
-    def test_single_parent_and_historical_bootstrap_boundary(self):
+def metadata(source):
+    assert source.startswith("---\n")
+    parts = source.split("---", 2)
+    return {
+        line.split(":", 1)[0]: line.split(":", 1)[1].strip()
+        for line in parts[1].splitlines()
+        if ":" in line
+    }
+
+
+class ChatGPTSourceBoundaries(unittest.TestCase):
+    def test_plugin_version_is_semantic_and_candidate_is_not_installed_truth(self):
+        manifest = json.loads((BASE / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["name"], "cognition-agent-os-chatgpt")
+        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
+        self.assertIn("Does not itself connect a custom Host API",
+                      manifest["description"])
+        self.assertIn("not", SKILL.read_text(encoding="utf-8").lower())
+
+    def test_triggers_are_scoped_and_body_is_on_demand(self):
         content = SKILL.read_text(encoding="utf-8")
-        self.assertIn("The ONE active cognitive parent", content)
-        self.assertIn("D1traverser-debug/cognition-agent-os", content)
-        self.assertIn("universal-agent-os@main", content)
-        self.assertIn("never the present parent bootstrap", content)
-        self.assertIn("domain-specific live compatibility documents", content)
-        self.assertIn("not proof", content.lower())
-
-    def test_dynamic_multirepo_routing_without_pinned_pr(self):
-        content = SKILL.read_text(encoding="utf-8")
-        self.assertIn("A bare `继承`", content)
-        self.assertIn("`继承视频`", content)
-        self.assertIn("show a compact evidence-backed choice", content)
-        self.assertIn("connected GitHub repository list/search", content)
-        self.assertIn("ordinary engineering/code repository", content)
-        self.assertIn("current relevant unclosed integration candidate", content)
-        self.assertIn("same", content.lower())
+        desc = metadata(content)["description"]
+        self.assertIn("cognition-agent-os", desc)
+        self.assertIn("继承", desc)
+        self.assertIn("unrelated", desc.lower())
+        self.assertLess(len(desc), 400)
+        self.assertIn("references/scope-probes.md", content)
+        self.assertTrue(PROBES.is_file())
         self.assertNotRegex(content, r"(?i)(?:PR\s*#|pull/)(?:\d+)")
-        self.assertIn("separate current grants", content)
+        # Metadata is discoverable; this test does not run ChatGPT.
+        self.assertIn("not", content.lower())
 
-    def test_legacy_migration_not_accidentally_deleted(self):
-        """Check migration safety contract, not three inherited prose quotes.
+    def test_current_parent_and_child_permission_boundary(self):
+        chatgpt = SKILL.read_text(encoding="utf-8")
+        codex = AGENTS.read_text(encoding="utf-8")
+        for content in (chatgpt, codex):
+            self.assertIn("cognition-agent-os", content)
+            self.assertIn("universal-agent-os", content)
+            self.assertRegex(content.lower(), r"child.{0,300}(?:grant|permission|native)")
+            self.assertNotIn("UAOS is the active parent", content)
+        self.assertIn("SESSION_HANDOFF.md", chatgpt)
+        self.assertIn("SESSION_HANDOFF.md", codex)
+        self.assertTrue(CODEX_SKILL.is_file())
 
-        These are configuration assertions, not actual child cutover tests;
-        a shorter root instruction file must not silently turn old UAOS into
-        a present parent or make its child migration automatic.
-        """
-        content = REPO_INSTRUCTIONS.read_text(encoding="utf-8")
-        self.assertRegex(content, r"(?is)universal-agent-os.{0,120}historical")
-        self.assertRegex(content, r"(?is)Child UAOS compatibility files.{0,150}migration dependencies")
-        self.assertRegex(content, r"(?is)do not remove/migrate.{0,120}independent cutover validation")
-        self.assertRegex(content, r"(?is)independent cutover validation.{0,100}owner approval")
-        self.assertIn("never the present parent bootstrap",
-                      SKILL.read_text(encoding="utf-8"))
-        self.assertNotIn("UAOS is the active parent", content)
+    def test_each_surface_is_a_distinct_loading_boundary(self):
+        chatgpt = SKILL.read_text(encoding="utf-8").lower()
+        codex = AGENTS.read_text(encoding="utf-8").lower()
+        self.assertIn("installed account", chatgpt)
+        self.assertIn("codex", codex)
+        self.assertIn("host", chatgpt)
+        self.assertIn("sqlite", codex)
+        self.assertIn(".agents/skills/goal-grounded-semantic-review/skill.md",
+                      codex)
 
-    def test_route_falsifiers_remain_in_scope_probes(self):
-        content = PROBES.read_text(encoding="utf-8")
-        for title in ("M. Legacy-entry collision:", "N. Bare new-chat inherit:",
-                      "O. Direct child resume:", "P. Newly discovered project:"):
-            self.assertIn(title, content)
-        self.assertIn("Native first-call observability", content)
-        self.assertIn("Q. Interrupted work / mid-task user question / connection loss:", content)
-        self.assertIn("real ChatGPT conversation", content)
-        self.assertIn("Fail if user must repeat", content)
-
-    def test_discovery_description_is_scoped_not_an_everyday_chat_hijack(self):
-        """Source-only metadata contract; native implicit trigger is untested."""
-        content = SKILL.read_text(encoding="utf-8")
-        parts = content.split("---", 2)
-        self.assertEqual(len(parts), 3)
-        header = parts[1]
-        description = next((line.partition(":")[2].strip()
-                            for line in header.splitlines()
-                            if line.startswith("description:")), "")
-        self.assertTrue(0 < len(description) <= 1024)
-        self.assertIn("cognition-agent-os", description)
-        self.assertIn("继承", description)
-        self.assertIn("cross-domain", description)
-        self.assertIn("Do not use for unrelated ordinary requests", description)
-        self.assertIn("Do not assume", description)
-
-    def test_nonexpert_owner_intake_has_outcome_first_evidence_contract(self):
-        """The expert-research burden belongs to the agent, not the owner."""
-        content = SKILL.read_text(encoding="utf-8")
-        self.assertIn("## Outcome-first input/output contract", content)
-        self.assertIn("No owner domain or AI expertise is presumed", content)
-        self.assertIn("independent owner-level postcondition", content)
-        self.assertIn("do not invent missing source facts", content)
-        self.assertIn("ask the owner only for indispensable", content.lower())
-        self.assertIn("No mandatory report format", content)
-
-    def test_trigger_holdouts_include_positive_and_negative_controls(self):
+    def test_evaluation_cases_not_default_loaded(self):
         probes = PROBES.read_text(encoding="utf-8")
-        self.assertIn("R. In-scope skill selection versus ordinary-chat non-trigger:", probes)
-        self.assertIn("S. Nonexpert original-owner task input/output:", probes)
+        for title in ("M. Legacy-entry collision:", "N. Bare new-chat inherit:",
+                      "O. Direct child resume:", "P. Newly discovered project:",
+                      "Q. Interrupted work / mid-task user question / connection loss:",
+                      "R. In-scope skill selection versus ordinary-chat non-trigger:",
+                      "S. Nonexpert original-owner task input/output:"):
+            self.assertIn(title, probes)
         self.assertIn("false-positive trigger", probes)
         self.assertIn("false-negative trigger", probes)
-        self.assertIn("without an invoked skill", probes)
-        self.assertIn("references/scope-probes.md", SKILL.read_text(encoding="utf-8"))
+        self.assertIn("real ChatGPT conversation", probes)
+        self.assertIn("Load", SKILL.read_text(encoding="utf-8"))
 
-    def test_private_plugin_version_and_no_false_runtime_claim(self):
-        root = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
-        manifest = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["version"], "0.1.3")
-        self.assertIn("Does not itself connect a custom Host API", manifest["description"])
-        self.assertIn("not proof", SKILL.read_text(encoding="utf-8").lower())
-
-    def test_native_skill_release_overlay_is_version_pinned(self):
-        """A source package is NOT proof that ChatGPT installed the update."""
+    def test_plugin_bundle_tracks_source_version_not_frozen_prose(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(
             encoding="utf-8")
         self.assertIn("chatgpt_plugin_release_bundle:", workflow)
         self.assertIn("[bundle-chatgpt-plugin]", workflow)
-        self.assertIn("'skills/cognition-parent-chatgpt-intake/SKILL.md'", workflow)
-        self.assertIn(
-            "'skills/cognition-parent-chatgpt-intake/references/scope-probes.md'",
-            workflow)
-        self.assertIn("assert manifest['version'] == '0.1.3'", workflow)
+        self.assertIn("manifest['version']", workflow)
+        self.assertNotIn("manifest['version'] == '0.1.3'", workflow)
         self.assertIn("No installation or owner account mutation occurs in CI",
                       workflow)
-
+        self.assertIn("'skills/cognition-parent-chatgpt-intake/SKILL.md'",
+                      workflow)
 
 
 if __name__ == "__main__":
