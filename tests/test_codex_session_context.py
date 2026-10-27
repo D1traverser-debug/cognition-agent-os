@@ -82,6 +82,31 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("commit history/diff", project["proposed_action"])
         self.assertEqual(project["live_pr_head_and_ci"], "MUST_REFETCH")
         self.assertEqual(project["product_readiness_claim"], "NOT_VERIFIED")
+        # An active architectural pivot must reach the actual cold-entry
+        # process rather than live only in a document the agent may never read.
+        architecture = project["architecture_pivot"]
+        self.assertEqual(architecture["status"],
+                         "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
+        self.assertEqual(architecture["source_path"],
+                         "docs/01-ARCHITECTURE-DECISIONS.md")
+        self.assertIn("ChatGPT/Codex",
+                      architecture["proposed_first_action"])
+        self.assertIn("新", architecture["proposed_first_action"])
+        topology = project["live_python_topology"]
+        self.assertEqual(topology["kind"],
+                         "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF")
+        self.assertGreaterEqual(topology["parsed_modules"], 50)
+        self.assertEqual(topology["parse_errors"], [])
+        self.assertEqual(topology["paths"]["decision"],
+                         "src/cognition_agent_os/native_decision.py")
+        self.assertEqual(topology["paths"]["effect"],
+                         "src/cognition_agent_os/runner.py")
+        self.assertEqual(topology["paths"]["recovery"],
+                         "src/cognition_agent_os/continuity.py")
+        self.assertEqual(topology["paths"]["client_adapter"],
+                         "src/cognition_agent_os/native_mcp_bridge.py")
+        self.assertEqual(topology["paths"]["independent_local_result"],
+                         "src/cognition_agent_os/owner_postcondition.py")
         self.assertFalse(result["business_outcome_verified"])
         self.assertFalse(result["scheduling_or_effects_performed"])
 
