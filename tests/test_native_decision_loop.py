@@ -248,6 +248,27 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(
             pending[0]["proposal_sha256"], unresolved["proposal_sha256"])
         self.assertFalse(self.view(root)["owner_outcome_verified"])
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+
+        # Source update was already reviewed in the SECOND decision.
+        # The THIRD decision must not reuse that same update indefinitely
+        # as "new evidence" to re-label the unresolved question again.
+        after_review = self.view(root)
+        self.assertEqual(len(after_review["pending_hypotheses"]), 1)
+        recycled = self.candidate(
+            after_review, self.reconcile(), self.structure())
+        recycled["hypothesis_reviews"] = [{
+            "proposal_sha256": unresolved["proposal_sha256"],
+            "disposition": "REJECTED",
+            "counterargument": "Already-cited late-returns note supposedly settles stock records.",
+            "verification_needed": "Independent supplier confirmation remains unavailable.",
+        }]
+        with self.assertRaisesRegex(
+                ValueError, "UNRESOLVED_HYPOTHESIS_NO_NEW_EVIDENCE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, recycled)
+        self.assertEqual(self.view(root)["decision_count"], 2)
+        self.assertEqual(len(self.view(root)["pending_hypotheses"]), 1)
 
     def test_late_idea_invalidates_stale_decision_and_fake_reviews(self):
         root = self.root_id()
