@@ -78,6 +78,26 @@ class NativeRealModelEvalContract(unittest.TestCase):
                     self.assertNotEqual(result["independent_owner_result"],
                                         "LOCAL_OWNER_RESULT_VERIFIED", result)
 
+    def test_three_arm_scores_expose_real_model_invocation_cost(self):
+        """A deterministic win must not be mislabeled as model cognition."""
+        bench = load_benchmark()
+        rows = []
+        for case in bench.CASES:
+            row = {"case": case["id"],
+                   "withheld_expected_method": case["target"],
+                   "withheld_local_owner_required": case["must_complete_local_owner"]}
+            for arm in ("baseline", "native", "adaptive_host"):
+                row[arm] = {"whole_local_owner_verified": False,
+                            "source_preserved": True,
+                            "selected_objectives": [],
+                            "model_calls": 2 if arm == "native" else 0}
+            rows.append(row)
+        scored = bench.score_trial_results(rows)
+        self.assertEqual(scored["baseline"]["model_generation_calls"], 0)
+        self.assertEqual(scored["native"]["model_generation_calls"], 8)
+        self.assertEqual(scored["adaptive_host"]["model_generation_calls"], 0)
+        self.assertEqual(scored["adaptive_host"]["owner_goals_completed"], 0)
+
     def test_no_action_on_negative_cases_never_counts_as_goal_completion(self):
         bench = load_benchmark()
         rows = []
