@@ -2,7 +2,7 @@
 
 This applies only to `D1traverser-debug/cognition-agent-os`. It is a repository work instruction, **not** user consent, ChatGPT plugin configuration, persisted runtime state or evidence of a loaded Codex Hook.
 
-**One goal:** deliver an opt-in cognition parent that preserves the COMPLETE owner goal and corrections; independently locates problems, challenges assumptions, researches and compares methods/tools, legally acts, verifies REAL owner/child-business results, learns from failures, resumes and transfers to unfamiliar fields with minimal owner correction. ChatGPT/Codex and the SQLite Host are distinct surfaces of the same intended product; never claim they are connected without live proof. Each child retains its native state, grants, IDs and outcome oracle. Historical UAOS is not the parent.
+**One goal:** deliver an opt-in cognition parent that preserves the COMPLETE owner goal and corrections; independently locates problems, challenges assumptions, researches and compares methods/tools, legally acts, verifies REAL owner/child-business results, learns from failures, resumes and transfers to unfamiliar fields with minimal owner correction. ChatGPT/Codex and the SQLite Host are distinct surfaces of the same intended product; never claim they are connected without live proof. Each child retains its native state, grants, IDs and outcome oracle. Historical `universal-agent-os` (UAOS) is not the parent.
 
 ## Select work and recover truth
 
