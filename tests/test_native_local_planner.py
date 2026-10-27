@@ -299,6 +299,54 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(inspect_native_goal(
             self.db, self.workspace, self.fixtures, root)["decision_count"], 0)
 
+    def test_many_checkpoint_reads_resume_with_lazy_provenance_index(self):
+        """History must be durable without replaying all excerpts as context."""
+        import hashlib
+        from cognition_agent_os.ledger import event
+        from cognition_agent_os.native_decision import _sources
+        (self.fixtures / "trace.md").write_text("Z" * 18_000,
+                                                encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        state = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        digest = _sources(self.fixtures)["trace.md"]
+        with closing(connect(self.db)) as db:
+            for offset in (0, 2100, 4200, 6300, 8400, 10500, 12600):
+                event(db, root, "NATIVE_LOCAL_RESEARCH_READ", {
+                    "observation_sha256": state["observation_sha256"],
+                    "model": "installed:test", "path": "trace.md",
+                    "sha256": digest, "offset_chars": offset,
+                    "length_chars": 2048})
+            db.commit()
+        observed = []
+        def research(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            history = json.loads(payload["prompt"].split("\n\n")[-1])
+            indexed = history.get("prior_research_receipts", [])
+            visible = history.get("additional_verified_source_excerpts", [])
+            self.assertEqual(len(indexed), 7)
+            self.assertLessEqual(len(visible), 3)
+            observed.append([(x["path"], x["offset_chars"]) for x in visible])
+            if len(observed) == 1:
+                # Review already-pinned evidence without fabricating new discovery.
+                return {"done": True, "response": json.dumps({
+                    "inspect_sources": [{"path": "trace.md", "offset_chars": 0}]})}
+            self.assertIn(("trace.md", 0), observed[1])
+            return self.transport(method, path, payload, timeout)
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=research):
+            planned = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(planned["status"], "NATIVE_METHOD_ENQUEUED", planned)
+        self.assertEqual(len(observed), 2)
+        with closing(connect(self.db)) as db:
+            count = db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ'", (root,)
+            ).fetchone()[0]
+        self.assertEqual(count, 7)  # recall != new independent evidence
+
     def test_host_autonomous_two_method_loop_and_cold_state(self):
         root = register_native_goal(self.db, self.goal)
         files_before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
