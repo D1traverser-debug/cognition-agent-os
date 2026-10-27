@@ -188,13 +188,48 @@ def main() -> int:
         + json.dumps(context, ensure_ascii=False, sort_keys=True)
     )
     if len(note) > MAX_CONTEXT_CHARS:
-        note = json.dumps({
+        # This is a *valid* previously read SQLite goal whose full context
+        # exceeds the hook transport budget. Do not erase its stable locator:
+        # a long original owner goal must remain retrievable without treating
+        # a summary, hook status, or shortened goal as runnable authority.
+        compact = {
             "kind": "CODEX_COGNITION_CONTEXT_READBACK_V1",
-            "status": "CONTEXT_TOO_LARGE_TO_RELIABLY_RESTORE",
+            "status": "FULL_LEDGER_READBACK_REQUIRED",
+            "observed_runtime_status": context.get("status"),
+            "ledger_discovery": context.get("ledger_discovery"),
+            "root_task_id": context.get("root_task_id"),
+            "original_contract_sha256": context.get("original_contract_sha256"),
+            "goal_rev": context.get("goal_rev"),
+            "grant_rev": context.get("grant_rev"),
+            "root_state": context.get("root_state"),
+            "source_of_truth": context.get("source_of_truth"),
+            "local_source_head": context.get("local_source_head"),
+            "source_head_is_live_github_attested": False,
             "original_goal_verified": False,
             "business_outcome_verified": False,
-            "local_source_head": context.get("local_source_head"),
-        }, sort_keys=True)
+            "scheduling_or_effects_performed": False,
+            "next_action_policy": (
+                "Read the complete owner goal again from the configured "
+                "existing SQLite ledger via cognition_agent_os.continuity."
+                "resume_goal, then independently recheck the root task ID, "
+                "contract digest and current grant. Do not execute from this "
+                "bounded hook receipt or infer owner/business completion."
+            ),
+        }
+        if (context.get("original_goal_verified") is True
+                and isinstance(context.get("original_goal"), str)):
+            compact["original_goal"] = context["original_goal"]
+            compact["original_goal_verified"] = True
+        note = json.dumps(compact, ensure_ascii=False, sort_keys=True)
+        if len(note) > MAX_CONTEXT_CHARS:
+            # No partial owner-goal text is ever substituted for the original.
+            compact.pop("original_goal", None)
+            compact["original_goal_verified"] = False
+            compact["original_goal_omitted_from_hook"] = True
+            compact["original_goal_persisted_in_ledger"] = (
+                context.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
+            )
+            note = json.dumps(compact, ensure_ascii=False, sort_keys=True)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
