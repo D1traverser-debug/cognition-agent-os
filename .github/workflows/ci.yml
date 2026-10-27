@@ -665,7 +665,7 @@ jobs:
     # Opt-in real Ollama inference on an ephemeral public CI runner.
     # Synthetic independent owner-acceptance labels and actual Host artifacts.
     # No paid inference, model API keys, user data, production grant or deployment.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-real-native-schema]') }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-real-native-schema]') }}
     strategy:
       fail-fast: false
       matrix:
