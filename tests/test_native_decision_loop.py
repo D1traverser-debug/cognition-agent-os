@@ -170,6 +170,21 @@ class NativeDecisionLoop(unittest.TestCase):
                                  "NATIVE_NEXT_DECISION_ADMISSIBLE")
         self.assertEqual(expected.read_text(encoding="utf-8"),
                          "supplier,received\nDelta,8\n")
+        # Adversarial opposite case: source outage must NOT cause the system
+        # to trust a forged/tampered ledger registration as an owner goal.
+        with closing(connect(self.db)) as db:
+            db.execute(
+                "UPDATE events SET details=? WHERE task_id=? "
+                "AND kind='NATIVE_GOAL_REGISTERED'",
+                ('{"contract_sha256":"' + "f" * 64 + '",'
+                 '"owner_outcome_verified":false,'
+                 '"external_effect_authorized":false}', root))
+            db.commit()
+        (self.fixtures / "unexpected.lock").write_text(
+            "outage again", encoding="utf-8")
+        forged = self.view(root)
+        self.assertEqual(forged["status"], "NATIVE_GOAL_UNVERIFIABLE")
+        self.assertNotIn("original_goal", forged)
 
     def test_simultaneous_native_creation_same_key_one_original_root(self):
         """Two SQLite connections racing after client retry cannot fork owner."""
