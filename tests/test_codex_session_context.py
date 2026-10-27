@@ -52,6 +52,7 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(
             result["hookSpecificOutput"]["hookEventName"], "SessionStart")
         msg = result["hookSpecificOutput"]["additionalContext"]
+        self.last_context_chars = len(msg)
         self.assertTrue(msg.startswith("Read-only project state observation"), msg)
         return json.loads(msg.partition(": ")[-1])
 
@@ -92,6 +93,8 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("ChatGPT/Codex",
                       architecture["proposed_first_action"])
         self.assertIn("挑战", architecture["proposed_first_action"])
+        self.assertLessEqual(self.last_context_chars, 2000,
+                             "Codex hook advertised additionalContextLimit=2000")
         topology = project["live_python_topology"]
         self.assertEqual(topology["kind"],
                          "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF")
