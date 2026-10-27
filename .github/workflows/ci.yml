@@ -909,6 +909,8 @@ jobs:
         with:
           persist-credentials: false
           # Intentionally NO ref: pull_request defaults to refs/pull/N/merge.
+          # Needed to inspect both parents; default fetch-depth=1 is shallow.
+          fetch-depth: 2
       - name: Attest actual tested merge and its exact source and base parents
         run: python scripts/verify_ci_merge_source.py
       - name: Regression on actual integration candidate (not business success)
