@@ -199,7 +199,10 @@ def observe_owner_goal_drift(db_path: Path, *, limit: int = 8,
                         native_observation = inspect_native_goal(
                             db_path, workspace, fixtures, root_id)
                         native_status = native_observation["status"]
-                        if native_status == "NATIVE_SOURCE_CHANGED":
+                        if native_status == "NATIVE_SOURCE_UNAVAILABLE":
+                            result["fidelity_state"] = "NATIVE_OWNER_SOURCE_UNAVAILABLE"
+                            result["next_goal_action"] = "RESTORE_SOURCE_MANIFEST_BEFORE_NEXT_METHOD"
+                        elif native_status == "NATIVE_SOURCE_CHANGED":
                             result["fidelity_state"] = "NATIVE_OWNER_SOURCE_CHANGED"
                             result["next_goal_action"] = "REVALIDATE_SOURCE_BEFORE_NEXT_METHOD"
                         elif native_status in ("NATIVE_EVIDENCE_UNVERIFIABLE",
