@@ -265,7 +265,9 @@ def _recovered_research_reads(db_path: Path, fixtures: Path,
             "AND json_valid(details) "
             "AND json_extract(details,'$.observation_sha256')=? "
             "AND json_extract(details,'$.model')=? "
-            "ORDER BY event_id LIMIT ?",
+            # Newest first for an indexed bounded lookup, then reverse below
+            # to replay admitted receipts in original chronological order.
+            "ORDER BY event_id DESC LIMIT ?",
             (root_id, observation, model,
              _MAX_DURABLE_RESEARCH_READS + 1)).fetchall()
         if len(rows) > _MAX_DURABLE_RESEARCH_READS:
