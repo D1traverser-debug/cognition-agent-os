@@ -100,7 +100,7 @@
 7. **资源和可靠性**：任务等待/饥饿、p95 完成时间、实际消费、供应商账单与预算偏差。
 8. **用户纠错负担**：用户需要提醒/修复的次数、耗时，和业务成功基线一同评价。
 
-最初阶段不给出凭空的 p95、SLO 或“完成百分比”；度量方案见 [03-FIRST-VERTICAL-SLICE.md](03-FIRST-VERTICAL-SLICE.md)。
+最初阶段不给出凭空的 p95、SLO 或“完成百分比”；2026-10-20 的首轮切片方案已作为历史实验保留在 [archive/docs/03-FIRST-VERTICAL-SLICE.md](../archive/docs/03-FIRST-VERTICAL-SLICE.md)，不再作为当前执行入口。
 
 ## 6. 假设、待确认边界与版本机制
 
