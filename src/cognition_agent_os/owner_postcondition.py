@@ -166,9 +166,12 @@ def _native_local_postcondition(db_path: Path, workspace: Path,
         db_path, workspace, fixtures, root_id)
     if observed["status"] == "NATIVE_GRANT_REVOKED":
         return _unknown(root_id, "CURRENT_OWNER_AUTHORITY_UNAVAILABLE")
-    if (observed["status"] in (
-            "NATIVE_GOAL_UNVERIFIABLE", "NATIVE_SOURCE_CHANGED",
-            "NATIVE_EVIDENCE_UNVERIFIABLE")
+    # Fail closed for ANY status without a complete independently replayed
+    # decision/evidence readback. Identity-only recovery intentionally lacks
+    # "decisions" and may not be mistaken for a result oracle input.
+    if (observed["status"] not in (
+            "NATIVE_NEXT_DECISION_ADMISSIBLE", "NATIVE_AWAITING_WORKER",
+            "NATIVE_DECISION_BUDGET_EXHAUSTED")
         or observed.get("original_goal") != spec.get("goal")):
         return _unknown(root_id, "GOAL_LINEAGE_OR_EVIDENCE_UNVERIFIABLE")
     decisions = observed["decisions"]
