@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from verify_assurance_registry import (check, RegistryError, verify_archived_sources,
-                                       verify_live_handoff)
+                                       verify_live_handoff, verify_active_context_surface)
 
 class AssuranceRegistryTests(unittest.TestCase):
     @classmethod
@@ -86,6 +86,24 @@ class AssuranceRegistryTests(unittest.TestCase):
         self.assertFalse(report['current_ref_verified'])
         self.assertEqual(report['archive_integrity'], 'EXACT_GIT_BLOB')
         self.assertLess(report['active_bytes'], 8192)
+
+    def test_active_context_surface_physically_excludes_old_reports(self):
+        report = verify_active_context_surface(ROOT)
+        self.assertEqual(report['status'], 'ACTIVE_CONTEXT_SURFACE_VALID')
+        self.assertFalse(report['historical_default_loaded'])
+        self.assertEqual(set(report['active_docs']), {
+            'docs/00-PRODUCT-CONOPS.md',
+            'docs/01-ARCHITECTURE-DECISIONS.md',
+            'docs/02-AUTHORITY-AND-INTERFACES.md',
+            'docs/04-SECURITY-OPERATIONS.md',
+            'docs/06-ZERO-API-CREDIT-POLICY.md',
+            'docs/PRODUCT-READINESS-GATE.md',
+        })
+        self.assertFalse((ROOT / 'README-P1.md').exists())
+        self.assertFalse((ROOT / 'audits').exists())
+        self.assertTrue((ROOT / 'archive/docs/03-FIRST-VERTICAL-SLICE.md').is_file())
+        self.assertTrue((ROOT / 'archive/docs/ENGINEERING-COGNITION-TOOLCHAIN.md').is_file())
+        self.assertTrue((ROOT / 'archive/audits/2026-10-25/whole-source-part-01.json').is_file())
 
     def test_archive_is_not_an_active_instruction_source(self):
         live = (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8')
