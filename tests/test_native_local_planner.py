@@ -347,6 +347,71 @@ class NativeLocalModelLoop(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual(count, 7)  # recall != new independent evidence
 
+    def test_retried_research_checkpoint_is_idempotent_at_sqlite_boundary(self):
+        """Same verified observation reread by a retry must leave one receipt."""
+        from cognition_agent_os.native_local_planner import (
+            _checkpoint_research_reads, _recovered_research_reads)
+        from cognition_agent_os.native_decision import _sources
+        (self.fixtures / "trace.md").write_text(
+            "R" * 6000, encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        state = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        sources = _sources(self.fixtures)
+        snippet = {
+            "path": "trace.md", "sha256": sources["trace.md"],
+            "offset_chars": 500, "untrusted_excerpt": "R" * 2048,
+            "trust": "UNTRUSTED_DATA"}
+        for _ in range(2):  # simulate competing retries after same snapshot
+            _checkpoint_research_reads(
+                self.db, self.workspace, self.fixtures, root,
+                state["observation_sha256"], "installed:test", [snippet])
+        with closing(connect(self.db)) as db:
+            receipts = db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ'", (root,)
+            ).fetchone()[0]
+        self.assertEqual(receipts, 1)
+        recovered = _recovered_research_reads(
+            self.db, self.fixtures, root, state["observation_sha256"],
+            "installed:test", sources)
+        self.assertEqual(len(recovered), 1)
+        self.assertEqual(recovered[0]["offset_chars"], 500)
+
+    def test_overlapping_retry_is_rejected_before_poisoning_resume(self):
+        """Two slightly different overlapping ranges are not distinct evidence."""
+        from cognition_agent_os.native_local_planner import (
+            _checkpoint_research_reads, _recovered_research_reads)
+        from cognition_agent_os.native_decision import _sources
+        (self.fixtures / "trace.md").write_text(
+            "R" * 6000, encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        state = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        sources = _sources(self.fixtures)
+        def part(offset):
+            return {
+                "path": "trace.md", "sha256": sources["trace.md"],
+                "offset_chars": offset, "untrusted_excerpt": "R" * 2048,
+                "trust": "UNTRUSTED_DATA"}
+        _checkpoint_research_reads(
+            self.db, self.workspace, self.fixtures, root,
+            state["observation_sha256"], "installed:test", [part(500)])
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_RESEARCH_NO_NEW_EVIDENCE"):
+            _checkpoint_research_reads(
+                self.db, self.workspace, self.fixtures, root,
+                state["observation_sha256"], "installed:test", [part(650)])
+        with closing(connect(self.db)) as db:
+            receipts = db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ'", (root,)
+            ).fetchone()[0]
+        self.assertEqual(receipts, 1)
+        self.assertEqual(len(_recovered_research_reads(
+            self.db, self.fixtures, root, state["observation_sha256"],
+            "installed:test", sources)), 1)
+
     def test_host_autonomous_two_method_loop_and_cold_state(self):
         root = register_native_goal(self.db, self.goal)
         files_before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
