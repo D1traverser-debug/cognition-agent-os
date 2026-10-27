@@ -18,7 +18,7 @@
         "capabilities": [
           "Interactive"
         ],
-        "defaultPrompt": "继续 cognition-agent-os：恢复用户原始目标、核查实时工具与 GitHub HEAD/CI，实际推进一项工作并独立验收。"
+        "defaultPrompt": "继续 cognition-agent-os：恢复完整用户目标及纠正；从实时 GitHub 和工具核实有效决策；自主质疑、研究、比较、合法执行并独立验收结果；失败纠偏，完整目标未实现不得报完成。"
       }
     }
   }
