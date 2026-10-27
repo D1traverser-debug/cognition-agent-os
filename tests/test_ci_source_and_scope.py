@@ -95,6 +95,7 @@ class CISourceAndScopeTests(unittest.TestCase):
             if "python scripts/verify_ci_merge_source.py" in block:
                 merge_blocks.append(block)
                 self.assertNotIn("ref: ${{ github.event.pull_request.head.sha", pre)
+                self.assertIn("fetch-depth: 2", pre)
                 continue
             self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", pre)
             self.assertIn("python scripts/verify_ci_checkout_source.py", block.split("      - name:", 2)[1])
