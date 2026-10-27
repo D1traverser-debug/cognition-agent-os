@@ -4,10 +4,12 @@ These tests never claim native Skill selection, actual ChatGPT loading, method
 comparison, correct cross-chat recovery or owner-level effect. Those require
 captured first-party client runs and independent outcome traces.
 """
+import io
 import json
 from pathlib import Path
 import re
 import unittest
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
@@ -84,6 +86,36 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("real ChatGPT conversation", probes)
         self.assertIn("Load", SKILL.read_text(encoding="utf-8"))
 
+    def test_native_plugin_candidate_matches_installed_package_contract(self):
+        root = json.loads((BASE / "plugin.json").read_text(encoding="utf-8"))
+        native = json.loads((BASE / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(root["name"], native["name"])
+        self.assertEqual(root["version"], native["version"])
+        self.assertEqual(native["skills"].rstrip("/"), "./skills")
+        self.assertEqual(native["repository"], root["repository"])
+
+        # Test the real five-entry source package, not just a manifest word.
+        # Preserve the installed plugin's native metadata during upgrade.
+        entries = (
+            ".codex-plugin/plugin.json",
+            "plugin.json",
+            "agents/openai.yaml",
+            "skills/cognition-parent-chatgpt-intake/SKILL.md",
+            "skills/cognition-parent-chatgpt-intake/references/scope-probes.md",
+        )
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in entries:
+                self.assertTrue((BASE / path).is_file())
+                archive.write(BASE / path, arcname=path)
+        with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as package:
+            self.assertEqual(set(package.namelist()), set(entries))
+            for path in entries:
+                self.assertEqual(package.read(path), (BASE / path).read_bytes())
+            self.assertEqual(
+                json.loads(package.read(".codex-plugin/plugin.json"))["version"],
+                json.loads(package.read("plugin.json"))["version"])
+
     def test_plugin_bundle_tracks_source_version_not_frozen_prose(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(
             encoding="utf-8")
@@ -93,6 +125,8 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertNotIn("manifest['version'] == '0.1.3'", workflow)
         self.assertIn("No installation or owner account mutation occurs in CI",
                       workflow)
+        self.assertIn("'.codex-plugin/plugin.json'", workflow)
+        self.assertIn("manifest['version'] == native['version']", workflow)
         self.assertIn("'skills/cognition-parent-chatgpt-intake/SKILL.md'",
                       workflow)
 
