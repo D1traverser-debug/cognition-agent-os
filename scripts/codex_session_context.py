@@ -94,8 +94,7 @@ def _current_architecture_pivot() -> dict:
     return {
         "status": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
         "source_path": relative,
-        "proposed_first_action": candidate[:175] + ("…" if len(candidate) > 175 else ""),
-        "excerpt_only": len(candidate) > 175,
+        "proposed_first_action": candidate[:130] + ("…" if len(candidate) > 130 else ""),
     }
 
 
@@ -165,8 +164,7 @@ def _project_recovery_when_no_ledger() -> dict:
         "status": "PROJECT_GUIDANCE_FOUND",
         "source_path": relative,
         "source_role": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
-        "near_term_priority": priority[:190] + ("…" if len(priority) > 190 else ""),
-        "priority_excerpt_only": len(priority) > 190,
+        "near_term_priority": priority[:85] + ("…" if len(priority) > 85 else ""),
         "continuation_index": "SESSION_HANDOFF.md",
         "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
         "complete_work_log_location": "LIVE_GIT_COMMIT_HISTORY_AND_DIFF",
@@ -176,9 +174,8 @@ def _project_recovery_when_no_ledger() -> dict:
         "architecture_pivot": _current_architecture_pivot(),
         "live_python_topology": _live_python_topology(),
         "proposed_action": (
-            "Restore original owner request; SESSION_HANDOFF.md is only a "
-            "bootstrap index. Fetch live PR/HEAD/CI, source and relevant "
-            "commit history/diff. Act on the full goal within real grants."
+            "Use SESSION_HANDOFF.md as bootstrap index only; recover "
+            "owner originals, live PR/HEAD/CI and commit history/diff."
         ),
     }
 
