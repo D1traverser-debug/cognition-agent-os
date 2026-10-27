@@ -94,6 +94,26 @@ extra chat-memory/Host layer or treat server storage alone as verified
 continuation. The six ultimate product gates below remain long-term
 criteria, not a mandate to deploy infrastructure in this phase.
 
+## AI-model reliability envelope — fix the parent before feature expansion
+
+The parent cannot assume a capable LLM will reliably remember, notice, select or verify everything. These are **system design obligations**, not excuses and not prompt-only fixes:
+
+| Model/system failure mode | Required structural compensation | Acceptance evidence |
+| --- | --- | --- |
+| Cross-chat/context loss | bounded bootstrap index + recovery from private original sources, live Git/runtime state | cold/new-session task resumes without owner restating recoverable requirements |
+| Long-context pollution / stale history | physically separate active vs archived material; progressive just-in-time retrieval; archived evidence never default authority | held-out resume with stale conflicting history still selects current goal/source |
+| Summary drift / fabricated continuity | summaries are indexes only; direct original source wins; inaccessible facts stay UNKNOWN | deliberately altered summary cannot override original user or live state |
+| First-solution anchoring / confirmation bias | material choices compare meaningfully different reuse/adapt/replace/add options and predeclare falsifiers | injected attractive-but-wrong first proposal is rejected or revised from evidence |
+| Tool blindness / user-as-tool-catalog | inspect actual connected capabilities and current expert sources proactively; discovered tools remain untrusted until fitted to authorization/effect boundary | unfamiliar task selects a useful tool/method not named by owner, without unsafe execution |
+| Easy-task/local-optimum drift | prioritize complete owner outcome and correction burden over test count/feature count; no fixed-grammar expansion as proxy progress | real uncurated task outcome improves while owner corrections and needless paths do not increase |
+| Model self-certification / hallucinated success | independent source/provider/artifact readback; model/plan/CI cannot certify its own broader outcome | false PASS/self-score is rejected by an independent oracle |
+| Nondeterminism on deterministic facts | programmatic checks for exact facts, typed admissions, repeatable traces; model judgment only where semantic judgment is needed | repeated runs preserve permissions/source roles and deterministic postconditions |
+| Repeated same-method failure | failure diagnosis must permit a materially different method, not prompt retries or more guardrails around the same cause | adverse result leads to different evidence/action and eventual verified or explicit UNKNOWN outcome |
+| Recency / stale external knowledge | fetch current authoritative sources when current facts matter, bind evidence to source/revision/time | stale cached fact cannot override a newer independently fetched source |
+| Permission confusion from retrieved text/model plans | single current grant/effect boundary; retrieved/model content is evidence, never authority | prompt injection/retrieved instruction cannot mint a grant or external effect |
+
+**Phase rule:** until the opt-in ChatGPT/Codex parent demonstrates these controls on real unseen work with low owner correction, adding more domain-specific local planners, static registries, roles or historical context is not product progress. Some model limits cannot be eliminated; the product succeeds by compensating, detecting and recovering from them measurably.
+
 ## Six end-to-end release gates — same candidate, same original goal
 
 1. **Whole goal -> next legal choice.** With owner requirements (including
