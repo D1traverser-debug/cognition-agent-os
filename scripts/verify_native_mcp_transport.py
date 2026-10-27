@@ -86,10 +86,26 @@ async def run():
                     "native_decision_admit", "native_capabilities"} <= tools
             goal = ("Reconcile original supplier evidence, prepare isolated "
                     "handoff after checking source truth, never alter originals.")
+            stable_request = "mcp-native-create-lost-ack-0001"
             created = unwrap(await client.call_tool(
-                "native_goal_create", {"owner_goal": goal}))
+                "native_goal_create", {
+                    "owner_goal": goal,
+                    "client_request_id": stable_request}))
             assert created["status"] == "NATIVE_GOAL_REGISTERED", created
             root = created["root_task_id"]
+            # Lost ACK / duplicate transport delivery: same exact goal and
+            # client token must recover the identical root, never create a
+            # duplicate native goal that later confuses cold discovery.
+            replayed = unwrap(await client.call_tool(
+                "native_goal_create", {
+                    "owner_goal": goal,
+                    "client_request_id": stable_request}))
+            assert replayed["root_task_id"] == root, (created, replayed)
+            wrong_intent = await client.call_tool(
+                "native_goal_create", {
+                    "owner_goal": goal + " and mutate an unauthorized record",
+                    "client_request_id": stable_request})
+            assert wrong_intent.is_error, wrong_intent
             observed = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
             assert observed["original_goal"] == goal, observed
