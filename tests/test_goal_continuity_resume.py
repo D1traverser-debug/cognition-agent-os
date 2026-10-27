@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 from cognition_agent_os.ledger import connect, initialize, create_task, alter_authority
 from cognition_agent_os.continuity import register_goal, resume_goal, checkpoint_goal
+from cognition_agent_os.native_decision import register_native_goal
 
 
 class GoalContinuityColdResume(unittest.TestCase):
@@ -107,6 +108,39 @@ class GoalContinuityColdResume(unittest.TestCase):
         with closing(connect(self.db_path)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM events")
                              .fetchone()[0], before)
+
+    def test_registered_goal_preserves_distinct_native_goal_without_owner_loss(self):
+        """An authorized native_goal is a legitimate competing owner objective."""
+        register_goal(self.db_path, self.contract())
+        original = (
+            "Independently investigate a new safety requirement and compare "
+            "unfamiliar methods without inventing execution permissions."
+        )
+        other_id = register_native_goal(self.db_path, original)
+        with closing(connect(self.db_path)) as db:
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        state = resume_goal(self.db_path)
+        self.assertEqual(state["status"], "AMBIGUOUS_DURABLE_GOALS", state)
+        self.assertEqual(state["other_original_goals"], [
+            {"root_task_id": other_id, "original_goal": original}])
+        self.assertEqual(state["registered_goal"]["goal_id"], "cognition-os")
+        self.assertNotIn("next_task_id", state)
+        with closing(connect(self.db_path)) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM events").fetchone()[0], before)
+
+    def test_revoked_mixed_native_goal_still_recovers_both_origins_readonly(self):
+        register_goal(self.db_path, self.contract())
+        original = "Compare new professional methods without taking any side effect."
+        other_id = register_native_goal(self.db_path, original)
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db, revoke=True)
+        state = resume_goal(self.db_path)
+        self.assertEqual(state["status"], "AMBIGUOUS_DURABLE_GOALS", state)
+        self.assertFalse(state["authority_current"])
+        self.assertEqual(state["other_original_goals"], [
+            {"root_task_id": other_id, "original_goal": original}])
+        self.assertNotIn("next_task_id", state)
 
     def test_registered_pointer_into_same_open_goal_is_not_a_second_goal(self):
         """A registered pointer and its original root are one identity."""
