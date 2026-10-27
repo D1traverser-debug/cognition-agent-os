@@ -154,11 +154,11 @@ _ARCHIVE_GIT_BLOB_SHA1 = '6bc6ad3041876916c16886767ce2ff24bfd88b75'
 # Full work provenance belongs in Git/runtime sources and is fetched on demand.
 _MAX_ACTIVE_HANDOFF_BYTES = 8192
 
-# Only durable current product specifications belong in docs/. Dated milestone,
-# benchmark, audit and experiment reports live under archive/ and are retrieved
-# explicitly when historical evidence is material. This prevents broad agent
-# search from silently promoting old plans into current context.
-_ACTIVE_DOCS = {
+# Small default reading set, not an exhaustive or immutable documentation
+# whitelist. Preserve technical reports until each is classified by purpose and
+# its references are checked. Physically moving a file does not fix links or
+# prove a future model will use the right evidence.
+_PRIMARY_DOCS = {
     'docs/00-PRODUCT-CONOPS.md',
     'docs/01-ARCHITECTURE-DECISIONS.md',
     'docs/02-AUTHORITY-AND-INTERFACES.md',
@@ -168,33 +168,41 @@ _ACTIVE_DOCS = {
 }
 
 def verify_active_context_surface(root):
-    docs = root / 'docs'
     actual = {
         p.relative_to(root).as_posix()
-        for p in docs.iterdir()
+        for p in (root / 'docs').iterdir()
         if p.is_file() and not p.is_symlink()
     }
-    require(actual == _ACTIVE_DOCS,
-            'active docs drifted; historical/experimental material must be '
-            'archived, not added to default agent context')
+    require(_PRIMARY_DOCS <= actual,
+            'required product specifications missing from docs/')
     require(not (root / 'README-P1.md').exists(),
             'obsolete P1 readme returned to active repository root')
     require(not (root / 'audits').exists(),
             'dated audit snapshots must remain under archive/')
-    for relative in (
-        'scripts/codex_session_context.py',
-        'AGENTS.md',
-        'integrations/chatgpt/cognition-agent-os-chatgpt/skills/'
-        'cognition-parent-chatgpt-intake/SKILL.md',
-    ):
-        text = (root / relative).read_text(encoding='utf-8')
-        require('archive/docs/' not in text and 'archive/audits/' not in text,
-                relative + ': default agent entrypoint must not load archived '
-                'evidence without an explicit historical task')
+
+    # Check a real migration side effect, not a magic phrase or file count:
+    # after a move, relative Markdown links from active entrypoints must still
+    # resolve. Checking archived documents (which are only fetched by explicit
+    # request) is a separate evidence audit, not proof of model cognition.
+    checked = 0
+    for relative in ('README.md', *_PRIMARY_DOCS):
+        source = root / relative
+        require(source.is_file() and not source.is_symlink(),
+                'missing active source: ' + relative)
+        for match in re.finditer(r'\]\(([^)]+)\)', source.read_text(encoding='utf-8')):
+            link = match.group(1).split('#', 1)[0].split('?', 1)[0]
+            if not link or link.startswith(('https:', 'http:', 'mailto:', '/')):
+                continue
+            target = (source.parent / link).resolve()
+            require(target.is_relative_to(root.resolve()) and target.is_file(),
+                    relative + ': broken relative Markdown link: ' + link)
+            checked += 1
     return {
         'status': 'ACTIVE_CONTEXT_SURFACE_VALID',
-        'active_docs': sorted(actual),
-        'historical_default_loaded': False,
+        'primary_docs': sorted(_PRIMARY_DOCS),
+        'other_docs_available_on_demand': len(actual - _PRIMARY_DOCS),
+        'relative_links_checked': checked,
+        'default_agent_loading_observed': False,
     }
 
 def verify_live_handoff(root):
