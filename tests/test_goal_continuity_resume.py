@@ -142,6 +142,25 @@ class GoalContinuityColdResume(unittest.TestCase):
             {"root_task_id": other_id, "original_goal": original}])
         self.assertNotIn("next_task_id", state)
 
+    def test_corrupted_native_goal_contract_is_not_silently_restored(self):
+        """Trust the original full registered contract, not only its goal words."""
+        register_goal(self.db_path, self.contract())
+        other = register_native_goal(
+            self.db_path, "Investigate unknown records and compare methods.")
+        with closing(connect(self.db_path)) as db:
+            source = json.loads(db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=?", (other,)
+            ).fetchone()[0])
+            source["allow_public_discovery"] = True  # unregistered scope change
+            db.execute(
+                "UPDATE tasks SET source_spec=? WHERE task_id=?",
+                (json.dumps(source, sort_keys=True), other))
+            db.commit()
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "OWNER_GOAL_LEDGER_UNVERIFIABLE")
+        self.assertNotIn("next_task_id", result)
+        self.assertNotIn("other_original_goals", result)
+
     def test_registered_pointer_into_same_open_goal_is_not_a_second_goal(self):
         """A registered pointer and its original root are one identity."""
         with closing(connect(self.db_path)) as db:
