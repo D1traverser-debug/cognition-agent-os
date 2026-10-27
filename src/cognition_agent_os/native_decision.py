@@ -27,6 +27,7 @@ _LEGACY_MAX_DECISIONS = 3
 _MAX_HYPOTHESES = 8
 _MAX_OPEN_RESEARCH_RECORDS = 64
 _MAX_COMPETING_RESEARCH_METHODS = 5
+_CLIENT_REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{15,127}\Z")
 _HYPOTHESIS_DISPOSITIONS = frozenset({
     "REJECTED", "CONDITIONALLY_USEFUL", "UNRESOLVED_RESEARCH_REQUIRED",
 })
@@ -551,9 +552,20 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
 
 
 def register_native_goal(db_path: Path, goal: str, *,
-                         allow_public_discovery: bool = False) -> str:
-    """Add the original goal without invoking the fixed-grammar open_goal router."""
+                         allow_public_discovery: bool = False,
+                         client_request_id: str | None = None) -> str:
+    """Register a durable owner goal with optional lost-ACK retry identity.
+
+    A client-supplied key is an idempotency token, not a task ID or grant.
+    The old no-key API keeps its existing distinct-registration semantics.
+    The same key with different owner intent is a hard conflict, never a
+    silent switch of source/scope or privilege.
+    """
     contract = _contract(goal, allow_public_discovery=allow_public_discovery)
+    if (client_request_id is not None
+        and (not isinstance(client_request_id, str)
+             or not _CLIENT_REQUEST_ID.fullmatch(client_request_id))):
+        raise ValueError("INVALID_NATIVE_GOAL_CLIENT_REQUEST_ID")
     require_initialized_ledger(db_path)
     with closing(connect(db_path)) as db:
         db.execute("BEGIN IMMEDIATE")
@@ -561,14 +573,43 @@ def register_native_goal(db_path: Path, goal: str, *,
             auth = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             if auth is None or auth["write_allowed"] != 1:
                 raise PermissionError("NATIVE_GOAL_CURRENT_GRANT_REQUIRED")
+            if client_request_id is not None:
+                prior = db.execute(
+                    "SELECT task_id FROM events WHERE "
+                    "kind='NATIVE_GOAL_REGISTERED' AND json_valid(details) "
+                    "AND json_extract(details,'$.client_request_id')=? "
+                    "LIMIT 2", (client_request_id,)).fetchall()
+                if len(prior) > 1:
+                    raise ValueError("NATIVE_GOAL_IDEMPOTENCY_UNVERIFIABLE")
+                if prior:
+                    original = db.execute(
+                        "SELECT task_id,source_spec,state,goal_rev,grant_rev "
+                        "FROM tasks WHERE task_id=? AND parent_task IS NULL",
+                        (prior[0]["task_id"],)).fetchone()
+                    if (original is None or original["state"] != "DECOMPOSED"
+                        or not _registered_native_contract_matches(
+                            db, original["task_id"],
+                            json.loads(original["source_spec"]))):
+                        raise ValueError("NATIVE_GOAL_IDEMPOTENCY_UNVERIFIABLE")
+                    if (json.loads(original["source_spec"]) != contract):
+                        raise ValueError("NATIVE_GOAL_IDEMPOTENCY_CONFLICT")
+                    if ((original["goal_rev"], original["grant_rev"]) !=
+                        (auth["goal_rev"], auth["grant_rev"])):
+                        raise ValueError("NATIVE_GOAL_IDEMPOTENCY_STALE_GRANT")
+                    db.commit()
+                    return original["task_id"]
             root = create_task(db, contract, commit=False)
             db.execute("UPDATE tasks SET state='DECOMPOSED',"
                        "decision='AWAIT_NATIVE_DECISION',"
                        "state_version=state_version+1 WHERE task_id=?", (root,))
-            event(db, root, "NATIVE_GOAL_REGISTERED", {
+            receipt = {
                 "contract_sha256": _digest(contract),
                 "owner_outcome_verified": False,
-                "external_effect_authorized": False})
+                "external_effect_authorized": False,
+            }
+            if client_request_id is not None:
+                receipt["client_request_id"] = client_request_id
+            event(db, root, "NATIVE_GOAL_REGISTERED", receipt)
             db.commit()
             return root
         except BaseException:
@@ -580,21 +621,29 @@ def _registered_native_contract_matches(
         db: sqlite3.Connection, root_id: str, contract: dict) -> bool:
     """Shared original-goal identity check for audits and cold resumption.
 
-    A structurally valid model/ledger record does not prove registration.
-    The original event fingerprint independently binds its admitted bytes.
-    This read-only check never grants a runnable task or approves an outcome.
+    Exact historic receipts remain valid. New keyed receipts add only a
+    bounded, non-authorizing retry identity; never allow arbitrary fields.
     """
     if not _valid_contract(contract):
         return False
     registrations = db.execute(
         "SELECT details FROM events WHERE task_id=? "
         "AND kind='NATIVE_GOAL_REGISTERED'", (root_id,)).fetchall()
-    return (len(registrations) == 1
-            and json.loads(registrations[0]["details"]) == {
-                "contract_sha256": _digest(contract),
-                "owner_outcome_verified": False,
-                "external_effect_authorized": False,
-            })
+    if len(registrations) != 1:
+        return False
+    actual = json.loads(registrations[0]["details"])
+    expected = {
+        "contract_sha256": _digest(contract),
+        "owner_outcome_verified": False,
+        "external_effect_authorized": False,
+    }
+    if actual == expected:
+        return True
+    return (isinstance(actual, dict)
+            and set(actual) == set(expected) | {"client_request_id"}
+            and all(actual[k] == v for k, v in expected.items())
+            and isinstance(actual["client_request_id"], str)
+            and bool(_CLIENT_REQUEST_ID.fullmatch(actual["client_request_id"])))
 
 
 def _audit(db: sqlite3.Connection, db_path: Path,
