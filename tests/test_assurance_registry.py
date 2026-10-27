@@ -87,23 +87,37 @@ class AssuranceRegistryTests(unittest.TestCase):
         self.assertEqual(report['archive_integrity'], 'EXACT_GIT_BLOB')
         self.assertLess(report['active_bytes'], 8192)
 
-    def test_active_context_surface_physically_excludes_old_reports(self):
+    def test_primary_context_is_selective_not_fixed_directory_whitelist(self):
         report = verify_active_context_surface(ROOT)
         self.assertEqual(report['status'], 'ACTIVE_CONTEXT_SURFACE_VALID')
-        self.assertFalse(report['historical_default_loaded'])
-        self.assertEqual(set(report['active_docs']), {
-            'docs/00-PRODUCT-CONOPS.md',
-            'docs/01-ARCHITECTURE-DECISIONS.md',
-            'docs/02-AUTHORITY-AND-INTERFACES.md',
-            'docs/04-SECURITY-OPERATIONS.md',
-            'docs/06-ZERO-API-CREDIT-POLICY.md',
-            'docs/PRODUCT-READINESS-GATE.md',
-        })
+        self.assertFalse(report['default_agent_loading_observed'])
+        self.assertEqual(len(report['primary_docs']), 6)
+        self.assertGreater(report['other_docs_available_on_demand'], 0)
+        self.assertGreater(report['relative_links_checked'], 0)
         self.assertFalse((ROOT / 'README-P1.md').exists())
         self.assertFalse((ROOT / 'audits').exists())
-        self.assertTrue((ROOT / 'archive/docs/03-FIRST-VERTICAL-SLICE.md').is_file())
-        self.assertTrue((ROOT / 'archive/docs/ENGINEERING-COGNITION-TOOLCHAIN.md').is_file())
+        self.assertTrue((ROOT / 'docs/03-FIRST-VERTICAL-SLICE.md').is_file())
+        self.assertTrue((ROOT / 'docs/ENGINEERING-COGNITION-TOOLCHAIN.md').is_file())
         self.assertTrue((ROOT / 'archive/audits/2026-10-25/whole-source-part-01.json').is_file())
+
+    def test_moved_document_link_break_is_detected_without_excluding_new_docs(self):
+        with tempfile.TemporaryDirectory() as d:
+            from shutil import copytree, copy2
+            dst = Path(d)
+            copytree(ROOT / 'docs', dst / 'docs')
+            (dst / 'archive').mkdir()
+            for name in ('README.md', 'AGENTS.md'):
+                copy2(ROOT / name, dst / name)
+            report = verify_active_context_surface(dst)
+            self.assertGreater(report['other_docs_available_on_demand'], 0)
+            # A replacement link to a missing file must fail; this is exactly
+            # the regression hidden by a prior mass doc archive.
+            source = dst / 'docs/00-PRODUCT-CONOPS.md'
+            source.write_text(source.read_text(encoding='utf-8').replace(
+                '(03-FIRST-VERTICAL-SLICE.md)',
+                '(does-not-exist.md)'), encoding='utf-8')
+            with self.assertRaisesRegex(RegistryError, 'broken relative Markdown link'):
+                verify_active_context_surface(dst)
 
     def test_archive_is_not_an_active_instruction_source(self):
         live = (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8')
