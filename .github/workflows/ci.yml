@@ -588,13 +588,17 @@ jobs:
           import zipfile
           base = Path('integrations/chatgpt/cognition-agent-os-chatgpt')
           paths = [
-              'plugin.json', 'agents/openai.yaml',
+              '.codex-plugin/plugin.json', 'plugin.json',
+              'agents/openai.yaml',
               'skills/cognition-parent-chatgpt-intake/SKILL.md',
               'skills/cognition-parent-chatgpt-intake/references/scope-probes.md',
           ]
           manifest = json.loads((base/'plugin.json').read_text(encoding='utf-8'))
-          assert manifest['name'] == 'cognition-agent-os-chatgpt'
+          native = json.loads((base/'.codex-plugin/plugin.json').read_text(encoding='utf-8'))
+          assert manifest['name'] == native['name'] == 'cognition-agent-os-chatgpt'
           assert isinstance(manifest['version'], str) and __import__('re').fullmatch(r'\d+\.\d+\.\d+',manifest['version'])
+          assert manifest['version'] == native['version']
+          assert native['skills'] in ('./skills', './skills/')
           for rel in paths:
               source = base / rel
               assert source.is_file() and not source.is_symlink()
@@ -602,6 +606,10 @@ jobs:
                                compression=zipfile.ZIP_DEFLATED) as archive:
               for rel in paths:
                   archive.write(base / rel, arcname=rel)
+          with zipfile.ZipFile('cognition-chatgpt-plugin-overlay.zip') as archive:
+              assert sorted(archive.namelist()) == sorted(paths)
+              for rel in paths:
+                  assert archive.read(rel) == (base/rel).read_bytes()
           print('CURRENT_HEAD_CHATGPT_OVERLAY_BUILT', manifest['version'])
           PY
       - name: Preserve verifiable skill package without private account secrets
