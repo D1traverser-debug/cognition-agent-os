@@ -632,12 +632,20 @@ def resume_goal(db_path: Path, *, resolve_head=None,
             ]
             if other_roots:
                 from .open_goal import validate_open_goal
+                from .native_decision import _valid_contract as valid_native_contract
                 originals = []
                 for root in other_roots:
                     try:
-                        goal = validate_open_goal(
-                            json.loads(root["source_spec"]))["goal"]
-                    except (ValueError, TypeError, KeyError):
+                        source_spec = json.loads(root["source_spec"])
+                        if source_spec.get("kind") == "open_goal":
+                            goal = validate_open_goal(source_spec)["goal"]
+                        elif source_spec.get("kind") == "native_goal":
+                            if not valid_native_contract(source_spec):
+                                raise ValueError("INVALID_NATIVE_GOAL_CONTRACT")
+                            goal = source_spec["goal"]
+                        else:
+                            raise ValueError("UNKNOWN_ORIGINAL_GOAL_KIND")
+                    except (ValueError, TypeError, KeyError, AttributeError):
                         return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
                     originals.append({
                         "root_task_id": root["task_id"],
