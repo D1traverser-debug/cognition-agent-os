@@ -85,6 +85,18 @@ class CISourceAndScopeTests(unittest.TestCase):
             verify_merge_source({}, "push", actual, self.b,
                                 (self.b, self.a))
 
+    def test_real_inference_opt_in_requires_trusted_same_repo_source(self):
+        """PR body alone must not allow outsiders to trigger model downloads."""
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = workflow.split("  experimental_real_native_cognition:", 1)[1].split(
+            "\n  experimental_live_open_goal_method:", 1)[0]
+        self.assertIn("[run-real-native-schema]", job)
+        self.assertIn(
+            "github.event.pull_request.head.repo.full_name == github.repository",
+            job)
+        self.assertIn("OLLAMA_NO_CLOUD: '1'", job)
+        self.assertIn("python scripts/measure_real_native_goal.py", job)
+
     def test_actual_workflow_pins_every_checkout_and_emits_receipt(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         blocks = workflow.split("      - uses: actions/checkout@")[1:]
