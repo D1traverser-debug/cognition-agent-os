@@ -4,6 +4,8 @@ These exercise model-neutral plan intake over two dissimilar registered local
 capabilities. Candidate rationale is deliberately NOT a semantic oracle.
 """
 from contextlib import closing
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 import hashlib
 import json
 from pathlib import Path
@@ -121,6 +123,34 @@ class NativeDecisionLoop(unittest.TestCase):
         with self.assertRaises(PermissionError):
             register_native_goal(
                 self.db, self.goal, client_request_id=stable_request)
+
+    def test_simultaneous_native_creation_same_key_one_original_root(self):
+        """Two SQLite connections racing after client retry cannot fork owner."""
+        key = "owner-native-concurrent-acklost-0002"
+        barrier = Barrier(2)
+
+        def call():
+            barrier.wait(timeout=10)
+            return register_native_goal(
+                self.db, self.goal, client_request_id=key)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call)
+            second = executor.submit(call)
+            values = [first.result(timeout=20), second.result(timeout=20)]
+        self.assertEqual(values[0], values[1])
+        with closing(connect(self.db)) as db:
+            roots = db.execute(
+                "SELECT task_id FROM tasks WHERE parent_task IS NULL "
+                "AND json_extract(source_spec,'$.kind')='native_goal'"
+            ).fetchall()
+            registrations = db.execute(
+                "SELECT count(*) FROM events WHERE kind='NATIVE_GOAL_REGISTERED'"
+            ).fetchone()[0]
+        self.assertEqual(len(roots), 1)
+        self.assertEqual(registrations, 1)
+        self.assertEqual(roots[0]["task_id"], values[0])
+        self.assertEqual(self.view(values[0])["original_goal"], self.goal)
 
     def test_unregistered_professional_domain_can_research_and_resume_without_execution(self):
         """Real SQLite research state before ANY local executable fits the goal."""
