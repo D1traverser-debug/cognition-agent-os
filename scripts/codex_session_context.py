@@ -62,6 +62,78 @@ def _head() -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def _current_architecture_pivot() -> dict:
+    """Read the existing ADR's adopted experimental path, not a copied plan.
+
+    This is repository PROPOSAL evidence, never original user consent.
+    The actual owner may supersede this at any time.
+    """
+    relative = "docs/01-ARCHITECTURE-DECISIONS.md"
+    source = ROOT / relative
+    if not source.is_file() or source.is_symlink():
+        return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    try:
+        content = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    title = "### 优先级反转（约束后续工程行为）"
+    if title not in content or len(content) > 80_000:
+        return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    section = content.split(title, 1)[1].split("\n### ", 1)[0]
+    candidate = next(
+        (line[3:].strip() for line in section.splitlines()
+         if line.startswith("1. ")), None)
+    if (not isinstance(candidate, str)
+        or not 60 <= len(candidate) <= 800
+        or "ChatGPT/Codex" not in candidate):
+        return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    return {
+        "status": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
+        "source_path": relative,
+        "proposed_first_action": candidate,
+    }
+
+
+def _live_python_topology() -> dict:
+    """Select module LOCATORS from current AST; no semantic graph claim."""
+    try:
+        from architecture_probe import inspect
+        scanned = inspect(ROOT)
+    except (ImportError, ValueError, OSError, SyntaxError):
+        return {"kind": "CURRENT_SOURCE_TOPOLOGY_UNVERIFIABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    observed = {m["name"]: m for m in scanned["modules"]}
+    contracts = {
+        "decision": ("native_decision", "admit_native_decision"),
+        "effect": ("runner", "run_once"),
+        "recovery": ("continuity", "resume_goal"),
+        "client_adapter": ("native_mcp_bridge", "build_mcp_server"),
+        "independent_local_result": (
+            "owner_postcondition", "inspect_owner_local_outcome"),
+    }
+    if (scanned["parse_errors"]
+        or scanned["parsed_count"] != scanned["file_count"]
+        or any(name not in observed
+               or symbol not in observed[name]["definitions"]
+               for name, symbol in contracts.values())):
+        return {"kind": "CURRENT_SOURCE_TOPOLOGY_UNVERIFIABLE",
+                "source_role": "NOT_OWNER_OR_GRANT",
+                "parse_errors": scanned["parse_errors"][:3]}
+    return {
+        "kind": "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF",
+        "parsed_modules": scanned["parsed_count"],
+        "parse_errors": [],
+        "paths": {
+            role: observed[name]["path"]
+            for role, (name, _symbol) in contracts.items()
+        },
+    }
+
+
 def _project_recovery_when_no_ledger() -> dict:
     """Bounded repository guide, NOT recovered owner text or a task grant.
 
@@ -99,6 +171,8 @@ def _project_recovery_when_no_ledger() -> dict:
         "product_readiness_claim": "NOT_VERIFIED",
         "live_pr_head_and_ci": "MUST_REFETCH",
         "original_user_utterances": "MUST_RECOVER_SEPARATELY",
+        "architecture_pivot": _current_architecture_pivot(),
+        "live_python_topology": _live_python_topology(),
         "proposed_action": (
             "Recover the owner's actual latest request; use SESSION_HANDOFF.md "
             "only as a bootstrap index; progressively fetch current open PR "
