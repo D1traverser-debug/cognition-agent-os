@@ -10,6 +10,7 @@ import unittest
 
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import alter_authority, connect, create_task, initialize
+from cognition_agent_os.native_decision import register_native_goal
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "scripts" / "codex_session_context.py"
@@ -92,6 +93,49 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(result["original_goal"], owner)
         self.assertTrue(result["original_goal_verified"])
         self.assertNotIn("repository_recovery", result)
+
+    def test_large_valid_owner_goal_preserves_sqlite_locator_not_partial_text(self):
+        # Native-goal admission permits 8,192 original characters. The
+        # read-only SessionStart hook must not erase its identity simply
+        # because that legitimate original exceeds the model-context budget.
+        goal = ("Check evidence and permissions without skipping any original "
+                "clauses. " + "compare sources and verify results; " * 220)
+        self.assertTrue(7500 < len(goal) <= 8192)
+        root = register_native_goal(self.db, goal)
+        first = self._run()
+        second = self._run()
+        self.assertEqual(first, second)
+        self.assertEqual(first["status"], "FULL_LEDGER_READBACK_REQUIRED")
+        self.assertEqual(first["root_task_id"], root)
+        self.assertEqual(first["source_of_truth"], "ORIGINAL_SQLITE_TASK")
+        self.assertRegex(first["original_contract_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(first["ledger_discovery"], "CONFIGURED_LEDGER")
+        self.assertTrue(first["original_goal_persisted_in_ledger"])
+        self.assertTrue(first["original_goal_omitted_from_hook"])
+        self.assertFalse(first["original_goal_verified"])
+        self.assertNotIn("original_goal", first)
+        self.assertNotIn("next_task_id", first)
+        self.assertFalse(first["business_outcome_verified"])
+        self.assertFalse(first["scheduling_or_effects_performed"])
+        with closing(connect(self.db)) as db:
+            original = db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=?", (root,)
+            ).fetchone()[0]
+        self.assertEqual(json.loads(original)["goal"], goal)
+
+    def test_large_goal_revocation_survives_bounded_hook_context(self):
+        goal = ("Keep complete owner intent and compare current evidence. "
+                + "compare sources and verify results; " * 220)
+        root = register_native_goal(self.db, goal)
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        state = self._run()
+        self.assertEqual(state["root_task_id"], root)
+        self.assertEqual(state["status"], "FULL_LEDGER_READBACK_REQUIRED")
+        self.assertEqual(state["observed_runtime_status"], "AUTHORITY_REVOKED")
+        self.assertFalse(state["original_goal_verified"])
+        self.assertNotIn("next_task_id", state)
+        self.assertFalse(state["business_outcome_verified"])
 
     def test_cold_restart_resumes_exact_original_goal_without_new_ledger(self):
         goal = "Compare actual.csv with baseline.csv and report differences."
