@@ -457,6 +457,31 @@ async def run():
                     + str(ordinal) + "; preserve the full owner identity."))
                 for ordinal in range(62)
             }
+            # Fault-injection across ordering and indexing: after page one
+            # has been read, ANOTHER writer creates a newer native root.
+            # The original keyset cursor must never re-include a first-page
+            # root or accidentally make the late root an older-page entry.
+            initial_page = unwrap(await client.call_tool(
+                "native_goal_list", {}))
+            assert initial_page["truncated"] is True, initial_page
+            after_first = initial_page["next_after_task_id"]
+            first_page_ids = {
+                item["root_task_id"] for item in initial_page["goals"]}
+            late = unwrap(await client.call_tool(
+                "native_goal_create", {
+                    "owner_goal": "Late-arriving native root, after page-one read."}))
+            late_id = late["root_task_id"]
+            extra_native_ids.add(late_id)
+            following = unwrap(await client.call_tool(
+                "native_goal_list", {"after_task_id": after_first}))
+            following_ids = {
+                item["root_task_id"] for item in following["goals"]}
+            assert not first_page_ids & following_ids, "PAGE_SHIFT_DUPLICATE"
+            assert late_id not in following_ids, "LATE_NEWER_GOAL_IN_OLD_PAGE"
+            assert late_id in {
+                item["root_task_id"] for item in unwrap(
+                    await client.call_tool("native_goal_list", {}))["goals"]
+            }, "NEWER_GOAL_INVISIBLE_ON_FRESH_DISCOVERY"
             with closing(connect(db)) as ledger:
                 from cognition_agent_os.ledger import alter_authority
                 alter_authority(ledger, revoke=True)
