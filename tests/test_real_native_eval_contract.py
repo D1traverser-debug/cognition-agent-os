@@ -113,7 +113,7 @@ class NativeRealModelEvalContract(unittest.TestCase):
                     "whole_local_owner_verified": False,
                     "source_preserved": True, "selected_objectives": [],
                     "independent_owner_result": "OWNER_POSTCONDITION_UNVERIFIED",
-                    "model_calls": 0}
+                    "model_calls": 0, "method_alignment": False}
         with tempfile.TemporaryDirectory() as td:
             output = Path(td) / "report.json"
             with patch.object(bench, "OUTPUT", output), \
