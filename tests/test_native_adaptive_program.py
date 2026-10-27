@@ -131,10 +131,12 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
             observation_sha256=before["observation_sha256"])
         # The program shortcut MUST NOT ignore unresolved user/agent ideas.
         with patch("cognition_agent_os.local_model._request",
-                   side_effect=AssertionError("No installed model")):
+                   return_value={"models": []}) as provider:
             result = advance_native_adaptive_once(
                 self.db, self.work, self.fixtures, root, model="missing")
         self.assertEqual(result["status"], "NATIVE_LOCAL_MODEL_UNAVAILABLE", result)
+        self.assertEqual(provider.call_count, 1)
+        self.assertEqual(provider.call_args.args[0], "GET")
         self.assertEqual(inspect_native_goal(
             self.db, self.work, self.fixtures, root)["decision_count"], 0)
         self.unchanged()
