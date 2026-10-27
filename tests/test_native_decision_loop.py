@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.goal_drift import observe_owner_goal_drift
+from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
 from cognition_agent_os.ledger import connect, create_task, initialize, alter_authority
 from cognition_agent_os.intent_planner import IntentError
 from cognition_agent_os.native_decision import (
@@ -154,6 +155,18 @@ class NativeDecisionLoop(unittest.TestCase):
                                      "NATIVE_SOURCE_UNAVAILABLE")
                     self.assertFalse(observed["owner_outcome_verified"])
                     self.assertNotIn("observation_sha256", observed)
+                    # Separate consumers of the same source/identity state
+                    # must not crash or silently call the owner result PASS.
+                    owner = inspect_owner_local_outcome(
+                        self.db, self.workspace, self.fixtures, root)
+                    self.assertFalse(owner["local_owner_outcome_verified"])
+                    monitored = observe_owner_goal_drift(
+                        self.db, workspace=self.workspace,
+                        fixtures=self.fixtures)
+                    self.assertTrue(any(
+                        item.get("fidelity_state")
+                            == "NATIVE_OWNER_SOURCE_UNAVAILABLE"
+                        for item in monitored), monitored)
                     with self.assertRaisesRegex(
                             ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
                         record_native_open_research(
@@ -168,6 +181,11 @@ class NativeDecisionLoop(unittest.TestCase):
                 self.assertEqual(recovered["original_goal"], original)
                 self.assertEqual(recovered["status"],
                                  "NATIVE_NEXT_DECISION_ADMISSIBLE")
+                # Permit fresh outage detection on the next injected fault,
+                # instead of treating all outages as one unchanged signal.
+                observe_owner_goal_drift(
+                    self.db, workspace=self.workspace,
+                    fixtures=self.fixtures)
         self.assertEqual(expected.read_text(encoding="utf-8"),
                          "supplier,received\nDelta,8\n")
         # Adversarial opposite case: source outage must NOT cause the system
