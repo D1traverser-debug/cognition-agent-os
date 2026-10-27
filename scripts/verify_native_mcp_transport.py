@@ -94,6 +94,52 @@ async def run():
                 "native_goal_inspect", {"root_task_id": root}))
             assert observed["original_goal"] == goal, observed
             assert observed["decision_count"] == 0, observed
+            assert "native_open_research_record" in tools
+
+            # A genuine official MCP client checkpoints an unfamiliar
+            # professional research direction with ZERO runnable Host method.
+            unknown_goal = (
+                "Diagnose humidity-sensitive calibration drift without "
+                "modifying the hardware or claiming independent verification.")
+            novel = unwrap(await client.call_tool(
+                "native_goal_create", {"owner_goal": unknown_goal}))
+            novel_id = novel["root_task_id"]
+            novel_state = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": novel_id}))
+            research = {
+                "observation_sha256": novel_state["observation_sha256"],
+                "owner_clause": "without modifying the hardware",
+                "unresolved_question": (
+                    "Which independent method could distinguish humidity bias "
+                    "from temperature drift?"),
+                "competing_methods": [
+                    {"name": "cross_reference",
+                     "applicability": "Compare with separate calibrated sensor.",
+                     "failure_mode": "The second sensor may share systematic drift.",
+                     "falsifier": "Independent reference disagrees with the pattern."},
+                    {"name": "controlled_experiment",
+                     "applicability": "Vary humidity while controlling temperature.",
+                     "failure_mode": "Hidden chamber gradients can confound results.",
+                     "falsifier": "Matched measurements show no humidity dependence."},
+                ],
+                "source_refs": [],
+                "next_research_step": (
+                    "Find authoritative calibration procedures and safe measurements."),
+                "uncertainty": (
+                    "No source, hardware test or independent result is yet observed."),
+            }
+            saved = unwrap(await client.call_tool(
+                "native_open_research_record",
+                {"root_task_id": novel_id, "proposal": research}))
+            assert saved["status"] == "NATIVE_OPEN_RESEARCH_RECORDED", saved
+            assert saved["authorizes_action"] is False
+            recovered = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": novel_id}))
+            assert recovered["decision_count"] == 0, recovered
+            assert recovered["open_research_count"] == 1, recovered
+            assert recovered["open_research"][0]["source_status"] == (
+                "NO_LOCAL_SOURCES_VERIFIED"), recovered
+            assert recovered["owner_outcome_verified"] is False
 
         # Genuine optional planning uses only an installed local Ollama
         # provider. It is absent by default. An attempt to select a cloud
