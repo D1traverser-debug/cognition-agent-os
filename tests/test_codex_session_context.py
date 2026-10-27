@@ -166,7 +166,7 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(
             pivot["status"], "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
         self.assertIn("ChatGPT/Codex", pivot["proposed_first_action"])
-        self.assertIn("架构", pivot["proposed_first_action"])
+        self.assertIn("认知", pivot["proposed_first_action"])
 
     def test_sqlite_original_owner_goal_is_not_replaced_by_repo_guidance(self):
         owner = "Compare reference.csv with observed.csv, preserve source."
