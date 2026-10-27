@@ -150,6 +150,8 @@ def verify_archived_sources(registry, directory):
 # The archive is evidence, not an alternate source of live project commands.
 _ARCHIVE_HANDOFF = 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md'
 _ARCHIVE_GIT_BLOB_SHA1 = '6bc6ad3041876916c16886767ce2ff24bfd88b75'
+# Safety ceiling for the bootstrap index, NOT a target size and NOT storage.
+# Full work provenance belongs in Git/runtime sources and is fetched on demand.
 _MAX_ACTIVE_HANDOFF_BYTES = 8192
 
 def verify_live_handoff(root):
@@ -166,7 +168,8 @@ def verify_live_handoff(root):
                 'missing, linked or unsuitable context source: ' + path.name)
     raw = active_path.read_bytes()
     require(0 < len(raw) <= _MAX_ACTIVE_HANDOFF_BYTES,
-            'active handoff unbounded: old and new instructions mixed')
+            'bootstrap handoff exceeded safety ceiling; retrieve full history '
+            'from live sources instead of compressing it into this file')
     try:
         live = raw.decode('utf-8')
         readme = readme_path.read_text(encoding='utf-8')
@@ -185,6 +188,13 @@ def verify_live_handoff(root):
     require('live GitHub' in live and 'exact HEADs' in live
             and 'ALL open Draft PRs' in live,
             'handoff lacks explicit live-authority resolution requirement')
+    require('BOOTSTRAP INDEX ONLY' in live
+            and 'not a complete work log' in live
+            and 'progressive disclosure' in live,
+            'handoff must remain a bootstrap index, not a project database')
+    require('commit history' in live and 'Files changed' in live
+            and 'Do NOT duplicate' in live,
+            'handoff must defer complete work history to live Git provenance')
     require('current *development* integration tip' not in readme
             and 'live GitHub' in readme,
             'README must not freeze an obsolete live PR as active')
