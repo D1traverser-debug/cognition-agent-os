@@ -133,6 +133,28 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
                 json.loads(package.read(".codex-plugin/plugin.json"))["version"],
                 json.loads(package.read("plugin.json"))["version"])
 
+    def test_all_three_discovery_surfaces_use_one_cognition_entry(self):
+        """Different manifest defaults used to silently diverge across clients."""
+        main = json.loads((BASE / "plugin.json").read_text(encoding="utf-8"))
+        native = json.loads((BASE / ".codex-plugin/plugin.json").read_text(
+            encoding="utf-8"))
+        yaml = (BASE / "agents/openai.yaml").read_text(encoding="utf-8")
+        yaml_prompt = next(
+            line.partition(": ")[2] for line in yaml.splitlines()
+            if line.startswith("  default_prompt: "))
+        prompts = (
+            main["extensions"]["com.openai"]["interface"]["defaultPrompt"],
+            native["interface"]["defaultPrompt"], yaml_prompt)
+        self.assertEqual(len(set(prompts)), 1, prompts)
+        for concept in ("完整用户目标", "质疑", "研究", "比较", "执行",
+                        "独立验收", "失败纠偏"):
+            self.assertIn(concept, prompts[0])
+        self.assertEqual(main["version"], native["version"])
+        # Candidate package must be distinguishable from account-installed
+        # 0.1.4; this check does not pretend that the account was changed.
+        self.assertGreater(
+            tuple(map(int, main["version"].split("."))), (0, 1, 4))
+
     def test_plugin_bundle_tracks_source_version_not_frozen_prose(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(
             encoding="utf-8")
