@@ -482,7 +482,7 @@ async def run():
             assert inventory["selected_root_task_id"] is None, inventory
             assert inventory["truncated"] is False, inventory
             ids = {entry["root_task_id"] for entry in inventory["goals"]}
-            assert ids == {root, json_root, long_root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
+            assert ids == {root, novel_id, json_root, long_root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
             discovered = next(
                 item for item in inventory["goals"]
                 if item["original_goal"] == goal)
