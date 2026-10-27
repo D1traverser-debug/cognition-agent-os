@@ -89,6 +89,30 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
                          "ORIGINAL_SANDBOX_DRAFT_POSTCONDITION")
         self.unchanged()
 
+    def test_real_host_entry_requires_no_model_for_exact_owner_goal(self):
+        """Two original Host ticks, one SQLite lineage, no model transport."""
+        root = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No Ollama during host work")):
+            first = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=1,
+                auto_native_cognition=True)
+            self.assertEqual(first["native_cognition"][0]["status"],
+                             "NATIVE_METHOD_ENQUEUED", first)
+            self.assertEqual(first["native_cognition"][0]["planner"],
+                             "EXACT_OWNER_PROGRAM_GROUNDED")
+            second = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=1,
+                auto_native_cognition=True)
+        self.assertEqual(len(second["tasks"]), 1, second)
+        self.assertEqual(second["tasks"][0]["status"], "NEEDS_REVIEW")
+        result = inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)
+        self.assertTrue(result["local_owner_outcome_verified"], result)
+        self.assertFalse(result["business_outcome_verified"])
+        self.unchanged()
+
     def test_missing_named_resource_is_not_improvised(self):
         root = register_native_goal(
             self.db, "Compare baseline.csv with missing.csv and report differences.")
