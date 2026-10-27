@@ -580,7 +580,7 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
 
 
 def advance_native_adaptive_once(db_path: Path, workspace: Path,
-                                 fixtures: Path, root_id: str, *, model: str,
+                                 fixtures: Path, root_id: str, *, model: str | None,
                                  timeout: int = 45,
                                  structured_output: bool = False) -> dict:
     """Use a verified explicit owner contract before asking any local LLM.
@@ -664,13 +664,21 @@ def advance_native_adaptive_once(db_path: Path, workspace: Path,
                 return {"status": "NATIVE_PROGRAM_PLAN_REFUSED",
                         "root_task_id": root_id, "reason": str(exc)[:120],
                         "owner_outcome_verified": False}
+    if not model:
+        # Program-only Host mode may finish only owner-exact known contracts.
+        # Unknown or compound goals need a real cognitive/tool surface; do
+        # not mint one from mere source extensions or a default weak model.
+        return {"status": "NATIVE_COGNITION_REQUIRED_FOR_UNRESOLVED_GOAL",
+                "root_task_id": root_id,
+                "reason": "NO_AUTHORIZED_MODEL_FOR_UNRESOLVED_OWNER_GOAL",
+                "owner_outcome_verified": False}
     return advance_native_local_once(
         db_path, workspace, fixtures, root_id, model=model,
         timeout=timeout, structured_output=structured_output)
 
 
 def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
-                               *, model: str, limit: int = 2) -> list[dict]:
+                               *, model: str | None, limit: int = 2) -> list[dict]:
     """Host's current schedule, existing ledger, no second controller.
 
     Only top-level native goals with current unproven evidence are eligible;
