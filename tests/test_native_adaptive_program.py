@@ -107,6 +107,8 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
                 auto_native_cognition=True)
         self.assertEqual(len(second["tasks"]), 1, second)
         self.assertEqual(second["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertEqual(second["native_cognition"][0]["status"],
+                         "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED")
         result = inspect_owner_local_outcome(
             self.db, self.work, self.fixtures, root)
         self.assertTrue(result["local_owner_outcome_verified"], result)
