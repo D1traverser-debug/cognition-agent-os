@@ -72,6 +72,13 @@ class CodexSessionContext(unittest.TestCase):
                       project["near_term_priority"])
         self.assertEqual(project["original_user_utterances"],
                          "MUST_RECOVER_SEPARATELY")
+        self.assertEqual(project["continuation_index"], "SESSION_HANDOFF.md")
+        self.assertEqual(project["continuation_policy"],
+                         "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE")
+        self.assertEqual(project["complete_work_log_location"],
+                         "LIVE_GIT_COMMIT_HISTORY_AND_DIFF")
+        self.assertIn("bootstrap index", project["proposed_action"])
+        self.assertIn("commit history/diff", project["proposed_action"])
         self.assertEqual(project["live_pr_head_and_ci"], "MUST_REFETCH")
         self.assertEqual(project["product_readiness_claim"], "NOT_VERIFIED")
         self.assertFalse(result["business_outcome_verified"])
