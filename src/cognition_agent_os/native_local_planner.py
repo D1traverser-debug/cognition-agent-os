@@ -698,19 +698,21 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
         raise ValueError("INVALID_NATIVE_PLAN_BATCH")
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-        # The shared SQLite ledger contains many nonnative parent
-        # workflows. Type-filter BEFORE the bounded page; otherwise an
-        # unrelated backlog can fill all 128 slots and silently starve every
-        # eligible native owner goal. Prefer latest eligible roots; never
-        # guess from task text or create a second scheduler.
+        # One shared queue, no new scheduler: the oldest unfinished native
+        # owner goal has precedence over newly registered work. The old
+        # newest-first LIMIT 128 could indefinitely hide that owner when
+        # unrelated goals kept arriving. Model-free work can also coexist
+        # with unresolved tasks which must not consume the action budget.
         rows = db.execute(
             "SELECT task_id,source_spec FROM tasks "
             "WHERE parent_task IS NULL AND state='DECOMPOSED' "
             "AND (CASE WHEN json_valid(source_spec) "
             "THEN json_extract(source_spec,'$.kind') ELSE NULL END)="
             "'native_goal' "
-            "ORDER BY created_at DESC,task_id DESC LIMIT 128").fetchall()
+            "ORDER BY created_at ASC,task_id ASC LIMIT ?",
+            (4096 if model is None else 128,)).fetchall()
     results = []
+    diagnostic = None
     for root_id, raw in rows:
         try:
             spec = json.loads(raw)
@@ -718,11 +720,37 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
             continue
         if not isinstance(spec, dict) or spec.get("kind") != "native_goal":
             continue
-        if inspect_native_goal(db_path,workspace,fixtures,root_id).get(
-                "status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+        state = inspect_native_goal(db_path,workspace,fixtures,root_id)
+        if state.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
             continue
-        results.append(advance_native_adaptive_once(
-            db_path,workspace,fixtures,root_id,model=model))
-        if len(results) >= limit:
-            break
+        if model is None:
+            # An unsupported owner goal is NOT an executable action, nor a
+            # license for weak fallback inference. Keep one explicit
+            # unresolved observation when no executable goal is available.
+            from .owner_postcondition import _explicit_owner_local_contract
+            if (state["decisions"] or state["pending_hypotheses"]
+                or _explicit_owner_local_contract(state["original_goal"]) is None):
+                if diagnostic is None:
+                    diagnostic = {
+                        "status": "NATIVE_COGNITION_REQUIRED_FOR_UNRESOLVED_GOAL",
+                        "root_task_id": root_id,
+                        "reason": "NO_AUTHORIZED_MODEL_FOR_UNRESOLVED_OWNER_GOAL",
+                        "owner_outcome_verified": False}
+                continue
+        outcome = advance_native_adaptive_once(
+            db_path,workspace,fixtures,root_id,model=model)
+        if outcome["status"] == "NATIVE_METHOD_ENQUEUED":
+            results.append(outcome)
+            if len(results) >= limit:
+                break
+        elif model is not None:
+            # Model attempts retain the original bounded limit. A refusal
+            # must not automatically turn into unlimited costly inference.
+            results.append(outcome)
+            if len(results) >= limit:
+                break
+        elif diagnostic is None:
+            diagnostic = outcome
+    if not results and diagnostic is not None:
+        results.append(diagnostic)
     return results
