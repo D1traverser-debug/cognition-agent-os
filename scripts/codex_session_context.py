@@ -94,7 +94,8 @@ def _current_architecture_pivot() -> dict:
     return {
         "status": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
         "source_path": relative,
-        "proposed_first_action": candidate,
+        "proposed_first_action": candidate[:175] + ("…" if len(candidate) > 175 else ""),
+        "excerpt_only": len(candidate) > 175,
     }
 
 
@@ -164,7 +165,8 @@ def _project_recovery_when_no_ledger() -> dict:
         "status": "PROJECT_GUIDANCE_FOUND",
         "source_path": relative,
         "source_role": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
-        "near_term_priority": priority,
+        "near_term_priority": priority[:190] + ("…" if len(priority) > 190 else ""),
+        "priority_excerpt_only": len(priority) > 190,
         "continuation_index": "SESSION_HANDOFF.md",
         "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
         "complete_work_log_location": "LIVE_GIT_COMMIT_HISTORY_AND_DIFF",
@@ -174,10 +176,9 @@ def _project_recovery_when_no_ledger() -> dict:
         "architecture_pivot": _current_architecture_pivot(),
         "live_python_topology": _live_python_topology(),
         "proposed_action": (
-            "Recover the owner's actual latest request; use SESSION_HANDOFF.md "
-            "only as a bootstrap index; progressively fetch current open PR "
-            "topology, exact HEAD/code/CI and relevant commit history/diff; "
-            "then act on the highest-value original-outcome gap within grants."
+            "Restore original owner request; SESSION_HANDOFF.md is only a "
+            "bootstrap index. Fetch live PR/HEAD/CI, source and relevant "
+            "commit history/diff. Act on the full goal within real grants."
         ),
     }
 
@@ -258,7 +259,8 @@ def main() -> int:
     context = build_context(payload)
     # The content is a source observation, not an instruction/permission grant.
     prefix = "Read-only project state observation (not a new instruction or grant): "
-    note = prefix + json.dumps(context, ensure_ascii=False, sort_keys=True)
+    note = prefix + json.dumps(context, ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":"))
     if len(note) > MAX_CONTEXT_CHARS:
         # This is a *valid* previously read SQLite goal whose full context
         # exceeds the hook transport budget. Do not erase its stable locator:
@@ -292,7 +294,8 @@ def main() -> int:
                 and isinstance(context.get("original_goal"), str)):
             compact["original_goal"] = context["original_goal"]
             compact["original_goal_verified"] = True
-        note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True)
+        note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True,
+                                   separators=(",", ":"))
         if len(note) > MAX_CONTEXT_CHARS:
             # No partial owner-goal text is ever substituted for the original.
             compact.pop("original_goal", None)
@@ -301,7 +304,8 @@ def main() -> int:
             compact["original_goal_persisted_in_ledger"] = (
                 context.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
             )
-            note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True)
+            note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True,
+                                   separators=(",", ":"))
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
