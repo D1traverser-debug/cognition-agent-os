@@ -83,7 +83,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
             source = entrypoint.read_text(encoding="utf-8")
             self.assertIn(adr_path, source)
             self.assertIn("docs/PRODUCT-READINESS-GATE.md", source)
-            self.assertNotRegex(source, r"\\b[0-9a-f]{40}\\b")
+            self.assertNotRegex(source, r"\b[0-9a-f]{40}\b")
         hook = (ROOT / "scripts/codex_session_context.py").read_text(
             encoding="utf-8")
         self.assertIn(adr_path, hook)
