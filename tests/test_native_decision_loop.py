@@ -19,7 +19,7 @@ from cognition_agent_os.ledger import connect, create_task, initialize, alter_au
 from cognition_agent_os.intent_planner import IntentError
 from cognition_agent_os.native_decision import (
     register_native_goal, inspect_native_goal, admit_native_decision,
-    record_native_hypothesis)
+    record_native_hypothesis, record_native_open_research)
 
 
 class NativeDecisionLoop(unittest.TestCase):
@@ -85,6 +85,113 @@ class NativeDecisionLoop(unittest.TestCase):
 
     def view(self, root):
         return inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+
+    def test_unregistered_professional_domain_can_research_and_resume_without_execution(self):
+        """Real SQLite research state before ANY local executable fits the goal."""
+        (self.fixtures / "thermal-observations.md").write_text(
+            "Calibration runs diverge when chamber humidity increases.\\n",
+            encoding="utf-8")
+        goal = ("Diagnose unknown humidity-dependent chamber calibration drift; "
+                "do not modify the chamber and require external expert confirmation "
+                "before declaring any calibration safe.")
+        root = register_native_goal(self.db, goal)
+        before = self.view(root)
+        self.assertEqual(before["decision_count"], 0)
+        source = self.fixtures / "thermal-observations.md"
+        proposal = {
+            "observation_sha256": before["observation_sha256"],
+            "owner_clause": "do not modify the chamber",
+            "unresolved_question": (
+                "Does humidity alter the sensor response, the reference system, "
+                "or the sampling procedure?"),
+            "competing_methods": [
+                {
+                    "name": "reference_crosscheck",
+                    "applicability": "Check against an independently calibrated reference.",
+                    "failure_mode": "The reference sensor may share the same bias.",
+                    "falsifier": "A third independent reference contradicts the effect.",
+                },
+                {
+                    "name": "controlled_humidity_study",
+                    "applicability": "Compare instrument response across controlled humidity levels.",
+                    "failure_mode": "Temperature drift may confound the result.",
+                    "falsifier": "Matched dry and humid samples show equal drift.",
+                },
+            ],
+            "source_refs": [{"path": source.name,
+                             "sha256": hashlib.sha256(source.read_bytes()).hexdigest()}],
+            "next_research_step": (
+                "Locate independent calibration standards and matched test conditions."),
+            "uncertainty": "Neither method has been executed nor externally validated.",
+        }
+        recorded = record_native_open_research(
+            self.db, self.workspace, self.fixtures, root, proposal)
+        self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        resumed = self.view(root)  # fresh readonly DB connection = cold state readback
+        self.assertEqual(resumed["original_goal"], goal)
+        self.assertEqual(resumed["decision_count"], 0)
+        self.assertEqual(len(resumed["open_research"]), 1)
+        self.assertEqual(resumed["open_research"][0]["proposal"]["competing_methods"],
+                         proposal["competing_methods"])
+        self.assertEqual(resumed["open_research"][0]["source_status"],
+                         "SOURCE_PIN_CURRENT_UNVERIFIED_SEMANTICS")
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?", (root,)
+            ).fetchone()[0], 0)
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        repeated = dict(proposal)
+        repeated["observation_sha256"] = resumed["observation_sha256"]
+        with self.assertRaisesRegex(ValueError, "DUPLICATE_NATIVE_OPEN_RESEARCH"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, repeated)
+        malicious = dict(repeated)
+        malicious["execute_shell"] = "curl provider/erase"
+        with self.assertRaisesRegex(ValueError, "INVALID_NATIVE_OPEN_RESEARCH"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, malicious)
+        fake = dict(repeated)
+        fake["source_refs"] = [{"path": source.name, "sha256": "a" * 64}]
+        with self.assertRaisesRegex(ValueError, "NATIVE_RESEARCH_SOURCE_UNVERIFIABLE"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, fake)
+        # Previously pinned evidence can go stale without falsifying owner
+        # identity, granting an action or mutating a user's source.
+        source.write_text("New measurement requires independent review.\\n",
+                          encoding="utf-8")
+        changed = self.view(root)
+        self.assertEqual(changed["open_research"][0]["source_status"],
+                         "SOURCE_STALE_OR_REMOVED")
+        self.assertFalse(changed["owner_outcome_verified"])
+
+    def test_open_research_cannot_bypass_revoked_effect_authority(self):
+        root = register_native_goal(
+            self.db, "Investigate an unregistered professional task")
+        observed = self.view(root)
+        proposal = {
+            "observation_sha256": observed["observation_sha256"],
+            "owner_clause": "unregistered professional task",
+            "unresolved_question": "Which domain model should be validated?",
+            "competing_methods": [
+                {"name": "model_a", "applicability": "Check primary evidence.",
+                 "failure_mode": "Sources may be incomplete.",
+                 "falsifier": "Independent sample rejects the result."},
+                {"name": "model_b", "applicability": "Measure with independent data.",
+                 "failure_mode": "Tool accuracy is unknown.",
+                 "falsifier": "External auditor rejects the measurement."},
+            ],
+            "source_refs": [],
+            "next_research_step": "Locate primary professional specifications.",
+            "uncertainty": "No tools or sources have yet been verified.",
+        }
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
 
     def test_user_and_agent_ideas_share_one_challenged_decision_path(self):
         root = self.root_id()
