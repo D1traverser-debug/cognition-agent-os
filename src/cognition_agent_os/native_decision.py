@@ -340,6 +340,24 @@ def _challenge_hypotheses(candidate: dict, hypotheses: list[dict]) -> None:
         raise ValueError("NATIVE_HYPOTHESES_NOT_CHALLENGED")
 
 
+def _new_independent_source_cited(
+        candidate: dict, original_source_names: list[str],
+        admitted_sources: dict[str, str]) -> bool:
+    """Detect a real, newly admitted source, NOT semantic resolution.
+
+    The model cannot close its own outstanding research obligation merely by
+    changing the review's prose/disposition. The new source must be present in
+    the current independently hashed corpus and cited in the proposal.
+    Neither a source hash nor a citation establishes that the new information
+    actually settles the question; the full owner result remains unverified.
+    """
+    prior = set(original_source_names)
+    return any(
+        ref["path"] not in prior
+        and admitted_sources.get(ref["path"]) == ref["sha256"]
+        for ref in candidate["decision_basis"]["source_refs"])
+
+
 def record_native_hypothesis(db_path: Path, workspace: Path, fixtures: Path,
                              root_id: str, *, origin: str, idea: str,
                              observation_sha256: str) -> dict:
@@ -509,9 +527,26 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             for review in reviews:
                 digest = review["proposal_sha256"]
                 if review["disposition"] == "UNRESOLVED_RESEARCH_REQUIRED":
-                    unresolved_hypotheses[digest] = candidates[digest]
+                    if digest not in unresolved_hypotheses:
+                        # Preserve the ORIGINAL source inventory at the
+                        # first unresolved decision. Replay does not invent
+                        # fresh information when the same model repeats itself.
+                        unresolved_hypotheses[digest] = {
+                            **candidates[digest],
+                            "unresolved_source_names": sorted(
+                                receipt["source_sha256"]),
+                        }
                 else:
-                    unresolved_hypotheses.pop(digest, None)
+                    old = unresolved_hypotheses.get(digest)
+                    if (old is None or _new_independent_source_cited(
+                            receipt["proposal"],
+                            old["unresolved_source_names"],
+                            receipt["source_sha256"])):
+                        unresolved_hypotheses.pop(digest, None)
+                    # Pre-change legacy receipts may have relabeled a
+                    # still-unresolved question without new observed input.
+                    # Keep their historical action valid, but DO NOT infer
+                    # that the question was actually resolved.
             previous_decision_event_id = item["event_id"]
             selected = parsed["selected"]
             child = by_id.get(receipt["child_task_id"])
@@ -683,6 +718,23 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             _ground_decision(
                 candidate, parsed, source_hashes,
                 observed["decisions"][-1]["task_id"] if observed["decisions"] else None)
+            # Reuse one state/evidence boundary for every registered method.
+            # A verified child task result alone does not refute an unrelated
+            # question about source completeness. A model can keep it OPEN,
+            # but cannot re-label it closed without a newly added, re-read,
+            # cited source. This only admits re-evaluation, never truth.
+            reviews = {
+                x["proposal_sha256"]: x
+                for x in candidate.get("hypothesis_reviews", [])}
+            for hypothesis in observed["pending_hypotheses"]:
+                original_sources = hypothesis.get("unresolved_source_names")
+                if original_sources is None:
+                    continue  # Newly recorded, not previously unresolved.
+                review = reviews[hypothesis["proposal_sha256"]]
+                if (review["disposition"] != "UNRESOLVED_RESEARCH_REQUIRED"
+                    and not _new_independent_source_cited(
+                        candidate, original_sources, source_hashes)):
+                    raise ValueError("UNRESOLVED_HYPOTHESIS_NO_NEW_EVIDENCE")
             # A proposal can be syntactically executable yet contradict an
             # UNAMBIGUOUS original local acceptance contract: reversed CSV
             # roles or unrelated CSV work for an explicitly named JSON draft.
