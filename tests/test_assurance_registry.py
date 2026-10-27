@@ -165,7 +165,7 @@ class AssuranceRegistryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             dst = Path(d)
             (dst / 'README.md').write_text(
-                'Current integration tip: PR #26\\n'.replace('\\n', '\n') +
+                'Current integration tip: PR #26\n' +
                 (ROOT / 'README.md').read_text(encoding='utf-8'),
                 encoding='utf-8')
             (dst / 'SESSION_HANDOFF.md').write_text(
