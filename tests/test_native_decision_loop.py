@@ -86,6 +86,42 @@ class NativeDecisionLoop(unittest.TestCase):
     def view(self, root):
         return inspect_native_goal(self.db, self.workspace, self.fixtures, root)
 
+    def test_lost_creation_ack_replays_same_root_without_duplicate_goal(self):
+        """Prospective crash/retry fault across grant, naming and cold memory."""
+        stable_request = "owner-native-create-acklost-0001"
+        created = register_native_goal(
+            self.db, self.goal, client_request_id=stable_request)
+        # Simulate a lost transport acknowledgement: the client never saw
+        # created, retries the same request after the original DB commit.
+        replayed = register_native_goal(
+            self.db, self.goal, client_request_id=stable_request)
+        self.assertEqual(replayed, created)
+        with closing(connect(self.db)) as db:
+            roots = db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task IS NULL "
+                "AND json_extract(source_spec,'$.kind')='native_goal'"
+            ).fetchone()[0]
+        self.assertEqual(roots, 1)
+        self.assertEqual(self.view(created)["original_goal"], self.goal)
+        self.assertEqual(self.view(created)["decision_count"], 0)
+        # A reused request identity cannot switch a prior user's actual
+        # desired outcome or elevate public discovery capabilities.
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_GOAL_IDEMPOTENCY_CONFLICT"):
+            register_native_goal(
+                self.db, self.goal + " now perform unsafe writes",
+                client_request_id=stable_request)
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_GOAL_IDEMPOTENCY_CONFLICT"):
+            register_native_goal(
+                self.db, self.goal, allow_public_discovery=True,
+                client_request_id=stable_request)
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        with self.assertRaises(PermissionError):
+            register_native_goal(
+                self.db, self.goal, client_request_id=stable_request)
+
     def test_unregistered_professional_domain_can_research_and_resume_without_execution(self):
         """Real SQLite research state before ANY local executable fits the goal."""
         (self.fixtures / "thermal-observations.md").write_text(
