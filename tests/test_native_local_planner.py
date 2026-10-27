@@ -443,11 +443,16 @@ class NativeLocalModelLoop(unittest.TestCase):
             {p.name: p.read_bytes() for p in self.fixtures.iterdir()},
             original)
 
-    def test_native_auto_needs_explicit_model_selection(self):
-        register_native_goal(self.db, self.goal)
-        with self.assertRaisesRegex(ValueError, "explicit installed local model"):
-            run_tick(self.db, self.workspace, self.fixtures, max_jobs=1,
-                     auto_native_cognition=True)
+    def test_native_auto_needs_model_for_unresolved_goal_not_exact_program(self):
+        original = register_native_goal(self.db, self.goal)
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No inference without model")):
+            result = run_tick(
+                self.db, self.workspace, self.fixtures,
+                max_jobs=1, auto_native_cognition=True)
+        self.assertEqual(result["native_cognition"][0]["root_task_id"], original)
+        self.assertEqual(result["native_cognition"][0]["status"],
+                         "NATIVE_COGNITION_REQUIRED_FOR_UNRESOLVED_GOAL")
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM tasks WHERE parent_task IS NOT NULL"
