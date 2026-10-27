@@ -97,6 +97,33 @@ class CISourceAndScopeTests(unittest.TestCase):
         self.assertIn("OLLAMA_NO_CLOUD: '1'", job)
         self.assertIn("python scripts/measure_real_native_goal.py", job)
 
+    def test_every_ollama_download_job_is_bound_to_this_repository_pr(self):
+        """No PR body from a fork may opt into downloading model weights.
+
+        Test the whole workflow rather than a named model experiment. This
+        also protects future model jobs added after today's repair.
+        """
+        import re
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        boundaries = list(re.finditer(r"(?m)^  ([a-z][a-z0-9_]*):\\s*$", workflow))
+        guarded = []
+        for position, match in enumerate(boundaries):
+            section = workflow[match.end():(
+                boundaries[position + 1].start()
+                if position + 1 < len(boundaries) else len(workflow))]
+            if "ollama pull" not in section:
+                continue
+            if_lines = [line.strip() for line in section.splitlines()
+                        if line.startswith("    if: ")]
+            self.assertEqual(len(if_lines), 1, match.group(1))
+            self.assertIn("github.event_name == 'pull_request'",
+                          if_lines[0], match.group(1))
+            self.assertIn(
+                "github.event.pull_request.head.repo.full_name == github.repository",
+                if_lines[0], match.group(1))
+            guarded.append(match.group(1))
+        self.assertGreaterEqual(len(guarded), 6, guarded)
+
     def test_actual_workflow_pins_every_checkout_and_emits_receipt(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         blocks = workflow.split("      - uses: actions/checkout@")[1:]
