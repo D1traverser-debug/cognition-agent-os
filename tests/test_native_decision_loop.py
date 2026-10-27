@@ -169,7 +169,7 @@ class NativeDecisionLoop(unittest.TestCase):
                 self.assertEqual(recovered["status"],
                                  "NATIVE_NEXT_DECISION_ADMISSIBLE")
         self.assertEqual(expected.read_text(encoding="utf-8"),
-                         "supplier,received\\nDelta,8\\n")
+                         "supplier,received\nDelta,8\n")
 
     def test_simultaneous_native_creation_same_key_one_original_root(self):
         """Two SQLite connections racing after client retry cannot fork owner."""
