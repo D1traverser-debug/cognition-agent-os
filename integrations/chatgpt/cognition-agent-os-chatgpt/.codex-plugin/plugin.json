@@ -11,7 +11,7 @@
     "defaultPrompt": "继续 cognition-agent-os：恢复用户原始目标、核查实时工具与 GitHub HEAD/CI，实际推进一项工作并独立验收。"
   },
   "name": "cognition-agent-os-chatgpt",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Private ChatGPT skills-only plugin for cognition-agent-os goal recovery, tool selection, first-hand research, independent verification and safe correction. Does not itself connect a custom Host API.",
   "author": {
     "name": "cognition-agent-os owner"
