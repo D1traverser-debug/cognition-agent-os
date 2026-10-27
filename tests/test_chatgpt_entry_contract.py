@@ -79,7 +79,8 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         adr = (ROOT / adr_path).read_text(encoding="utf-8")
         self.assertIn("### 优先级反转", adr)
         self.assertIn("ChatGPT/Codex", adr)
-        for entrypoint in (AGENTS, SKILL):
+        for entrypoint in (
+                AGENTS, SKILL, ROOT / "SESSION_HANDOFF.md"):
             source = entrypoint.read_text(encoding="utf-8")
             self.assertIn(adr_path, source)
             self.assertIn("docs/PRODUCT-READINESS-GATE.md", source)
