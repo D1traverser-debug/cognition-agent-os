@@ -447,6 +447,16 @@ async def run():
                 other_queued["child_task_id"]), earlier_tick
             assert earlier_tick["worker_result"]["status"] == (
                 "NEEDS_REVIEW"), earlier_tick
+            # Prospective multi-tenant recovery fault: create more genuine
+            # owner roots than one inventory page can hold. This is not an
+            # unrelated fixture workload or a fake row with invalid grants.
+            from cognition_agent_os.native_decision import register_native_goal
+            extra_native_ids = {
+                register_native_goal(db, (
+                    "Persistent independent native owner goal number "
+                    + str(ordinal) + "; preserve the full owner identity."))
+                for ordinal in range(62)
+            }
             with closing(connect(db)) as ledger:
                 from cognition_agent_os.ledger import alter_authority
                 alter_authority(ledger, revoke=True)
@@ -476,15 +486,51 @@ async def run():
         # identity/goal is independently available. Ambiguity is not silently
         # collapsed to the newest row.
         async with Client(server(allow_tick=False)) as client:
-            inventory = unwrap(await client.call_tool("native_goal_list", {}))
-            assert inventory["status"] == "NATIVE_GOAL_INVENTORY", inventory
-            assert inventory["ambiguous"] is True, inventory
-            assert inventory["selected_root_task_id"] is None, inventory
-            assert inventory["truncated"] is False, inventory
-            ids = {entry["root_task_id"] for entry in inventory["goals"]}
-            assert ids == {root, novel_id, json_root, long_root, local_id, public_root, unscoped_root, other_id, second_id}, inventory
+            # API-level keyset paging must recover EVERY native original
+            # without knowing any ID, even when >50 roots and >50 unrelated
+            # task records coexist in the same persistent ledger.
+            async def full_inventory():
+                seen = {}
+                after = None
+                pages = 0
+                while True:
+                    args = {} if after is None else {
+                        "after_task_id": after}
+                    page = unwrap(await client.call_tool(
+                        "native_goal_list", args))
+                    assert page["status"] == "NATIVE_GOAL_INVENTORY", page
+                    assert page["ambiguous"] is True, page
+                    assert page["selected_root_task_id"] is None, page
+                    assert len(page["goals"]) <= 50, page
+                    for item in page["goals"]:
+                        rid = item["root_task_id"]
+                        assert rid not in seen, ("DUPLICATE_PAGINATED_ROOT", rid)
+                        seen[rid] = item
+                    pages += 1
+                    assert pages <= 5, "INVENTORY_PAGINATION_LOOP"
+                    after = page.get("next_after_task_id")
+                    if after is None:
+                        assert page["truncated"] is False, page
+                        return seen, pages
+                    assert page["truncated"] is True, page
+                    assert after in seen, ("CURSOR_NOT_IN_PREVIOUS_PAGE", after)
+            inventory, page_count = await full_inventory()
+            assert page_count >= 2, "OLDER_GOALS_INACCESSIBLE"
+            expected = ({root, novel_id, json_root, long_root, local_id,
+                         public_root, unscoped_root, other_id, second_id}
+                        | extra_native_ids)
+            assert set(inventory) == expected, ("OLDER_GOALS_LOST", inventory)
+            # Repeating the paginated query after an interrupted client
+            # roundtrip must not change membership or execute any task.
+            reread, repeat_page_count = await full_inventory()
+            assert set(reread) == expected, "PAGINATION_RETRY_CHANGED_GOALS"
+            assert repeat_page_count == page_count
+            for bad_cursor in ("not_a_valid_root", other_queued["child_task_id"]):
+                rejected_cursor = await client.call_tool(
+                    "native_goal_list", {"after_task_id": bad_cursor})
+                assert rejected_cursor.is_error, rejected_cursor
             discovered = next(
-                item for item in inventory["goals"]
+                item for item in inventory.values()
                 if item["original_goal"] == goal)
             recovered = unwrap(await client.call_tool(
                 "native_goal_inspect",
@@ -498,9 +544,8 @@ async def run():
             # read-only native audit intentionally withholds decision_count.
             (sources / "observed.csv").write_text(
                 "supplier,received\nDelta,999\n", encoding="utf-8")
-            drifted = unwrap(await client.call_tool("native_goal_list", {}))
-            entry = next(
-                g for g in drifted["goals"] if g["root_task_id"] == root)
+            drifted, _ = await full_inventory()
+            entry = drifted[root]
             assert entry["status"] == "NATIVE_SOURCE_CHANGED", entry
             assert entry["decision_count"] is None, entry
             assert entry["owner_outcome_verified"] is False, entry
@@ -514,6 +559,8 @@ async def run():
             "native_json_sandbox_owner_goal_verified_by_real_mcp": True,
             "cold_goal_discovery_without_id": True,
             "mixed_ledger_old_goals_not_hidden": True,
+            "native_goal_inventory_paginated_cold_resume": True,
+            "paginated_inventory_retry_idempotent": True,
             "long_original_owner_clause_exact_roundtrip": True,
             "drifted_goal_inventory_does_not_crash_or_claim_success": True,
             "stale_proposal_rejected": True,
