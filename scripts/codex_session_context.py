@@ -183,10 +183,8 @@ def main() -> int:
         payload = {}
     context = build_context(payload)
     # The content is a source observation, not an instruction/permission grant.
-    note = (
-        "Read-only project state observation (not a new instruction or grant): "
-        + json.dumps(context, ensure_ascii=False, sort_keys=True)
-    )
+    prefix = "Read-only project state observation (not a new instruction or grant): "
+    note = prefix + json.dumps(context, ensure_ascii=False, sort_keys=True)
     if len(note) > MAX_CONTEXT_CHARS:
         # This is a *valid* previously read SQLite goal whose full context
         # exceeds the hook transport budget. Do not erase its stable locator:
@@ -220,7 +218,7 @@ def main() -> int:
                 and isinstance(context.get("original_goal"), str)):
             compact["original_goal"] = context["original_goal"]
             compact["original_goal_verified"] = True
-        note = json.dumps(compact, ensure_ascii=False, sort_keys=True)
+        note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True)
         if len(note) > MAX_CONTEXT_CHARS:
             # No partial owner-goal text is ever substituted for the original.
             compact.pop("original_goal", None)
@@ -229,7 +227,7 @@ def main() -> int:
             compact["original_goal_persisted_in_ledger"] = (
                 context.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
             )
-            note = json.dumps(compact, ensure_ascii=False, sort_keys=True)
+            note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
