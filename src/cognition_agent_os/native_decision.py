@@ -528,27 +528,24 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 digest = review["proposal_sha256"]
                 if review["disposition"] == "UNRESOLVED_RESEARCH_REQUIRED":
                     if digest not in unresolved_hypotheses:
-                        # Preserve the ORIGINAL source inventory at the
-                        # first unresolved decision. Replay does not invent
-                        # fresh information when the same model repeats itself.
+                        # The first unresolved review establishes provenance,
+                        # but not the evidence baseline for every future review.
                         unresolved_hypotheses[digest] = {
                             **candidates[digest],
                             "unresolved_source_names": sorted(
                                 receipt["source_sha256"]),
                         }
-                else:
-                    # A model may revise an idea when newly pinned evidence
-                    # appears, but a source hash/citation is NOT an
-                    # independent answer to the underlying hypothesis.
-                    # Old and new relabelings stay visible as reviews;
-                    # unresolved cognition obligations survive until a
-                    # separate domain/owner outcome oracle can attest them.
-                    # No such hypothesis-specific semantic oracle exists in
-                    # this registered local decision contract today.
-                    # The next decision may still make lawful progress by
-                    # researching further or choosing a different method.
-                    if digest not in unresolved_hypotheses:
-                        unresolved_hypotheses.pop(digest, None)
+                # On EVERY subsequent review, advance the last-examined
+                # source inventory, even for model-relabelled dispositions.
+                # A cited source is fresh only once. Replay uses the original
+                # admission receipt, never the current file list or model
+                # recollection; a changed source remains separately blocked.
+                if digest in unresolved_hypotheses:
+                    unresolved_hypotheses[digest]["last_review_source_names"] = (
+                        sorted(receipt["source_sha256"]))
+                # An external domain/outcome oracle would need a distinct
+                # proof-bearing resolution receipt. This ledger has none;
+                # model prose and added files do NOT close an old question.
             previous_decision_event_id = item["event_id"]
             selected = parsed["selected"]
             child = by_id.get(receipt["child_task_id"])
@@ -725,17 +722,18 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             # question about source completeness. A model can keep it OPEN,
             # but cannot re-label it closed without a newly added, re-read,
             # cited source. This only admits re-evaluation, never truth.
+            # Freshness is compared to the LAST review, not the first one.
             reviews = {
                 x["proposal_sha256"]: x
                 for x in candidate.get("hypothesis_reviews", [])}
             for hypothesis in observed["pending_hypotheses"]:
-                original_sources = hypothesis.get("unresolved_source_names")
-                if original_sources is None:
+                last_reviewed_sources = hypothesis.get("last_review_source_names")
+                if last_reviewed_sources is None:
                     continue  # Newly recorded, not previously unresolved.
                 review = reviews[hypothesis["proposal_sha256"]]
                 if (review["disposition"] != "UNRESOLVED_RESEARCH_REQUIRED"
                     and not _new_independent_source_cited(
-                        candidate, original_sources, source_hashes)):
+                        candidate, last_reviewed_sources, source_hashes)):
                     raise ValueError("UNRESOLVED_HYPOTHESIS_NO_NEW_EVIDENCE")
             # A proposal can be syntactically executable yet contradict an
             # UNAMBIGUOUS original local acceptance contract: reversed CSV
