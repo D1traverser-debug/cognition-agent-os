@@ -665,6 +665,16 @@ def advance_native_adaptive_once(db_path: Path, workspace: Path,
                         "root_task_id": root_id, "reason": str(exc)[:120],
                         "owner_outcome_verified": False}
     if not model:
+        # Completion is always a fresh independent owner-result readback,
+        # never a cached native child PASS or a model's proposal label.
+        from .owner_postcondition import inspect_owner_local_outcome
+        actual = inspect_owner_local_outcome(
+            db_path, workspace, fixtures, root_id)
+        if actual["local_owner_outcome_verified"]:
+            return {"status": "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED",
+                    "root_task_id": root_id,
+                    "local_owner_outcome_verified": True,
+                    "owner_outcome_verified": False}
         # Program-only Host mode may finish only owner-exact known contracts.
         # Unknown or compound goals need a real cognitive/tool surface; do
         # not mint one from mere source extensions or a default weak model.
