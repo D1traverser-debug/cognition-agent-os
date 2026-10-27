@@ -155,6 +155,19 @@ class CodexSessionContext(unittest.TestCase):
             self.assertNotIn("ALL current original source",
                              second["proposed_first_action"])
 
+    def test_windows_cp1252_hook_wire_round_trips_architecture_unicode(self):
+        """A Windows client can decode the original UTF-8 owner/ADR content
+        even when console stdout uses a restrictive legacy codepage.
+        """
+        result = self._run(
+            with_database=False,
+            vars={"PYTHONIOENCODING": "cp1252:strict"})
+        pivot = result["repository_recovery"]["architecture_pivot"]
+        self.assertEqual(
+            pivot["status"], "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
+        self.assertIn("ChatGPT/Codex", pivot["proposed_first_action"])
+        self.assertIn("架构", pivot["proposed_first_action"])
+
     def test_sqlite_original_owner_goal_is_not_replaced_by_repo_guidance(self):
         owner = "Compare reference.csv with observed.csv, preserve source."
         with closing(connect(self.db)) as db:
