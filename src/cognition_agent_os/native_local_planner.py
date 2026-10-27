@@ -249,10 +249,29 @@ def _recovered_research_reads(db_path: Path, fixtures: Path,
     """
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # Query by exact durable research identity BEFORE any pagination or
+        # context bound. The previous newest-first LIMIT 128 across all
+        # models/observations could make earlier valid AND forged receipts
+        # disappear after unrelated research activity in the SAME owner root.
+        # Keep full matching receipt provenance for overlap/replay checks;
+        # context excerpts are bounded separately below.
         rows = db.execute(
             "SELECT details FROM events WHERE task_id=? "
             "AND kind='NATIVE_LOCAL_RESEARCH_READ' "
-            "ORDER BY event_id DESC LIMIT 128", (root_id,)).fetchall()
+            "AND json_valid(details) "
+            "AND json_extract(details,'$.observation_sha256')=? "
+            "AND json_extract(details,'$.model')=? "
+            "ORDER BY event_id",
+            (root_id, observation, model)).fetchall()
+        # Invalid JSON cannot be assigned a reliable evidence identity.
+        # Fail closed rather than silently discarding any corrupted receipt.
+        malformed = db.execute(
+            "SELECT 1 FROM events WHERE task_id=? "
+            "AND kind='NATIVE_LOCAL_RESEARCH_READ' "
+            "AND NOT json_valid(details) LIMIT 1", (root_id,)
+        ).fetchone()
+        if malformed is not None:
+            raise ValueError("NATIVE_RESEARCH_CHECKPOINT_UNVERIFIABLE")
     recovered = []
     ranges: dict[str, list[tuple[int, int]]] = {}
     for (raw,) in reversed(rows):
