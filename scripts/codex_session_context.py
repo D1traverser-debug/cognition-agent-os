@@ -93,13 +93,17 @@ def _project_recovery_when_no_ledger() -> dict:
         "source_path": relative,
         "source_role": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
         "near_term_priority": priority,
+        "continuation_index": "SESSION_HANDOFF.md",
+        "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
+        "complete_work_log_location": "LIVE_GIT_COMMIT_HISTORY_AND_DIFF",
         "product_readiness_claim": "NOT_VERIFIED",
         "live_pr_head_and_ci": "MUST_REFETCH",
         "original_user_utterances": "MUST_RECOVER_SEPARATELY",
         "proposed_action": (
-            "Recover the owner's actual latest request; verify current open "
-            "Draft PR, exact HEAD and CI with GitHub tools; act on the "
-            "highest-value original-outcome gap within existing grants."
+            "Recover the owner's actual latest request; use SESSION_HANDOFF.md "
+            "only as a bootstrap index; progressively fetch current open PR "
+            "topology, exact HEAD/code/CI and relevant commit history/diff; "
+            "then act on the highest-value original-outcome gap within grants."
         ),
     }
 
