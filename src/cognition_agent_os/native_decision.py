@@ -420,6 +420,27 @@ def register_native_goal(db_path: Path, goal: str, *,
             raise
 
 
+def _registered_native_contract_matches(
+        db: sqlite3.Connection, root_id: str, contract: dict) -> bool:
+    """Shared original-goal identity check for audits and cold resumption.
+
+    A structurally valid model/ledger record does not prove registration.
+    The original event fingerprint independently binds its admitted bytes.
+    This read-only check never grants a runnable task or approves an outcome.
+    """
+    if not _valid_contract(contract):
+        return False
+    registrations = db.execute(
+        "SELECT details FROM events WHERE task_id=? "
+        "AND kind='NATIVE_GOAL_REGISTERED'", (root_id,)).fetchall()
+    return (len(registrations) == 1
+            and json.loads(registrations[0]["details"]) == {
+                "contract_sha256": _digest(contract),
+                "owner_outcome_verified": False,
+                "external_effect_authorized": False,
+            })
+
+
 def _audit(db: sqlite3.Connection, db_path: Path,
            workspace: Path, fixtures: Path, root_id: str) -> dict:
     """Independent lineage and live evidence readback, no task writes."""
@@ -432,14 +453,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         return {**fail, "reason": "ORIGINAL_GOAL_NOT_ACTIVE"}
     try:
         contract = json.loads(root["source_spec"])
-        if not _valid_contract(contract):
-            raise ValueError("INVALID_ORIGINAL_CONTRACT")
-        reg = db.execute(
-            "SELECT details FROM events WHERE task_id=? AND kind='NATIVE_GOAL_REGISTERED'",
-            (root_id,)).fetchall()
-        if (len(reg) != 1 or json.loads(reg[0]["details"]) != {
-            "contract_sha256": _digest(contract),
-            "owner_outcome_verified": False, "external_effect_authorized": False}):
+        if not _registered_native_contract_matches(db, root_id, contract):
             raise ValueError("ORIGINAL_RECEIPT_CHANGED")
         hypotheses = _native_hypotheses(db, root_id, contract)
         decisions = db.execute(
