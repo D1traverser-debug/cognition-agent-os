@@ -21,7 +21,7 @@ from .native_decision import _sources
 from .source import safe_fixture
 from .native_decision import (
     admit_native_decision, capability_catalog, inspect_native_goal,
-    record_native_hypothesis, register_native_goal,
+    record_native_hypothesis, record_native_open_research, register_native_goal,
 )
 from .owner_postcondition import inspect_owner_local_outcome
 
@@ -199,6 +199,19 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             db_path, workspace, fixtures, root_task_id,
             origin=origin, idea=idea,
             observation_sha256=observation_sha256)
+
+    @mcp.tool()
+    def native_open_research_record(root_task_id: str, proposal: dict) -> dict:
+        """Preserve competing UNREGISTERED professional methods across sessions.
+
+        This is research, not tool installation, a shell/HTTP executor,
+        semantic truth, external provider authority, or a business outcome.
+        The original SQLite grant, immutable goal, source pins and live
+        observation CAS still guard the checkpoint. Only a separately
+        registered adapter can later admit real work.
+        """
+        return record_native_open_research(
+            db_path, workspace, fixtures, root_task_id, proposal)
 
     @mcp.tool()
     def native_decision_admit(root_task_id: str, proposal: dict) -> dict:
