@@ -141,6 +141,18 @@ async def run():
                 "NO_LOCAL_SOURCES_VERIFIED"), recovered
             assert recovered["owner_outcome_verified"] is False
 
+        # A completely separate MCP stdio process must recover the original
+        # professional research proposal, even with NO executable child.
+        async with Client(server(allow_tick=False)) as fresh_client:
+            cold = unwrap(await fresh_client.call_tool(
+                "native_goal_inspect", {"root_task_id": novel_id}))
+            assert cold["original_goal"] == unknown_goal, cold
+            assert cold["open_research_count"] == 1, cold
+            assert cold["open_research"][0]["proposal"]["competing_methods"] == (
+                research["competing_methods"]), cold
+            assert cold["decision_count"] == 0, cold
+            assert cold["owner_outcome_verified"] is False, cold
+
         # Genuine optional planning uses only an installed local Ollama
         # provider. It is absent by default. An attempt to select a cloud
         # model/URL is rejected without task admission or provider requests.
