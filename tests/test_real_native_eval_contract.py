@@ -58,6 +58,26 @@ class NativeRealModelEvalContract(unittest.TestCase):
         self.assertEqual(set(scores), {"baseline", "native", "adaptive_host"})
         self.assertEqual(scores["adaptive_host"]["owner_goals_completed"], 0)
 
+    def test_adaptive_host_real_entry_has_source_preservation_and_owner_readback(self):
+        """Actual Host/Worker/isolated effect, never stubbed planner responses."""
+        bench = load_benchmark()
+        with tempfile.TemporaryDirectory() as td:
+            for case in bench.CASES:
+                location = Path(td) / case["id"]
+                location.mkdir()
+                result = bench._adaptive_host_trial(case, location)
+                self.assertTrue(result["source_preserved"], result)
+                self.assertEqual(result["model_calls"], 0)
+                self.assertEqual(result["whole_local_owner_verified"],
+                                 case["must_complete_local_owner"], result)
+                if case["must_complete_local_owner"]:
+                    self.assertIn(case["target"], result["selected_objectives"])
+                    self.assertEqual(result["independent_owner_result"],
+                                     "LOCAL_OWNER_RESULT_VERIFIED", result)
+                else:
+                    self.assertNotEqual(result["independent_owner_result"],
+                                        "LOCAL_OWNER_RESULT_VERIFIED", result)
+
     def test_no_action_on_negative_cases_never_counts_as_goal_completion(self):
         bench = load_benchmark()
         rows = []
