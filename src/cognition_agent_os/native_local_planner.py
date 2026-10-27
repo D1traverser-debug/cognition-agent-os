@@ -579,6 +579,96 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                 "owner_outcome_verified": False}
 
 
+def advance_native_adaptive_once(db_path: Path, workspace: Path,
+                                 fixtures: Path, root_id: str, *, model: str,
+                                 timeout: int = 45,
+                                 structured_output: bool = False) -> dict:
+    """Use a verified explicit owner contract before asking any local LLM.
+
+    An owner-exact two-file comparison or JSON draft is already known from
+    the independent owner oracle; asking a small model to guess the same
+    method, file order or literal is redundant and empirically unreliable.
+    This is program-generated planning, NEVER presented as model cognition.
+    Unrecognized/composite goals, previous action histories and pending
+    owner/agent hypotheses still require the original evidence/model path.
+
+    The candidate uses ONLY the existing native admission, CAS, one SQLite
+    grant and original Worker; this function never executes an effect.
+    """
+    state = inspect_native_goal(db_path, workspace, fixtures, root_id)
+    if (state.get("status") == "NATIVE_NEXT_DECISION_ADMISSIBLE"
+        and not state["decisions"] and not state["pending_hypotheses"]):
+        from .owner_postcondition import _explicit_owner_local_contract
+        exact = _explicit_owner_local_contract(state["original_goal"])
+        if exact is not None:
+            if exact["objective"] == "compare_records":
+                intent = {
+                    "kind": "goal_intent", "objective": "compare_records",
+                    "resources": [
+                        {"role": "reference", "path": exact["reference"]},
+                        {"role": "observed", "path": exact["observed"]},
+                    ],
+                }
+                names = {exact["reference"], exact["observed"]}
+                expected = ("Independently recomputed immutable original CSV "
+                            "sources and exact reference/observed roles.")
+            else:
+                intent = {
+                    "kind": "goal_intent", "objective": "ensure_structure",
+                    "resources": [{"role": "input", "path": exact["input"]}],
+                    "requirements": [
+                        {"field": key, "equals": value}
+                        for key, value in sorted(exact["desired"].items())],
+                }
+                names = {exact["input"]}
+                expected = ("Independent JSON original preservation plus "
+                            "authorized sandbox draft field-value readback.")
+            try:
+                observed = _sources(fixtures)
+                proposal = {
+                    "selected_intent": intent,
+                    "alternative_intent": None,
+                    "decision_reason": (
+                        "Complete explicit owner postcondition matches this "
+                        "typed local method and fixed source bindings."),
+                    "alternative_reason": (
+                        "Other registered methods cannot independently fulfill "
+                        "this exact owner-local postcondition."),
+                    "expected_evidence": expected,
+                    "observation_sha256": state["observation_sha256"],
+                    "decision_basis": {
+                        "source_refs": [
+                            {"path": name, "sha256": observed[name]}
+                            for name in sorted(names) if name in observed],
+                        "previous_result_task_id": None,
+                        "challenge": (
+                            "A mechanically runnable method may still omit "
+                            "an owner clause or reverse source roles."),
+                        "falsifier": (
+                            "A fresh independent original-owner outcome "
+                            "readback rejects any missing or changed source."),
+                        "uncertainty": (
+                            "A correct bounded local task does not demonstrate "
+                            "external business success or general cognition."),
+                    },
+                }
+                result = admit_native_decision(
+                    db_path, workspace, fixtures, root_id, proposal)
+                return {**result, "planner": "EXACT_OWNER_PROGRAM_GROUNDED",
+                        "model_calls_in_step": 0,
+                        "model_proposal_verified_semantically": False}
+            except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
+                    SourceUnavailable, PermissionError) as exc:
+                # A missing source, race or permission failure must not become
+                # a guessed LLM alternative or a replay of the same effect.
+                return {"status": "NATIVE_PROGRAM_PLAN_REFUSED",
+                        "root_task_id": root_id, "reason": str(exc)[:120],
+                        "owner_outcome_verified": False}
+    return advance_native_local_once(
+        db_path, workspace, fixtures, root_id, model=model,
+        timeout=timeout, structured_output=structured_output)
+
+
 def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
                                *, model: str, limit: int = 2) -> list[dict]:
     """Host's current schedule, existing ledger, no second controller.
@@ -613,7 +703,7 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
         if inspect_native_goal(db_path,workspace,fixtures,root_id).get(
                 "status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
             continue
-        results.append(advance_native_local_once(
+        results.append(advance_native_adaptive_once(
             db_path,workspace,fixtures,root_id,model=model))
         if len(results) >= limit:
             break
