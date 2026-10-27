@@ -62,6 +62,48 @@ def _head() -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def _project_recovery_when_no_ledger() -> dict:
+    """Bounded repository guide, NOT recovered owner text or a task grant.
+
+    Codex frequently edits a GitHub Draft without a local SQLite runtime.
+    An empty runtime must not erase the product mission or silently turn
+    a historical CI/checkpoint into current task authority. Reuse the
+    EXISTING near-term gate instead of duplicating a second roadmap.
+    """
+    relative = "docs/PRODUCT-READINESS-GATE.md"
+    path = ROOT / relative
+    if not path.is_file() or path.is_symlink():
+        return {"status": "PROJECT_GUIDANCE_UNAVAILABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return {"status": "PROJECT_GUIDANCE_UNAVAILABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    if len(text) > 80_000 or "**Near-term priority:**" not in text:
+        return {"status": "PROJECT_GUIDANCE_UNAVAILABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    paragraph = text.split("**Near-term priority:**", 1)[1].split("\n\n", 1)[0]
+    priority = " ".join(paragraph.split())
+    if not 40 <= len(priority) <= 800:
+        return {"status": "PROJECT_GUIDANCE_UNAVAILABLE",
+                "source_role": "NOT_OWNER_OR_GRANT"}
+    return {
+        "status": "PROJECT_GUIDANCE_FOUND",
+        "source_path": relative,
+        "source_role": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
+        "near_term_priority": priority,
+        "product_readiness_claim": "NOT_VERIFIED",
+        "live_pr_head_and_ci": "MUST_REFETCH",
+        "original_user_utterances": "MUST_RECOVER_SEPARATELY",
+        "proposed_action": (
+            "Recover the owner's actual latest request; verify current open "
+            "Draft PR, exact HEAD and CI with GitHub tools; act on the "
+            "highest-value original-outcome gap within existing grants."
+        ),
+    }
+
+
 def build_context(payload: dict) -> dict:
     cwd_value = payload.get("cwd")
     if not isinstance(cwd_value, str) or not cwd_value.strip():
@@ -90,6 +132,7 @@ def build_context(payload: dict) -> dict:
     context["ledger_discovery"] = origin
     if db_path is None:
         context["status"] = origin
+        context["repository_recovery"] = _project_recovery_when_no_ledger()
         return context
     ws = _optional_existing_directory(WORKSPACE_ENV, "workspace")
     fixtures = _optional_existing_directory(FIXTURES_ENV, "fixtures")
