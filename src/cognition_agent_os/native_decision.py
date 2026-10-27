@@ -537,16 +537,18 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                                 receipt["source_sha256"]),
                         }
                 else:
-                    old = unresolved_hypotheses.get(digest)
-                    if (old is None or _new_independent_source_cited(
-                            receipt["proposal"],
-                            old["unresolved_source_names"],
-                            receipt["source_sha256"])):
+                    # A model may revise an idea when newly pinned evidence
+                    # appears, but a source hash/citation is NOT an
+                    # independent answer to the underlying hypothesis.
+                    # Old and new relabelings stay visible as reviews;
+                    # unresolved cognition obligations survive until a
+                    # separate domain/owner outcome oracle can attest them.
+                    # No such hypothesis-specific semantic oracle exists in
+                    # this registered local decision contract today.
+                    # The next decision may still make lawful progress by
+                    # researching further or choosing a different method.
+                    if digest not in unresolved_hypotheses:
                         unresolved_hypotheses.pop(digest, None)
-                    # Pre-change legacy receipts may have relabeled a
-                    # still-unresolved question without new observed input.
-                    # Keep their historical action valid, but DO NOT infer
-                    # that the question was actually resolved.
             previous_decision_event_id = item["event_id"]
             selected = parsed["selected"]
             child = by_id.get(receipt["child_task_id"])
