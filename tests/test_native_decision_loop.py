@@ -183,6 +183,18 @@ class NativeDecisionLoop(unittest.TestCase):
         # proposal's in-memory review. The unverified concern still exists.
         later = self.view(root)
         self.assertEqual(later["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        # Cold resume must inherit WHY the previous method was chosen, what
+        # could falsify it, and what remained unproven. Only the independent
+        # mechanical verdict is observed, not the model's rationale.
+        trace = later["decisions"][0]["research_trace"]
+        self.assertEqual(trace["selected_reason"], first["decision_reason"])
+        self.assertEqual(trace["alternative_reason"], first["alternative_reason"])
+        self.assertEqual(trace["falsifier"], first["decision_basis"]["falsifier"])
+        self.assertEqual(trace["source_refs"], first["decision_basis"]["source_refs"])
+        self.assertEqual(trace["semantic_verdict"], "UNVERIFIED_MODEL_ARGUMENTS")
+        self.assertEqual(trace["hypothesis_reviews"], first["hypothesis_reviews"])
+        self.assertEqual(later["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
         self.assertEqual(
             [h["proposal_sha256"] for h in later["pending_hypotheses"]],
             [unresolved["proposal_sha256"]])
