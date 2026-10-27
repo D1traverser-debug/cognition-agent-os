@@ -73,6 +73,23 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn(".agents/skills/goal-grounded-semantic-review/skill.md",
                       codex)
 
+    def test_cognition_entrypoints_share_one_live_architecture_source(self):
+        """A file reference is a proposed route, NOT observed client obedience."""
+        adr_path = "docs/01-ARCHITECTURE-DECISIONS.md"
+        adr = (ROOT / adr_path).read_text(encoding="utf-8")
+        self.assertIn("### 优先级反转", adr)
+        self.assertIn("ChatGPT/Codex", adr)
+        for entrypoint in (AGENTS, SKILL):
+            source = entrypoint.read_text(encoding="utf-8")
+            self.assertIn(adr_path, source)
+            self.assertIn("docs/PRODUCT-READINESS-GATE.md", source)
+            self.assertNotRegex(source, r"\\b[0-9a-f]{40}\\b")
+        hook = (ROOT / "scripts/codex_session_context.py").read_text(
+            encoding="utf-8")
+        self.assertIn(adr_path, hook)
+        self.assertIn("from architecture_probe import inspect", hook)
+        self.assertIn("REPO_PROPOSAL_NOT_OWNER_OR_GRANT", hook)
+
     def test_evaluation_cases_not_default_loaded(self):
         probes = PROBES.read_text(encoding="utf-8")
         for title in ("M. Legacy-entry collision:", "N. Bare new-chat inherit:",
