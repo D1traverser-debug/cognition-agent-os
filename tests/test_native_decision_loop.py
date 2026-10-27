@@ -255,8 +255,15 @@ class NativeDecisionLoop(unittest.TestCase):
         # as "new evidence" to re-label the unresolved question again.
         after_review = self.view(root)
         self.assertEqual(len(after_review["pending_hypotheses"]), 1)
+        # Select an UNUSED, eligible research family so the independent
+        # duplicate-method guard cannot be the reason this test passes.
+        # This is a separate research path, not a second CSV/JSON retry.
         recycled = self.candidate(
-            after_review, self.reconcile(), self.structure())
+            after_review,
+            {"kind": "goal_intent", "objective": "investigate_evidence",
+             "resources": [],
+             "question": "Are late supplier returns missing from stock snapshots?"},
+            self.structure())
         recycled["hypothesis_reviews"] = [{
             "proposal_sha256": unresolved["proposal_sha256"],
             "disposition": "REJECTED",
