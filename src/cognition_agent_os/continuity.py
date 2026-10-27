@@ -292,6 +292,33 @@ def _all_open_goal_roots(db: sqlite3.Connection) -> list[sqlite3.Row] | None:
     return roots
 
 
+def _attested_owner_root(
+        db: sqlite3.Connection, root: sqlite3.Row) -> dict | None:
+    """Recover intact owner words across both existing goal types.
+
+    This is a read-only identity projection, not a selectable runnable task.
+    Native goal text must match its original immutable registration receipt.
+    """
+    try:
+        spec = json.loads(root["source_spec"])
+        if not isinstance(spec, dict):
+            return None
+        if spec.get("kind") == "open_goal":
+            from .open_goal import validate_open_goal
+            original = validate_open_goal(spec)["goal"]
+        elif spec.get("kind") == "native_goal":
+            from .native_decision import _registered_native_contract_matches
+            if not _registered_native_contract_matches(
+                    db, root["task_id"], spec):
+                return None
+            original = spec["goal"]
+        else:
+            return None
+        return {"root_task_id": root["task_id"], "original_goal": original}
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
 def _lineage_root_id(db: sqlite3.Connection, task: sqlite3.Row) -> str | None:
     """Find the selected registered task's root, without minting authority."""
     seen = set()
@@ -421,8 +448,14 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
         return _no_action("STALE_GOAL_REVISION",
                           root_task_ids=[r["task_id"] for r in roots])
     if len(active) != 1:
-        return _no_action("AMBIGUOUS_OPEN_OWNER_GOALS",
-                          root_task_ids=[r["task_id"] for r in active])
+        originals = [_attested_owner_root(db, r) for r in active]
+        if any(x is None for x in originals):
+            return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
+        return _no_action(
+            "AMBIGUOUS_OPEN_OWNER_GOALS",
+            root_task_ids=[r["task_id"] for r in active],
+            original_goals=originals,
+            authority_current=bool(authority["write_allowed"]))
     root = active[0]
     root_id = root["task_id"]
     try:
@@ -430,13 +463,8 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
     except (ValueError, TypeError):
         return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
     if isinstance(raw_spec, dict) and raw_spec.get("kind") == "native_goal":
-        from .native_decision import _contract, inspect_native_goal
-        try:
-            expected = _contract(raw_spec["goal"],
-                                 allow_public_discovery=raw_spec["allow_public_discovery"])
-            if expected != raw_spec:
-                raise ValueError("INVALID_NATIVE_GOAL_CONTRACT")
-        except (ValueError, TypeError, KeyError):
+        from .native_decision import inspect_native_goal
+        if _attested_owner_root(db, root) is None:
             return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
         base = {
             "root_task_id": root_id, "original_goal": raw_spec["goal"],
@@ -631,27 +659,10 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                 and r["task_id"] != selected_root
             ]
             if other_roots:
-                from .open_goal import validate_open_goal
-                from .native_decision import _registered_native_contract_matches
-                originals = []
-                for root in other_roots:
-                    try:
-                        source_spec = json.loads(root["source_spec"])
-                        if source_spec.get("kind") == "open_goal":
-                            goal = validate_open_goal(source_spec)["goal"]
-                        elif source_spec.get("kind") == "native_goal":
-                            if not _registered_native_contract_matches(
-                                    db, root["task_id"], source_spec):
-                                raise ValueError("UNATTESTED_NATIVE_GOAL_CONTRACT")
-                            goal = source_spec["goal"]
-                        else:
-                            raise ValueError("UNKNOWN_ORIGINAL_GOAL_KIND")
-                    except (ValueError, TypeError, KeyError, AttributeError):
-                        return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
-                    originals.append({
-                        "root_task_id": root["task_id"],
-                        "original_goal": goal,
-                    })
+                originals = [_attested_owner_root(db, root)
+                             for root in other_roots]
+                if any(x is None for x in originals):
+                    return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
                 return _no_action(
                     "AMBIGUOUS_DURABLE_GOALS",
                     goal_ids=[row["goal_id"]],
