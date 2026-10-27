@@ -570,6 +570,24 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                                          if parsed["alternative"] is not None else None),
                 "mechanical_verdict": verdict,
                 "error_code": child["error_code"],
+                # Replay the previously recorded comparative RESEARCH, not
+                # just method names. On cold resume an external cognitive
+                # client needs the falsifier, rejected alternative and
+                # still-unverified explanations to challenge/revise a method.
+                # These are original, untrusted proposals already stored in
+                # this ledger; neither hashes nor prose prove semantic truth.
+                "research_trace": {
+                    "selected_reason": receipt["proposal"]["decision_reason"],
+                    "alternative_reason": receipt["proposal"]["alternative_reason"],
+                    "expected_evidence": receipt["proposal"]["expected_evidence"],
+                    "challenge": receipt["proposal"]["decision_basis"]["challenge"],
+                    "falsifier": receipt["proposal"]["decision_basis"]["falsifier"],
+                    "uncertainty": receipt["proposal"]["decision_basis"]["uncertainty"],
+                    "source_refs": receipt["proposal"]["decision_basis"]["source_refs"],
+                    "hypothesis_reviews": (
+                        receipt["proposal"].get("hypothesis_reviews") or []),
+                    "semantic_verdict": "UNVERIFIED_MODEL_ARGUMENTS",
+                },
                 "owner_outcome_verified": False})
         auth = db.execute(
             "SELECT * FROM authority WHERE singleton=1").fetchone()
