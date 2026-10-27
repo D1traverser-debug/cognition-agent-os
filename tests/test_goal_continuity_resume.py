@@ -109,6 +109,57 @@ class GoalContinuityColdResume(unittest.TestCase):
             self.assertEqual(db.execute("SELECT COUNT(*) FROM events")
                              .fetchone()[0], before)
 
+    def test_unregistered_mixed_roots_restore_both_original_goal_texts(self):
+        """Cold bare resume must not send owner back to reconstruct identities."""
+        with closing(connect(self.db_path)) as db:
+            text_goal = "Compare independent local evidence and preserve every clause."
+            open_root = create_task(db, {"kind": "open_goal", "goal": text_goal})
+        native_goal = (
+            "Investigate an unfamiliar professional method with independent "
+            "verification and without assuming a registered tool is enough."
+        )
+        native_root = register_native_goal(self.db_path, native_goal)
+        state = resume_goal(self.db_path)
+        self.assertEqual(state["status"], "AMBIGUOUS_OPEN_OWNER_GOALS", state)
+        self.assertEqual(state["root_task_ids"], [open_root, native_root])
+        self.assertEqual(state["original_goals"], [
+            {"root_task_id": open_root, "original_goal": text_goal},
+            {"root_task_id": native_root, "original_goal": native_goal},
+        ])
+        self.assertNotIn("next_task_id", state)
+
+    def test_revoked_unregistered_mixed_roots_restore_without_execution(self):
+        with closing(connect(self.db_path)) as db:
+            open_root = create_task(db, {
+                "kind": "open_goal",
+                "goal": "Examine reference evidence without publishing effects."})
+        native_goal = "Independently compare source approaches in a new domain."
+        native_root = register_native_goal(self.db_path, native_goal)
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db, revoke=True)
+        state = resume_goal(self.db_path)
+        self.assertEqual(state["status"], "AMBIGUOUS_OPEN_OWNER_GOALS", state)
+        self.assertFalse(state["authority_current"])
+        self.assertEqual({x["root_task_id"] for x in state["original_goals"]},
+                         {open_root, native_root})
+        self.assertNotIn("next_task_id", state)
+
+    def test_revoked_native_root_corrupted_original_never_recovered_as_fact(self):
+        goal = "Verify complete origin and compare methods before a new action."
+        root = register_native_goal(self.db_path, goal)
+        with closing(connect(self.db_path)) as db:
+            source = json.loads(db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=?", (root,)
+            ).fetchone()[0])
+            source["goal"] = "Forged and unregistered substitute original text."
+            db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?",
+                       (json.dumps(source, sort_keys=True), root))
+            alter_authority(db, revoke=True)
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "ORIGINAL_GOAL_UNVERIFIABLE", result)
+        self.assertNotIn("original_goal", result)
+        self.assertNotIn("next_task_id", result)
+
     def test_registered_goal_preserves_distinct_native_goal_without_owner_loss(self):
         """An authorized native_goal is a legitimate competing owner objective."""
         register_goal(self.db_path, self.contract())
