@@ -427,6 +427,64 @@ class NativeLocalModelLoop(unittest.TestCase):
                 self.db, self.fixtures, root,
                 current, "installed:test", sources)
 
+    def test_durable_research_over_24_reads_keeps_history_but_limits_context(self):
+        """Do not mistake a prompt-preview cap for a lifetime memory cap."""
+        import hashlib
+        from cognition_agent_os.ledger import event
+        from cognition_agent_os.native_local_planner import _recovered_research_reads
+        (self.fixtures / "trace.md").write_text(
+            "Q" * 62_000, encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        observation = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["observation_sha256"]
+        sha = hashlib.sha256(
+            (self.fixtures / "trace.md").read_bytes()).hexdigest()
+        with closing(connect(self.db)) as db:
+            for ordinal in range(26):
+                event(db, root, "NATIVE_LOCAL_RESEARCH_READ", {
+                    "observation_sha256": observation,
+                    "model": "installed:test",
+                    "path": "trace.md",
+                    "sha256": sha, "offset_chars": ordinal * 2100,
+                    "length_chars": 2048,
+                })
+            db.commit()
+        sources = {x.name: hashlib.sha256(x.read_bytes()).hexdigest()
+                   for x in self.fixtures.iterdir()}
+        recovered = _recovered_research_reads(
+            self.db, self.fixtures, root, observation,
+            "installed:test", sources)
+        self.assertEqual(len(recovered), 26)
+        self.assertEqual(recovered[0]["offset_chars"], 0)
+        self.assertEqual(recovered[-1]["offset_chars"], 52_500)
+        def agent(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            context = json.loads(payload["prompt"].split("\n\n")[-1])
+            self.assertEqual(
+                context["prior_research_total_count"], 26)
+            self.assertTrue(context["research_history_index_truncated"])
+            self.assertLessEqual(len(context["prior_research_receipts"]), 24)
+            self.assertLessEqual(len(context.get(
+                "additional_verified_source_excerpts", [])), 2)
+            # The complete source history is still checked for duplicates
+            # despite only a finite amount of metadata reaching the model.
+            return {"done": True, "response": '{"abstain":true}'}
+        with patch("cognition_agent_os.local_model._request", side_effect=agent):
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_LOCAL_MODEL_ABSTAINED")
+        with closing(connect(self.db)) as db:
+            count = db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ'", (root,)
+            ).fetchone()[0]
+            self.assertEqual(count, 26)
+        self.assertFalse(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)[
+                "owner_outcome_verified"])
+
     def test_no_progress_abstention_remains_enforced_after_unrelated_events(self):
         """The retry guard is persistent by exact model/evidence identity."""
         from cognition_agent_os.ledger import event
