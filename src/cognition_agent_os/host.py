@@ -329,9 +329,12 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
         raise ValueError("max_jobs must be between 1 and 64")
     if planner_mode not in ("deterministic", "ollama-local"):
         raise ValueError("Unsupported planner mode")
-    if auto_native_cognition and (
-        planner_mode != "ollama-local" or not local_model):
-        raise ValueError("Native cognition needs an explicit installed local model")
+    # Explicit native opt-in can use program-derived exact owner contracts
+    # without any installed model. Non-exact goals then return an unresolved
+    # cognition requirement; no unsupported model or effect is invented.
+    # A supplied model still requires the original Ollama worker transport.
+    if auto_native_cognition and local_model and planner_mode != "ollama-local":
+        raise ValueError("Installed native model requires ollama-local planner mode")
     _admit_existing_ledger(db_path)
     # Prior-success evidence is assessed before an opted-in sandbox write.
     # A partial/broken sweep blocks new effects, not ordinary read-only work.
