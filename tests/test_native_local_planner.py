@@ -156,6 +156,65 @@ class NativeLocalModelLoop(unittest.TestCase):
             self.db, self.workspace, self.fixtures, native,
             model="installed:test")
 
+    def test_research_reads_multiple_distinct_evidence_rounds_before_choice(self):
+        """The model may ask for more actual evidence without a preset one-read cutoff.
+
+        This checks the real native proposal -> SQLite admission boundary,
+        not whether a mocked model can independently understand the domain.
+        """
+        (self.fixtures / "trace.md").write_text("A" * 2800 + "B" * 2800,
+                                                encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        observed = []
+        def research(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            evidence = json.loads(payload["prompt"].split("\n\n")[-1])
+            excerpts = evidence.get("additional_verified_source_excerpts", [])
+            observed.append([(p["path"], p["offset_chars"]) for p in excerpts])
+            if not excerpts:
+                return {"done": True, "response": json.dumps({
+                    "inspect_sources": [{"path": "trace.md", "offset_chars": 500}]})}
+            if len(excerpts) == 1:
+                self.assertEqual(excerpts[0]["untrusted_excerpt"], "A" * 2048)
+                return {"done": True, "response": json.dumps({
+                    "inspect_sources": [{"path": "trace.md", "offset_chars": 3100}]})}
+            self.assertEqual(excerpts[1]["untrusted_excerpt"], "B" * 2048)
+            return self.transport(method, path, payload, timeout)
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=research) as provider:
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_METHOD_ENQUEUED", result)
+        self.assertEqual(observed, [
+            [], [("trace.md", 500)],
+            [("trace.md", 500), ("trace.md", 3100)]])
+        self.assertEqual(provider.call_count, 4)  # 1 installed GET + 3 POST
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["decision_count"], 1)
+
+    def test_research_cannot_loop_on_identical_observation(self):
+        """An unchanged source offset must not induce endless model requests."""
+        (self.fixtures / "trace.md").write_text("evidence " * 500,
+                                                encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        def repeat(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            return {"done": True, "response": json.dumps({
+                "inspect_sources": [{"path": "trace.md", "offset_chars": 500}]})}
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=repeat) as provider:
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_LOCAL_PLAN_REFUSED", result)
+        self.assertIn("NATIVE_RESEARCH_NO_NEW_EVIDENCE", result["reason"])
+        self.assertEqual(provider.call_count, 3)  # 1 GET + 2 POST
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["decision_count"], 0)
+
     def test_host_autonomous_two_method_loop_and_cold_state(self):
         root = register_native_goal(self.db, self.goal)
         files_before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
