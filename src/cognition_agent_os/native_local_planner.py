@@ -312,20 +312,60 @@ def _checkpoint_research_reads(db_path: Path, workspace: Path,
             if (current["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE"
                 or current["observation_sha256"] != observation):
                 raise ValueError("NATIVE_RESEARCH_OBSERVATION_STALE")
+            # BEGIN IMMEDIATE serializes competing writers. Reconstruct the
+            # same-observation source ranges INSIDE this transaction, not from
+            # the proposal's earlier read-only snapshot. Without this, two
+            # resumed planners can create receipts that poison cold recovery.
+            prior_rows = db.execute(
+                "SELECT details FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ' "
+                "AND json_valid(details) "
+                "AND json_extract(details,'$.observation_sha256')=? "
+                "AND json_extract(details,'$.model')=?",
+                (root_id, observation, model)).fetchall()
+            prior = []
+            for (raw,) in prior_rows:
+                try:
+                    receipt = json.loads(raw)
+                    if (not isinstance(receipt, dict)
+                        or set(receipt) != {
+                            "observation_sha256", "model", "path", "sha256",
+                            "offset_chars", "length_chars"}
+                        or type(receipt["offset_chars"]) is not int
+                        or type(receipt["length_chars"]) is not int
+                        or receipt["offset_chars"] < 0
+                        or not 1 <= receipt["length_chars"] <= 2048
+                        or not isinstance(receipt["path"], str)):
+                        raise ValueError("INVALID_EXISTING_RESEARCH_RECEIPT")
+                    prior.append(receipt)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ValueError(
+                        "NATIVE_RESEARCH_CHECKPOINT_UNVERIFIABLE") from exc
             for item in snippets:
                 data = safe_fixture(fixtures, item["path"])
                 if hashlib.sha256(data).hexdigest() != item["sha256"]:
                     raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
                 content = data.decode("utf-8", errors="strict")
-                text = item["untrusted_excerpt"]
+                read_text = item["untrusted_excerpt"]
                 offset = item["offset_chars"]
-                if content[offset:offset + 2048] != text or not text:
+                if content[offset:offset + 2048] != read_text or not read_text:
                     raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
-                event(db, root_id, "NATIVE_LOCAL_RESEARCH_READ", {
+                receipt = {
                     "observation_sha256": observation, "model": model,
                     "path": item["path"], "sha256": item["sha256"],
-                    "offset_chars": offset, "length_chars": len(text),
-                })
+                    "offset_chars": offset, "length_chars": len(read_text),
+                }
+                overlap = [
+                    old for old in prior
+                    if old["path"] == item["path"]
+                    and offset < old["offset_chars"] + old["length_chars"]
+                    and old["offset_chars"] < offset + len(read_text)]
+                if overlap:
+                    if len(overlap) == 1 and overlap[0] == receipt:
+                        continue  # idempotent retry, not another discovery
+                    raise ValueError("NATIVE_RESEARCH_NO_NEW_EVIDENCE")
+                event(db, root_id, "NATIVE_LOCAL_RESEARCH_READ", receipt)
+                prior.append(receipt)
             db.commit()
         except BaseException:
             db.rollback()
