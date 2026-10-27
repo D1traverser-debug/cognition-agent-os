@@ -50,7 +50,7 @@
 
 **最近实测纠偏证据（不要省略失败）：** 首次调整 Native 调度导致已完成目标被误报为需要模型，[红色运行 #40434899922](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/40434899922) 暴露，随后修复并在最后已核验 HEAD `552024137208d1a2ced271870ae523f1949239a5` 的 [CI #40435086831](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/40435086831) 通过：Linux **815/815 OK**、Windows **815 中 5 个平台跳过，其余 OK**；Docker、Linux/Windows MCP stdio、跨平台 CLI、Windows scheduler、Graphify 检查均 success。这是 HEAD 匹配的工程回归，**不是整个产品 DONE**。
 
-截至上述快照，该 Draft 有 **359 commits、248 changed files、约 +53,452 / -1 行**，包含 54 个运行时 Python 模块；这些数字提示累加风险，不等于所有文件都应删除。每次继续必须重新获取真正实时的统计和分支关系。2010 年代 UAOS/其他仓库的旧证据不得充当本项目产品进度。
+截至上述快照，该 Draft 有 **359 commits、248 changed files、约 +53,452 / -1 行**，包含 54 个运行时 Python 模块；这些数字提示累加风险，不等于所有文件都应删除。每次继续必须重新获取真正实时的统计和分支关系。旧 UAOS/其他仓库的历史证据不得充当本项目产品进度。
 
 ## 4. 当前责任/完成状态：不能把不同层冒充彼此
 
