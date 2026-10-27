@@ -632,7 +632,7 @@ def resume_goal(db_path: Path, *, resolve_head=None,
             ]
             if other_roots:
                 from .open_goal import validate_open_goal
-                from .native_decision import _valid_contract as valid_native_contract
+                from .native_decision import _registered_native_contract_matches
                 originals = []
                 for root in other_roots:
                     try:
@@ -640,8 +640,9 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                         if source_spec.get("kind") == "open_goal":
                             goal = validate_open_goal(source_spec)["goal"]
                         elif source_spec.get("kind") == "native_goal":
-                            if not valid_native_contract(source_spec):
-                                raise ValueError("INVALID_NATIVE_GOAL_CONTRACT")
+                            if not _registered_native_contract_matches(
+                                    db, root["task_id"], source_spec):
+                                raise ValueError("UNATTESTED_NATIVE_GOAL_CONTRACT")
                             goal = source_spec["goal"]
                         else:
                             raise ValueError("UNKNOWN_ORIGINAL_GOAL_KIND")
