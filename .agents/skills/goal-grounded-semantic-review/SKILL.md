@@ -43,6 +43,26 @@ Fix the actual shared failure and meet the *entire* behavioral requirement. Comp
 
 Preserve source history immutably where possible. Knowledge selection must not equate newest with true, matching words with applicable, or archived text with authority. Model output is evidence/hypothesis until verified and authorized.
 
+## Evidence-driven recursive challenge and transferable method
+
+On EVERY substantive decision, question the current diagnosis AND the method
+used to reach it. Do not guess whether an issue is "local", "upper" or
+"architectural" beforehand: inspect competing causes and escalate across
+boundaries when observations warrant it. Repeated objections with no new source,
+counterexample, outcome feedback or changed executable plan are not research
+progress. A resource limit is not an epistemic stopping criterion: preserve
+the unproved owner obligation and the verified evidence needed to continue.
+
+After a contradicted hypothesis, explicitly compare whether to investigate
+more original evidence, change the method, revise the workflow, or challenge
+a governing design assumption. Research new domains and alternatives at the
+original implementation level before selection, then challenge the preferred
+adaptation AGAIN. Record reusable methods only with exact source provenance,
+applicability conditions, counterexamples, failure/rollback conditions and an
+independent result; transfer to a different domain is still NOT_TESTED until
+that domain actually verifies it. Do not promote a successful single fixture
+or a model-authored summary to universal SOP.
+
 ## Verify before claiming completion
 
 1. Establish a failing/positive baseline and predeclared acceptance criteria where feasible.
