@@ -98,6 +98,39 @@ class NativeRealModelEvalContract(unittest.TestCase):
         self.assertEqual(scored["adaptive_host"]["model_generation_calls"], 0)
         self.assertEqual(scored["adaptive_host"]["owner_goals_completed"], 0)
 
+    def test_main_serializes_three_actual_arms_into_one_report(self):
+        """Execute the evaluation ENTRY, not an internal scoring helper.
+
+        Stubs are only wire tests; no model performance may be inferred.
+        """
+        import contextlib
+        import io
+        import json
+        from unittest.mock import patch
+        bench = load_benchmark()
+        def fake(case, home):
+            return {"case": case["id"], "path": "TEST_STUB_NOT_MODEL",
+                    "whole_local_owner_verified": False,
+                    "source_preserved": True, "selected_objectives": [],
+                    "independent_owner_result": "OWNER_POSTCONDITION_UNVERIFIED",
+                    "model_calls": 0}
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td) / "report.json"
+            with patch.object(bench, "OUTPUT", output), \
+                 patch.object(bench, "_native_trial", fake), \
+                 patch.object(bench, "_baseline_trial", fake), \
+                 patch.object(bench, "_adaptive_host_trial", fake), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                bench.main()
+            report = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(set(report["scores"]),
+                             {"baseline", "native", "adaptive_host"})
+            self.assertEqual(len(report["cases"]), len(bench.CASES))
+            for row in report["cases"]:
+                self.assertEqual(set(("baseline", "native", "adaptive_host"))
+                                 - set(row), set(), row)
+            self.assertFalse(report["whole_product_ready"])
+
     def test_no_action_on_negative_cases_never_counts_as_goal_completion(self):
         bench = load_benchmark()
         rows = []
