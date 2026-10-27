@@ -700,10 +700,19 @@ def _previous_no_progress(db_path: Path, root_id: str,
     """Bounded feedback for at most two different reasoning attempts."""
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # Refusal is scoped to the same ORIGINAL root, exact evidence
+        # snapshot and exact model. The old newest-first LIMIT 64 ran before
+        # these filters, so unrelated model attempts could silently erase
+        # an abstention and trigger repeated inference without new evidence.
         rows = db.execute(
             "SELECT details FROM events WHERE task_id=? "
-            "AND kind='NATIVE_LOCAL_NO_PROGRESS' ORDER BY event_id DESC LIMIT 64",
-            (root_id,)).fetchall()
+            "AND kind='NATIVE_LOCAL_NO_PROGRESS' "
+            "AND json_valid(details) "
+            "AND json_extract(details,'$.observation_sha256')=? "
+            "AND json_extract(details,'$.model')=? "
+            "AND json_type(details,'$.reason')='text' "
+            "ORDER BY event_id DESC LIMIT 2",
+            (root_id, fingerprint, model)).fetchall()
     failures = []
     for item in rows:
         try:
