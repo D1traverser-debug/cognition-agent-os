@@ -713,6 +713,7 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
             (4096 if model is None else 128,)).fetchall()
     results = []
     diagnostic = None
+    verified = None
     for root_id, raw in rows:
         try:
             spec = json.loads(raw)
@@ -727,7 +728,19 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
             # An unsupported owner goal is NOT an executable action, nor a
             # license for weak fallback inference. Keep one explicit
             # unresolved observation when no executable goal is available.
-            from .owner_postcondition import _explicit_owner_local_contract
+            from .owner_postcondition import (
+                _explicit_owner_local_contract, inspect_owner_local_outcome)
+            if state["decisions"]:
+                owner = inspect_owner_local_outcome(
+                    db_path, workspace, fixtures, root_id)
+                if owner["local_owner_outcome_verified"]:
+                    if verified is None:
+                        verified = {
+                            "status": "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED",
+                            "root_task_id": root_id,
+                            "local_owner_outcome_verified": True,
+                            "owner_outcome_verified": False}
+                    continue
             if (state["decisions"] or state["pending_hypotheses"]
                 or _explicit_owner_local_contract(state["original_goal"]) is None):
                 if diagnostic is None:
@@ -751,6 +764,9 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
                 break
         elif diagnostic is None:
             diagnostic = outcome
-    if not results and diagnostic is not None:
-        results.append(diagnostic)
+    if not results:
+        if verified is not None:
+            results.append(verified)
+        elif diagnostic is not None:
+            results.append(diagnostic)
     return results
