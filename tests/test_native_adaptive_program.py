@@ -115,6 +115,66 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         self.assertFalse(result["business_outcome_verified"])
         self.unchanged()
 
+    def test_original_owner_not_hidden_by_more_than_128_newer_unsupported_goals(self):
+        """Real Host regression: do not drop old actionable owner on new arrivals.
+
+        Before this fix the newest-first LIMIT 128 returned only recent
+        unsupported goals and exhausted the capacity on a no-model refusal.
+        The old exact owner never reached Worker even though no permission or
+        input had changed.
+        """
+        original = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        for i in range(130):
+            register_native_goal(
+                self.db, "Unfamiliar specialist objective number %03d: "
+                         "investigate sources and compare approaches." % i)
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model can be called")) as provider:
+            first = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=1,
+                auto_native_cognition=True)
+            self.assertEqual(len(first["native_cognition"]), 1, first)
+            admitted = first["native_cognition"][0]
+            self.assertEqual(admitted["root_task_id"], original)
+            self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED", first)
+            second = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=1,
+                auto_native_cognition=True)
+        provider.assert_not_called()
+        self.assertEqual(second["tasks"][0]["task_id"],
+                         admitted["child_task_id"])
+        actual = inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, original)
+        self.assertTrue(actual["local_owner_outcome_verified"], actual)
+        self.assertFalse(actual["business_outcome_verified"])
+        self.unchanged()
+
+    def test_unresolved_owner_does_not_occupy_entire_program_action_budget(self):
+        """Unknown scope remains UNKNOWN; older runnable owners still run."""
+        unknown = register_native_goal(
+            self.db, "Analyze a new scientific domain and invent new tools.")
+        first = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        second = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model is authorized")):
+            planned = run_tick(
+                self.db, self.work, self.fixtures,
+                max_jobs=2, auto_native_cognition=True)
+        self.assertEqual(
+            [x["root_task_id"] for x in planned["native_cognition"]],
+            [first, second], planned)
+        self.assertTrue(all(x["status"] == "NATIVE_METHOD_ENQUEUED"
+                            for x in planned["native_cognition"]))
+        self.assertEqual(inspect_native_goal(
+            self.db, self.work, self.fixtures, unknown)["decision_count"], 0)
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, unknown)["local_owner_outcome_verified"])
+        self.unchanged()
+
     def test_missing_named_resource_is_not_improvised(self):
         root = register_native_goal(
             self.db, "Compare baseline.csv with missing.csv and report differences.")
