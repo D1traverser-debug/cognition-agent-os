@@ -132,10 +132,10 @@ class CodexSessionContext(unittest.TestCase):
             docs.mkdir()
             original = docs / "01-ARCHITECTURE-DECISIONS.md"
             original.write_text(
-                "### 优先级反转（约束后续工程行为）\\n"
+                "### 优先级反转（约束后续工程行为）\n"
                 "1. ChatGPT/Codex first inspect ALL current original source "
                 "evidence; compare two legitimate methods; independently "
-                "read back authorized effects before promoting outcomes.\\n",
+                "read back authorized effects before promoting outcomes.\n",
                 encoding="utf-8")
             first = module._current_architecture_pivot()
             self.assertEqual(
@@ -144,10 +144,10 @@ class CodexSessionContext(unittest.TestCase):
             # Editing the actual source must update the next cold recovery,
             # without a cached latest-decision summary.
             original.write_text(
-                "### 优先级反转（约束后续工程行为）\\n"
+                "### 优先级反转（约束后续工程行为）\n"
                 "1. ChatGPT/Codex now challenge a changed evidence provider "
                 "and re-evaluate actual task results before granting "
-                "semantic success to any previous attempt.\\n",
+                "semantic success to any previous attempt.\n",
                 encoding="utf-8")
             second = module._current_architecture_pivot()
             self.assertIn("changed evidence provider",
