@@ -288,7 +288,8 @@ def score_trial_results(rows: list[dict]) -> dict:
     deliberately separate measures; neither is whole-product acceptance.
     """
     scores = {}
-    for name in ("baseline", "native"):
+    paths = ("baseline", "native") + (("adaptive_host",) if rows and all("adaptive_host" in row for row in rows) else ())
+    for name in paths:
         positives = [
             row for row in rows if row["withheld_local_owner_required"]]
         negatives = [
@@ -348,7 +349,8 @@ def main() -> None:
         cases = {}
         with tempfile.TemporaryDirectory(prefix="real-native-ab-") as tmp:
             for label, fn in (("baseline", _baseline_trial),
-                              ("native", _native_trial)):
+                              ("native", _native_trial),
+                              ("adaptive_host", _adaptive_host_trial)):
                 home = Path(tmp) / label
                 home.mkdir()
                 try:
@@ -402,6 +404,8 @@ def main() -> None:
             "native": x["native"]["independent_owner_result"],
             "baseline": x["baseline"]["independent_owner_result"],
             "native_method": x["native"]["method_alignment"],
+            "adaptive_host": x["adaptive_host"]["independent_owner_result"],
+            "adaptive_host_model_calls": x["adaptive_host"].get("model_calls"),
         } for x in results],
         "whole_product_ready": False,
     }, ensure_ascii=False, sort_keys=True))
