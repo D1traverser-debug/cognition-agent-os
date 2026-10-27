@@ -209,10 +209,38 @@ class NativeDecisionLoop(unittest.TestCase):
             "counterargument": "The local discrepancy report does not prove source completeness.",
             "verification_needed": "Seek independent later supplier updates before outcome closure.",
         }]
+        # Re-labeling an UNRESOLVED hypothesis in model-written prose is NOT
+        # fresh research evidence. The independently verified Worker report
+        # proves only a local CSV discrepancy, not supplier completeness.
+        with self.assertRaisesRegex(
+                ValueError, "UNRESOLVED_HYPOTHESIS_NO_NEW_EVIDENCE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, second)
+        self.assertEqual(self.view(root)["decision_count"], 1)
+        self.assertEqual(len(self.view(root)["pending_hypotheses"]), 1)
+
+        # A new externally supplied source becomes a live, hash-pinned input,
+        # independently re-read by the normal admission transaction. It
+        # allows a NEW provisional disposition, never source truth or an
+        # independent full-owner/business-success claim.
+        (self.fixtures / "supplier_update.md").write_text(
+            "External follow-up: inventory snapshots may omit late returns.\\n",
+            encoding="utf-8")
+        with_new_evidence = self.view(root)
+        self.assertEqual(len(with_new_evidence["pending_hypotheses"]), 1)
+        reconsidered = self.candidate(
+            with_new_evidence, self.structure(), self.reconcile())
+        reconsidered["hypothesis_reviews"] = [{
+            "proposal_sha256": unresolved["proposal_sha256"],
+            "disposition": "CONDITIONALLY_USEFUL",
+            "counterargument": "New source warns that the supplier snapshot may omit returns.",
+            "verification_needed": "An independent supplier owner must confirm final completeness.",
+        }]
         admitted = admit_native_decision(
-            self.db, self.workspace, self.fixtures, root, second)
+            self.db, self.workspace, self.fixtures, root, reconsidered)
         self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertEqual(self.view(root)["pending_hypotheses"], [])
+        self.assertFalse(self.view(root)["owner_outcome_verified"])
 
     def test_late_idea_invalidates_stale_decision_and_fake_reviews(self):
         root = self.root_id()
