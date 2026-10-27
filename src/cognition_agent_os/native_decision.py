@@ -25,6 +25,8 @@ _ID = re.compile(r"[a-f0-9]{32}\Z")
 _MAX_DECISIONS = 12
 _LEGACY_MAX_DECISIONS = 3
 _MAX_HYPOTHESES = 8
+_MAX_OPEN_RESEARCH_RECORDS = 64
+_MAX_COMPETING_RESEARCH_METHODS = 5
 _HYPOTHESIS_DISPOSITIONS = frozenset({
     "REJECTED", "CONDITIONALLY_USEFUL", "UNRESOLVED_RESEARCH_REQUIRED",
 })
@@ -412,6 +414,142 @@ def record_native_hypothesis(db_path: Path, workspace: Path, fixtures: Path,
             raise
 
 
+def _checked_open_research(proposal: dict, original_goal: str) -> None:
+    """Syntax/owner-scope check, NOT permission or expert semantic validation.
+
+    A method outside the registered Host catalog is legitimate as a research
+    idea, never as an execution request. All fields are bounded, data-only
+    observations. This is deliberately separate from compile_intent().
+    """
+    names = {
+        "observation_sha256", "owner_clause", "unresolved_question",
+        "competing_methods", "source_refs", "next_research_step",
+        "uncertainty",
+    }
+    if not isinstance(proposal, dict) or set(proposal) != names:
+        raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+    observation = proposal["observation_sha256"]
+    if (not isinstance(observation, str)
+        or re.fullmatch(r"[0-9a-f]{64}", observation) is None):
+        raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+    clause = proposal["owner_clause"]
+    if (not isinstance(clause, str)
+        or not 8 <= len(clause) <= 256 or clause not in original_goal):
+        raise ValueError("OPEN_RESEARCH_OWNER_CLAUSE_NOT_ORIGINAL")
+    for key in ("unresolved_question", "next_research_step", "uncertainty"):
+        value = proposal[key]
+        if (not isinstance(value, str)
+            or not 12 <= len(value.strip()) <= 600):
+            raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+    methods = proposal["competing_methods"]
+    if (not isinstance(methods, list)
+        or not 2 <= len(methods) <= _MAX_COMPETING_RESEARCH_METHODS):
+        raise ValueError("OPEN_RESEARCH_NEEDS_COMPETING_METHODS")
+    seen = set()
+    for method in methods:
+        if (not isinstance(method, dict)
+            or set(method) != {
+                "name", "applicability", "failure_mode", "falsifier"}
+            or not isinstance(method["name"], str)
+            or re.fullmatch(r"[A-Za-z0-9_\-]{3,80}", method["name"]) is None
+            or method["name"] in seen):
+            raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+        seen.add(method["name"])
+        for name in ("applicability", "failure_mode", "falsifier"):
+            value = method[name]
+            if (not isinstance(value, str)
+                or not 12 <= len(value.strip()) <= 500):
+                raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+    refs = proposal["source_refs"]
+    if (not isinstance(refs, list) or len(refs) > 16
+        or any(not isinstance(ref, dict)
+               or set(ref) != {"path", "sha256"}
+               or not isinstance(ref["path"], str)
+               or not isinstance(ref["sha256"], str)
+               or re.fullmatch(r"[0-9a-f]{64}", ref["sha256"]) is None
+               for ref in refs)
+        or len({ref["path"] for ref in refs}) != len(refs)):
+        raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+
+
+def _open_research_fingerprint(proposal: dict) -> str:
+    """Ignore per-decision CAS nonce when detecting repeated research prose."""
+    return _digest({
+        key: value for key, value in proposal.items()
+        if key != "observation_sha256"
+    })
+
+
+def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
+                                root_id: str, proposal: dict) -> dict:
+    """Checkpoint open-domain competing methods in the existing SQLite ledger.
+
+    Never compiles a new executor, queues tasks, approves a tool or attests
+    business success. Real native clients may research outside a fixed tool
+    registry; this contract persists their FALSIFIABLE proposals and verified
+    LOCAL file identity for later model/tool scrutiny.
+    """
+    require_initialized_ledger(db_path)
+    if not isinstance(root_id, str) or _ID.fullmatch(root_id) is None:
+        raise ValueError("INVALID_NATIVE_ROOT_ID")
+    with closing(connect(db_path)) as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            state = _audit(db, db_path, workspace, fixtures, root_id)
+            if state["status"] not in (
+                    "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                    "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+                raise ValueError(
+                    "NATIVE_DECISION_NOT_ADMISSIBLE:" + state["status"])
+            root = db.execute(
+                "SELECT source_spec,goal_rev,grant_rev FROM tasks "
+                "WHERE task_id=?", (root_id,)).fetchone()
+            if root is None:
+                raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
+            contract = json.loads(root["source_spec"])
+            _checked_open_research(proposal, contract["goal"])
+            if proposal["observation_sha256"] != state["observation_sha256"]:
+                raise ValueError("NATIVE_STALE_OBSERVATION")
+            if len(state["open_research"]) >= _MAX_OPEN_RESEARCH_RECORDS:
+                raise ValueError("NATIVE_OPEN_RESEARCH_STORAGE_BOUND")
+            digest = _open_research_fingerprint(proposal)
+            if any(row["proposal_sha256"] == digest
+                   for row in state["open_research"]):
+                raise ValueError("DUPLICATE_NATIVE_OPEN_RESEARCH")
+            hashes = _sources(fixtures)
+            if any(hashes.get(ref["path"]) != ref["sha256"]
+                   for ref in proposal["source_refs"]):
+                raise ValueError("NATIVE_RESEARCH_SOURCE_UNVERIFIABLE")
+            auth = db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed "
+                "FROM authority WHERE singleton=1").fetchone()
+            if (auth is None or auth["write_allowed"] != 1
+                or (auth["goal_rev"], auth["grant_rev"]) !=
+                   (root["goal_rev"], root["grant_rev"])):
+                raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
+            event(db, root_id, "NATIVE_OPEN_RESEARCH_RECORDED", {
+                "contract_sha256": _digest(contract),
+                "proposal_sha256": digest,
+                "proposal": proposal,
+                "goal_rev": root["goal_rev"],
+                "grant_rev": root["grant_rev"],
+                "authorizes_action": False,
+                "owner_outcome_verified": False,
+            })
+            db.commit()
+            return {
+                "status": "NATIVE_OPEN_RESEARCH_RECORDED",
+                "root_task_id": root_id,
+                "proposal_sha256": digest,
+                "authorizes_action": False,
+                "semantic_verdict": "UNVERIFIED_RESEARCH_PROPOSAL",
+                "owner_outcome_verified": False,
+            }
+        except BaseException:
+            db.rollback()
+            raise
+
+
 def register_native_goal(db_path: Path, goal: str, *,
                          allow_public_discovery: bool = False) -> str:
     """Add the original goal without invoking the fixed-grammar open_goal router."""
@@ -487,6 +625,51 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         if len(by_id) != len(children):
             raise ValueError("DUPLICATE_DECISION_CHILD")
         current_sources = _sources(fixtures)
+        # Recover model-neutral research independently of registered tools.
+        # Source hashes are checked against the current manifest but stale
+        # notes remain visible as historical hypotheses, not runnable facts.
+        research_rows = db.execute(
+            "SELECT event_id,details FROM events WHERE task_id=? "
+            "AND kind='NATIVE_OPEN_RESEARCH_RECORDED' ORDER BY event_id",
+            (root_id,)).fetchall()
+        if len(research_rows) > _MAX_OPEN_RESEARCH_RECORDS:
+            raise ValueError("NATIVE_OPEN_RESEARCH_STORAGE_BOUND")
+        open_research = []
+        seen_research = set()
+        for research_row in research_rows:
+            receipt = json.loads(research_row["details"])
+            if (not isinstance(receipt, dict)
+                or set(receipt) != {
+                    "contract_sha256", "proposal_sha256", "proposal",
+                    "goal_rev", "grant_rev", "authorizes_action",
+                    "owner_outcome_verified"}
+                or receipt["contract_sha256"] != _digest(contract)
+                or receipt["goal_rev"] != root["goal_rev"]
+                or receipt["grant_rev"] != root["grant_rev"]
+                or receipt["authorizes_action"] is not False
+                or receipt["owner_outcome_verified"] is not False):
+                raise ValueError("NATIVE_OPEN_RESEARCH_RECEIPT_INVALID")
+            proposal = receipt["proposal"]
+            _checked_open_research(proposal, contract["goal"])
+            digest = _open_research_fingerprint(proposal)
+            if digest != receipt["proposal_sha256"] or digest in seen_research:
+                raise ValueError("NATIVE_OPEN_RESEARCH_RECEIPT_INVALID")
+            seen_research.add(digest)
+            refs = proposal["source_refs"]
+            source_status = (
+                "NO_LOCAL_SOURCES_VERIFIED" if not refs
+                else "SOURCE_PIN_CURRENT_UNVERIFIED_SEMANTICS"
+                if all(current_sources.get(ref["path"]) == ref["sha256"]
+                       for ref in refs)
+                else "SOURCE_STALE_OR_REMOVED")
+            open_research.append({
+                "event_id": research_row["event_id"],
+                "proposal_sha256": digest,
+                "proposal": proposal,
+                "source_status": source_status,
+                "semantic_verdict": "UNVERIFIED_RESEARCH_PROPOSAL",
+                "authorizes_action": False,
+            })
         observations = []
         previous_id = None
         previous_decision_event_id = -1
@@ -636,6 +819,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "grant_current": grant_current, "sources": current_sources,
             "decisions": [json.loads(e["details"]) for e in decisions],
             "hypotheses": hypotheses,
+            "open_research": open_research,
             "children": observations})
         waiting = bool(observations and
             observations[-1]["task_state"] in ("PENDING", "RUNNING"))
@@ -650,6 +834,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "observation_sha256": fingerprint,
             "decisions": observations, "decision_count": len(decisions),
             "hypotheses": hypotheses,
+            "open_research": open_research,
+            "open_research_count": len(open_research),
             "pending_hypotheses": (
                 list(unresolved_hypotheses.values())
                 + [h for h in hypotheses
