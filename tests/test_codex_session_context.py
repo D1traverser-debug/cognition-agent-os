@@ -59,6 +59,32 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(result["status"], "NO_LOCAL_LEDGER_CONFIGURED")
         self.assertFalse(result["original_goal_verified"])
         self.assertNotIn("original_goal", result)
+        # Real process invocation without local SQLite must recover the
+        # EXISTING repository product direction, NOT invent owner history,
+        # claim GitHub-verified HEAD, or create a new authority.
+        project = result["repository_recovery"]
+        self.assertEqual(project["status"], "PROJECT_GUIDANCE_FOUND")
+        self.assertEqual(project["source_path"],
+                         "docs/PRODUCT-READINESS-GATE.md")
+        self.assertEqual(project["source_role"],
+                         "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
+        self.assertIn("opt-in interactive cognition workflow",
+                      project["near_term_priority"])
+        self.assertEqual(project["original_user_utterances"],
+                         "MUST_RECOVER_SEPARATELY")
+        self.assertEqual(project["live_pr_head_and_ci"], "MUST_REFETCH")
+        self.assertEqual(project["product_readiness_claim"], "NOT_VERIFIED")
+        self.assertFalse(result["business_outcome_verified"])
+        self.assertFalse(result["scheduling_or_effects_performed"])
+
+    def test_sqlite_original_owner_goal_is_not_replaced_by_repo_guidance(self):
+        owner = "Compare reference.csv with observed.csv, preserve source."
+        with closing(connect(self.db)) as db:
+            create_task(db, {"kind": "open_goal", "goal": owner})
+        result = self._run()
+        self.assertEqual(result["original_goal"], owner)
+        self.assertTrue(result["original_goal_verified"])
+        self.assertNotIn("repository_recovery", result)
 
     def test_cold_restart_resumes_exact_original_goal_without_new_ledger(self):
         goal = "Compare actual.csv with baseline.csv and report differences."
