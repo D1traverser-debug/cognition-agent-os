@@ -242,6 +242,43 @@ def _baseline_trial(case: dict, home: Path) -> dict:
     }
 
 
+def _adaptive_host_trial(case: dict, home: Path) -> dict:
+    """Genuine Host adaptive route; no model for exact local contracts."""
+    db, work, fixture, before = _prepare(home, case["files"])
+    root = register_native_goal(db, case["goal"])
+    progress = []
+    start = time.monotonic()
+    for _ in range(4):
+        receipt = run_tick(db, work, fixture, max_jobs=2,
+                           auto_native_cognition=True, auto_stage_goals=True)
+        owner = inspect_owner_local_outcome(db, work, fixture, root)
+        choices = receipt.get("native_cognition", [])
+        progress.append({"host_status": receipt["status"],
+                         "native_choices": choices,
+                         "worker_results": receipt["tasks"][:2],
+                         "sandbox_reviews": receipt.get("sandbox_reviews", [])[:2],
+                         "independent_owner_result": owner["status"]})
+        if owner["local_owner_outcome_verified"]:
+            break
+        if not receipt["tasks"] and not any(
+                x.get("status") == "NATIVE_METHOD_ENQUEUED" for x in choices):
+            break
+    final = inspect_owner_local_outcome(db, work, fixture, root)
+    state = inspect_native_goal(db, work, fixture, root)
+    selected = [x["selected_objective"] for x in state.get("decisions", [])]
+    return {"path": "REAL_HOST_ADAPTIVE_NO_MODEL", "case": case["id"],
+            "selected_objectives": selected,
+            "method_alignment": (case["target"] in selected if case["target"] else not selected),
+            "whole_local_owner_verified": bool(final["local_owner_outcome_verified"]),
+            "independent_owner_result": final["status"],
+            "source_preserved": _preserved(fixture, before),
+            "model_calls": 0, "progress": progress,
+            "sandbox_effects_verified": sum(x.get("status") == "SANDBOX_VERIFIED"
+                for step in progress for x in step["sandbox_reviews"]),
+            "elapsed_seconds": round(time.monotonic() - start, 2),
+            "external_business_result_verified": False,
+            "novel_domain_cognition_verified": False}
+
 def score_trial_results(rows: list[dict]) -> dict:
     """Score DELIVERED positive owner goals, not negative-label agreement.
 
