@@ -154,6 +154,49 @@ _ARCHIVE_GIT_BLOB_SHA1 = '6bc6ad3041876916c16886767ce2ff24bfd88b75'
 # Full work provenance belongs in Git/runtime sources and is fetched on demand.
 _MAX_ACTIVE_HANDOFF_BYTES = 8192
 
+# Only durable current product specifications belong in docs/. Dated milestone,
+# benchmark, audit and experiment reports live under archive/ and are retrieved
+# explicitly when historical evidence is material. This prevents broad agent
+# search from silently promoting old plans into current context.
+_ACTIVE_DOCS = {
+    'docs/00-PRODUCT-CONOPS.md',
+    'docs/01-ARCHITECTURE-DECISIONS.md',
+    'docs/02-AUTHORITY-AND-INTERFACES.md',
+    'docs/04-SECURITY-OPERATIONS.md',
+    'docs/06-ZERO-API-CREDIT-POLICY.md',
+    'docs/PRODUCT-READINESS-GATE.md',
+}
+
+def verify_active_context_surface(root):
+    docs = root / 'docs'
+    actual = {
+        p.relative_to(root).as_posix()
+        for p in docs.iterdir()
+        if p.is_file() and not p.is_symlink()
+    }
+    require(actual == _ACTIVE_DOCS,
+            'active docs drifted; historical/experimental material must be '
+            'archived, not added to default agent context')
+    require(not (root / 'README-P1.md').exists(),
+            'obsolete P1 readme returned to active repository root')
+    require(not (root / 'audits').exists(),
+            'dated audit snapshots must remain under archive/')
+    for relative in (
+        'scripts/codex_session_context.py',
+        'AGENTS.md',
+        'integrations/chatgpt/cognition-agent-os-chatgpt/skills/'
+        'cognition-parent-chatgpt-intake/SKILL.md',
+    ):
+        text = (root / relative).read_text(encoding='utf-8')
+        require('archive/docs/' not in text and 'archive/audits/' not in text,
+                relative + ': default agent entrypoint must not load archived '
+                'evidence without an explicit historical task')
+    return {
+        'status': 'ACTIVE_CONTEXT_SURFACE_VALID',
+        'active_docs': sorted(actual),
+        'historical_default_loaded': False,
+    }
+
 def verify_live_handoff(root):
     """Check only identity, active/archive isolation and stale-context hygiene.
 
@@ -230,6 +273,7 @@ def main(argv=None):
                        (root / 'docs/00-PRODUCT-CONOPS.md').read_text(encoding='utf-8'),
                        (root / 'docs/PRODUCT-READINESS-GATE.md').read_text(encoding='utf-8'))
         result['active_handoff'] = verify_live_handoff(root)
+        result['active_context_surface'] = verify_active_context_surface(root)
         result['original_source_content_verified'] = (
             verify_archived_sources(reg, opts.archive_dir)
             if opts.archive_dir else 'NOT_CHECKED_CI_HAS_NO_PRIVATE_ARCHIVES')
