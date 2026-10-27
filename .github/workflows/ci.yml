@@ -727,7 +727,7 @@ jobs:
 
   experimental_live_open_goal_method:
     # Real local inference on disposable hosted Linux. No owner-host install.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-real-open-goal]') }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-real-open-goal]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
