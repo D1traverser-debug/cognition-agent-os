@@ -1,6 +1,6 @@
 # cognition-agent-os
 
-**Status: experimental integrated candidate — NOT_READY.** This repository is the implementation of one opt-in cognition parent, not a release claim. Never infer current work from a dated README, cached SHA or old green CI: resolve the live open-PR topology, exact HEAD, actual source, current grants and matching-head evidence first.
+**Status: experimental integrated candidate — NOT_READY.** This repository is the implementation of one opt-in cognition parent, not a release claim. Never infer current work from a dated README, cached SHA or old green CI: resolve live GitHub open-PR topology, exact HEAD, actual source, current grants and matching-head evidence first.
 
 ## Product objective
 
@@ -21,9 +21,9 @@ Do not recursively load the repository as context.
 - `docs/06-ZERO-API-CREDIT-POLICY.md` — free-first/no-unapproved-metered-call policy.
 - `docs/PRODUCT-READINESS-GATE.md` — current product acceptance gaps and phase priority.
 
-Everything under `archive/` is historical evidence. Do **not** load it during normal continuation or architecture selection. Retrieve a specific archived file only when the current task explicitly needs historical provenance, a superseded decision, or failure evidence; then treat it as historical, never as current authority.
+The six `docs/` paths above are the **default specification starting set**, not a ban on other documentation. Additional `docs/` reports and experiments may be relevant evidence for a particular task; their presence does not make them current authority. Retrieve them selectively by purpose and provenance (not by date, size or filename alone). Material under `archive/` is historical by default and retrieved only for relevant prior decisions, failed attempts or source provenance.
 
-Complete engineering provenance belongs in Git commit history, diffs, current code/tests and exact-head CI. Dated audit snapshots and milestone reports were moved out of active context rather than repeatedly summarized into prompts.
+Complete engineering provenance belongs in Git commit history, diffs, current code/tests and exact-head CI. Dated audit snapshots and obsolete root P1 instructions are archived; other technical reports retain their original paths until separately classified with link and dependency verification. Directory arrangement alone cannot prove a model selected correct context.
 
 ## Local prototype smoke
 
