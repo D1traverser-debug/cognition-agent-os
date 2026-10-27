@@ -395,15 +395,22 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     if not isinstance(candidate, dict):
         raise local_model.LocalModelUnavailable("NATIVE_MODEL_INVALID_CHOICE")
 
-    # The installed model can decide what extra evidence to inspect, rather
-    # than being trapped by hardcoded first-350-byte previews. It cannot read
-    # an arbitrary path, invent a new source, trigger another tool or loop.
-    if "inspect_sources" in candidate:
+    # Ask for additional actual evidence as needed, rather than forcing a
+    # verdict after exactly one read. No fixed hierarchy/depth is inferred:
+    # each model request must bring a genuinely new, source-pinned excerpt.
+    # Prompt size and the finite live-source inventory bound resource usage.
+    # Exhaustion is refusal to decide, NOT evidence that the goal is solved.
+    additional = []
+    previously_read: dict[str, list[tuple[int, int]]] = {}
+    while "inspect_sources" in candidate:
         reads = candidate.get("inspect_sources")
         if (set(candidate) != {"inspect_sources"}
             or not isinstance(reads, list) or not 1 <= len(reads) <= 2):
             raise ValueError("INVALID_NATIVE_RESEARCH_REQUEST")
-        additional = []
+        if len(additional) + len(reads) > _MAX_VIEW_FILES:
+            raise ValueError("NATIVE_RESEARCH_BUDGET_EXHAUSTED")
+        next_ranges: dict[str, list[tuple[int, int]]] = {}
+        next_excerpts = []
         for item in reads:
             if (not isinstance(item, dict)
                 or set(item) != {"path", "offset_chars"}
@@ -422,25 +429,39 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             offset = item["offset_chars"]
             if offset >= len(content):
                 raise ValueError("NATIVE_RESEARCH_OFFSET_OUTSIDE_SOURCE")
-            additional.append({
+            excerpt = content[offset:offset + 2048]
+            end_offset = offset + len(excerpt)
+            prior_ranges = (previously_read.get(item["path"], [])
+                            + next_ranges.get(item["path"], []))
+            if any(offset < old_end and old_start < end_offset
+                   for old_start, old_end in prior_ranges):
+                raise ValueError("NATIVE_RESEARCH_NO_NEW_EVIDENCE")
+            next_ranges.setdefault(item["path"], []).append(
+                (offset, end_offset))
+            next_excerpts.append({
                 "path": item["path"],
                 "sha256": observed[item["path"]],
                 "offset_chars": offset,
-                "untrusted_excerpt": content[offset:offset + 2048],
+                "untrusted_excerpt": excerpt,
                 "trust": "UNTRUSTED_DATA",
             })
         if _sources(fixtures) != observed:
             raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
         expanded = dict(evidence)
-        expanded["additional_verified_source_excerpts"] = additional
-        extended_json = json.dumps(expanded, ensure_ascii=False, sort_keys=True)
+        expanded["additional_verified_source_excerpts"] = (
+            additional + next_excerpts)
+        extended_json = json.dumps(
+            expanded, ensure_ascii=False, sort_keys=True)
         if len(extended_json) > _MAX_PROMPT:
             raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
-        # Latest JSON is still the last prompt section, for re-analysis.
+        additional.extend(next_excerpts)
+        for name, ranges in next_ranges.items():
+            previously_read.setdefault(name, []).extend(ranges)
         extended_prompt = prompt.rsplit("\n\n", 1)[0] + "\n\n" + extended_json
         response = local_model._request("POST", "/api/generate", {
             "model": model, "prompt": extended_prompt, "stream": False,
-            "format": result_format, "options": {"temperature": 0, "num_predict": 900},
+            "format": result_format,
+            "options": {"temperature": 0, "num_predict": 900},
             "keep_alive": "0",
         }, timeout)
         if (response.get("done") is not True
@@ -451,9 +472,9 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         except (ValueError, TypeError) as exc:
             raise local_model.LocalModelUnavailable(
                 "NATIVE_MODEL_INVALID_JSON") from exc
-        if (not isinstance(candidate, dict)
-            or "inspect_sources" in candidate):
-            raise ValueError("NATIVE_RESEARCH_ROUND_LIMIT")
+        if not isinstance(candidate, dict):
+            raise local_model.LocalModelUnavailable(
+                "NATIVE_MODEL_INVALID_CHOICE")
     if candidate == {"abstain": True}:
         return {"status": "NATIVE_LOCAL_MODEL_ABSTAINED",
                 "root_task_id": root_id, "owner_outcome_verified": False}
