@@ -241,7 +241,7 @@ jobs:
     # ephemeral hosted CI runner, NEVER an install on the user's Windows PC.
     # Image and weights are downloaded once in the CI job; no cloud LLM
     # inference endpoint, paid token bill or finite AI-credit scheme.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p14-real-model]') }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-p14-real-model]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 22
     steps:
@@ -304,7 +304,7 @@ jobs:
     # P15: separate opt-in, one real nonmetered 3B coder model only.
     # This measures quality on unchanged P14 hidden cases. A zero pass
     # remains valid observed model-quality failure, not fabricated success.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-p15-feedback-model]') }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-p15-feedback-model]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -356,7 +356,7 @@ jobs:
   experimental_local_7b_capacity:
     # One explicitly requested nonmetered coder-capacity test only.
     # Installed on disposable hosted Linux CI, never owner's computer.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]') || contains(github.event.pull_request.body, '[run-p23-nuplan-ab]') || contains(github.event.pull_request.body, '[run-p24-finance-7b]') || contains(github.event.pull_request.body, '[run-p31-full-dateutil-7b]') || contains(github.event.pull_request.body, '[run-p32-full-apscheduler-7b]')) }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (contains(github.event.pull_request.body, '[run-p17-7b-local-model]') || contains(github.event.pull_request.body, '[run-p18-goal-7b]') || contains(github.event.pull_request.body, '[run-p19-unfamiliar-7b]') || contains(github.event.pull_request.body, '[run-p20-external-7b]') || contains(github.event.pull_request.body, '[run-p21-issue-7b]') || contains(github.event.pull_request.body, '[run-p22-issue-7b]') || contains(github.event.pull_request.body, '[run-p23-nuplan-ab]') || contains(github.event.pull_request.body, '[run-p24-finance-7b]') || contains(github.event.pull_request.body, '[run-p31-full-dateutil-7b]') || contains(github.event.pull_request.body, '[run-p32-full-apscheduler-7b]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 28
     steps:
@@ -811,7 +811,7 @@ jobs:
     # Opt-in genuine LOCAL inference on an ephemeral free PUBLIC CI runner.
     # Not a cloud AI API, not owner's machine, not unattended deployment.
     # A low quality score remains a measured failure and does not flip CI red.
-    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && contains(github.event.pull_request.body, '[run-investigation-real-0.5b]') }}
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-investigation-real-0.5b]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     permissions:
