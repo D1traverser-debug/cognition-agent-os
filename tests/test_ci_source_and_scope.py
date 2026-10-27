@@ -105,7 +105,7 @@ class CISourceAndScopeTests(unittest.TestCase):
         """
         import re
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        boundaries = list(re.finditer(r"(?m)^  ([a-z][a-z0-9_]*):\\s*$", workflow))
+        boundaries = list(re.finditer(r"(?m)^  ([a-z][a-z0-9_]*):\s*$", workflow))
         guarded = []
         for position, match in enumerate(boundaries):
             section = workflow[match.end():(
