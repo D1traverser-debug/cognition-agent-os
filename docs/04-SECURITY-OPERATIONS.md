@@ -61,6 +61,6 @@
 
 ## 9. 实际工程进度与下阶段输入
 
-此文档本身无安全效果。安全门禁属于未来代码、可信运行宿主与供应商实际授权；目前只有设计和此前本地 SQLite 等受限实验。下一步需要实现并实测第一条完整工作链 [historical 03-FIRST-VERTICAL-SLICE.md](../archive/docs/03-FIRST-VERTICAL-SLICE.md)，对该版本报告每条测试的真实状态（`SPECIFIED/IMPLEMENTED/EXECUTED/INDEPENDENT_VERIFIED`）。不得把设计 PR 视作系统可持续自治或已通过外部验收。
+此文档本身无安全效果。安全门禁属于未来代码、可信运行宿主与供应商实际授权；目前只有设计和此前本地 SQLite 等受限实验。下一步需要实现并实测第一条完整工作链 [historical 03-FIRST-VERTICAL-SLICE.md](03-FIRST-VERTICAL-SLICE.md)，对该版本报告每条测试的真实状态（`SPECIFIED/IMPLEMENTED/EXECUTED/INDEPENDENT_VERIFIED`）。不得把设计 PR 视作系统可持续自治或已通过外部验收。
 
 参考：[GitHub Actions 计划运行异常](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows)、[GitHub GITHUB_TOKEN 权限](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)、[Agents SDK Guardrails](https://openai.github.io/openai-agents-python/guardrails/)、NIST AI RMF、历史研究 `DEEP_STUDY_AUTHORITY_AND_ARCHITECTURE.md`、`DEEP_STUDY_GOAL_FIDELITY_AND_SAFE_EVOLUTION.md`。
