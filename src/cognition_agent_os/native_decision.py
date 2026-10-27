@@ -673,7 +673,18 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         by_id = {row["task_id"]: row for row in children}
         if len(by_id) != len(children):
             raise ValueError("DUPLICATE_DECISION_CHILD")
-        current_sources = _sources(fixtures)
+        # Root identity is authenticated by its immutable ledger receipt
+        # ABOVE. An unavailable/misplaced/over-capacity evidence directory is
+        # not the deletion of that original owner goal. Recover the EXACT
+        # goal but NEVER return an observation CAS or permission to execute.
+        # Do not mask malformed task/registration/lineage as source outage.
+        try:
+            current_sources = _sources(fixtures)
+        except (ValueError, OSError, SourceUnavailable, PermissionError) as exc:
+            return {**fail, "status": "NATIVE_SOURCE_UNAVAILABLE",
+                    "original_goal": contract["goal"],
+                    "reason": type(exc).__name__,
+                    "identity_scope": "IMMUTABLE_REGISTERED_ROOT_ONLY"}
         # Recover model-neutral research independently of registered tools.
         # Source hashes are checked against the current manifest but stale
         # notes remain visible as historical hypotheses, not runnable facts.
