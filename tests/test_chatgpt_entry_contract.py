@@ -36,10 +36,20 @@ class ChatGPTCurrentEntryBoundary(unittest.TestCase):
         self.assertIn("separate current grants", content)
 
     def test_legacy_migration_not_accidentally_deleted(self):
+        """Check migration safety contract, not three inherited prose quotes.
+
+        These are configuration assertions, not actual child cutover tests;
+        a shorter root instruction file must not silently turn old UAOS into
+        a present parent or make its child migration automatic.
+        """
         content = REPO_INSTRUCTIONS.read_text(encoding="utf-8")
-        self.assertIn("Existing child repositories still name UAOS", content)
-        self.assertIn("explicit cutover approval", content)
-        self.assertIn("not a new permanent superior", content)
+        self.assertRegex(content, r"(?is)universal-agent-os.{0,120}historical")
+        self.assertRegex(content, r"(?is)Child UAOS compatibility files.{0,150}migration dependencies")
+        self.assertRegex(content, r"(?is)do not remove/migrate.{0,120}independent cutover validation")
+        self.assertRegex(content, r"(?is)independent cutover validation.{0,100}owner approval")
+        self.assertIn("never the present parent bootstrap",
+                      SKILL.read_text(encoding="utf-8"))
+        self.assertNotIn("UAOS is the active parent", content)
 
     def test_route_falsifiers_remain_in_scope_probes(self):
         content = PROBES.read_text(encoding="utf-8")
