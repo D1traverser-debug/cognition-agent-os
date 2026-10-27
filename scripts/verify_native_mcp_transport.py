@@ -591,6 +591,31 @@ async def run():
             assert entry["decision_count"] is None, entry
             assert entry["owner_outcome_verified"] is False, entry
             (sources / "observed.csv").write_bytes(original["observed.csv"])
+            # Composite cold-resume failure: a stray temporary file makes
+            # the entire evidence manifest unparseable. Valid immutable
+            # owner goals must remain discoverable, but no plan/effect may
+            # be authorized from that incomplete evidence snapshot.
+            stray = sources / "temporary.lock"
+            stray.write_text("writer interrupted before atomic rename",
+                             encoding="utf-8")
+            try:
+                outage = unwrap(await client.call_tool(
+                    "native_goal_inspect", {"root_task_id": root}))
+                assert outage["status"] == "NATIVE_SOURCE_UNAVAILABLE", outage
+                assert outage["original_goal"] == goal, outage
+                assert "observation_sha256" not in outage, outage
+                degraded, _ = await full_inventory()
+                assert set(degraded) == expected, "VALID_ROOTS_LOST_WITH_SOURCE"
+                assert degraded[root]["original_goal"] == goal
+                assert degraded[root]["status"] == (
+                    "NATIVE_SOURCE_UNAVAILABLE"), degraded[root]
+                still_revoked = await client.call_tool(
+                    "native_goal_create", {"owner_goal": goal})
+                assert still_revoked.is_error, still_revoked
+            finally:
+                stray.unlink()
+            restored, _ = await full_inventory()
+            assert restored[root]["status"] == "NATIVE_GRANT_REVOKED"
         print(json.dumps({
             "status": "LOCAL_MCP_HOST_READBACK_VERIFIED",
             "transport": "OFFICIAL_MCP_STDIO_SUBPROCESS",
