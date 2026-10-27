@@ -172,7 +172,7 @@ passed [Linux and Windows 652/652 each, all seven required CI jobs](https://gith
 These checks DO NOT prove owner-level external effects, spontaneous capability
 discovery, or complete independent semantic correctness of every file.
 
-**Actual priority (not next isolated local feature):** build the genuine
+**2026-10-25 historical engineering priority (superseded for the current opt-in phase by the 2026-10-26 Near-term priority above):** build the genuine
 parent → child read-only discovery/goal reconciliation → competing
 source-grounded guidance → child-native admission → independent child-domain
 result feedback → parent correction loop on at least one of the existing
