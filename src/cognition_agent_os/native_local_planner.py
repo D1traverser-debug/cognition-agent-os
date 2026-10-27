@@ -21,6 +21,10 @@ from .ledger import connect, event
 from .source import safe_fixture, SourceUnavailable
 
 _MAX_VIEW_FILES = 24
+# This is a defensive per-replay resource ceiling, NOT the context preview
+# count. Immutable receipts always stay in SQLite, even when a model sees
+# only a bounded excerpt and a compact/explicitly truncated range index.
+_MAX_DURABLE_RESEARCH_READS = 4096
 _MAX_PREVIEW_BYTES = 350
 _MAX_PROMPT = 14500
 
@@ -261,8 +265,11 @@ def _recovered_research_reads(db_path: Path, fixtures: Path,
             "AND json_valid(details) "
             "AND json_extract(details,'$.observation_sha256')=? "
             "AND json_extract(details,'$.model')=? "
-            "ORDER BY event_id",
-            (root_id, observation, model)).fetchall()
+            "ORDER BY event_id LIMIT ?",
+            (root_id, observation, model,
+             _MAX_DURABLE_RESEARCH_READS + 1)).fetchall()
+        if len(rows) > _MAX_DURABLE_RESEARCH_READS:
+            raise ValueError("NATIVE_RESEARCH_HISTORY_RESOURCE_BOUND")
         # Invalid JSON cannot be assigned a reliable evidence identity.
         # Fail closed rather than silently discarding any corrupted receipt.
         malformed = db.execute(
@@ -290,8 +297,7 @@ def _recovered_research_reads(db_path: Path, fixtures: Path,
             if (not isinstance(path, str) or path not in sources
                 or sources[path] != entry["sha256"]
                 or type(offset) is not int or type(length) is not int
-                or offset < 0 or not 1 <= length <= 2048
-                or len(recovered) >= _MAX_VIEW_FILES):
+                or offset < 0 or not 1 <= length <= 2048):
                 raise ValueError("INVALID_RESEARCH_RECEIPT")
             data = safe_fixture(fixtures, path)
             if hashlib.sha256(data).hexdigest() != entry["sha256"]:
@@ -460,11 +466,18 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     # Durable history is an index, not a mandatory growing context replay.
     # Restored snippets are re-read from current source hashes, never accepted
     # from an untrusted compacted model summary.
+    # The whole validated provenance history is used below for overlap and
+    # replay controls, but never dumped into the model context wholesale.
+    # Conflating total checkpoint count with per-prompt excerpt budget froze
+    # the agent permanently at the 25th legitimate source read.
     receipts = [{
         "path": x["path"], "sha256": x["sha256"],
         "offset_chars": x["offset_chars"],
         "length_chars": len(x["untrusted_excerpt"]),
-    } for x in history]
+    } for x in history[-_MAX_VIEW_FILES:]]
+    evidence["prior_research_total_count"] = len(history)
+    evidence["research_history_index_truncated"] = (
+        len(receipts) < len(history))
     additional = history[-2:]
     if receipts:
         evidence["prior_research_receipts"] = receipts
@@ -477,6 +490,15 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             evidence["additional_verified_source_excerpts"] = additional
         else:
             evidence.pop("additional_verified_source_excerpts", None)
+        evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    # Remaining index entries can be removed from THIS prompt when large
+    # owner/source context consumes the window. Full receipts are retained
+    # and checked in SQLite, and the model is explicitly told the index is
+    # incomplete; absence from the prompt never means unread/unverified.
+    while len(evidence_json) > _MAX_PROMPT and receipts:
+        receipts = receipts[1:]
+        evidence["prior_research_receipts"] = receipts
+        evidence["research_history_index_truncated"] = True
         evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
     if len(evidence_json) > _MAX_PROMPT:
         raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
