@@ -124,6 +124,53 @@ class NativeDecisionLoop(unittest.TestCase):
             register_native_goal(
                 self.db, self.goal, client_request_id=stable_request)
 
+    def test_original_goal_identity_survives_local_source_manifest_outage(self):
+        """Root identity comes from authenticated ledger, not file availability."""
+        root = self.root_id()
+        original = self.goal
+        expected = self.fixtures / "expected.csv"
+        scenarios = ("unsupported_entry", "source_count_exhausted",
+                     "directory_unavailable")
+        for scenario in scenarios:
+            with self.subTest(scenario=scenario):
+                injected = []
+                if scenario == "unsupported_entry":
+                    bad = self.fixtures / "unexpected.lock"
+                    bad.write_text("transient writer temp file", encoding="utf-8")
+                    injected.append(bad)
+                elif scenario == "source_count_exhausted":
+                    for index in range(62):
+                        bad = self.fixtures / ("added_%02d.md" % index)
+                        bad.write_text("research source placeholder", encoding="utf-8")
+                        injected.append(bad)
+                else:
+                    self.fixtures.rename(self.root / "sources-temporarily-offline")
+                try:
+                    # Pure identity must remain recoverable despite failed
+                    # evidence audit. No stale source can authorize action.
+                    observed = self.view(root)
+                    self.assertEqual(observed["original_goal"], original)
+                    self.assertEqual(observed["status"],
+                                     "NATIVE_SOURCE_UNAVAILABLE")
+                    self.assertFalse(observed["owner_outcome_verified"])
+                    self.assertNotIn("observation_sha256", observed)
+                    with self.assertRaisesRegex(
+                            ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+                        record_native_open_research(
+                            self.db, self.workspace, self.fixtures, root, {})
+                finally:
+                    if scenario == "directory_unavailable":
+                        (self.root / "sources-temporarily-offline").rename(
+                            self.fixtures)
+                    for path in injected:
+                        path.unlink()
+                recovered = self.view(root)
+                self.assertEqual(recovered["original_goal"], original)
+                self.assertEqual(recovered["status"],
+                                 "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        self.assertEqual(expected.read_text(encoding="utf-8"),
+                         "supplier,received\\nDelta,8\\n")
+
     def test_simultaneous_native_creation_same_key_one_original_root(self):
         """Two SQLite connections racing after client retry cannot fork owner."""
         key = "owner-native-concurrent-acklost-0002"
