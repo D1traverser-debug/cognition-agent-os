@@ -472,6 +472,10 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         observations = []
         previous_id = None
         previous_decision_event_id = -1
+        # Replay the EXISTING immutable decision events to recover unresolved
+        # concerns. A review marked UNRESOLVED is not an outcome observation.
+        # Do not erase it merely because one decision/Worker tick occurred.
+        unresolved_hypotheses: dict[str, dict] = {}
         for index, item in enumerate(decisions):
             receipt = json.loads(item["details"])
             if (not isinstance(receipt, dict)
@@ -483,10 +487,31 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 or receipt["owner_outcome_verified"] is not False):
                 raise ValueError("DECISION_RECEIPT_CHANGED")
             parsed = _proposal(receipt["proposal"], contract)
+            newly_recorded = [
+                h for h in hypotheses if (previous_decision_event_id <
+                    h["event_id"] < item["event_id"])]
+            reviews = receipt["proposal"].get("hypothesis_reviews") or []
+            reviewed_hashes = {
+                review.get("proposal_sha256") for review in reviews
+                if isinstance(review, dict)}
+            # Historical admitted receipts were only required to review NEW
+            # hypotheses. Reconstruct unresolved legacy concerns even when
+            # an old receipt omitted them; never reinterpret omission as a
+            # verified resolution or invalidate unrelated legitimate work.
+            carried_and_reviewed = [
+                h for digest, h in unresolved_hypotheses.items()
+                if digest in reviewed_hashes]
             _challenge_hypotheses(
-                receipt["proposal"],
-                [h for h in hypotheses if (previous_decision_event_id <
-                    h["event_id"] < item["event_id"])])
+                receipt["proposal"], newly_recorded + carried_and_reviewed)
+            candidates = {
+                h["proposal_sha256"]: h
+                for h in newly_recorded + carried_and_reviewed}
+            for review in reviews:
+                digest = review["proposal_sha256"]
+                if review["disposition"] == "UNRESOLVED_RESEARCH_REQUIRED":
+                    unresolved_hypotheses[digest] = candidates[digest]
+                else:
+                    unresolved_hypotheses.pop(digest, None)
             previous_decision_event_id = item["event_id"]
             selected = parsed["selected"]
             child = by_id.get(receipt["child_task_id"])
@@ -573,8 +598,10 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "observation_sha256": fingerprint,
             "decisions": observations, "decision_count": len(decisions),
             "hypotheses": hypotheses,
-            "pending_hypotheses": [
-                h for h in hypotheses if h["event_id"] > previous_decision_event_id],
+            "pending_hypotheses": (
+                list(unresolved_hypotheses.values())
+                + [h for h in hypotheses
+                   if h["event_id"] > previous_decision_event_id]),
             "owner_outcome_verified": False, "business_outcome_verified": False,
         }
     except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
