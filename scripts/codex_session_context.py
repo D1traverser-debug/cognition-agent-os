@@ -308,7 +308,7 @@ def main() -> int:
             "hookEventName": "SessionStart",
             "additionalContext": note,
         }
-    }, ensure_ascii=False))
+    }, ensure_ascii=True))
     return 0
 
 
