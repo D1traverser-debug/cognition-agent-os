@@ -338,6 +338,8 @@ def score_trial_results(rows: list[dict]) -> dict:
             "actual_sandbox_effects_verified": sum(
                 row[name].get("sandbox_effects_verified", 0)
                 for row in rows),
+            "model_generation_calls": sum(
+                row[name].get("model_calls", 0) for row in rows),
             "independent_business_result_verified": False,
         }
     return scores
@@ -370,6 +372,7 @@ def main() -> None:
             "withheld_expected_method": case["target"],
             "withheld_local_owner_required": case["must_complete_local_owner"],
             "baseline": cases["baseline"], "native": cases["native"],
+            "adaptive_host": cases["adaptive_host"],
         })
         # Persist intermediate receipts in case the next real inference stalls.
         OUTPUT.write_text(json.dumps({
