@@ -113,6 +113,48 @@ class CodexSessionContext(unittest.TestCase):
         self.assertFalse(result["business_outcome_verified"])
         self.assertFalse(result["scheduling_or_effects_performed"])
 
+    def test_missing_current_architecture_or_modules_does_not_fabricate_map(self):
+        """Cold recovery source truth is rechecked, never guessed from old prose."""
+        import importlib.util
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location(
+            "codex_test_recovery", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with patch.object(module, "ROOT", self.tmp):
+            self.assertEqual(
+                module._current_architecture_pivot()["status"],
+                "ARCHITECTURE_PIVOT_UNVERIFIABLE")
+            self.assertEqual(
+                module._live_python_topology()["kind"],
+                "CURRENT_SOURCE_TOPOLOGY_UNVERIFIABLE")
+            docs = self.tmp / "docs"
+            docs.mkdir()
+            original = docs / "01-ARCHITECTURE-DECISIONS.md"
+            original.write_text(
+                "### 优先级反转（约束后续工程行为）\\n"
+                "1. ChatGPT/Codex first inspect ALL current original source "
+                "evidence; compare two legitimate methods; independently "
+                "read back authorized effects before promoting outcomes.\\n",
+                encoding="utf-8")
+            first = module._current_architecture_pivot()
+            self.assertEqual(
+                first["status"], "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
+            self.assertIn("ALL current original source", first["proposed_first_action"])
+            # Editing the actual source must update the next cold recovery,
+            # without a cached latest-decision summary.
+            original.write_text(
+                "### 优先级反转（约束后续工程行为）\\n"
+                "1. ChatGPT/Codex now challenge a changed evidence provider "
+                "and re-evaluate actual task results before granting "
+                "semantic success to any previous attempt.\\n",
+                encoding="utf-8")
+            second = module._current_architecture_pivot()
+            self.assertIn("changed evidence provider",
+                          second["proposed_first_action"])
+            self.assertNotIn("ALL current original source",
+                             second["proposed_first_action"])
+
     def test_sqlite_original_owner_goal_is_not_replaced_by_repo_guidance(self):
         owner = "Compare reference.csv with observed.csv, preserve source."
         with closing(connect(self.db)) as db:
