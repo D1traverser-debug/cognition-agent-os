@@ -427,6 +427,40 @@ class NativeLocalModelLoop(unittest.TestCase):
                 self.db, self.fixtures, root,
                 current, "installed:test", sources)
 
+    def test_no_progress_abstention_remains_enforced_after_unrelated_events(self):
+        """The retry guard is persistent by exact model/evidence identity."""
+        from cognition_agent_os.ledger import event
+        root = register_native_goal(self.db, self.goal)
+        snapshot = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        current = snapshot["observation_sha256"]
+        with closing(connect(self.db)) as db:
+            event(db, root, "NATIVE_LOCAL_NO_PROGRESS", {
+                "observation_sha256": current,
+                "model": "installed:test",
+                "reason": "MODEL_ABSTAINED",
+                "owner_outcome_verified": False,
+            })
+            for idx in range(70):
+                event(db, root, "NATIVE_LOCAL_NO_PROGRESS", {
+                    "observation_sha256": "f" * 64,
+                    "model": "other:" + str(idx),
+                    "reason": "OTHER_MODEL_UNRELATED_FAILURE",
+                    "owner_outcome_verified": False,
+                })
+            db.commit()
+        with patch("cognition_agent_os.local_model._request") as model:
+            answer = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(answer["status"],
+                         "NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED")
+        model.assert_not_called()
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tasks WHERE parent_task=?", (root,)
+            ).fetchone()[0], 0)
+
     def test_retried_research_checkpoint_is_idempotent_at_sqlite_boundary(self):
         """Same verified observation reread by a retry must leave one receipt."""
         from cognition_agent_os.native_local_planner import (
