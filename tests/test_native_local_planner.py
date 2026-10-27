@@ -347,6 +347,86 @@ class NativeLocalModelLoop(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual(count, 7)  # recall != new independent evidence
 
+    def test_research_checkpoint_not_forgotten_after_128_unrelated_events(self):
+        """Cold resume filters OWNER+OBSERVATION+MODEL before any bounded read."""
+        import hashlib
+        from cognition_agent_os.ledger import event
+        from cognition_agent_os.native_local_planner import (
+            _recovered_research_reads, _checkpoint_research_reads)
+        (self.fixtures / "trace.md").write_text("X" * 6000, encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        snap = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        model = "installed:test"
+        sha = hashlib.sha256(
+            (self.fixtures / "trace.md").read_bytes()).hexdigest()
+        receipt = {
+            "observation_sha256": snap["observation_sha256"],
+            "model": model,
+            "path": "trace.md", "sha256": sha,
+            "offset_chars": 500, "length_chars": 2048,
+        }
+        with closing(connect(self.db)) as db:
+            event(db, root, "NATIVE_LOCAL_RESEARCH_READ", receipt)
+            for idx in range(140):
+                event(db, root, "NATIVE_LOCAL_RESEARCH_READ", {
+                    **receipt,
+                    "observation_sha256": "f" * 64,
+                    "model": "unrelated-model:" + str(idx),
+                })
+            db.commit()
+        sources = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in self.fixtures.iterdir()}
+        recovered = _recovered_research_reads(
+            self.db, self.fixtures, root,
+            snap["observation_sha256"], model, sources)
+        self.assertEqual(
+            [(x["path"], x["offset_chars"]) for x in recovered],
+            [("trace.md", 500)])
+        # If a caller repeats the known range after losing its response,
+        # the single authoritative receipt remains idempotent, not "new".
+        _checkpoint_research_reads(
+            self.db, self.workspace, self.fixtures, root,
+            snap["observation_sha256"], model, [{
+                "path": "trace.md", "sha256": sha,
+                "offset_chars": 500, "untrusted_excerpt": "X" * 2048,
+            }])
+        with closing(connect(self.db)) as db:
+            count = db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ' "
+                "AND json_extract(details,'$.observation_sha256')=? "
+                "AND json_extract(details,'$.model')=?",
+                (root, snap["observation_sha256"], model)).fetchone()[0]
+        self.assertEqual(count, 1)
+
+    def test_forged_research_checkpoint_cannot_be_hidden_by_unrelated_tail(self):
+        """Truncation must not hide a corrupted CURRENT claim from the verifier."""
+        import hashlib
+        from cognition_agent_os.ledger import event
+        from cognition_agent_os.native_local_planner import _recovered_research_reads
+        (self.fixtures / "trace.md").write_text("Z" * 4200, encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        snap = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        current = snap["observation_sha256"]
+        with closing(connect(self.db)) as db:
+            event(db, root, "NATIVE_LOCAL_RESEARCH_READ", {
+                "observation_sha256": current, "model": "installed:test",
+                "path": "trace.md", "sha256": "0" * 64,
+                "offset_chars": 500, "length_chars": 2048})
+            for idx in range(140):
+                event(db, root, "NATIVE_LOCAL_RESEARCH_READ", {
+                    "observation_sha256": "e" * 64, "model": f"other:{idx}",
+                    "path": "trace.md", "sha256": "0" * 64,
+                    "offset_chars": 500, "length_chars": 2048})
+            db.commit()
+        sources = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in self.fixtures.iterdir()}
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_RESEARCH_CHECKPOINT_UNVERIFIABLE"):
+            _recovered_research_reads(
+                self.db, self.fixtures, root,
+                current, "installed:test", sources)
+
     def test_retried_research_checkpoint_is_idempotent_at_sqlite_boundary(self):
         """Same verified observation reread by a retry must leave one receipt."""
         from cognition_agent_os.native_local_planner import (
