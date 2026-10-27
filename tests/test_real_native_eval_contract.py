@@ -35,6 +35,29 @@ class NativeRealModelEvalContract(unittest.TestCase):
             self.assertNotIn("selected_intent", case)
             self.assertNotIn("decision_basis", case)
 
+    def test_real_benchmark_includes_actual_host_adaptive_entry(self):
+        """The model-only planner is a diagnostic arm, not the real Host path."""
+        bench = load_benchmark()
+        self.assertTrue(callable(getattr(bench, "_adaptive_host_trial", None)))
+        rows = []
+        for case in bench.CASES:
+            row = {
+                "case": case["id"],
+                "withheld_expected_method": case["target"],
+                "withheld_local_owner_required": case["must_complete_local_owner"],
+            }
+            for path in ("baseline", "native", "adaptive_host"):
+                row[path] = {
+                    "whole_local_owner_verified": False,
+                    "source_preserved": True,
+                    "selected_objectives": [],
+                    "model_calls": 0,
+                }
+            rows.append(row)
+        scores = bench.score_trial_results(rows)
+        self.assertEqual(set(scores), {"baseline", "native", "adaptive_host"})
+        self.assertEqual(scores["adaptive_host"]["owner_goals_completed"], 0)
+
     def test_no_action_on_negative_cases_never_counts_as_goal_completion(self):
         bench = load_benchmark()
         rows = []
