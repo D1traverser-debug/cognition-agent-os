@@ -239,7 +239,14 @@ class NativeDecisionLoop(unittest.TestCase):
         admitted = admit_native_decision(
             self.db, self.workspace, self.fixtures, root, reconsidered)
         self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED")
-        self.assertEqual(self.view(root)["pending_hypotheses"], [])
+        # A freshly hash-pinned source is NEW EVIDENCE, not an oracle.
+        # It may justify another method attempt, but must not silently
+        # erase the original supplier-completeness doubt. This also
+        # defeats the adversarial "add irrelevant.md and cite it" bypass.
+        pending = self.view(root)["pending_hypotheses"]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(
+            pending[0]["proposal_sha256"], unresolved["proposal_sha256"])
         self.assertFalse(self.view(root)["owner_outcome_verified"])
 
     def test_late_idea_invalidates_stale_decision_and_fake_reviews(self):
