@@ -215,6 +215,90 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(inspect_native_goal(
             self.db, self.workspace, self.fixtures, root)["decision_count"], 0)
 
+    def test_research_read_checkpoint_survives_interrupted_model_turn(self):
+        """Evidence reads must survive a stopped turn without saving raw text.
+
+        The transport here is scripted, but state/authority/events are real.
+        """
+        (self.fixtures / "trace.md").write_text("A" * 2800 + "B" * 2800,
+                                                encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        calls = []
+        def interrupted(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            history = json.loads(payload["prompt"].split("\n\n")[-1])
+            calls.append(history.get("additional_verified_source_excerpts", []))
+            if len(calls) == 1:
+                return {"done": True, "response": json.dumps({
+                    "inspect_sources": [{"path": "trace.md", "offset_chars": 500}]})}
+            raise RuntimeError("INTERRUPTED_AFTER_EVIDENCE_READ")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=interrupted):
+            with self.assertRaisesRegex(RuntimeError, "INTERRUPTED_AFTER"):
+                advance_native_local_once(
+                    self.db, self.workspace, self.fixtures, root,
+                    model="installed:test")
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["decision_count"], 0)
+        with closing(connect(self.db)) as db:
+            saved = [json.loads(row[0]) for row in db.execute(
+                "SELECT details FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ'", (root,))]
+        self.assertEqual(len(saved), 1)
+        self.assertNotIn("untrusted_excerpt", saved[0])
+        self.assertEqual(saved[0]["offset_chars"], 500)
+        resumed = []
+        def resume(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            history = json.loads(payload["prompt"].split("\n\n")[-1])
+            excerpts = history.get("additional_verified_source_excerpts", [])
+            resumed.append([(x["path"], x["offset_chars"]) for x in excerpts])
+            if len(excerpts) == 1:
+                self.assertEqual(excerpts[0]["untrusted_excerpt"], "A" * 2048)
+                return {"done": True, "response": json.dumps({
+                    "inspect_sources": [{"path": "trace.md", "offset_chars": 3100}]})}
+            return self.transport(method, path, payload, timeout)
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=resume):
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_METHOD_ENQUEUED", result)
+        self.assertEqual(resumed, [
+            [("trace.md", 500)],
+            [("trace.md", 500), ("trace.md", 3100)]])
+        with closing(connect(self.db)) as db:
+            saved = [json.loads(row[0]) for row in db.execute(
+                "SELECT details FROM events WHERE task_id=? "
+                "AND kind='NATIVE_LOCAL_RESEARCH_READ'", (root,))]
+        self.assertEqual(len(saved), 2)
+
+    def test_forged_research_checkpoint_never_becomes_model_evidence(self):
+        """A fabricated prior hash must fail before another model decision."""
+        (self.fixtures / "trace.md").write_text("safe reference " * 300,
+                                                encoding="utf-8")
+        root = register_native_goal(self.db, self.goal)
+        state = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
+        from cognition_agent_os.ledger import event
+        with closing(connect(self.db)) as db:
+            event(db, root, "NATIVE_LOCAL_RESEARCH_READ", {
+                "observation_sha256": state["observation_sha256"],
+                "model": "installed:test", "path": "trace.md",
+                "sha256": "0" * 64, "offset_chars": 500,
+                "length_chars": 2048})
+            db.commit()
+        with patch("cognition_agent_os.local_model._request") as model:
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_LOCAL_PLAN_REFUSED", result)
+        self.assertIn("NATIVE_RESEARCH_CHECKPOINT_UNVERIFIABLE", result["reason"])
+        model.assert_not_called()
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["decision_count"], 0)
+
     def test_host_autonomous_two_method_loop_and_cold_state(self):
         root = register_native_goal(self.db, self.goal)
         files_before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
