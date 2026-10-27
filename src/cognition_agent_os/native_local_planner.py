@@ -395,12 +395,30 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "truncated_source_previews": len(observed) > _MAX_VIEW_FILES,
         "observation_sha256": current["observation_sha256"],
     }
-    additional = _recovered_research_reads(
+    history = _recovered_research_reads(
         db_path, fixtures, root_id, current["observation_sha256"],
         model, observed)
+    # Durable history is an index, not a mandatory growing context replay.
+    # Restored snippets are re-read from current source hashes, never accepted
+    # from an untrusted compacted model summary.
+    receipts = [{
+        "path": x["path"], "sha256": x["sha256"],
+        "offset_chars": x["offset_chars"],
+        "length_chars": len(x["untrusted_excerpt"]),
+    } for x in history]
+    additional = history[-2:]
+    if receipts:
+        evidence["prior_research_receipts"] = receipts
     if additional:
         evidence["additional_verified_source_excerpts"] = additional
     evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    while len(evidence_json) > _MAX_PROMPT and additional:
+        additional = additional[1:]
+        if additional:
+            evidence["additional_verified_source_excerpts"] = additional
+        else:
+            evidence.pop("additional_verified_source_excerpts", None)
+        evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
     if len(evidence_json) > _MAX_PROMPT:
         raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
     _installed_model(model)
@@ -505,10 +523,17 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     # Prompt size and the finite live-source inventory bound resource usage.
     # Exhaustion is refusal to decide, NOT evidence that the goal is solved.
     previously_read: dict[str, list[tuple[int, int]]] = {}
-    for saved in additional:
+    historical_ranges = set()
+    for saved in history:
         start = saved["offset_chars"]
-        previously_read.setdefault(saved["path"], []).append(
-            (start, start + len(saved["untrusted_excerpt"])))
+        end = start + len(saved["untrusted_excerpt"])
+        previously_read.setdefault(saved["path"], []).append((start, end))
+        historical_ranges.add((saved["path"], start, end))
+    visible_ranges = {
+        (x["path"], x["offset_chars"],
+         x["offset_chars"] + len(x["untrusted_excerpt"]))
+        for x in additional
+    }
     while "inspect_sources" in candidate:
         reads = candidate.get("inspect_sources")
         if (set(candidate) != {"inspect_sources"}
@@ -518,6 +543,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             raise ValueError("NATIVE_RESEARCH_BUDGET_EXHAUSTED")
         next_ranges: dict[str, list[tuple[int, int]]] = {}
         next_excerpts = []
+        genuinely_new = []
         for item in reads:
             if (not isinstance(item, dict)
                 or set(item) != {"path", "offset_chars"}
@@ -540,18 +566,27 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             end_offset = offset + len(excerpt)
             prior_ranges = (previously_read.get(item["path"], [])
                             + next_ranges.get(item["path"], []))
-            if any(offset < old_end and old_start < end_offset
-                   for old_start, old_end in prior_ranges):
+            key = (item["path"], offset, end_offset)
+            overlap = any(offset < old_end and old_start < end_offset
+                          for old_start, old_end in prior_ranges)
+            # An exact historical receipt may be recalled from the ORIGINAL
+            # bytes if omitted from this turn's bounded visible context. It
+            # is not new investigation and MUST NOT mint another checkpoint.
+            if overlap and (key not in historical_ranges
+                            or key in visible_ranges):
                 raise ValueError("NATIVE_RESEARCH_NO_NEW_EVIDENCE")
             next_ranges.setdefault(item["path"], []).append(
                 (offset, end_offset))
-            next_excerpts.append({
+            viewed = {
                 "path": item["path"],
                 "sha256": observed[item["path"]],
                 "offset_chars": offset,
                 "untrusted_excerpt": excerpt,
                 "trust": "UNTRUSTED_DATA",
-            })
+            }
+            next_excerpts.append(viewed)
+            if not overlap:
+                genuinely_new.append(viewed)
         if _sources(fixtures) != observed:
             raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
         expanded = dict(evidence)
@@ -561,12 +596,17 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             expanded, ensure_ascii=False, sort_keys=True)
         if len(extended_json) > _MAX_PROMPT:
             raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
-        _checkpoint_research_reads(
-            db_path, workspace, fixtures, root_id,
-            current["observation_sha256"], model, next_excerpts)
+        if genuinely_new:
+            _checkpoint_research_reads(
+                db_path, workspace, fixtures, root_id,
+                current["observation_sha256"], model, genuinely_new)
         additional.extend(next_excerpts)
         for name, ranges in next_ranges.items():
             previously_read.setdefault(name, []).extend(ranges)
+        visible_ranges.update(
+            (x["path"], x["offset_chars"],
+             x["offset_chars"] + len(x["untrusted_excerpt"]))
+            for x in next_excerpts)
         extended_prompt = prompt.rsplit("\n\n", 1)[0] + "\n\n" + extended_json
         response = local_model._request("POST", "/api/generate", {
             "model": model, "prompt": extended_prompt, "stream": False,
