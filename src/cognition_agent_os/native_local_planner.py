@@ -239,6 +239,99 @@ def _verified_prior_results(db_path: Path, workspace: Path,
     return readback
 
 
+def _recovered_research_reads(db_path: Path, fixtures: Path,
+                             root_id: str, observation: str, model: str,
+                             sources: dict[str, str]) -> list[dict]:
+    """Rebuild only attested read offsets from the existing durable event log.
+
+    Persist NO source text or model-written "knowledge" as authority. A source,
+    goal revision or observation change cannot revive stale research as fact.
+    """
+    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        rows = db.execute(
+            "SELECT details FROM events WHERE task_id=? "
+            "AND kind='NATIVE_LOCAL_RESEARCH_READ' "
+            "ORDER BY event_id DESC LIMIT 128", (root_id,)).fetchall()
+    recovered = []
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    for (raw,) in reversed(rows):
+        try:
+            entry = json.loads(raw)
+            if (not isinstance(entry, dict)
+                or set(entry) != {"observation_sha256", "model", "path",
+                                  "sha256", "offset_chars", "length_chars"}):
+                raise ValueError("INVALID_RESEARCH_RECEIPT")
+            if (entry["observation_sha256"] != observation
+                or entry["model"] != model):
+                continue
+            path = entry["path"]
+            offset = entry["offset_chars"]
+            length = entry["length_chars"]
+            if (not isinstance(path, str) or path not in sources
+                or sources[path] != entry["sha256"]
+                or type(offset) is not int or type(length) is not int
+                or offset < 0 or not 1 <= length <= 2048
+                or len(recovered) >= _MAX_VIEW_FILES):
+                raise ValueError("INVALID_RESEARCH_RECEIPT")
+            data = safe_fixture(fixtures, path)
+            if hashlib.sha256(data).hexdigest() != entry["sha256"]:
+                raise ValueError("INVALID_RESEARCH_SOURCE")
+            content = data.decode("utf-8", errors="strict")
+            excerpt = content[offset:offset + 2048]
+            end_offset = offset + len(excerpt)
+            if (len(excerpt) != length
+                or any(offset < end and start < end_offset
+                       for start, end in ranges.get(path, []))):
+                raise ValueError("INVALID_RESEARCH_RANGE")
+            ranges.setdefault(path, []).append((offset, end_offset))
+            recovered.append({
+                "path": path, "sha256": sources[path],
+                "offset_chars": offset, "untrusted_excerpt": excerpt,
+                "trust": "UNTRUSTED_DATA",
+            })
+        except (ValueError, TypeError, KeyError, UnicodeError,
+                SourceUnavailable) as exc:
+            raise ValueError("NATIVE_RESEARCH_CHECKPOINT_UNVERIFIABLE") from exc
+    return recovered
+
+
+def _checkpoint_research_reads(db_path: Path, workspace: Path,
+                               fixtures: Path, root_id: str,
+                               observation: str, model: str,
+                               snippets: list[dict]) -> None:
+    """Pin evidence-only progress under the existing SQLite grant and CAS.
+
+    It cannot create a child task or authorize model-discovered operations.
+    """
+    from .native_decision import _audit
+    with closing(connect(db_path)) as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            current = _audit(db, db_path, workspace, fixtures, root_id)
+            if (current["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE"
+                or current["observation_sha256"] != observation):
+                raise ValueError("NATIVE_RESEARCH_OBSERVATION_STALE")
+            for item in snippets:
+                data = safe_fixture(fixtures, item["path"])
+                if hashlib.sha256(data).hexdigest() != item["sha256"]:
+                    raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
+                content = data.decode("utf-8", errors="strict")
+                text = item["untrusted_excerpt"]
+                offset = item["offset_chars"]
+                if content[offset:offset + 2048] != text or not text:
+                    raise ValueError("NATIVE_RESEARCH_SOURCE_CHANGED")
+                event(db, root_id, "NATIVE_LOCAL_RESEARCH_READ", {
+                    "observation_sha256": observation, "model": model,
+                    "path": item["path"], "sha256": item["sha256"],
+                    "offset_chars": offset, "length_chars": len(text),
+                })
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+
+
 def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
                          root_id: str, *, model: str, timeout: int = 45,
                          structured_output: bool = False) -> dict:
@@ -302,6 +395,11 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "truncated_source_previews": len(observed) > _MAX_VIEW_FILES,
         "observation_sha256": current["observation_sha256"],
     }
+    additional = _recovered_research_reads(
+        db_path, fixtures, root_id, current["observation_sha256"],
+        model, observed)
+    if additional:
+        evidence["additional_verified_source_excerpts"] = additional
     evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
     if len(evidence_json) > _MAX_PROMPT:
         raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
@@ -406,8 +504,11 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     # each model request must bring a genuinely new, source-pinned excerpt.
     # Prompt size and the finite live-source inventory bound resource usage.
     # Exhaustion is refusal to decide, NOT evidence that the goal is solved.
-    additional = []
     previously_read: dict[str, list[tuple[int, int]]] = {}
+    for saved in additional:
+        start = saved["offset_chars"]
+        previously_read.setdefault(saved["path"], []).append(
+            (start, start + len(saved["untrusted_excerpt"])))
     while "inspect_sources" in candidate:
         reads = candidate.get("inspect_sources")
         if (set(candidate) != {"inspect_sources"}
@@ -460,6 +561,9 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             expanded, ensure_ascii=False, sort_keys=True)
         if len(extended_json) > _MAX_PROMPT:
             raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
+        _checkpoint_research_reads(
+            db_path, workspace, fixtures, root_id,
+            current["observation_sha256"], model, next_excerpts)
         additional.extend(next_excerpts)
         for name, ranges in next_ranges.items():
             previously_read.setdefault(name, []).extend(ranges)
