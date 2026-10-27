@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 CORE = (
+    "pr_merge_compatibility",
     "offline_regression",
     "windows_offline_regression",
     "installed_cli_cross_platform",
@@ -52,6 +53,7 @@ def classify_needs(needs: dict) -> tuple[dict, bool]:
         "schema": "cognition-ci-evidence-scope-v1",
         "status": "ENGINEERING_GATES_PASSED" if not blocked else "CORE_GATE_UNVERIFIED",
         "source_revision_checked_separately_in_all_jobs": True,
+        "pr_merge_integration_checked_separately": outcomes["pr_merge_compatibility"] == "success",
         "core_jobs": {name: outcomes[name] for name in CORE},
         "core_blockers": blocked,
         "optional_jobs": {name: outcomes[name] for name in OPTIONAL},

@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from verify_ci_checkout_source import expected_sha, verify_checkout
+from verify_ci_merge_source import verify_merge_source
 from verify_ci_evidence_scope import CORE, OPTIONAL, classify_needs
 
 
@@ -56,14 +57,49 @@ class CISourceAndScopeTests(unittest.TestCase):
         self.assertTrue(ok)  # The failed experiment separately makes workflow red.
         self.assertEqual(receipt["optional_jobs"][OPTIONAL[0]], "failure")
 
+    def test_merge_parents_and_actual_merge_sha_must_match_originals(self):
+        merge = "c" * 40
+        event = {"pull_request": {"head": {"sha": self.a},
+                                  "base": {"sha": self.b}}}
+        evidence = verify_merge_source(event, "pull_request", merge,
+                                       merge, (merge, self.b, self.a))
+        self.assertEqual(evidence["scope"], "PR_SYNTHETIC_MERGE")
+        self.assertEqual(evidence["base_parent"], self.b)
+        self.assertEqual(evidence["head_parent"], self.a)
+        with self.assertRaisesRegex(ValueError, "CI_MERGE_PARENT_MISMATCH"):
+            verify_merge_source(event, "pull_request", merge,
+                                merge, (merge, self.a, self.b))
+        with self.assertRaisesRegex(ValueError, "CI_TESTED_WRONG_MERGE"):
+            verify_merge_source(event, "pull_request", merge,
+                                self.a, (self.a, self.b, self.a))
+        with self.assertRaisesRegex(ValueError, "CI_MERGE_PARENT_MISMATCH"):
+            verify_merge_source(event, "pull_request", merge,
+                                merge, (merge, self.b, self.b))
+
+    def test_push_no_merge_is_labelled_not_impersonated(self):
+        actual = self.a
+        evidence = verify_merge_source({}, "push", actual, actual,
+                                       (actual, self.b))
+        self.assertEqual(evidence["scope"], "NON_PR_EXACT_SOURCE_NOT_MERGE")
+        with self.assertRaisesRegex(ValueError, "CI_TESTED_WRONG_MERGE"):
+            verify_merge_source({}, "push", actual, self.b,
+                                (self.b, self.a))
+
     def test_actual_workflow_pins_every_checkout_and_emits_receipt(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         blocks = workflow.split("      - uses: actions/checkout@")[1:]
-        self.assertGreaterEqual(len(blocks), 19)
+        self.assertGreaterEqual(len(blocks), 20)
+        merge_blocks = []
         for block in blocks:
             pre = block.split("      - name:", 1)[0]
+            if "python scripts/verify_ci_merge_source.py" in block:
+                merge_blocks.append(block)
+                self.assertNotIn("ref: ${{ github.event.pull_request.head.sha", pre)
+                continue
             self.assertIn("ref: ${{ github.event.pull_request.head.sha || github.sha }}", pre)
             self.assertIn("python scripts/verify_ci_checkout_source.py", block.split("      - name:", 2)[1])
+        self.assertEqual(len(merge_blocks), 1)
+        self.assertIn("pr_merge_compatibility:", workflow)
         self.assertIn("ci_evidence_scope:", workflow)
         self.assertIn("python scripts/verify_ci_evidence_scope.py", workflow)
         self.assertIn("if: ${{ always() }}", workflow)

@@ -897,11 +897,30 @@ jobs:
           path: native_child_readback.json
           if-no-files-found: warn
 
+  pr_merge_compatibility:
+    # Separate integration candidate check: unlike head-pinned jobs, this
+    # intentionally checks out GitHub's synthetic PR merge commit.
+    # Both parents are independently attested against the event payload.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          # Intentionally NO ref: pull_request defaults to refs/pull/N/merge.
+      - name: Attest actual tested merge and its exact source and base parents
+        run: python scripts/verify_ci_merge_source.py
+      - name: Regression on actual integration candidate (not business success)
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -q
+
   ci_evidence_scope:
     # Always runs after other jobs. A green PR cannot hide a skipped core gate.
     # Opt-in model/child experiments remain explicitly UNTESTED when skipped.
     if: ${{ always() }}
-    needs: [offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout]
+    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
