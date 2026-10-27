@@ -246,9 +246,17 @@ def verify_live_handoff(root):
     require('commit history' in live and 'Files changed' in live
             and 'Do NOT duplicate' in live,
             'handoff must defer complete work history to live Git provenance')
-    require('current *development* integration tip' not in readme
-            and 'live GitHub' in readme,
-            'README must not freeze an obsolete live PR as active')
+    # Validate the risky behavior (promoting a dated PR to present authority),
+    # not a particular phrase such as "live GitHub". That old string check
+    # failed on semantically correct README rewrites and encouraged word hacks.
+    require('SESSION_HANDOFF.md' in readme and 'AGENTS.md' in readme,
+            'README lacks usable project recovery entrypoints')
+    require(not re.search(
+        r'(?im)^\s*(?:\*\*)?(?:current|live)\s+'
+        r'(?:development\s+)?(?:integration\s+)?'
+        r'(?:tip|head|PR)\b[^\n]{0,80}'
+        r'(?:PR\s*#\d+|\b[a-f0-9]{40}\b)', readme),
+        'README presents a specific historical PR/SHA as current authority')
     require('NOT_READY' in live and 'NOT_READY' in readme,
             'cannot silently promote incomplete product via handoff')
     require('archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md' in live,
