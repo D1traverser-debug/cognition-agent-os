@@ -153,6 +153,55 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(next_choice["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertEqual(self.view(root)["decision_count"], 2)
 
+    def test_unresolved_research_survives_decision_and_worker_readback(self):
+        """A challenged-but-UNRESOLVED original idea must not be forgotten.
+
+        This checks the durable SQLite audit after an independently checked
+        worker outcome. A one-time review is not research resolution.
+        """
+        root = self.root_id()
+        opening = self.view(root)
+        record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="user",
+            idea="First verify whether the original supplier data is complete",
+            observation_sha256=opening["observation_sha256"])
+        current = self.view(root)
+        unresolved = current["pending_hypotheses"][0]
+        first = self.candidate(current, self.reconcile(), self.structure())
+        first["hypothesis_reviews"] = [{
+            "proposal_sha256": unresolved["proposal_sha256"],
+            "disposition": "UNRESOLVED_RESEARCH_REQUIRED",
+            "counterargument": "The given records may omit later supplier corrections.",
+            "verification_needed": "Check independent supplier evidence before closure.",
+        }]
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, first)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+
+        # Re-open through the public read-only audit, not the earlier
+        # proposal's in-memory review. The unverified concern still exists.
+        later = self.view(root)
+        self.assertEqual(later["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        self.assertEqual(
+            [h["proposal_sha256"] for h in later["pending_hypotheses"]],
+            [unresolved["proposal_sha256"]])
+        second = self.candidate(later, self.structure(), self.reconcile())
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_HYPOTHESES_NOT_CHALLENGED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, second)
+        second["hypothesis_reviews"] = [{
+            "proposal_sha256": unresolved["proposal_sha256"],
+            "disposition": "CONDITIONALLY_USEFUL",
+            "counterargument": "The local discrepancy report does not prove source completeness.",
+            "verification_needed": "Seek independent later supplier updates before outcome closure.",
+        }]
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, second)
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED")
+        self.assertEqual(self.view(root)["pending_hypotheses"], [])
+
     def test_late_idea_invalidates_stale_decision_and_fake_reviews(self):
         root = self.root_id()
         stale = self.candidate(self.view(root), self.reconcile(), self.structure())
