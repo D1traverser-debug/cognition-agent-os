@@ -143,7 +143,7 @@ class NativeLocalModelLoop(unittest.TestCase):
                        "WHERE parent_task IS NULL AND state='PENDING'")
             db.commit()
         native = register_native_goal(self.db, self.goal)
-        with patch("cognition_agent_os.native_local_planner.advance_native_local_once",
+        with patch("cognition_agent_os.native_local_planner.advance_native_adaptive_once",
                    return_value={"status": "NATIVE_TEST_SELECTED",
                                  "root_task_id": native}) as planner:
             chosen = advance_native_local_goals(
