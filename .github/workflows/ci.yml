@@ -24,6 +24,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Check draft requirements inventory (NOT product acceptance)
         run: python scripts/verify_assurance_registry.py
       - name: Check registered effect paths and central grant guards
@@ -44,7 +47,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Baseline vs candidate full host-state behavioral parity
         run: python scripts/verify_architecture_ab.py --repetitions 3 --output architecture_ab.json
       - name: Upload independent per-scenario traces including failures
@@ -68,6 +74,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Build and run the actual installed cognition-os entrypoint
         shell: pwsh
         run: |
@@ -101,6 +110,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Install optional official local MCP transport (CI only)
         run: python -m pip install --disable-pip-version-check ".[mcp]"
       - name: Verify real stdio -> Host -> independent readback -> cold restart
@@ -118,6 +130,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Check draft requirements inventory (NOT product acceptance)
         shell: pwsh
         run: python scripts/verify_assurance_registry.py
@@ -143,6 +158,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Register temporary user-scoped Windows Scheduled Task; witness two ticks
         shell: pwsh
         run: ./scripts/verify_windows_scheduler.ps1 -TimeoutSeconds 180
@@ -157,6 +175,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Explicitly prefetch public Python runtime image for ephemeral CI
         run: docker pull python:3.12-alpine
       - name: Real no-network non-root repository repair and independent holdout
@@ -227,6 +248,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Prefetch isolated Python Docker runtime on temporary CI host
         run: docker pull python:3.12-alpine
       - name: Explicitly install Ollama binary only on temporary CI host
@@ -287,6 +311,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Prepare actual offline Docker, temporary CI runner only
         run: docker pull python:3.12-alpine
       - name: Install local Ollama on temporary CI runner only
@@ -336,6 +363,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Prefetch actual offline Docker image on disposable runner
         run: docker pull python:3.12-alpine
       - name: Independently prove original P22 defect in Docker before 7B resource loading
@@ -471,6 +501,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Real mutable public HEAD to immutable baseline (no API key)
         env:
           PYTHONPATH: src
@@ -514,6 +547,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Probe official AOCI-CODE in isolated checkout (no model authoring)
         shell: bash
         run: bash scripts/probe_official_aoci.sh
@@ -535,6 +571,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Install official Graphify in isolated runner
         run: python -m pip install --disable-pip-version-check graphifyy==0.9.94
       - name: Extract code graph and prove real artifact exists
@@ -579,6 +618,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Build exact native ChatGPT skill overlay from current HEAD
         shell: bash
         run: |
@@ -638,6 +680,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Install Ollama on disposable public CI runner
         shell: bash
         run: |
@@ -689,6 +734,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Install local Ollama on ephemeral worker
         shell: bash
         run: |
@@ -772,6 +820,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Install local Ollama on disposable CI runner
         shell: bash
         run: |
@@ -827,6 +878,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
       - name: Real video and novel native execution with parent Host state re-observation
         shell: bash
         env:
@@ -841,4 +895,30 @@ jobs:
         with:
           name: native-two-child-readonly-evidence
           path: native_child_readback.json
+          if-no-files-found: warn
+
+  ci_evidence_scope:
+    # Always runs after other jobs. A green PR cannot hide a skipped core gate.
+    # Opt-in model/child experiments remain explicitly UNTESTED when skipped.
+    if: ${{ always() }}
+    needs: [offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
+      - name: Independently classify mandatory job outcomes and skipped product experiments
+        env:
+          COGNITION_CI_NEEDS: ${{ toJSON(needs) }}
+        run: python scripts/verify_ci_evidence_scope.py --output ci-evidence-scope.json
+      - name: Preserve source and testing-scope receipt even on failed gates
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognition-ci-evidence-scope
+          path: ci-evidence-scope.json
           if-no-files-found: warn
