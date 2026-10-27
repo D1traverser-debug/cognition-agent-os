@@ -91,7 +91,7 @@ class CodexSessionContext(unittest.TestCase):
                          "docs/01-ARCHITECTURE-DECISIONS.md")
         self.assertIn("ChatGPT/Codex",
                       architecture["proposed_first_action"])
-        self.assertIn("新", architecture["proposed_first_action"])
+        self.assertIn("挑战", architecture["proposed_first_action"])
         topology = project["live_python_topology"]
         self.assertEqual(topology["kind"],
                          "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF")
