@@ -147,7 +147,7 @@ class CISourceAndScopeTests(unittest.TestCase):
         self.assertEqual(native_experiment_admission(body, reads)
                          ["changed_executable_or_owner_case_sources"],
                          ["scripts/measure_real_native_goal.py"])
-        with self.assertRaisesRegex(ValueError, "NO_MECHANISM_OR_CASE_DELTA"):
+        with self.assertRaisesRegex(ValueError, "NO_FRESH_COMMIT_DELTA"):
             native_experiment_admission(
                 body, lambda _p, rev: old + ("\n# new comment" if rev == "HEAD" else ""))
 
