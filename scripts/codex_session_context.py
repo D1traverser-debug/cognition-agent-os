@@ -153,7 +153,7 @@ def _live_python_topology() -> dict:
 def _project_recovery_when_no_ledger() -> dict:
     """Bounded repository guide, NOT recovered owner text or a task grant.
 
-    Codex frequently edits a GitHub Draft without a local SQLite runtime.
+    Codex may start from integrated main or an active PR without a local SQLite runtime.
     An empty runtime must not erase the product mission or silently turn
     a historical CI/checkpoint into current task authority. Reuse the
     EXISTING near-term gate instead of duplicating a second roadmap.
@@ -185,12 +185,14 @@ def _project_recovery_when_no_ledger() -> dict:
         "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
         "complete_work_log_location": "LIVE_GIT_PROVENANCE_ON_DEMAND",
         "product_readiness_claim": "NOT_VERIFIED",
-        "live_pr_head_and_ci": "MUST_REFETCH",
+        "live_default_branch_head_and_ci": "MUST_REFETCH",
+        "live_active_pr_metadata": "CHECK_IF_PRESENT",
         "original_user_utterances": "MUST_RECOVER_SEPARATELY",
         "architecture_pivot": _current_architecture_pivot(),
         "live_python_topology": _live_python_topology(),
         "proposed_action": (
-            "bootstrap index: SESSION_HANDOFF.md; task-relevant source; "
+            "bootstrap index: SESSION_HANDOFF.md; live default branch HEAD; "
+            "task-relevant source; active PR only if present; "
             "diffs for specific conflict."
         ),
     }
