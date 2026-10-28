@@ -319,6 +319,38 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(context["status"], "READY_TO_TICK")
         self.assertFalse(context["scheduling_or_effects_performed"])
 
+    def test_actual_pretool_hook_command_from_nested_directory(self):
+        """Verify the SAME shell transport for the second configured Windows hook.
+
+        The risk is systemic: an apparently tested Python guard can be dead
+        when the Codex commandWindows wrapper is parsed by cmd.exe.
+        """
+        config = json.loads((ROOT / ".codex" / "hooks.json").read_text())
+        handler = config["hooks"]["PreToolUse"][0]["hooks"][0]
+        event = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "mcp__GitHub__update_pull_request",
+            "tool_input": {
+                "repository_full_name": "D1traverser-debug/cognition-agent-os",
+                "pr_number": 50,
+                "body": "[run-real-native-schema]",
+            },
+        }
+        if os.name == "nt":
+            command = ["cmd.exe", "/C", handler["commandWindows"]]
+        else:
+            command = ["/bin/sh", "-c", handler["command"]]
+        result = subprocess.run(
+            command, cwd=ROOT / "src", input=json.dumps(event), text=True,
+            capture_output=True, timeout=8)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads(result.stdout)
+        decision = receipt["hookSpecificOutput"]
+        self.assertEqual(decision["hookEventName"], "PreToolUse")
+        self.assertEqual(decision["permissionDecision"], "deny")
+        self.assertIn("REUSE_PRIOR_NATIVE_EVIDENCE",
+                      decision["permissionDecisionReason"])
+
     def test_hook_lifecycle_registration_and_entry_path(self):
         config = json.loads((ROOT / ".codex" / "hooks.json").read_text())
         events = config["hooks"]["SessionStart"]
