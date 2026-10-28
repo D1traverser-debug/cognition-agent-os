@@ -73,6 +73,29 @@ async def run():
                 command=sys.executable, args=args,
                 env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
 
+        # The default native CLI is read-only even when the local SQLite
+        # authority is initialized. A separate explicit flag is required to
+        # expose queue-writing tools, independently of --allow-host-tick.
+        default_params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "cognition_agent_os.native_mcp_bridge",
+                  "--db", str(db), "--workspace", str(workspace),
+                  "--fixtures", str(sources)],
+            env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
+        async with Client(default_params) as read_client:
+            names = {tool.name for tool in (await read_client.list_tools()).tools}
+            assert {"native_goal_list", "native_goal_inspect"} <= names
+            assert not ({"native_goal_create", "native_decision_admit",
+                         "native_hypothesis_record",
+                         "native_open_research_record",
+                         "native_local_tick", "native_local_model_plan"} & names)
+            blocked = await read_client.call_tool(
+                "native_goal_create", {"owner_goal": "must never register"})
+            assert blocked.is_error, ("DEFAULT_MCP_WRITES_NOT_REJECTED", blocked)
+        with closing(connect(db)) as after_read:
+            assert after_read.execute(
+                "SELECT COUNT(*) FROM tasks").fetchone()[0] == 0
+
         # Real negotiated MCP transport, not a direct Python function test.
         async with Client(server(allow_tick=False)) as client:
             registered = (await client.list_tools()).tools
