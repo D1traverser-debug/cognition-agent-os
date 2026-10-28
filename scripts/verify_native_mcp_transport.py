@@ -675,6 +675,56 @@ async def run():
                 stray.unlink()
             restored, _ = await full_inventory()
             assert restored[root]["status"] == "NATIVE_GRANT_REVOKED"
+        # Same private stdio entry intended for the official Secure MCP
+        # Tunnel: independent process + real official MCP client + SAME
+        # existing ledger. No tunnel credentials, account connection, API
+        # call, network exposure or extra task grants are involved here.
+        launcher = Path(__file__).resolve().parent / "chatgpt_private_stdio.py"
+        launcher_env = {
+            **os.environ,
+            "COGNITION_OS_DB": str(db),
+            "COGNITION_OS_WORKSPACE": str(workspace),
+            "COGNITION_OS_FIXTURES": str(sources),
+        }
+
+        async def launch(mode, overrides=None):
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, str(launcher), mode,
+                env={**launcher_env, **(overrides or {})},
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE)
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=35)
+            return proc.returncode, stdout, stderr
+
+        code, stdout, stderr = await launch("check")
+        assert code == 0, ("PRIVATE_STDIO_PREFLIGHT_FAILED", stderr)
+        preflight = json.loads(stdout)
+        assert preflight["status"] == "PRIVATE_STDIO_MCP_LOCAL_PREFLIGHT_OK"
+        assert preflight["chatgpt_cloud_connected"] is False
+        assert "chatgpt_private_stdio.py" in preflight["mcp_command"]
+
+        code, stdout, stderr = await launch("probe")
+        assert code == 0, ("PRIVATE_STDIO_LIVE_PROBE_FAILED", stderr)
+        probe = json.loads(stdout)
+        assert probe["status"] == "PRIVATE_STDIO_MCP_SUBPROCESS_VERIFIED"
+        assert probe["native_goal_list_verified"] is True
+        assert probe["unprivileged_tools_only"] is True
+        assert probe["chatgpt_cloud_connected"] is False
+
+        absent_db = base / "never_initialized_by_bridge.sqlite"
+        code, stdout, stderr = await launch(
+            "check", {"COGNITION_OS_DB": str(absent_db)})
+        assert code == 2, ("MISSING_LEDGER_NOT_REJECTED", stdout, stderr)
+        assert not absent_db.exists(), "PRIVATE_BRIDGE_CREATED_LEDGER"
+        print(json.dumps({
+            "status": "PRIVATE_CHATGPT_STDIO_TARGET_LOCALLY_VERIFIED",
+            "ready_for_owner_secure_tunnel": True,
+            "actual_chatgpt_cloud_link": False,
+            "real_mcp_client": True,
+            "missing_db_failed_closed": True,
+            "production_effect": False}, sort_keys=True))
+
         print(json.dumps({
             "status": "LOCAL_MCP_HOST_READBACK_VERIFIED",
             "transport": "OFFICIAL_MCP_STDIO_SUBPROCESS",
