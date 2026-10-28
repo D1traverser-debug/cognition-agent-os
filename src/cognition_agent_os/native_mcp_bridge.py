@@ -444,6 +444,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", type=Path, required=True)
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--fixtures", type=Path, required=True)
+    parser.add_argument("--allow-goal-writes", action="store_true",
+                        help="Explicitly expose local goal creation, research checkpoints and decision queue writes")
     parser.add_argument("--allow-host-tick", action="store_true",
                         help="Explicitly allow one targeted native child execution")
     parser.add_argument("--allow-source-read", action="store_true",
@@ -458,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
     mcp = build_mcp_server(
         args.db, args.workspace, args.fixtures,
         allow_host_tick=args.allow_host_tick,
+        allow_goal_writes=args.allow_goal_writes,
         allow_source_read=args.allow_source_read,
         allow_local_model_plan=args.allow_local_model_plan,
         public_discovery_goal_sha256=args.public_discovery_goal_sha256,
