@@ -145,9 +145,18 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 "owner_outcome_verified": False}
 
     @mcp.tool()
-    def native_goal_inspect(root_task_id: str) -> dict:
-        """Read original owner goal, prior independently audited work and CAS state."""
-        return inspect_native_goal(db_path, workspace, fixtures, root_task_id)
+    def native_goal_inspect(
+            root_task_id: str,
+            research_before_event_id: int | None = None) -> dict:
+        """Read verified goal/CAS state and a bounded research history page.
+
+        Follow open_research_next_before_event_id to recover older source
+        records. Pagination never changes the underlying decision CAS, grants,
+        or independent history validation. None means the newest page.
+        """
+        return inspect_native_goal(
+            db_path, workspace, fixtures, root_task_id,
+            research_before_event_id=research_before_event_id)
 
     @mcp.tool()
     def native_owner_outcome(root_task_id: str) -> dict:
