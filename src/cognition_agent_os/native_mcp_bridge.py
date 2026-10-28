@@ -107,10 +107,18 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         """
         with closing(_read_only_ledger(db_path)) as db:
             native_root = (
-                "parent_task IS NULL AND "
+                "parent_task IS NULL AND ("
                 "(CASE WHEN json_valid(source_spec) "
                 "THEN json_extract(source_spec,'$.kind') "
-                "ELSE NULL END)='native_goal'")
+                "ELSE NULL END)='native_goal' "
+                "OR task_id IN (SELECT task_id FROM events "
+                "WHERE kind='NATIVE_GOAL_REGISTERED'))")
+            # The native source_spec and its registration receipt are two
+            # separate existing identity witnesses. Either one identifies a
+            # *candidate* root for a cold inventory, but only the independent
+            # audit can expose trusted original text or admit any work.
+            # IN builds a bounded membership lookup rather than an
+            # unindexed events scan for every task row.
             args = []
             where = native_root
             if after_task_id is not None:
