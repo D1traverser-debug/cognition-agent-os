@@ -618,6 +618,49 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(files_before,
                          {p.name:p.read_bytes() for p in self.fixtures.iterdir()})
 
+    def test_one_tick_two_model_methods_are_feedback_driven(self):
+        """One explicit opt-in Host run must replan after actual first feedback.
+
+        The synthetic model provides candidate JSON; all admission, Worker
+        execution, SQLite persistence and independent artifact readback are
+        REAL. A valid first artifact is not the whole composite owner goal.
+        No external model service, grants, or production writes are implied.
+        """
+        root = register_native_goal(self.db, self.goal)
+        before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
+        calls = []
+        def provider(method, path, payload, timeout):
+            if method == "POST":
+                evidence = json.loads(payload["prompt"].split("\\n\\n")[-1])
+                calls.append(len(evidence["past_methods_and_independent_verdicts"]))
+            return self.transport(method, path, payload, timeout)
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=provider):
+            result = run_tick(
+                self.db, self.workspace, self.fixtures, max_jobs=2,
+                planner_mode="ollama-local", local_model="installed:test",
+                auto_native_cognition=True)
+        self.assertEqual(calls, [0, 1], result)
+        self.assertEqual(len(result["tasks"]), 2, result)
+        self.assertEqual(
+            [x["status"] for x in result["tasks"]],
+            ["NEEDS_REVIEW", "NEEDS_REVIEW"], result)
+        self.assertEqual(len([
+            c for c in result["native_cognition"]
+            if c["status"] == "NATIVE_METHOD_ENQUEUED"]), 2, result)
+        observed = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertEqual(observed["decision_count"], 2, observed)
+        self.assertEqual(
+            [x["mechanical_verdict"] for x in observed["decisions"]],
+            ["REPORT_MECHANICALLY_VERIFIED", "CANDIDATE_MECHANICALLY_VALID"])
+        self.assertIs(observed["owner_outcome_verified"], False)
+        self.assertEqual(
+            before, {p.name: p.read_bytes() for p in self.fixtures.iterdir()})
+        replay = run_tick(self.db, self.workspace, self.fixtures,
+                          max_jobs=2, auto_native_cognition=False)
+        self.assertEqual(replay["tasks"], [], replay)
+
     def test_installed_planner_challenges_both_user_and_agent_suggestions(self):
         root = register_native_goal(self.db, self.goal)
         first = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
