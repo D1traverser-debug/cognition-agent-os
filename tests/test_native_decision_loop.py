@@ -358,6 +358,19 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(len(seen), 70)
         self.assertEqual(len(set(seen)), 70)
         self.assertEqual(seen, sorted(seen, reverse=True))
+        latest = self.view(root)
+        oldest = dict(proposal)
+        oldest["next_research_step"] = (
+            "Investigate external reference approach number 0 independently.")
+        oldest["observation_sha256"] = latest["observation_sha256"]
+        with self.assertRaisesRegex(ValueError, "DUPLICATE_NATIVE_OPEN_RESEARCH"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, oldest)
+        self.assertEqual(self.view(root)["observation_sha256"],
+                         latest["observation_sha256"])
+        with self.assertRaisesRegex(ValueError, "INVALID_NATIVE_RESEARCH_CURSOR"):
+            inspect_native_goal(self.db, self.workspace, self.fixtures,
+                                root, research_before_event_id=0)
         # Old untrustworthy receipts must NOT disappear from the validation
         # merely because they are no longer on the latest model-facing page.
         with closing(connect(self.db)) as db:
