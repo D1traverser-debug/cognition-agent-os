@@ -194,6 +194,46 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
                 old_root)["local_owner_outcome_verified"])
         self.unchanged()
 
+    def test_132_registered_unfamiliar_goals_do_not_starve_later_owner(self):
+        """Real registered owner roots cross a page, without losing the goal.
+
+        Different from fake DECOMPOSED rows: all 132 old roots have authentic
+        immutable registrations and remain unresolved. Model transport is
+        absent; one external availability check cannot consume the entire
+        Host budget or permanently hide the 133rd owner goal.
+        """
+        from cognition_agent_os.local_model import LocalModelUnavailable
+        old_roots = [
+            register_native_goal(self.db,
+                                 "Investigate unfamiliar professional domain "
+                                 f"{ordinal} using not-yet-connected tools.")
+            for ordinal in range(132)
+        ]
+        exact = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        with patch("cognition_agent_os.native_local_planner._installed_model",
+                   side_effect=LocalModelUnavailable(
+                       "LOCAL_MODEL_NOT_INSTALLED")) as provider:
+            tick = run_tick(
+                self.db, self.work, self.fixtures,
+                max_jobs=1, auto_native_cognition=True,
+                planner_mode="ollama-local", local_model="not-installed:test")
+        provider.assert_called_once()
+        self.assertEqual(len(tick["tasks"]), 1, tick)
+        self.assertEqual(tick["native_cognition"][0]["status"],
+                         "NATIVE_METHOD_ENQUEUED", tick)
+        actual = inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, exact)
+        self.assertTrue(actual["local_owner_outcome_verified"], actual)
+        self.assertFalse(actual["business_outcome_verified"])
+        for prior in old_roots:
+            state = inspect_native_goal(
+                self.db, self.work, self.fixtures, prior)
+            self.assertEqual(state["status"],
+                             "NATIVE_NEXT_DECISION_ADMISSIBLE", state)
+            self.assertEqual(state["decisions"], [])
+        self.unchanged()
+
     def test_one_opted_in_tick_stages_json_without_touching_original(self):
         """The same bounded Host invocation crosses a second registered method.
 
