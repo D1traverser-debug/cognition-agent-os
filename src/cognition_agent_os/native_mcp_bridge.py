@@ -325,7 +325,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Local stdio MCP adapter; existing SQLite grant required.")
+        description="Opt-in local MCP adapter; existing SQLite grant required.")
+    parser.add_argument("--transport", choices=("stdio", "streamable-http"),
+                        default="stdio",
+                        help="Local stdio (default), or explicitly enabled loopback HTTP")
+    parser.add_argument("--port", type=int, default=8000,
+                        help="Loopback HTTP port (1024–65535); ignored for stdio")
     parser.add_argument("--db", type=Path, required=True)
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--fixtures", type=Path, required=True)
@@ -338,13 +343,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--public-discovery-goal-sha256", default=None,
                         help="Operator pins an exact original goal for sanitized public metadata search")
     args = parser.parse_args(argv)
+    if args.transport == "streamable-http" and not 1024 <= args.port <= 65535:
+        parser.error("HTTP_LOOPBACK_PORT_OUT_OF_RANGE")
+    # No --host flag: localhost-only is a deliberate security boundary.
+    # ChatGPT web cannot reach loopback directly. Do NOT expose through a
+    # public tunnel without a separate authenticated, scoped approval path.
     mcp = build_mcp_server(
         args.db, args.workspace, args.fixtures,
         allow_host_tick=args.allow_host_tick,
         allow_source_read=args.allow_source_read,
         allow_local_model_plan=args.allow_local_model_plan,
         public_discovery_goal_sha256=args.public_discovery_goal_sha256)
-    mcp.run(transport="stdio")
+    if args.transport == "stdio":
+        mcp.run(transport="stdio")
+    else:
+        mcp.run(transport="streamable-http", host="127.0.0.1",
+                port=args.port)
     return 0
 
 
