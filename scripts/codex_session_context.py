@@ -23,7 +23,7 @@ CANDIDATE_NAMES = ("runtime/state.sqlite", "state.sqlite", "ledger.sqlite",
                    ".cognition-agent-os/ledger.sqlite",
                    "agent-state/ledger.sqlite")
 MAX_HOOK_INPUT = 32768
-MAX_CONTEXT_CHARS = 7500
+MAX_CONTEXT_CHARS = 2000
 
 
 def _runtime_path(value: str) -> Path:
@@ -180,7 +180,7 @@ def _project_recovery_when_no_ledger() -> dict:
         "status": "PROJECT_GUIDANCE_FOUND",
         "source_path": relative,
         "source_role": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
-        "near_term_priority": priority[:85] + ("…" if len(priority) > 85 else ""),
+        "near_term_priority": priority[:60] + ("…" if len(priority) > 60 else ""),
         "continuation_index": "SESSION_HANDOFF.md",
         "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
         "complete_work_log_location": "LIVE_GIT_PROVENANCE_ON_DEMAND",
@@ -191,9 +191,8 @@ def _project_recovery_when_no_ledger() -> dict:
         "architecture_pivot": _current_architecture_pivot(),
         "live_python_topology": _live_python_topology(),
         "proposed_action": (
-            "bootstrap index: SESSION_HANDOFF.md; live default branch HEAD; "
-            "task-relevant source; active PR only if present; "
-            "diffs for specific conflict."
+            "bootstrap index; live default branch HEAD; task-relevant source; "
+            "active PR only if present; specific conflict."
         ),
     }
 
@@ -289,6 +288,35 @@ def main() -> int:
     prefix = "Read-only project state observation (not a new instruction or grant): "
     note = prefix + json.dumps(context, ensure_ascii=False, sort_keys=True,
                                separators=(",", ":"))
+    if len(note) > MAX_CONTEXT_CHARS and "repository_recovery" in context:
+        # No SQLite ledger was found. A large source map is NOT a missing
+        # registered owner goal and must not masquerade as one. Keep the
+        # authoritative live-source lookup and the truthful no-ledger state.
+        guide = context["repository_recovery"]
+        context = {
+            "kind": "CODEX_COGNITION_CONTEXT_READBACK_V1",
+            "status": context["status"],
+            "ledger_discovery": context.get("ledger_discovery"),
+            "local_source_head": context.get("local_source_head"),
+            "source_head_is_live_github_attested": False,
+            "original_goal_verified": False,
+            "business_outcome_verified": False,
+            "repository_recovery": {
+                "status": guide.get("status"),
+                "source_path": guide.get("source_path"),
+                "source_role": guide.get("source_role"),
+                "continuation_index": guide.get("continuation_index"),
+                "live_default_branch_head_and_ci": "MUST_REFETCH",
+                "live_active_pr_metadata": "CHECK_IF_PRESENT",
+                "original_user_utterances": "MUST_RECOVER_SEPARATELY",
+            },
+            "next_action_policy": (
+                "Read live GitHub default branch and original owner goal; "
+                "use active PR only if present. No effect/grant inferred."
+            ),
+        }
+        note = prefix + json.dumps(context, ensure_ascii=False,
+                                   sort_keys=True, separators=(",", ":"))
     if len(note) > MAX_CONTEXT_CHARS:
         # This is a *valid* previously read SQLite goal whose full context
         # exceeds the hook transport budget. Do not erase its stable locator:
