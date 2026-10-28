@@ -17,17 +17,28 @@ ROOT = Path(__file__).resolve().parents[1]
 DB_ENV = "COGNITION_AGENT_OS_DB"
 WORKSPACE_ENV = "COGNITION_AGENT_OS_WORKSPACE"
 FIXTURES_ENV = "COGNITION_AGENT_OS_FIXTURES"
-CANDIDATE_NAMES = ("state.sqlite", "ledger.sqlite",
+# Recognize the Windows Host and private ChatGPT stdio default as well as
+# existing older CLI layouts. Multiple distinct ledgers remain ambiguous.
+CANDIDATE_NAMES = ("runtime/state.sqlite", "state.sqlite", "ledger.sqlite",
                    ".cognition-agent-os/ledger.sqlite",
                    "agent-state/ledger.sqlite")
 MAX_HOOK_INPUT = 32768
 MAX_CONTEXT_CHARS = 7500
 
 
+def _runtime_path(value: str) -> Path:
+    path = Path(value).expanduser()
+    return (path if path.is_absolute() else ROOT / path).resolve(strict=False)
+
+
 def _existing_database() -> tuple[Path | None, str]:
     configured = os.getenv(DB_ENV, "").strip()
-    if configured:
-        target = Path(configured).expanduser()
+    legacy = os.getenv("COGNITION_OS_DB", "").strip()
+    if configured and legacy and _runtime_path(configured) != _runtime_path(legacy):
+        return None, "CONFLICTING_LEDGER_ENV"
+    selected = configured or legacy
+    if selected:
+        target = Path(selected).expanduser()
         if not target.is_absolute():
             target = ROOT / target
         if target.is_symlink() or not target.is_file():
@@ -44,7 +55,11 @@ def _existing_database() -> tuple[Path | None, str]:
 
 def _optional_existing_directory(env: str, fallback: str) -> Path | None:
     raw = os.getenv(env, "").strip()
-    directory = Path(raw).expanduser() if raw else ROOT / fallback
+    legacy = os.getenv(env.replace("COGNITION_AGENT_OS_", "COGNITION_OS_"), "").strip()
+    if raw and legacy and _runtime_path(raw) != _runtime_path(legacy):
+        return None
+    chosen = raw or legacy
+    directory = Path(chosen).expanduser() if chosen else ROOT / fallback
     if not directory.is_absolute():
         directory = ROOT / directory
     if directory.is_symlink() or not directory.is_dir():
@@ -210,8 +225,8 @@ def build_context(payload: dict) -> dict:
         context["status"] = origin
         context["repository_recovery"] = _project_recovery_when_no_ledger()
         return context
-    ws = _optional_existing_directory(WORKSPACE_ENV, "workspace")
-    fixtures = _optional_existing_directory(FIXTURES_ENV, "fixtures")
+    ws = _optional_existing_directory(WORKSPACE_ENV, "runtime/workspace")
+    fixtures = _optional_existing_directory(FIXTURES_ENV, "runtime/fixtures")
     if (ws is None) != (fixtures is None):
         ws = fixtures = None
     sys.path.insert(0, str(ROOT / "src"))
