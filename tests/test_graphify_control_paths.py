@@ -91,6 +91,52 @@ class GraphifyEvidenceTests(unittest.TestCase):
         self.assertIn("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN",
                       result["errors"])
 
+    def test_current_mcp_research_path_cannot_be_cut_without_graph_notice(self):
+        """A stale legacy graph must not pass when the ACTIVE MCP branch breaks."""
+        repo=Path(__file__).resolve().parents[1]
+        dest=Path(self.tmp.name)/"src"/"cognition_agent_os"
+        dest.mkdir(parents=True,exist_ok=True)
+        for filename in ("capability_dispatch.py","native_mcp_bridge.py",
+                         "native_local_planner.py","host.py"):
+            original=(repo/"src"/"cognition_agent_os"/filename).read_text(
+                encoding="utf-8")
+            if filename=="native_mcp_bridge.py":
+                self.assertIn("return record_native_open_research(",original)
+                original=original.replace(
+                    "return record_native_open_research(",
+                    "return unverified_research_checkpoint(")
+            (dest/filename).write_text(original,encoding="utf-8")
+        self.path.write_text(json.dumps(self.graph),encoding="utf-8")
+        with patch.object(checker.subprocess,"check_output",
+                          return_value=self.sha+"\n"):
+            result=checker.check(self.path,Path(self.tmp.name))
+        self.assertEqual(result["status"],"FAIL",result)
+        self.assertIn("NATIVE_MCP_RESEARCH_LINEAGE_UNPROVEN",
+                      result["errors"])
+
+    def test_native_host_planner_path_cannot_be_cut_without_graph_notice(self):
+        """Also guard actual Host→planner route, not obsolete legacy only."""
+        repo=Path(__file__).resolve().parents[1]
+        dest=Path(self.tmp.name)/"src"/"cognition_agent_os"
+        dest.mkdir(parents=True,exist_ok=True)
+        for filename in ("capability_dispatch.py","native_mcp_bridge.py",
+                         "native_local_planner.py","host.py"):
+            original=(repo/"src"/"cognition_agent_os"/filename).read_text(
+                encoding="utf-8")
+            if filename=="host.py":
+                self.assertIn("native_choices = advance_native_local_goals(",original)
+                original=original.replace(
+                    "native_choices = advance_native_local_goals(",
+                    "native_choices = unverified_planner_route(")
+            (dest/filename).write_text(original,encoding="utf-8")
+        self.path.write_text(json.dumps(self.graph),encoding="utf-8")
+        with patch.object(checker.subprocess,"check_output",
+                          return_value=self.sha+"\n"):
+            result=checker.check(self.path,Path(self.tmp.name))
+        self.assertEqual(result["status"],"FAIL",result)
+        self.assertIn("HOST_NATIVE_PLANNER_LINEAGE_UNPROVEN",
+                      result["errors"])
+
     def test_old_commit_is_rejected(self):
         self.graph["built_at_commit"]="b"*40
         self.assertIn("STALE_GRAPH_COMMIT",self.result()["errors"])
