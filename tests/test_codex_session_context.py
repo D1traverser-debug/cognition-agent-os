@@ -107,6 +107,38 @@ class CodexSessionContext(unittest.TestCase):
                 self.assertTrue(all(actual.samefile(expected) for actual, expected in
                                     zip(private._paths(), (db, workspace, fixtures))))
 
+            # Cold recovery must select runtime/ dirs even when the
+            # initialized DB is configured through a Windows short-path alias.
+            # The continuation oracle sees the actual resource paths, not
+            # only the ledger ID or a source-observation summary.
+            from unittest.mock import patch as mock_patch
+            with patch.dict(os.environ, {
+                    "COGNITION_OS_DB": str(raw_checkout / "runtime" / "state.sqlite")
+            }, clear=True):
+                with mock_patch("cognition_agent_os.continuity.resume_goal",
+                                return_value={"status": "UNVERIFIED_TEST_GOAL"}) as resume:
+                    codex.build_context({"cwd": str(checkout)})
+                    kwargs = resume.call_args.kwargs
+                    self.assertTrue(kwargs["workspace"].samefile(workspace))
+                    self.assertTrue(kwargs["fixtures"].samefile(fixtures))
+
+            # An older checkout-root ledger still selects its older
+            # checkout-root resources, not the new runtime directories.
+            legacy_db = checkout / "ledger.sqlite"
+            legacy_db.write_bytes(self.db.read_bytes())
+            root_ws, root_fx = checkout / "workspace", checkout / "fixtures"
+            root_ws.mkdir()
+            root_fx.mkdir()
+            with patch.dict(os.environ, {
+                    "COGNITION_OS_DB": str(raw_checkout / "ledger.sqlite")
+            }, clear=True):
+                with mock_patch("cognition_agent_os.continuity.resume_goal",
+                                return_value={"status": "UNVERIFIED_TEST_GOAL"}) as resume:
+                    codex.build_context({"cwd": str(checkout)})
+                    kwargs = resume.call_args.kwargs
+                    self.assertTrue(kwargs["workspace"].samefile(root_ws))
+                    self.assertTrue(kwargs["fixtures"].samefile(root_fx))
+
             # Legacy-only and canonical-only configurations remain valid.
             for key in ("COGNITION_OS_DB", "COGNITION_AGENT_OS_DB"):
                 with patch.dict(os.environ, {key: str(db)}, clear=True):
