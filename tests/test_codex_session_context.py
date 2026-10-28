@@ -248,6 +248,7 @@ class CodexSessionContext(unittest.TestCase):
         topology = project["live_python_topology"]
         self.assertEqual(topology["kind"],
                          "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF")
+        self.assertEqual(topology["source_map"], "scripts/architecture_probe.py")
         self.assertGreaterEqual(topology["parsed_modules"], 50)
         self.assertEqual(topology["parse_errors"], [])
         self.assertEqual(topology["paths"]["decision"],

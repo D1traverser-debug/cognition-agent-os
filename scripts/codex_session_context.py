@@ -140,6 +140,7 @@ def _live_python_topology() -> dict:
                 "parse_errors": scanned["parse_errors"][:3]}
     return {
         "kind": "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF",
+        "source_map": "scripts/architecture_probe.py",
         "parsed_modules": scanned["parsed_count"],
         "parse_errors": [],
         "paths": {
