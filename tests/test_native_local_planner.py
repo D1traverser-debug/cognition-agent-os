@@ -631,7 +631,7 @@ class NativeLocalModelLoop(unittest.TestCase):
         calls = []
         def provider(method, path, payload, timeout):
             if method == "POST":
-                evidence = json.loads(payload["prompt"].split("\\n\\n")[-1])
+                evidence = json.loads(payload["prompt"].split("\n\n")[-1])
                 calls.append(len(evidence["past_methods_and_independent_verdicts"]))
             return self.transport(method, path, payload, timeout)
         with patch("cognition_agent_os.local_model._request",
