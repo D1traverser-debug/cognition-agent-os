@@ -194,6 +194,20 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertGreater(
             tuple(map(int, main["version"].split("."))), (0, 1, 4))
 
+    def test_integrated_main_receives_real_core_ci_without_manual_dispatch(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8")
+        # main was formerly invisible to push CI after integration.
+        # Require the actual event mapping, not just an incidental mention.
+        trigger = workflow.split("\npermissions:", 1)[0]
+        self.assertRegex(
+            trigger,
+            r"(?ms)^  push:\n    branches:\n(?:(?:      - [^\n]+)\n)*?      - main\n")
+        self.assertIn("  pull_request:\n", trigger)
+        # Push must run core conformance, not optional model experiments.
+        self.assertIn("  offline_regression:\n", workflow)
+        self.assertIn("  windows_offline_regression:\n", workflow)
+
     def test_plugin_bundle_tracks_source_version_not_frozen_prose(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(
             encoding="utf-8")
