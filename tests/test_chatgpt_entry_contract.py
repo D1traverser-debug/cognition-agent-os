@@ -73,7 +73,8 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertNotIn("fetch the active integration PR\u0027s **commit history**", handoff)
         hook = (ROOT / "scripts" / "codex_session_context.py").read_text(encoding="utf-8")
         self.assertIn("LIVE_GIT_PROVENANCE_ON_DEMAND", hook)
-        self.assertIn("task-relevant source, commits and diffs", hook)
+        self.assertIn("task-relevant", hook)
+        self.assertIn("specific conflict", hook)
 
     def test_each_surface_is_a_distinct_loading_boundary(self):
         chatgpt = SKILL.read_text(encoding="utf-8").lower()

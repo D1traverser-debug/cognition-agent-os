@@ -189,8 +189,8 @@ def _project_recovery_when_no_ledger() -> dict:
         "architecture_pivot": _current_architecture_pivot(),
         "live_python_topology": _live_python_topology(),
         "proposed_action": (
-            "Use SESSION_HANDOFF.md as bootstrap index only; recover "
-            "owner originals, live integration PR/HEAD/CI, and only task-relevant source, commits and diffs. Expand history when conflicting evidence requires it."
+            "Recover owner goal, live PR/HEAD/CI and task-relevant "
+            "source; fetch historical diffs only for a specific conflict."
         ),
     }
 
