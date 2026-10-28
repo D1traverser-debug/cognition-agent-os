@@ -69,7 +69,10 @@ class CodexSessionContext(unittest.TestCase):
 
         codex = load("codex_path_contract_probe", "codex_session_context.py")
         private = load("chatgpt_path_contract_probe", "chatgpt_private_stdio.py")
-        checkout = self.tmp / "separate-checkout"
+        raw_checkout = self.tmp / "separate-checkout"
+        # The fake ROOT is a fixture; a real hook's ROOT is also canonical
+        # because it originates from Path(__file__).resolve().
+        checkout = raw_checkout.resolve()
         runtime = checkout / "runtime"
         runtime.mkdir(parents=True)
         db = runtime / "state.sqlite"
@@ -94,7 +97,9 @@ class CodexSessionContext(unittest.TestCase):
             # including relative paths interpreted against the repo checkout.
             with patch.dict(os.environ, {
                     "COGNITION_AGENT_OS_DB": "runtime/state.sqlite",
-                    "COGNITION_OS_DB": str(db),
+                    # May retain the Windows RUNNER~1 spelling while ROOT
+                    # above expands it to runneradmin: same inode, two names.
+                    "COGNITION_OS_DB": str(raw_checkout / "runtime" / "state.sqlite"),
                     "COGNITION_OS_WORKSPACE": str(workspace),
                     "COGNITION_OS_FIXTURES": str(fixtures),
             }, clear=True):
