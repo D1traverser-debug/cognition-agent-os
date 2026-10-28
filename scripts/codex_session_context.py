@@ -189,8 +189,9 @@ def _project_recovery_when_no_ledger() -> dict:
         "architecture_pivot": _current_architecture_pivot(),
         "live_python_topology": _live_python_topology(),
         "proposed_action": (
-            "Recover owner goal, live PR/HEAD/CI and task-relevant "
-            "source; fetch historical diffs only for a specific conflict."
+            "bootstrap index: SESSION_HANDOFF.md; recover owner goal, "
+            "live PR/HEAD/CI and task-relevant source; inspect diffs "
+            "for specific conflicts."
         ),
     }
 
