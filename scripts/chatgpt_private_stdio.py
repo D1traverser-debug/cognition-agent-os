@@ -37,7 +37,10 @@ def _server():
     db, workspace, fixtures = _paths()
     # build_mcp_server verifies existing ledger initialization and paths.
     # The optional model / worker / source-disclosure tools are OFF.
-    return build_mcp_server(db, workspace, fixtures)
+    # An observation-only tunnel must not expose SQLite mutations or queued
+    # actions. The separate native CLI retains its explicitly configured
+    # write-capable profile under the original initialized Host grant.
+    return build_mcp_server(db, workspace, fixtures, allow_goal_writes=False)
 
 
 def _mcp_command() -> str:
@@ -82,7 +85,9 @@ async def _probe() -> dict:
         if not required <= names:
             raise RuntimeError("EXPECTED_NATIVE_GOAL_TOOLS_MISSING")
         forbidden = {"native_local_tick", "native_local_model_plan",
-                     "native_source_read"}
+                     "native_source_read", "native_goal_create",
+                     "native_hypothesis_record", "native_open_research_record",
+                     "native_decision_admit"}
         if forbidden & names:
             raise RuntimeError("UNAUTHORIZED_MCP_TOOL_EXPOSED")
         page = _read_result(await client.call_tool("native_goal_list", {}))
@@ -100,7 +105,7 @@ async def _probe() -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Existing cognition Host as a private stdio MCP target.")
+        description="Existing cognition Host as an observation-only stdio MCP target.")
     parser.add_argument("mode", choices=("check", "probe", "serve"),
                         help="check paths; probe real MCP; or serve over stdio")
     args = parser.parse_args()
