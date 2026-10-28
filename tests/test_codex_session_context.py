@@ -81,14 +81,14 @@ class CodexSessionContext(unittest.TestCase):
         with patch.object(codex, "ROOT", checkout), patch.object(private, "_REPO", checkout):
             with patch.dict(os.environ, {}, clear=True):
                 found, source = codex._existing_database()
-                self.assertEqual((found, source), (db, "DISCOVERED_EXISTING_LEDGER"))
-                self.assertEqual(private._paths(), (db, workspace, fixtures))
-                self.assertEqual(
-                    codex._optional_existing_directory(
-                        "COGNITION_AGENT_OS_WORKSPACE", "runtime/workspace"), workspace)
-                self.assertEqual(
-                    codex._optional_existing_directory(
-                        "COGNITION_AGENT_OS_FIXTURES", "runtime/fixtures"), fixtures)
+                self.assertEqual(source, "DISCOVERED_EXISTING_LEDGER")
+                self.assertTrue(found.samefile(db))
+                self.assertTrue(all(actual.samefile(expected) for actual, expected in
+                                    zip(private._paths(), (db, workspace, fixtures))))
+                self.assertTrue(codex._optional_existing_directory(
+                    "COGNITION_AGENT_OS_WORKSPACE", "runtime/workspace").samefile(workspace))
+                self.assertTrue(codex._optional_existing_directory(
+                    "COGNITION_AGENT_OS_FIXTURES", "runtime/fixtures").samefile(fixtures))
 
             # Both supported env schemes must identify the identical resource,
             # including relative paths interpreted against the repo checkout.
@@ -98,14 +98,15 @@ class CodexSessionContext(unittest.TestCase):
                     "COGNITION_OS_WORKSPACE": str(workspace),
                     "COGNITION_OS_FIXTURES": str(fixtures),
             }, clear=True):
-                self.assertEqual(codex._existing_database()[0], db)
-                self.assertEqual(private._paths(), (db, workspace, fixtures))
+                self.assertTrue(codex._existing_database()[0].samefile(db))
+                self.assertTrue(all(actual.samefile(expected) for actual, expected in
+                                    zip(private._paths(), (db, workspace, fixtures))))
 
             # Legacy-only and canonical-only configurations remain valid.
             for key in ("COGNITION_OS_DB", "COGNITION_AGENT_OS_DB"):
                 with patch.dict(os.environ, {key: str(db)}, clear=True):
-                    self.assertEqual(codex._existing_database()[0], db)
-                    self.assertEqual(private._paths()[0], db)
+                    self.assertTrue(codex._existing_database()[0].samefile(db))
+                    self.assertTrue(private._paths()[0].samefile(db))
 
             # Workspace/fixture aliases also must not silently diverge.
             other_dir = checkout / "other-workspace"
@@ -136,7 +137,7 @@ class CodexSessionContext(unittest.TestCase):
             with patch.dict(os.environ, {}, clear=True):
                 self.assertEqual(codex._existing_database(),
                                  (None, "AMBIGUOUS_LOCAL_LEDGERS"))
-                self.assertEqual(private._paths()[0], db)
+                self.assertTrue(private._paths()[0].samefile(db))
 
     def test_missing_source_never_invents_owner_goal(self):
         result = self._run(with_database=False)
