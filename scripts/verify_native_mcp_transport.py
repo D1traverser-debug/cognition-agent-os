@@ -675,6 +675,72 @@ async def run():
                 stray.unlink()
             restored, _ = await full_inventory()
             assert restored[root]["status"] == "NATIVE_GRANT_REVOKED"
+        # Real loopback HTTP subprocess: proves a NETWORK MCP client can
+        # restore the same already-revoked SQLite owner identity without
+        # installing a public endpoint, opening a write tool, or mutating data.
+        # The normal STDIO adapter remains the default.
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            loopback_port = sock.getsockname()[1]
+        http_proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "cognition_agent_os.native_mcp_bridge",
+            "--db", str(db), "--workspace", str(workspace),
+            "--fixtures", str(sources),
+            "--transport", "streamable-http",
+            "--port", str(loopback_port),
+            env={**os.environ,
+                 "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE)
+        try:
+            url = f"http://127.0.0.1:{loopback_port}/mcp"
+            connected = False
+            last_error = None
+            for _ in range(20):
+                if http_proc.returncode is not None:
+                    err = await http_proc.stderr.read()
+                    raise AssertionError(
+                        "HTTP_MCP_SUBPROCESS_EXITED: " + repr(err[:1500]))
+                try:
+                    async with Client(url) as remote_client:
+                        discovered = {
+                            tool.name for tool in (
+                                await remote_client.list_tools()).tools}
+                        assert "native_goal_inspect" in discovered
+                        assert "native_local_tick" not in discovered
+                        assert "native_source_read" not in discovered
+                        state = unwrap(await remote_client.call_tool(
+                            "native_goal_inspect", {"root_task_id": novel_id}))
+                        assert state["original_goal"] == unknown_goal, state
+                        assert state["open_research_count"] == 18, state
+                        assert state["status"] == "NATIVE_GRANT_REVOKED", state
+                        # Remote network clients cannot write after revocation.
+                        denied = await remote_client.call_tool(
+                            "native_goal_create", {
+                                "owner_goal": "Network transport cannot mint authority"})
+                        assert denied.is_error, denied
+                        connected = True
+                    break
+                except (OSError, ConnectionError, TimeoutError) as exc:
+                    last_error = repr(exc)
+                    await asyncio.sleep(0.2)
+            assert connected, ("LOOPBACK_HTTP_MCP_UNREACHABLE", last_error)
+            print(json.dumps({
+                "status": "LOCAL_MCP_HTTP_LOOPBACK_VERIFIED",
+                "network_transport": "STREAMABLE_HTTP_LOOPBACK_ONLY",
+                "revoked_write_denied": True,
+                "original_goal_readback": True,
+                "external_effect": False}, sort_keys=True))
+        finally:
+            if http_proc.returncode is None:
+                http_proc.terminate()
+            try:
+                await asyncio.wait_for(http_proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                http_proc.kill()
+                await http_proc.wait()
+
         print(json.dumps({
             "status": "LOCAL_MCP_HOST_READBACK_VERIFIED",
             "transport": "OFFICIAL_MCP_STDIO_SUBPROCESS",
