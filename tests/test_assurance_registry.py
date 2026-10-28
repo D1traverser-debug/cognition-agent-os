@@ -128,6 +128,25 @@ class AssuranceRegistryTests(unittest.TestCase):
         self.assertNotIn('## HISTORICAL CHECKPOINT ARCHIVE', live)
         self.assertNotIn('**START HERE, NOT THE HISTORICAL', live)
 
+    def test_unconditional_history_preload_is_rejected(self):
+        """Cold resume must not regress to a large mandatory PR crawl."""
+        with tempfile.TemporaryDirectory() as d:
+            dst = Path(d)
+            (dst / 'README.md').write_text(
+                (ROOT / 'README.md').read_text(encoding='utf-8'),
+                encoding='utf-8')
+            live = (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8')
+            live = live.replace(
+                'PR **metadata**',
+                'ALL open Draft PRs')
+            (dst / 'SESSION_HANDOFF.md').write_text(live, encoding='utf-8')
+            (dst / 'archive').mkdir()
+            (dst / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').write_bytes(
+                (ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').read_bytes())
+            with self.assertRaisesRegex(
+                    RegistryError, 'task-scoped live-authority'):
+                verify_live_handoff(dst)
+
     def test_stale_handoff_substitution_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             dst = Path(d)

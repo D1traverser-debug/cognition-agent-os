@@ -236,16 +236,25 @@ def verify_live_handoff(root):
     require(re.fullmatch(
         r'# cognition-agent-os — dated continuation pointer \(\d{4}-\d{2}-\d{2}\)',
         first) is not None, 'handoff must be a date-scoped non-authoritative pointer')
-    require('live GitHub' in live and 'exact HEADs' in live
-            and 'ALL open Draft PRs' in live,
-            'handoff lacks explicit live-authority resolution requirement')
+    # Check the *new* recovery contract: fresh candidate identity via metadata,
+    # but expensive competing PR bodies and complete history only on demand.
+    # The former literal requirement to fetch ALL Draft PRs amplified context.
+    require('live GitHub' in live and 'exact HEAD' in live
+            and 'PR **metadata**' in live
+            and 'only when identity, ancestry' in live,
+            'handoff lacks task-scoped live-authority resolution requirement')
     require('BOOTSTRAP INDEX ONLY' in live
             and 'not a complete work log' in live
             and 'progressive disclosure' in live,
             'handoff must remain a bootstrap index, not a project database')
     require('commit history' in live and 'Files changed' in live
-            and 'Do NOT duplicate' in live,
-            'handoff must defer complete work history to live Git provenance')
+            and 'On-demand engineering provenance' in live
+            and 'not a mandatory cold-start download' in live
+            and 'Do not preload' in live,
+            'handoff must use on-demand Git provenance, not full history preload')
+    require('ALL open Draft PRs' not in live
+            and "fetch the active integration PR's **commit history**" not in live,
+            'handoff regressed to unconditional context-heavy recovery')
     # Validate the risky behavior (promoting a dated PR to present authority),
     # not a particular phrase such as "live GitHub". That old string check
     # failed on semantically correct README rewrites and encouraged word hacks.
