@@ -25,7 +25,7 @@ _ID = re.compile(r"[a-f0-9]{32}\Z")
 _MAX_DECISIONS = 12
 _LEGACY_MAX_DECISIONS = 3
 _MAX_HYPOTHESES = 8
-_MAX_OPEN_RESEARCH_RECORDS = 64
+_MAX_OPEN_RESEARCH_PREVIEW = 16
 _MAX_COMPETING_RESEARCH_METHODS = 5
 _CLIENT_REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{15,127}\Z")
 _HYPOTHESIS_DISPOSITIONS = frozenset({
@@ -511,11 +511,16 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             _checked_open_research(proposal, contract["goal"])
             if proposal["observation_sha256"] != state["observation_sha256"]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
-            if len(state["open_research"]) >= _MAX_OPEN_RESEARCH_RECORDS:
-                raise ValueError("NATIVE_OPEN_RESEARCH_STORAGE_BOUND")
             digest = _open_research_fingerprint(proposal)
-            if any(row["proposal_sha256"] == digest
-                   for row in state["open_research"]):
+            # A bounded read page must never become a bounded duplicate
+            # detector. Query the authoritative ledger across ALL old events.
+            prior = db.execute(
+                "SELECT 1 FROM events WHERE task_id=? "
+                "AND kind='NATIVE_OPEN_RESEARCH_RECORDED' "
+                "AND json_valid(details) "
+                "AND json_extract(details,'$.proposal_sha256')=? LIMIT 1",
+                (root_id, digest)).fetchone()
+            if prior is not None:
                 raise ValueError("DUPLICATE_NATIVE_OPEN_RESEARCH")
             hashes = _sources(fixtures)
             if any(hashes.get(ref["path"]) != ref["sha256"]
@@ -647,7 +652,8 @@ def _registered_native_contract_matches(
 
 
 def _audit(db: sqlite3.Connection, db_path: Path,
-           workspace: Path, fixtures: Path, root_id: str) -> dict:
+           workspace: Path, fixtures: Path, root_id: str, *,
+           research_before_event_id: int | None = None) -> dict:
     """Independent lineage and live evidence readback, no task writes."""
     fail = {"root_task_id": root_id, "status": "NATIVE_GOAL_UNVERIFIABLE",
             "owner_outcome_verified": False, "business_outcome_verified": False}
@@ -692,8 +698,6 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "SELECT event_id,details FROM events WHERE task_id=? "
             "AND kind='NATIVE_OPEN_RESEARCH_RECORDED' ORDER BY event_id",
             (root_id,)).fetchall()
-        if len(research_rows) > _MAX_OPEN_RESEARCH_RECORDS:
-            raise ValueError("NATIVE_OPEN_RESEARCH_STORAGE_BOUND")
         open_research = []
         seen_research = set()
         for research_row in research_rows:
@@ -881,6 +885,12 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "hypotheses": hypotheses,
             "open_research": open_research,
             "children": observations})
+        eligible_research = [
+            entry for entry in reversed(open_research)
+            if research_before_event_id is None
+            or entry["event_id"] < research_before_event_id
+        ]
+        research_page = eligible_research[:_MAX_OPEN_RESEARCH_PREVIEW]
         waiting = bool(observations and
             observations[-1]["task_state"] in ("PENDING", "RUNNING"))
         return {
@@ -894,8 +904,13 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "observation_sha256": fingerprint,
             "decisions": observations, "decision_count": len(decisions),
             "hypotheses": hypotheses,
-            "open_research": open_research,
+            # The model-facing page is small; all historical receipts above
+            # remain verified, and ALL history remains in the CAS fingerprint.
+            "open_research": research_page,
             "open_research_count": len(open_research),
+            "open_research_next_before_event_id": (
+                research_page[-1]["event_id"]
+                if len(eligible_research) > len(research_page) else None),
             "pending_hypotheses": (
                 list(unresolved_hypotheses.values())
                 + [h for h in hypotheses
@@ -908,8 +923,13 @@ def _audit(db: sqlite3.Connection, db_path: Path,
 
 
 def inspect_native_goal(db_path: Path, workspace: Path, fixtures: Path,
-                        root_id: str) -> dict:
-    """Read-only resumable native-cognition decision state."""
+                        root_id: str, *,
+                        research_before_event_id: int | None = None) -> dict:
+    """Read-only resumable state, with bounded newest-first research pages."""
+    if (research_before_event_id is not None
+        and (type(research_before_event_id) is not int
+             or research_before_event_id < 1)):
+        raise ValueError("INVALID_NATIVE_RESEARCH_CURSOR")
     if (not isinstance(root_id, str) or not _ID.fullmatch(root_id)
         or not db_path.is_file() or db_path.is_symlink()):
         return {"root_task_id": root_id, "status": "NATIVE_GOAL_UNVERIFIABLE",
@@ -917,7 +937,9 @@ def inspect_native_goal(db_path: Path, workspace: Path, fixtures: Path,
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
         db.row_factory = sqlite3.Row
-        return _audit(db, db_path, workspace, fixtures, root_id)
+        return _audit(
+            db, db_path, workspace, fixtures, root_id,
+            research_before_event_id=research_before_event_id)
 
 
 def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
