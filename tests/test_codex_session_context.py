@@ -231,7 +231,12 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("bootstrap index", project["proposed_action"])
         self.assertIn("task-relevant source", project["proposed_action"])
         self.assertIn("specific conflict", project["proposed_action"])
-        self.assertEqual(project["live_pr_head_and_ci"], "MUST_REFETCH")
+        self.assertEqual(project["live_default_branch_head_and_ci"],
+                         "MUST_REFETCH")
+        self.assertEqual(project["live_active_pr_metadata"], "CHECK_IF_PRESENT")
+        self.assertNotIn("live_pr_head_and_ci", project)
+        self.assertIn("live default branch HEAD", project["proposed_action"])
+        self.assertIn("active PR only if present", project["proposed_action"])
         self.assertEqual(project["product_readiness_claim"], "NOT_VERIFIED")
         # An active architectural pivot must reach the actual cold-entry
         # process rather than live only in a document the agent may never read.
