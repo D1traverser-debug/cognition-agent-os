@@ -93,8 +93,10 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                         ValueError, "READ_ONLY_MCP_CANNOT_ENABLE"):
                     self.server(allow_goal_writes=False, **{flag: True})
-        self.assertIn("native_goal_create", self.server().tools)
-        self.assertIn("native_decision_admit", self.server().tools)
+        self.assertNotIn("native_goal_create", self.server().tools)
+        self.assertNotIn("native_decision_admit", self.server().tools)
+        self.assertIn("native_goal_create", self.server(allow_goal_writes=True).tools)
+        self.assertIn("native_decision_admit", self.server(allow_goal_writes=True).tools)
 
     def test_public_read_requires_explicit_runtime_opt_in(self):
         self.assertNotIn("native_public_primary_source_read",
