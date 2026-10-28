@@ -101,6 +101,24 @@ class CodexSessionContext(unittest.TestCase):
                 self.assertEqual(codex._existing_database()[0], db)
                 self.assertEqual(private._paths(), (db, workspace, fixtures))
 
+            # Legacy-only and canonical-only configurations remain valid.
+            for key in ("COGNITION_OS_DB", "COGNITION_AGENT_OS_DB"):
+                with patch.dict(os.environ, {key: str(db)}, clear=True):
+                    self.assertEqual(codex._existing_database()[0], db)
+                    self.assertEqual(private._paths()[0], db)
+
+            # Workspace/fixture aliases also must not silently diverge.
+            other_dir = checkout / "other-workspace"
+            other_dir.mkdir()
+            with patch.dict(os.environ, {
+                    "COGNITION_AGENT_OS_WORKSPACE": str(workspace),
+                    "COGNITION_OS_WORKSPACE": str(other_dir),
+            }, clear=True):
+                self.assertIsNone(codex._optional_existing_directory(
+                    "COGNITION_AGENT_OS_WORKSPACE", "runtime/workspace"))
+                with self.assertRaisesRegex(ValueError, "CONFLICTING_RUNTIME_RESOURCE_ENV"):
+                    private._paths()
+
             # A silently different ledger is more dangerous than no ledger.
             other = checkout / "other.sqlite"
             other.write_bytes(self.db.read_bytes())
