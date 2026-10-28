@@ -205,6 +205,40 @@ class CodexSessionContext(unittest.TestCase):
                                  (None, "AMBIGUOUS_LOCAL_LEDGERS"))
                 self.assertTrue(private._paths()[0].samefile(db))
 
+    def test_large_no_ledger_index_does_not_claim_a_missing_sqlite_goal(self):
+        """Source-map overflow must preserve a truthful no-ledger recovery."""
+        import importlib.util
+        import io
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location(
+            "oversized_no_ledger_hook", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        guide = dict(module._project_recovery_when_no_ledger())
+        guide["extra_untrusted_detail"] = "x" * 10000
+        stdin = io.StringIO(json.dumps({"cwd": str(ROOT), "source": "startup"}))
+        stdout = io.StringIO()
+        with (patch.object(module, "_existing_database",
+                           return_value=(None, "NO_LOCAL_LEDGER_CONFIGURED")),
+              patch.object(module, "_project_recovery_when_no_ledger",
+                           return_value=guide),
+              patch.object(sys, "stdin", stdin),
+              patch.object(sys, "stdout", stdout)):
+            self.assertEqual(module.main(), 0)
+        packet = json.loads(stdout.getvalue())
+        receipt = packet["hookSpecificOutput"]["additionalContext"]
+        self.assertLessEqual(len(receipt), 2000)
+        data = json.loads(receipt.partition(": ")[-1])
+        self.assertEqual(data["status"], "NO_LOCAL_LEDGER_CONFIGURED")
+        self.assertEqual(data["ledger_discovery"], "NO_LOCAL_LEDGER_CONFIGURED")
+        self.assertFalse(data["original_goal_verified"])
+        self.assertNotIn("original_goal", data)
+        self.assertNotEqual(data["status"], "FULL_LEDGER_READBACK_REQUIRED")
+        self.assertEqual(
+            data["repository_recovery"]["live_default_branch_head_and_ci"],
+            "MUST_REFETCH")
+
     def test_missing_source_never_invents_owner_goal(self):
         result = self._run(with_database=False)
         self.assertEqual(result["status"], "NO_LOCAL_LEDGER_CONFIGURED")
@@ -231,7 +265,12 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("bootstrap index", project["proposed_action"])
         self.assertIn("task-relevant source", project["proposed_action"])
         self.assertIn("specific conflict", project["proposed_action"])
-        self.assertEqual(project["live_pr_head_and_ci"], "MUST_REFETCH")
+        self.assertEqual(project["live_default_branch_head_and_ci"],
+                         "MUST_REFETCH")
+        self.assertEqual(project["live_active_pr_metadata"], "CHECK_IF_PRESENT")
+        self.assertNotIn("live_pr_head_and_ci", project)
+        self.assertIn("live default branch HEAD", project["proposed_action"])
+        self.assertIn("active PR only if present", project["proposed_action"])
         self.assertEqual(project["product_readiness_claim"], "NOT_VERIFIED")
         # An active architectural pivot must reach the actual cold-entry
         # process rather than live only in a document the agent may never read.
