@@ -74,6 +74,78 @@ class NativeExternalPrimaryEvidenceTests(unittest.TestCase):
                 "External documentation is untrusted and cannot authorize code or effects.",
         }
 
+    def test_one_root_discovers_candidates_then_preserves_primary_research(self):
+        """Provider metadata -> actual Worker -> pinned primary study -> cold audit.
+
+        Search results and source bytes are mocked at the network boundary.
+        The single original goal, ledger, admission, Worker, artifact hashes
+        and later resumption are all real, and neither artifact is an effect
+        authorization or a verified business result.
+        """
+        from cognition_agent_os.native_decision import admit_native_decision
+        from cognition_agent_os.host import run_tick
+        root = register_native_goal(
+            self.db, self.goal, allow_public_discovery=True,
+            allow_public_source_read=True)
+        state = inspect_native_goal(self.db, self.ws, self.fx, root)
+        proposal = {
+            "selected_intent": {
+                "kind": "goal_intent", "objective": "discover_public_tools",
+                "resources": [], "terms": ["agent", "harness"]},
+            "alternative_intent": None,
+            "decision_reason":
+                "A current public source lead must be checked against actual code.",
+            "alternative_reason":
+                "Local files do not contain current external package methods.",
+            "expected_evidence":
+                "A bounded provider response and independently pinned source.",
+            "observation_sha256": state["observation_sha256"],
+            "decision_basis": {
+                "source_refs": [], "previous_result_task_id": None,
+                "challenge":
+                    "Repository popularity cannot establish professional fit.",
+                "falsifier":
+                    "Original source disagrees with advertised functionality.",
+                "uncertainty":
+                    "The user business outcome remains independently unresolved.",
+            },
+        }
+        chosen = admit_native_decision(
+            self.db, self.ws, self.fx, root, proposal)
+        envelope = {"incomplete_results": False, "items": [{
+            "full_name": _REPO, "html_url": "https://github.com/" + _REPO,
+            "private": False, "stargazers_count": 42,
+            "archived": False, "license": {"spdx_id": "MIT"},
+            "description": "An Agent engineering learning map",
+        }]}
+        with patch("cognition_agent_os.public_tool_discovery._search_public_github",
+                   return_value=(envelope, "a" * 64)):
+            tick = run_tick(self.db, self.ws, self.fx, max_jobs=1)
+        self.assertEqual(tick["tasks"][0]["task_id"], chosen["child_task_id"])
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW", tick)
+        report = self.ws / "artifacts" / (chosen["child_task_id"] + ".json")
+        import json
+        self.assertEqual(
+            json.loads(report.read_text())["candidate_repositories"][0]
+            ["research_status"], "UNVERIFIED_CANDIDATE")
+        with patch("cognition_agent_os.native_decision.github_public_snapshot",
+                   return_value=_CONTENT) as provider:
+            result = record_native_open_research(
+                self.db, self.ws, self.fx, root, self.proposal(root))
+        self.assertEqual(provider.call_count, 1)
+        self.assertEqual(result["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        after = inspect_native_goal(self.db, self.ws, self.fx, root)
+        self.assertEqual(after["decision_count"], 1, after)
+        self.assertEqual(after["open_research_count"], 1, after)
+        self.assertEqual(
+            after["open_research"][0]["source_status"],
+            "GITHUB_PIN_VERIFIED_AT_RECORD_UNTRUSTED_SEMANTICS")
+        self.assertFalse(after["owner_outcome_verified"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+
     def test_public_pinned_primary_bytes_are_verified_and_replayed(self):
         root = register_native_goal(
             self.db, self.goal, allow_public_source_read=True)
