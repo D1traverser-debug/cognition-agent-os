@@ -137,7 +137,7 @@ class AssuranceRegistryTests(unittest.TestCase):
                 encoding='utf-8')
             live = (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8')
             live = live.replace(
-                'PR **metadata**',
+                'live PR metadata',
                 'ALL open Draft PRs')
             (dst / 'SESSION_HANDOFF.md').write_text(live, encoding='utf-8')
             (dst / 'archive').mkdir()
