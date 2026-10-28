@@ -11,7 +11,7 @@
             "timeout": 8,
             "additionalContextLimit": 2000,
             "statusMessage": "Reattesting original goal from existing local SQLite",
-            "commandWindows": "for /F \"delims=\" %G in ('git rev-parse --show-toplevel') do @python \"%G/scripts/codex_session_context.py\""
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -EncodedCommand JAByAG8AbwB0ACAAPQAgACgAJgAgAGcAaQB0ACAAcgBlAHYALQBwAGEAcgBzAGUAIAAtAC0AcwBoAG8AdwAtAHQAbwBwAGwAZQB2AGUAbAApAC4AVAByAGkAbQAoACkAOwAgAGkAZgAgACgAJABMAEEAUwBUAEUAWABJAFQAQwBPAEQARQAgAC0AbgBlACAAMAApACAAewAgAGUAeABpAHQAIAAxACAAfQA7ACAAJgAgAHAAeQB0AGgAbwBuACAAKABKAG8AaQBuAC0AUABhAHQAaAAgACQAcgBvAG8AdAAgACcAcwBjAHIAaQBwAHQAcwAvAGMAbwBkAGUAeABfAHMAZQBzAHMAaQBvAG4AXwBjAG8AbgB0AGUAeAB0AC4AcAB5ACcAKQA7ACAAZQB4AGkAdAAgACQATABBAFMAVABFAFgASQBUAEMATwBEAEUA"
           }
         ]
       }
@@ -23,7 +23,7 @@
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/verify_ci_evidence_scope.py\" --codex-pretool",
-            "commandWindows": "for /F \"delims=\" %G in ('git rev-parse --show-toplevel') do @python \"%G/scripts/verify_ci_evidence_scope.py\" --codex-pretool",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -EncodedCommand JAByAG8AbwB0ACAAPQAgACgAJgAgAGcAaQB0ACAAcgBlAHYALQBwAGEAcgBzAGUAIAAtAC0AcwBoAG8AdwAtAHQAbwBwAGwAZQB2AGUAbAApAC4AVAByAGkAbQAoACkAOwAgAGkAZgAgACgAJABMAEEAUwBUAEUAWABJAFQAQwBPAEQARQAgAC0AbgBlACAAMAApACAAewAgAGUAeABpAHQAIAAxACAAfQA7ACAAJgAgAHAAeQB0AGgAbwBuACAAKABKAG8AaQBuAC0AUABhAHQAaAAgACQAcgBvAG8AdAAgACcAcwBjAHIAaQBwAHQAcwAvAHYAZQByAGkAZgB5AF8AYwBpAF8AZQB2AGkAZABlAG4AYwBlAF8AcwBjAG8AcABlAC4AcAB5ACcAKQAgAC0ALQBjAG8AZABlAHgALQBwAHIAZQB0AG8AbwBsADsAIABlAHgAaQB0ACAAJABMAEEAUwBUAEUAWABJAFQAQwBPAEQARQA=",
             "timeout": 8,
             "statusMessage": "Checking previously verified experiment evidence before external action"
           }
