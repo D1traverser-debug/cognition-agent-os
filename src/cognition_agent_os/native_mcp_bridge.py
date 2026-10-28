@@ -201,8 +201,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return {
             **capability_catalog(
                 fixtures, allow_public_discovery=spec["allow_public_discovery"]),
-            "public_primary_source_read_authorized":
-                spec.get("allow_public_source_read") is True,
+            "public_primary_source_read_authorized": (
+                spec.get("allow_public_source_read") is True
+                and public_source_goal_sha256 is not None
+                and hashlib.sha256(
+                    spec["goal"].encode("utf-8")).hexdigest()
+                    == public_source_goal_sha256),
         }
 
     if allow_source_read:
