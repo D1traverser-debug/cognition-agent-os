@@ -61,6 +61,41 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
             return build_mcp_server(
                 self.db, self.ws, self.fx, **kwargs)
 
+    def test_observation_only_profile_excludes_every_mutating_tool(self):
+        reader = self.server(allow_goal_writes=False)
+        exposed = set(reader.tools)
+        self.assertTrue({
+            "native_goal_list", "native_goal_inspect", "native_capabilities",
+            "native_owner_outcome",
+        } <= exposed)
+        self.assertFalse({
+            "native_goal_create", "native_hypothesis_record",
+            "native_open_research_record", "native_decision_admit",
+            "native_local_tick", "native_local_model_plan",
+        } & exposed)
+        with closing(connect(self.db)) as db:
+            before = (
+                db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],
+                db.execute("SELECT COUNT(*) FROM events").fetchone()[0],
+            )
+        inventory = reader.tools["native_goal_list"]()
+        self.assertEqual(inventory["goals"][0]["original_goal"], self.owner_goal)
+        with closing(connect(self.db)) as db:
+            after = (
+                db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],
+                db.execute("SELECT COUNT(*) FROM events").fetchone()[0],
+            )
+        self.assertEqual(after, before)
+
+    def test_observation_only_profile_rejects_mixed_write_flags(self):
+        for flag in ("allow_host_tick", "allow_local_model_plan"):
+            with self.subTest(flag=flag):
+                with self.assertRaisesRegex(
+                        ValueError, "READ_ONLY_MCP_CANNOT_ENABLE"):
+                    self.server(allow_goal_writes=False, **{flag: True})
+        self.assertIn("native_goal_create", self.server().tools)
+        self.assertIn("native_decision_admit", self.server().tools)
+
     def test_public_read_requires_explicit_runtime_opt_in(self):
         self.assertNotIn("native_public_primary_source_read",
                          self.server().tools)
