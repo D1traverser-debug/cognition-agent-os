@@ -300,9 +300,9 @@ class CodexSessionContext(unittest.TestCase):
             "hook_event_name": "SessionStart",
         })
         if os.name == "nt":
-            # Match the actual Codex Windows default command shell: cmd.exe /C.
+            # Replicate Codex Command::raw_arg: cmd.exe /C "<hook command>".
             # PowerShell masked POSIX $(...) substitution in commandWindows.
-            command = ["cmd.exe", "/C", handler["commandWindows"]]
+            command = 'cmd.exe /C "' + handler["commandWindows"] + '"'
         else:
             command = ["/bin/sh", "-c", handler["command"]]
         call = subprocess.run(
@@ -337,7 +337,7 @@ class CodexSessionContext(unittest.TestCase):
             },
         }
         if os.name == "nt":
-            command = ["cmd.exe", "/C", handler["commandWindows"]]
+            command = 'cmd.exe /C "' + handler["commandWindows"] + '"'
         else:
             command = ["/bin/sh", "-c", handler["command"]]
         result = subprocess.run(
