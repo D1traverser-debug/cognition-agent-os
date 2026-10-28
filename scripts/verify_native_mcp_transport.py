@@ -712,6 +712,43 @@ async def run():
         assert probe["unprivileged_tools_only"] is True
         assert probe["chatgpt_cloud_connected"] is False
 
+        # An actual separate process is the permission oracle; unlike a
+        # self-described "unprivileged" probe it cannot expose write tools.
+        with closing(connect(db)) as before_db:
+            before_counts = (
+                before_db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],
+                before_db.execute("SELECT COUNT(*) FROM events").fetchone()[0],
+            )
+        private_params = StdioServerParameters(
+            command=sys.executable, args=[str(launcher), "serve"],
+            env=launcher_env)
+        async with Client(private_params) as private_client:
+            private_tools = {
+                tool.name for tool in (await private_client.list_tools()).tools
+            }
+            assert {"native_goal_list", "native_goal_inspect",
+                    "native_owner_outcome", "native_capabilities"} <= private_tools
+            assert not ({
+                "native_goal_create", "native_hypothesis_record",
+                "native_open_research_record", "native_decision_admit",
+                "native_local_tick", "native_local_model_plan",
+                "native_source_read",
+            } & private_tools), ("PRIVATE_STDIO_EXPOSED_WRITE_TOOL", private_tools)
+            denied = await private_client.call_tool(
+                "native_goal_create",
+                {"owner_goal": "unauthorized goal through read-only tunnel"})
+            assert denied.is_error, ("PRIVATE_STDIO_WRITES_NOT_REJECTED", denied)
+            readback = unwrap(await private_client.call_tool(
+                "native_goal_list", {}))
+            assert readback["status"] == "NATIVE_GOAL_INVENTORY"
+        with closing(connect(db)) as after_db:
+            after_counts = (
+                after_db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],
+                after_db.execute("SELECT COUNT(*) FROM events").fetchone()[0],
+            )
+        assert after_counts == before_counts, (
+            "READ_ONLY_TUNNEL_MUTATED_LEDGER", before_counts, after_counts)
+
         absent_db = base / "never_initialized_by_bridge.sqlite"
         code, stdout, stderr = await launch(
             "check", {"COGNITION_OS_DB": str(absent_db)})
