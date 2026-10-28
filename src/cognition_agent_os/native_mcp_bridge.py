@@ -37,7 +37,7 @@ def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
 
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                      allow_host_tick: bool = False,
-                     allow_goal_writes: bool = True,
+                     allow_goal_writes: bool = False,
                      allow_source_read: bool = False,
                      allow_local_model_plan: bool = False,
                      public_discovery_goal_sha256: str | None = None,
