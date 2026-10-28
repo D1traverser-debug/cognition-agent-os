@@ -106,6 +106,22 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 reader(metadata_only, *self.remote)
 
+    def test_revoked_grant_during_source_fetch_cannot_return_content(self):
+        reader = self.server(
+            public_source_goal_sha256=self.scope).tools[
+                "native_public_primary_source_read"]
+        def revoke(repo, path, sha):
+            with closing(connect(self.db)) as db:
+                db.execute("UPDATE authority SET grant_rev=grant_rev+1 "
+                           "WHERE singleton=1")
+                db.commit()
+            return b"private-after-revocation"
+        with patch("cognition_agent_os.source.github_public_snapshot",
+                   side_effect=revoke):
+            with self.assertRaisesRegex(
+                    PermissionError, "PUBLIC_SOURCE_GRANT_CHANGED_DURING_READ"):
+                reader(self.root, *self.remote)
+
     def test_invalid_input_and_binary_rejected_without_claiming_truth(self):
         reader = self.server(
             public_source_goal_sha256=self.scope).tools[
