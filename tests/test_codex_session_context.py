@@ -148,7 +148,11 @@ class CodexSessionContext(unittest.TestCase):
             # Workspace/fixture aliases also must not silently diverge.
             other_dir = checkout / "other-workspace"
             other_dir.mkdir()
+            # The fixture now holds two legitimate ledgers (new and legacy).
+            # Explicitly select the runtime one so this case tests *workspace*
+            # alias conflict rather than the earlier multi-ledger refusal.
             with patch.dict(os.environ, {
+                    "COGNITION_AGENT_OS_DB": str(db),
                     "COGNITION_AGENT_OS_WORKSPACE": str(workspace),
                     "COGNITION_OS_WORKSPACE": str(other_dir),
             }, clear=True):
