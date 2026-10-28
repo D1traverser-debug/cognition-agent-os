@@ -111,10 +111,67 @@ def check(graph_path: Path, repo: Path) -> dict:
             errors.append("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN")
     except (OSError, ValueError, StopIteration, SyntaxError, TypeError, AttributeError):
         errors.append("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN")
+
+    # A Graphify snapshot is a useful extracted CODE graph, not proof of
+    # today’s active cognition entry. The original list above predates the
+    # native ChatGPT/MCP+SQLite branch. Check its ACTUAL caller bodies using
+    # stdlib Python AST instead of inventing Graphify EXTRACTED edges for
+    # closures or dispatch that a graph generator might not resolve. Report
+    # this evidence under a DISTINCT evidence type and line location.
+    native_calls = (
+        ("native_mcp_bridge.py", "native_open_research_record",
+         "record_native_open_research", "NATIVE_MCP_RESEARCH_LINEAGE_UNPROVEN"),
+        ("native_mcp_bridge.py", "native_decision_admit",
+         "admit_native_decision", "NATIVE_MCP_ADMISSION_LINEAGE_UNPROVEN"),
+        ("native_mcp_bridge.py", "native_owner_outcome",
+         "inspect_owner_local_outcome", "NATIVE_MCP_OUTCOME_LINEAGE_UNPROVEN"),
+        ("host.py", "run_tick",
+         "advance_native_local_goals", "HOST_NATIVE_PLANNER_LINEAGE_UNPROVEN"),
+        ("native_local_planner.py", "advance_native_local_once",
+         "admit_native_decision", "LOCAL_MODEL_ADMISSION_LINEAGE_UNPROVEN"),
+        ("native_local_planner.py", "advance_native_adaptive_once",
+         "admit_native_decision", "ADAPTIVE_NATIVE_ADMISSION_LINEAGE_UNPROVEN"),
+    )
+    native_provenance = []
+    parsed_modules = {}
+    for filename, caller, callee, failure in native_calls:
+        try:
+            if filename not in parsed_modules:
+                source = (repo / "src" / "cognition_agent_os" / filename)
+                parsed_modules[filename] = ast.parse(
+                    source.read_text(encoding="utf-8"), filename=str(source))
+            tree = parsed_modules[filename]
+            matches = [node for node in ast.walk(tree)
+                       if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                       and node.name == caller]
+            if len(matches) != 1:
+                raise ValueError("CALLER_NOT_UNIQUE")
+            # Only a real import and a real AST call inside the expected
+            # function count; comments, same-name text and inferred graph
+            # relationships are not a call path. No semantic proof implied.
+            imported = any(
+                isinstance(node, ast.ImportFrom)
+                and any(alias.name == callee for alias in node.names)
+                for node in ast.walk(tree))
+            called = [node for node in ast.walk(matches[0])
+                      if isinstance(node, ast.Call)
+                      and isinstance(node.func, ast.Name)
+                      and node.func.id == callee]
+            if not imported or not called:
+                raise ValueError("MISSING_IMPORTED_DIRECT_CALL")
+            native_provenance.append({
+                "caller": caller, "callee": callee,
+                "source_file": "src/cognition_agent_os/" + filename,
+                "source_location": "L" + str(called[0].lineno),
+                "confidence": "SOURCE_AST_DIRECT",
+            })
+        except (OSError, ValueError, SyntaxError, TypeError):
+            errors.append(failure)
     return {"status":"PASS" if not errors else "FAIL",
             "commit":sha,"nodes":len(nodes),"edges":len(g["links"]),
             "inferred_edges":sum(e.get("confidence")=="INFERRED" for e in g["links"]),
             "control_edges":evidence,
+            "active_native_source_edges":native_provenance,
             "errors":errors,"semantic_outcome_verified":False}
 
 def main():
