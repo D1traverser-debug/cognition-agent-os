@@ -106,6 +106,53 @@ class NativeSameMethodCorrection(unittest.TestCase):
             {x.name: x.read_bytes() for x in self.sources.iterdir()},
             self.originals)
 
+    def test_one_host_trigger_repairs_failed_method_with_verified_feedback(self):
+        """Actual first Worker refusal is the reason to switch a typed plan.
+
+        A deterministic fake model only supplies candidate JSON, never an
+        execution or a success verdict. The same SQLite admission and Worker
+        must reject the conflicting source edit, then execute a materially
+        changed same-capability plan during the original authorized tick.
+        """
+        from unittest.mock import patch
+        proposed = []
+        def source_model(method, endpoint, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            self.assertEqual(method, "POST")
+            state = self.view()
+            count = len(state["decisions"])
+            proposed.append(count)
+            self.assertIn(self.root, self.view()["root_task_id"])
+            method_intent = (
+                self.structure("retain", "overwrite") if count == 0
+                else self.structure("audit", "confirmed"))
+            return {"done": True,
+                    "response": json.dumps(self.choice(method_intent))}
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=source_model):
+            tick = run_tick(
+                self.db, self.workspace, self.sources, max_jobs=2,
+                planner_mode="ollama-local", local_model="installed:test",
+                auto_native_cognition=True)
+        self.assertEqual(proposed, [0, 1], tick)
+        self.assertEqual(
+            [x["status"] for x in tick["tasks"]],
+            ["UNKNOWN", "NEEDS_REVIEW"], tick)
+        self.assertEqual(
+            [x["status"] for x in tick["native_cognition"]],
+            ["NATIVE_METHOD_ENQUEUED", "NATIVE_METHOD_ENQUEUED"], tick)
+        state = self.view()
+        self.assertEqual(state["decision_count"], 2, state)
+        self.assertEqual(state["decisions"][0]["error_code"],
+                         "NO_SAFE_GOAL_PLAN", state)
+        self.assertEqual(state["decisions"][1]["mechanical_verdict"],
+                         "CANDIDATE_MECHANICALLY_VALID", state)
+        self.assertIs(state["owner_outcome_verified"], False)
+        self.assertEqual(
+            {x.name: x.read_bytes() for x in self.sources.iterdir()},
+            self.originals)
+
     def test_identical_retry_after_failure_is_not_a_correction(self):
         self.failed_initial_method()
         with self.assertRaisesRegex(
