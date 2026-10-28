@@ -156,6 +156,66 @@ class NativeLocalModelLoop(unittest.TestCase):
             self.db, self.workspace, self.fixtures, native,
             model="installed:test")
 
+    def test_durable_open_research_is_available_to_next_model_decision(self):
+        """A saved competing-method study is useful only if a later planner reads it.
+
+        The stored study is UNTRUSTED, source-pinned research, not an action
+        grant or an independent owner outcome. No second model or store.
+        """
+        from cognition_agent_os.native_decision import (
+            record_native_open_research, _sources)
+        root = register_native_goal(self.db, self.goal)
+        current = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        sources = _sources(self.fixtures)
+        study = {
+            "observation_sha256": current["observation_sha256"],
+            "owner_clause": "actual inventory discrepancy",
+            "unresolved_question":
+                "Should reference evidence or a secondary physical count guide correction?",
+            "competing_methods": [
+                {"name": "record_crosscheck",
+                 "applicability": "Compare independent original transaction records.",
+                 "failure_mode": "Two records may share a data collection error.",
+                 "falsifier": "Independent verified counts contradict both records."},
+                {"name": "physical_recount",
+                 "applicability": "Use a separately validated physical stock tally.",
+                 "failure_mode": "The physical count may be stale or incomplete.",
+                 "falsifier": "Repeat blind counts disagree with the suggested tally."},
+            ],
+            "source_refs": [
+                {"path": "reference.csv", "sha256": sources["reference.csv"]}],
+            "next_research_step":
+                "Check whether the independent source can distinguish shared bias.",
+            "uncertainty":
+                "No physical stock effect or external business outcome has been checked.",
+        }
+        record_native_open_research(
+            self.db, self.workspace, self.fixtures, root, study)
+        viewed = []
+        def model(method, path, payload, timeout):
+            if method == "POST":
+                evidence = json.loads(payload["prompt"].split("\n\n")[-1])
+                viewed.append(evidence)
+            return self.transport(method, path, payload, timeout)
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=model):
+            admitted = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED", admitted)
+        self.assertEqual(len(viewed), 1)
+        self.assertEqual(viewed[0]["prior_open_research_total_count"], 1)
+        self.assertFalse(viewed[0]["prior_open_research_index_truncated"])
+        recorded = viewed[0]["untrusted_prior_open_research"][0]
+        self.assertEqual(recorded["source_status"],
+                         "SOURCE_PIN_CURRENT_UNVERIFIED_SEMANTICS")
+        self.assertEqual(recorded["competing_methods"],
+                         study["competing_methods"])
+        self.assertNotIn("authorizes_action", recorded)
+        self.assertFalse(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["owner_outcome_verified"])
+
     def test_research_reads_multiple_distinct_evidence_rounds_before_choice(self):
         """The model may ask for more actual evidence without a preset one-read cutoff.
 
