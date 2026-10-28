@@ -1,6 +1,6 @@
 ---
 name: cognition-parent-chatgpt-intake
-description: Use for cognition-agent-os engineering, explicit child-agent projects, or 继续/继承 of a prior agent goal. Recover the full owner objective, research and challenge methods, act with available permission and independently verify actual outcomes. Do not trigger on unrelated chat; do not infer Host access from this skill.
+description: Use for cognition-agent-os or selected child-agent work, 继续/继承, and ALL in-scope follow-ups, challenges, corrections, failures and interrupted resumes even without repeating the trigger. Independently find missing work, research and compare solutions, execute permitted actions and verify full owner outcomes. Do not trigger on unrelated chat.
 ---
 
 # Cognition parent: opt-in ChatGPT entry
