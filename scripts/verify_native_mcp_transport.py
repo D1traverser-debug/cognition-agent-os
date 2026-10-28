@@ -169,6 +169,65 @@ async def run():
             assert cold["decision_count"] == 0, cold
             assert cold["owner_outcome_verified"] is False, cold
 
+        # Real MCP transport, not an internal Python caller: more than one
+        # model-context page must remain recoverable after a server restart.
+        async with Client(server(allow_tick=False)) as client:
+            for ordinal in range(17):
+                state = unwrap(await client.call_tool(
+                    "native_goal_inspect", {"root_task_id": novel_id}))
+                proposed = json.loads(json.dumps(research))
+                proposed["observation_sha256"] = state["observation_sha256"]
+                proposed["next_research_step"] = (
+                    "Review separate primary calibration protocol number "
+                    + str(ordinal) + " with an independent expert.")
+                receipt = unwrap(await client.call_tool(
+                    "native_open_research_record", {
+                        "root_task_id": novel_id, "proposal": proposed}))
+                assert receipt["status"] == "NATIVE_OPEN_RESEARCH_RECORDED", receipt
+                assert receipt["authorizes_action"] is False
+
+        # Another fresh stdio process independently rereads two pages.
+        async with Client(server(allow_tick=False)) as client:
+            first = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": novel_id}))
+            assert first["open_research_count"] == 18, first
+            assert len(first["open_research"]) == 16, first
+            cursor = first["open_research_next_before_event_id"]
+            assert type(cursor) is int and cursor > 0, first
+            old = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": novel_id,
+                                        "research_before_event_id": cursor}))
+            assert old["open_research_count"] == 18, old
+            assert len(old["open_research"]) == 2, old
+            assert old["open_research_next_before_event_id"] is None, old
+            all_ids = [x["event_id"] for x in first["open_research"]]
+            all_ids += [x["event_id"] for x in old["open_research"]]
+            assert len(set(all_ids)) == 18, "MCP_RESEARCH_PAGE_DUPLICATE"
+            assert all_ids == sorted(all_ids, reverse=True), all_ids
+            assert old["open_research"][-1]["proposal"]["competing_methods"] == (
+                research["competing_methods"]), old
+            assert first["original_goal"] == unknown_goal
+            assert old["original_goal"] == unknown_goal
+            assert first["observation_sha256"] == old["observation_sha256"]
+            assert not first["owner_outcome_verified"]
+            assert not old["owner_outcome_verified"]
+            invalid = await client.call_tool(
+                "native_goal_inspect", {
+                    "root_task_id": novel_id, "research_before_event_id": 0})
+            assert invalid.is_error, invalid
+            off_page_duplicate = json.loads(json.dumps(research))
+            off_page_duplicate["observation_sha256"] = (
+                first["observation_sha256"])
+            repeated_old = await client.call_tool(
+                "native_open_research_record", {
+                    "root_task_id": novel_id, "proposal": off_page_duplicate})
+            assert repeated_old.is_error, repeated_old
+            unchanged = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": novel_id}))
+            assert unchanged["observation_sha256"] == (
+                first["observation_sha256"]), unchanged
+            assert unchanged["decision_count"] == 0, unchanged
+
         # Genuine optional planning uses only an installed local Ollama
         # provider. It is absent by default. An attempt to select a cloud
         # model/URL is rejected without task admission or provider requests.
