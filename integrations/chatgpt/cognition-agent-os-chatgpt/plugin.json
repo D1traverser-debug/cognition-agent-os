@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cognition-agent-os-chatgpt",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Private ChatGPT skills-only plugin for cognition-agent-os goal recovery, tool selection, first-hand research, independent verification and safe correction. Does not itself connect a custom Host API.",
   "author": {
     "name": "cognition-agent-os owner"
@@ -18,7 +18,7 @@
         "capabilities": [
           "Interactive"
         ],
-        "defaultPrompt": "继续 cognition-agent-os：恢复完整目标及纠正；自主发现遗漏和未执行工作，主动检索、比较方案，合法执行并独立核验；可继续则不中止，受阻才说明；未达目标不得报完成。"
+        "defaultPrompt": "继续 cognition-agent-os：恢复完整用户目标及纠正；自主发现遗漏、未执行与漂移，质疑、研究、比较方案；合法执行并独立验收真实结果，失败纠偏；有合法下一步即继续，确实受阻才报告。"
       }
     }
   }
