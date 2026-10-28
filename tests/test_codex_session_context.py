@@ -115,8 +115,13 @@ class CodexSessionContext(unittest.TestCase):
                     "COGNITION_AGENT_OS_WORKSPACE": str(workspace),
                     "COGNITION_OS_WORKSPACE": str(other_dir),
             }, clear=True):
-                self.assertIsNone(codex._optional_existing_directory(
-                    "COGNITION_AGENT_OS_WORKSPACE", "runtime/workspace"))
+                with self.assertRaisesRegex(ValueError, "CONFLICTING_RUNTIME_RESOURCE_ENV"):
+                    codex._optional_existing_directory(
+                        "COGNITION_AGENT_OS_WORKSPACE", "runtime/workspace")
+                denied = codex.build_context({"cwd": str(checkout)})
+                self.assertEqual(denied["status"], "CONFLICTING_RUNTIME_RESOURCE_ENV")
+                self.assertFalse(denied["original_goal_verified"])
+                self.assertFalse(denied["scheduling_or_effects_performed"])
                 with self.assertRaisesRegex(ValueError, "CONFLICTING_RUNTIME_RESOURCE_ENV"):
                     private._paths()
 
