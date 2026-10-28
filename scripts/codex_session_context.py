@@ -225,8 +225,14 @@ def build_context(payload: dict) -> dict:
         context["status"] = origin
         context["repository_recovery"] = _project_recovery_when_no_ledger()
         return context
-    ws = _optional_existing_directory(WORKSPACE_ENV, "runtime/workspace")
-    fixtures = _optional_existing_directory(FIXTURES_ENV, "runtime/fixtures")
+    # Preserve the older checkout-root workspace/fixtures layout for legacy
+    # ledgers; only the Windows Host's runtime/state.sqlite default selects
+    # runtime/workspace and runtime/fixtures in the absence of env overrides.
+    runtime_layout = db_path == ROOT / "runtime" / "state.sqlite"
+    ws = _optional_existing_directory(
+        WORKSPACE_ENV, "runtime/workspace" if runtime_layout else "workspace")
+    fixtures = _optional_existing_directory(
+        FIXTURES_ENV, "runtime/fixtures" if runtime_layout else "fixtures")
     if (ws is None) != (fixtures is None):
         ws = fixtures = None
     sys.path.insert(0, str(ROOT / "src"))
