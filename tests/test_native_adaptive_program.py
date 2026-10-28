@@ -153,6 +153,47 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         self.assertFalse(result["business_outcome_verified"], result)
         self.unchanged()
 
+    def test_offline_model_does_not_starve_later_exact_owner_work(self):
+        """Real Host -> Worker -> owner readback with one unavailable provider.
+
+        Two prior unfamiliar owner requests require genuine cognition but
+        cannot use this absent model. A later exact CSV task needs zero
+        inference and must still get the authorized one-job budget.
+        """
+        from cognition_agent_os.local_model import LocalModelUnavailable
+        before = [
+            register_native_goal(self.db,
+                                 "Investigate an unknown export pipeline with "
+                                 "external tools not present locally."),
+            register_native_goal(self.db,
+                                 "Compare rival methods for an unfamiliar "
+                                 "biology experiment and check real outcomes."),
+        ]
+        exact = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        with patch("cognition_agent_os.native_local_planner._installed_model",
+                   side_effect=LocalModelUnavailable(
+                       "LOCAL_MODEL_NOT_INSTALLED")) as provider:
+            tick = run_tick(
+                self.db, self.work, self.fixtures,
+                max_jobs=1, auto_native_cognition=True,
+                planner_mode="ollama-local", local_model="not-installed:test")
+        provider.assert_called_once()
+        self.assertEqual(len(tick["tasks"]), 1, tick)
+        self.assertEqual(tick["native_cognition"][0]["status"],
+                         "NATIVE_METHOD_ENQUEUED", tick)
+        self.assertEqual(
+            tick["tasks"][0]["task_id"],
+            tick["native_cognition"][0]["child_task_id"], tick)
+        actual = inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, exact)
+        self.assertTrue(actual["local_owner_outcome_verified"], actual)
+        for old_root in before:
+            self.assertFalse(inspect_owner_local_outcome(
+                self.db, self.work, self.fixtures,
+                old_root)["local_owner_outcome_verified"])
+        self.unchanged()
+
     def test_one_opted_in_tick_stages_json_without_touching_original(self):
         """The same bounded Host invocation crosses a second registered method.
 

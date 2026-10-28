@@ -1048,6 +1048,7 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
     results = []
     diagnostic = None
     verified = None
+    model_transport_unavailable = False
     # The previous static first-128 / first-4096 sample was NOT a fair
     # scheduler. In a long-lived SQLite ledger, failed or unrecognized older
     # roots could hide every newer owner goal forever. The iterator is a
@@ -1062,6 +1063,17 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
         state = inspect_native_goal(db_path,workspace,fixtures,root_id)
         if state.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
             continue
+        if model is not None and model_transport_unavailable:
+            # One actual failed local-provider precondition applies to every
+            # still-unknown model task in THIS tick. Do not call the same
+            # offline provider again or starve a later exact owner task that
+            # can be fulfilled with zero model calls. Keep the model-free
+            # program path strictly guarded by the original owner contract.
+            from .owner_postcondition import _explicit_owner_local_contract
+            if (state["decisions"] or state["pending_hypotheses"]
+                or _explicit_owner_local_contract(
+                    state["original_goal"]) is None):
+                continue
         if model is not None:
             # Earlier model/tool failures remain authoritative across cold
             # restarts. Merely being one of the first 128 roots must not
@@ -1111,8 +1123,22 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
             if len(results) >= limit:
                 break
         elif model is not None:
-            # Model attempts retain the original bounded limit. A refusal
-            # must not automatically turn into unlimited costly inference.
+            if outcome["status"] == "NATIVE_LOCAL_MODEL_UNAVAILABLE":
+                # A provider-wide unavailable result is not an executed model
+                # attempt for each remaining root. One diagnostic is enough;
+                # continue looking for an owner-exact no-model method.
+                model_transport_unavailable = True
+                if diagnostic is None:
+                    diagnostic = outcome
+                continue
+            if outcome["status"] == "NATIVE_PROGRAM_PLAN_REFUSED":
+                # This exact method did no inference or effect and is still
+                # unresolved. Do not let a broken irrelevant local input
+                # consume the complete Host action budget.
+                if diagnostic is None:
+                    diagnostic = outcome
+                continue
+            # Real model attempts retain their bounded budget.
             results.append(outcome)
             if len(results) >= limit:
                 break
