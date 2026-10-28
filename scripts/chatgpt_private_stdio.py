@@ -20,14 +20,25 @@ sys.path.insert(0, str(_REPO / "src"))
 
 
 def _paths() -> tuple[Path, Path, Path]:
-    def configured(key: str, fallback: str) -> Path:
-        value = os.environ.get(key)
-        return Path(value).expanduser() if value else _REPO / fallback
+    # Both entrypoints must resolve the SAME Host identity. Preserve older
+    # COGNITION_OS_* tunnel configurations, but never silently choose between
+    # two conflicting configured resources.
+    def configured(name: str, fallback: str) -> Path:
+        current = os.environ.get("COGNITION_AGENT_OS_" + name, "").strip()
+        legacy = os.environ.get("COGNITION_OS_" + name, "").strip()
+
+        def resolved(value: str) -> Path:
+            path = Path(value).expanduser()
+            return (path if path.is_absolute() else _REPO / path).resolve(strict=False)
+
+        if current and legacy and resolved(current) != resolved(legacy):
+            raise ValueError("CONFLICTING_RUNTIME_RESOURCE_ENV")
+        return resolved(current or legacy or fallback)
 
     return (
-        configured("COGNITION_OS_DB", "runtime/state.sqlite"),
-        configured("COGNITION_OS_WORKSPACE", "runtime/workspace"),
-        configured("COGNITION_OS_FIXTURES", "runtime/fixtures"),
+        configured("DB", "runtime/state.sqlite"),
+        configured("WORKSPACE", "runtime/workspace"),
+        configured("FIXTURES", "runtime/fixtures"),
     )
 
 
