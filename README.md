@@ -1,6 +1,6 @@
 # cognition-agent-os
 
-**Status: experimental integrated candidate — NOT_READY.** This repository is the implementation of one opt-in cognition parent, not a release claim. Never infer current work from a dated README, cached SHA or old green CI: resolve live GitHub open-PR topology, exact HEAD, actual source, current grants and matching-head evidence first.
+**Status: experimental integrated candidate — NOT_READY.** This repository is the implementation of one opt-in cognition parent, not a release claim. Never infer current work from a dated README, cached SHA or old green CI: resolve live GitHub default-branch HEAD and active-PR topology, exact authoritative source, current grants and matching-head evidence first.
 
 ## Product objective
 
