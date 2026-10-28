@@ -82,6 +82,19 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("task-relevant", hook)
         self.assertIn("specific conflict", hook)
 
+    def test_recovery_roadmap_steps_are_monotonic_without_missing_entries(self):
+        """Route order remains deterministic when new preflight phases are added."""
+        handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
+        recovery = handoff.split("## Recovery order and responsibility map", 1)[1].split(
+            "## Work cycle after recovery", 1)[0]
+        skill = SKILL.read_text(encoding="utf-8")
+        workflow = skill.split("## Work on the problem, not the instructions", 1)[1].split(
+            "**Continuation/stop check", 1)[0]
+        for body in (recovery, workflow):
+            ordinals = re.findall(r"(?m)^(\d+)\. \*\*", body)
+            self.assertGreaterEqual(len(ordinals), 6)
+            self.assertEqual(ordinals, [str(i) for i in range(1, len(ordinals) + 1)])
+
     def test_each_surface_is_a_distinct_loading_boundary(self):
         chatgpt = SKILL.read_text(encoding="utf-8").lower()
         codex = AGENTS.read_text(encoding="utf-8").lower()
