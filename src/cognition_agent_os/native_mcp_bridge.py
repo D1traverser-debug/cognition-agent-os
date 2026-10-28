@@ -39,7 +39,8 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                      allow_host_tick: bool = False,
                      allow_source_read: bool = False,
                      allow_local_model_plan: bool = False,
-                     public_discovery_goal_sha256: str | None = None):
+                     public_discovery_goal_sha256: str | None = None,
+                     public_source_goal_sha256: str | None = None):
     """Expose only the existing, audited native-goal contract as MCP tools."""
     from mcp.server import MCPServer
 
@@ -53,6 +54,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             or any(ch not in "0123456789abcdef"
                    for ch in public_discovery_goal_sha256)):
         raise ValueError("INVALID_PUBLIC_GOAL_SCOPE_DIGEST")
+    if public_source_goal_sha256 is not None and (
+            type(public_source_goal_sha256) is not str
+            or len(public_source_goal_sha256) != 64
+            or any(ch not in "0123456789abcdef"
+                   for ch in public_source_goal_sha256)):
+        raise ValueError("INVALID_PUBLIC_SOURCE_GOAL_SCOPE_DIGEST")
     mcp = MCPServer("cognition-agent-os-local")
 
     @mcp.tool()
@@ -75,9 +82,16 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             public_discovery_goal_sha256 is not None
             and hashlib.sha256(owner_goal.encode("utf-8")).hexdigest()
                 == public_discovery_goal_sha256)
+        # Reading public source FILE BYTES is independently scoped; metadata
+        # discovery never grants content disclosure or a new action executor.
+        pinned_source_scope = (
+            public_source_goal_sha256 is not None
+            and hashlib.sha256(owner_goal.encode("utf-8")).hexdigest()
+                == public_source_goal_sha256)
         root = register_native_goal(
             db_path, owner_goal,
             allow_public_discovery=pinned_public_scope,
+            allow_public_source_read=pinned_source_scope,
             client_request_id=client_request_id)
         return {"status": "NATIVE_GOAL_REGISTERED", "root_task_id": root,
                 "owner_outcome_verified": False}
@@ -184,8 +198,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 return {"status": "NATIVE_GOAL_UNVERIFIABLE",
                         "owner_outcome_verified": False}
             spec = json.loads(row["source_spec"])
-        return capability_catalog(
-            fixtures, allow_public_discovery=spec["allow_public_discovery"])
+        return {
+            **capability_catalog(
+                fixtures, allow_public_discovery=spec["allow_public_discovery"]),
+            "public_primary_source_read_authorized":
+                spec.get("allow_public_source_read") is True,
+        }
 
     if allow_source_read:
         @mcp.tool()
@@ -337,13 +355,16 @@ def main(argv: list[str] | None = None) -> int:
                         help="Opt into installed loopback Ollama model planning; no cloud/API")
     parser.add_argument("--public-discovery-goal-sha256", default=None,
                         help="Operator pins an exact original goal for sanitized public metadata search")
+    parser.add_argument("--public-source-goal-sha256", default=None,
+                        help="Operator separately pins an exact goal for immutable GitHub file-content reads")
     args = parser.parse_args(argv)
     mcp = build_mcp_server(
         args.db, args.workspace, args.fixtures,
         allow_host_tick=args.allow_host_tick,
         allow_source_read=args.allow_source_read,
         allow_local_model_plan=args.allow_local_model_plan,
-        public_discovery_goal_sha256=args.public_discovery_goal_sha256)
+        public_discovery_goal_sha256=args.public_discovery_goal_sha256,
+        public_source_goal_sha256=args.public_source_goal_sha256)
     mcp.run(transport="stdio")
     return 0
 
