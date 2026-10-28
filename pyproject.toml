@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cognition-agent-os"
+version = "0.0.1"
+description = "P0/P1 bounded durable evidence workflow prototype"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=2,<3"]  # Local adapter requires Python 3.11+; core stays stdlib-only.
+
+[project.scripts]
+cognition-os = "cognition_agent_os.cli:main"
+cognition-os-mcp = "cognition_agent_os.native_mcp_bridge:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

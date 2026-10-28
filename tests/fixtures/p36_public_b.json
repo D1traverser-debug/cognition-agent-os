@@ -1,0 +1,17 @@
+{
+  "source_id": "p36_public_b",
+  "publisher_id": "synthetic-beta",
+  "goal_key": "repair-goal",
+  "assertions": [
+    {
+      "route": "structure",
+      "stance": "supports",
+      "evidence_ref": "fixture:beta-002"
+    },
+    {
+      "route": "compare",
+      "stance": "refutes",
+      "evidence_ref": "fixture:beta-002"
+    }
+  ]
+}

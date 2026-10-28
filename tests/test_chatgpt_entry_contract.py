@@ -1,0 +1,213 @@
+"""Source/package contracts only.
+
+These tests never claim native Skill selection, actual ChatGPT loading, method
+comparison, correct cross-chat recovery or owner-level effect. Those require
+captured first-party client runs and independent outcome traces.
+"""
+import io
+import json
+from pathlib import Path
+import re
+import unittest
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+BASE = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
+SKILL = BASE / "skills/cognition-parent-chatgpt-intake/SKILL.md"
+PROBES = SKILL.parent / "references/scope-probes.md"
+CODEX_SKILL = ROOT / ".agents/skills/goal-grounded-semantic-review/SKILL.md"
+AGENTS = ROOT / "AGENTS.md"
+
+
+def metadata(source):
+    assert source.startswith("---\n")
+    parts = source.split("---", 2)
+    return {
+        line.split(":", 1)[0]: line.split(":", 1)[1].strip()
+        for line in parts[1].splitlines()
+        if ":" in line
+    }
+
+
+class ChatGPTSourceBoundaries(unittest.TestCase):
+    def test_plugin_version_is_semantic_and_candidate_is_not_installed_truth(self):
+        manifest = json.loads((BASE / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["name"], "cognition-agent-os-chatgpt")
+        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
+        self.assertIn("Does not itself connect a custom Host API",
+                      manifest["description"])
+        self.assertIn("not", SKILL.read_text(encoding="utf-8").lower())
+
+    def test_triggers_are_scoped_and_body_is_on_demand(self):
+        content = SKILL.read_text(encoding="utf-8")
+        desc = metadata(content)["description"]
+        self.assertIn("cognition-agent-os", desc)
+        self.assertIn("继承", desc)
+        self.assertIn("unrelated", desc.lower())
+        self.assertLess(len(desc), 400)
+        self.assertIn("references/scope-probes.md", content)
+        self.assertTrue(PROBES.is_file())
+        self.assertNotRegex(content, r"(?i)(?:PR\s*#|pull/)(?:\d+)")
+        # Metadata is discoverable; this test does not run ChatGPT.
+        self.assertIn("not", content.lower())
+
+    def test_current_parent_and_child_permission_boundary(self):
+        chatgpt = SKILL.read_text(encoding="utf-8")
+        codex = AGENTS.read_text(encoding="utf-8")
+        for content in (chatgpt, codex):
+            self.assertIn("cognition-agent-os", content)
+            self.assertIn("universal-agent-os", content)
+            self.assertRegex(content.lower(), r"child.{0,300}(?:grant|permission|native)")
+            self.assertNotIn("UAOS is the active parent", content)
+        self.assertIn("SESSION_HANDOFF.md", chatgpt)
+        self.assertIn("SESSION_HANDOFF.md", codex)
+        self.assertTrue(CODEX_SKILL.is_file())
+
+    def test_bootstrap_is_a_locator_not_a_bulk_history_download(self):
+        """Reject recurring context amplification, not certify native obedience."""
+        handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
+        self.assertIn("On-demand engineering provenance", handoff)
+        self.assertIn("possible competing active work", handoff)
+        self.assertIn("default branch HEAD", handoff)
+        self.assertIn("merged PR is historical provenance", handoff)
+        self.assertIn("live default-branch HEAD", AGENTS.read_text(encoding="utf-8"))
+        self.assertIn("live default-branch HEAD", SKILL.read_text(encoding="utf-8"))
+        self.assertIn("default-branch HEAD and active-PR topology",
+                      (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("Active evidence frontier is always required", handoff)
+        self.assertIn("Existing-capability survey BEFORE every substantive choice", handoff)
+        self.assertIn("architecture_probe.py --repo .", handoff)
+        self.assertIn("Agent-Learning-Hub", handoff)
+        self.assertIn("existing-capability and prior-learning survey", AGENTS.read_text(encoding="utf-8"))
+        self.assertIn("First recover unfinished work", SKILL.read_text(encoding="utf-8"))
+        self.assertIn("only when identity, ancestry", handoff)
+        self.assertNotIn("ALL open Draft PRs", handoff)
+        self.assertNotIn("fetch the active integration PR\u0027s **commit history**", handoff)
+        hook = (ROOT / "scripts" / "codex_session_context.py").read_text(encoding="utf-8")
+        self.assertIn("LIVE_GIT_PROVENANCE_ON_DEMAND", hook)
+        self.assertIn("task-relevant", hook)
+        self.assertIn("specific conflict", hook)
+
+    def test_recovery_roadmap_steps_are_monotonic_without_missing_entries(self):
+        """Route order remains deterministic when new preflight phases are added."""
+        handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
+        recovery = handoff.split("## Recovery order and responsibility map", 1)[1].split(
+            "## Work cycle after recovery", 1)[0]
+        skill = SKILL.read_text(encoding="utf-8")
+        workflow = skill.split("## Work on the problem, not the instructions", 1)[1].split(
+            "**Continuation/stop check", 1)[0]
+        for body in (recovery, workflow):
+            ordinals = re.findall(r"(?m)^(\d+)\. \*\*", body)
+            self.assertGreaterEqual(len(ordinals), 6)
+            self.assertEqual(ordinals, [str(i) for i in range(1, len(ordinals) + 1)])
+
+    def test_each_surface_is_a_distinct_loading_boundary(self):
+        chatgpt = SKILL.read_text(encoding="utf-8").lower()
+        codex = AGENTS.read_text(encoding="utf-8").lower()
+        self.assertIn("installed account", chatgpt)
+        self.assertIn("codex", codex)
+        self.assertIn("host", chatgpt)
+        self.assertIn("sqlite", codex)
+        self.assertIn(".agents/skills/goal-grounded-semantic-review/skill.md",
+                      codex)
+
+    def test_cognition_entrypoints_share_one_live_architecture_source(self):
+        """A file reference is a proposed route, NOT observed client obedience."""
+        adr_path = "docs/01-ARCHITECTURE-DECISIONS.md"
+        adr = (ROOT / adr_path).read_text(encoding="utf-8")
+        self.assertIn("### 优先级反转", adr)
+        self.assertIn("ChatGPT/Codex", adr)
+        for entrypoint in (
+                AGENTS, SKILL, ROOT / "SESSION_HANDOFF.md"):
+            source = entrypoint.read_text(encoding="utf-8")
+            self.assertIn(adr_path, source)
+            self.assertIn("docs/PRODUCT-READINESS-GATE.md", source)
+            self.assertNotRegex(source, r"\b[0-9a-f]{40}\b")
+        hook = (ROOT / "scripts/codex_session_context.py").read_text(
+            encoding="utf-8")
+        self.assertIn(adr_path, hook)
+        self.assertIn("from architecture_probe import inspect", hook)
+        self.assertIn("REPO_PROPOSAL_NOT_OWNER_OR_GRANT", hook)
+
+    def test_evaluation_cases_not_default_loaded(self):
+        probes = PROBES.read_text(encoding="utf-8")
+        for title in ("M. Legacy-entry collision:", "N. Bare new-chat inherit:",
+                      "O. Direct child resume:", "P. Newly discovered project:",
+                      "Q. Interrupted work / mid-task user question / connection loss:",
+                      "R. In-scope skill selection versus ordinary-chat non-trigger:",
+                      "S. Nonexpert original-owner task input/output:"):
+            self.assertIn(title, probes)
+        self.assertIn("false-positive trigger", probes)
+        self.assertIn("false-negative trigger", probes)
+        self.assertIn("real ChatGPT conversation", probes)
+        self.assertIn("Load", SKILL.read_text(encoding="utf-8"))
+
+    def test_native_plugin_candidate_matches_installed_package_contract(self):
+        root = json.loads((BASE / "plugin.json").read_text(encoding="utf-8"))
+        native = json.loads((BASE / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(root["name"], native["name"])
+        self.assertEqual(root["version"], native["version"])
+        self.assertEqual(native["skills"].rstrip("/"), "./skills")
+        self.assertEqual(native["repository"], root["repository"])
+
+        # Test the real five-entry source package, not just a manifest word.
+        # Preserve the installed plugin's native metadata during upgrade.
+        entries = (
+            ".codex-plugin/plugin.json",
+            "plugin.json",
+            "agents/openai.yaml",
+            "skills/cognition-parent-chatgpt-intake/SKILL.md",
+            "skills/cognition-parent-chatgpt-intake/references/scope-probes.md",
+        )
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path in entries:
+                self.assertTrue((BASE / path).is_file())
+                archive.write(BASE / path, arcname=path)
+        with zipfile.ZipFile(io.BytesIO(buffer.getvalue())) as package:
+            self.assertEqual(set(package.namelist()), set(entries))
+            for path in entries:
+                self.assertEqual(package.read(path), (BASE / path).read_bytes())
+            self.assertEqual(
+                json.loads(package.read(".codex-plugin/plugin.json"))["version"],
+                json.loads(package.read("plugin.json"))["version"])
+
+    def test_all_three_discovery_surfaces_use_one_cognition_entry(self):
+        """Different manifest defaults used to silently diverge across clients."""
+        main = json.loads((BASE / "plugin.json").read_text(encoding="utf-8"))
+        native = json.loads((BASE / ".codex-plugin/plugin.json").read_text(
+            encoding="utf-8"))
+        yaml = (BASE / "agents/openai.yaml").read_text(encoding="utf-8")
+        yaml_prompt = next(
+            line.partition(": ")[2] for line in yaml.splitlines()
+            if line.startswith("  default_prompt: "))
+        prompts = (
+            main["extensions"]["com.openai"]["interface"]["defaultPrompt"],
+            native["interface"]["defaultPrompt"], yaml_prompt)
+        self.assertEqual(len(set(prompts)), 1, prompts)
+        for concept in ("完整用户目标", "质疑", "研究", "比较", "执行",
+                        "独立验收", "失败纠偏"):
+            self.assertIn(concept, prompts[0])
+        self.assertEqual(main["version"], native["version"])
+        # Candidate package must be distinguishable from account-installed
+        # 0.1.4; this check does not pretend that the account was changed.
+        self.assertGreater(
+            tuple(map(int, main["version"].split("."))), (0, 1, 4))
+
+    def test_plugin_bundle_tracks_source_version_not_frozen_prose(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(
+            encoding="utf-8")
+        self.assertIn("chatgpt_plugin_release_bundle:", workflow)
+        self.assertIn("[bundle-chatgpt-plugin]", workflow)
+        self.assertIn("manifest['version']", workflow)
+        self.assertNotIn("manifest['version'] == '0.1.3'", workflow)
+        self.assertIn("No installation or owner account mutation occurs in CI",
+                      workflow)
+        self.assertIn("'.codex-plugin/plugin.json'", workflow)
+        self.assertIn("manifest['version'] == native['version']", workflow)
+        self.assertIn("'skills/cognition-parent-chatgpt-intake/SKILL.md'",
+                      workflow)
+
+
+if __name__ == "__main__":
+    unittest.main()
