@@ -19,7 +19,7 @@ import sqlite3
 
 from .intent_planner import compile_intent, IntentError
 from .ledger import connect, create_task, event, require_initialized_ledger
-from .source import safe_fixture, SourceUnavailable
+from .source import (safe_fixture, SourceUnavailable, github_public_snapshot)
 
 _ID = re.compile(r"[a-f0-9]{32}\Z")
 _MAX_DECISIONS = 12
@@ -48,22 +48,30 @@ def _digest(value: object) -> str:
 
 
 def _contract(goal: str, *, allow_public_discovery: bool = False,
+              allow_public_source_read: bool = False,
               legacy: bool = False) -> dict:
     if (not isinstance(goal, str) or not 1 <= len(goal.strip()) <= _MAX_ORIGINAL_GOAL_CHARS
         or type(allow_public_discovery) is not bool
-        or type(legacy) is not bool):
+        or type(allow_public_source_read) is not bool
+        or type(legacy) is not bool
+        or (legacy and allow_public_source_read)):
         raise ValueError("INVALID_NATIVE_OWNER_GOAL")
-    return {"kind": "native_goal", "version": 1 if legacy else 2,
-            "goal": goal, "allow_public_discovery": allow_public_discovery,
-            "max_decisions": (_LEGACY_MAX_DECISIONS if legacy
-                              else _MAX_DECISIONS)}
+    contract = {"kind": "native_goal",
+                "version": 1 if legacy else 3 if allow_public_source_read else 2,
+                "goal": goal, "allow_public_discovery": allow_public_discovery,
+                "max_decisions": (_LEGACY_MAX_DECISIONS if legacy
+                                  else _MAX_DECISIONS)}
+    if allow_public_source_read:
+        contract["allow_public_source_read"] = True
+    return contract
 
 
 def _valid_contract(spec: dict) -> bool:
     """Old seeded goals retain their original finite grant and identity."""
-    return (isinstance(spec, dict) and spec.get("version") in (1, 2)
+    return (isinstance(spec, dict) and spec.get("version") in (1, 2, 3)
             and spec == _contract(spec["goal"],
                                   allow_public_discovery=spec["allow_public_discovery"],
+                                  allow_public_source_read=spec["version"] == 3,
                                   legacy=(spec["version"] == 1)))
 
 
@@ -462,15 +470,43 @@ def _checked_open_research(proposal: dict, original_goal: str) -> None:
                 or not 12 <= len(value.strip()) <= 500):
                 raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
     refs = proposal["source_refs"]
-    if (not isinstance(refs, list) or len(refs) > 16
-        or any(not isinstance(ref, dict)
-               or set(ref) != {"path", "sha256"}
-               or not isinstance(ref["path"], str)
-               or not isinstance(ref["sha256"], str)
-               or re.fullmatch(r"[0-9a-f]{64}", ref["sha256"]) is None
-               for ref in refs)
-        or len({ref["path"] for ref in refs}) != len(refs)):
+    if not isinstance(refs, list) or len(refs) > 16:
         raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+    source_ids = set()
+    remote_count = 0
+    for ref in refs:
+        if not isinstance(ref, dict):
+            raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+        if (not isinstance(ref.get("sha256"), str)
+            or re.fullmatch(r"[0-9a-f]{64}", ref["sha256"]) is None):
+            raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+        if set(ref) == {"path", "sha256"}:
+            if not isinstance(ref["path"], str):
+                raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+            identity = ("local", ref["path"])
+        elif set(ref) == {"kind", "repo", "path", "ref", "sha256"}:
+            # This is a PRIMARY-source read, explicitly separate from the
+            # earlier metadata-only public tool discovery scope.
+            if (ref["kind"] != "github"
+                or not isinstance(ref["repo"], str)
+                or re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", ref["repo"]) is None
+                or not isinstance(ref["ref"], str)
+                or re.fullmatch(r"[0-9a-f]{40}", ref["ref"]) is None
+                or not isinstance(ref["path"], str)
+                or not 1 <= len(ref["path"]) <= 240
+                or ref["path"].startswith("/")
+                or "\\" in ref["path"]
+                or any(part in ("", ".", "..") for part in ref["path"].split("/"))):
+                raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+            remote_count += 1
+            identity = ("github", ref["repo"], ref["ref"], ref["path"])
+        else:
+            raise ValueError("INVALID_NATIVE_OPEN_RESEARCH")
+        if identity in source_ids:
+            raise ValueError("DUPLICATE_NATIVE_RESEARCH_SOURCE")
+        source_ids.add(identity)
+    if remote_count > 4:
+        raise ValueError("NATIVE_REMOTE_SOURCE_BUDGET_EXCEEDED")
 
 
 def _open_research_fingerprint(proposal: dict) -> str:
@@ -493,6 +529,35 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
     require_initialized_ledger(db_path)
     if not isinstance(root_id, str) or _ID.fullmatch(root_id) is None:
         raise ValueError("INVALID_NATIVE_ROOT_ID")
+    # Before any outbound read, verify the exact original scope and current
+    # grant. Do not hold SQLite's write lock over a network request; the CAS
+    # below independently rechecks both versions after the fetch.
+    preflight = inspect_native_goal(db_path, workspace, fixtures, root_id)
+    if preflight.get("status") not in (
+            "NATIVE_NEXT_DECISION_ADMISSIBLE",
+            "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+        raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE")
+    with closing(connect(db_path)) as db:
+        original = db.execute(
+            "SELECT source_spec FROM tasks WHERE task_id=? AND parent_task IS NULL",
+            (root_id,)).fetchone()
+        if original is None:
+            raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
+        original_contract = json.loads(original["source_spec"])
+    _checked_open_research(proposal, original_contract["goal"])
+    if proposal["observation_sha256"] != preflight["observation_sha256"]:
+        raise ValueError("NATIVE_STALE_OBSERVATION")
+    public_refs = [ref for ref in proposal["source_refs"]
+                   if ref.get("kind") == "github"]
+    if public_refs and not original_contract.get("allow_public_source_read"):
+        raise PermissionError("PUBLIC_SOURCE_READ_NOT_AUTHORIZED")
+    checked_public = []
+    for ref in public_refs:
+        raw = github_public_snapshot(ref["repo"], ref["path"], ref["ref"])
+        digest = hashlib.sha256(raw).hexdigest()
+        if not raw or len(raw) > 131072 or digest != ref["sha256"]:
+            raise ValueError("NATIVE_RESEARCH_SOURCE_UNVERIFIABLE")
+        checked_public.append({**ref, "bytes": len(raw)})
     with closing(connect(db_path)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
@@ -524,8 +589,11 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
                 raise ValueError("DUPLICATE_NATIVE_OPEN_RESEARCH")
             hashes = _sources(fixtures)
             if any(hashes.get(ref["path"]) != ref["sha256"]
-                   for ref in proposal["source_refs"]):
+                   for ref in proposal["source_refs"]
+                   if "kind" not in ref):
                 raise ValueError("NATIVE_RESEARCH_SOURCE_UNVERIFIABLE")
+            if public_refs and not contract.get("allow_public_source_read"):
+                raise PermissionError("PUBLIC_SOURCE_READ_NOT_AUTHORIZED")
             auth = db.execute(
                 "SELECT goal_rev,grant_rev,write_allowed "
                 "FROM authority WHERE singleton=1").fetchone()
@@ -533,7 +601,7 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
                 or (auth["goal_rev"], auth["grant_rev"]) !=
                    (root["goal_rev"], root["grant_rev"])):
                 raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
-            event(db, root_id, "NATIVE_OPEN_RESEARCH_RECORDED", {
+            record = {
                 "contract_sha256": _digest(contract),
                 "proposal_sha256": digest,
                 "proposal": proposal,
@@ -541,7 +609,10 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
                 "grant_rev": root["grant_rev"],
                 "authorizes_action": False,
                 "owner_outcome_verified": False,
-            })
+            }
+            if checked_public:
+                record["public_source_verified_at_record"] = checked_public
+            event(db, root_id, "NATIVE_OPEN_RESEARCH_RECORDED", record)
             db.commit()
             return {
                 "status": "NATIVE_OPEN_RESEARCH_RECORDED",
@@ -558,6 +629,7 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
 
 def register_native_goal(db_path: Path, goal: str, *,
                          allow_public_discovery: bool = False,
+                         allow_public_source_read: bool = False,
                          client_request_id: str | None = None) -> str:
     """Register a durable owner goal with optional lost-ACK retry identity.
 
@@ -566,7 +638,9 @@ def register_native_goal(db_path: Path, goal: str, *,
     The same key with different owner intent is a hard conflict, never a
     silent switch of source/scope or privilege.
     """
-    contract = _contract(goal, allow_public_discovery=allow_public_discovery)
+    contract = _contract(
+        goal, allow_public_discovery=allow_public_discovery,
+        allow_public_source_read=allow_public_source_read)
     if (client_request_id is not None
         and (not isinstance(client_request_id, str)
              or not _CLIENT_REQUEST_ID.fullmatch(client_request_id))):
@@ -702,11 +776,14 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         seen_research = set()
         for research_row in research_rows:
             receipt = json.loads(research_row["details"])
+            required_receipt_keys = {
+                "contract_sha256", "proposal_sha256", "proposal",
+                "goal_rev", "grant_rev", "authorizes_action",
+                "owner_outcome_verified"}
             if (not isinstance(receipt, dict)
-                or set(receipt) != {
-                    "contract_sha256", "proposal_sha256", "proposal",
-                    "goal_rev", "grant_rev", "authorizes_action",
-                    "owner_outcome_verified"}
+                or not required_receipt_keys.issubset(receipt)
+                or set(receipt) - required_receipt_keys
+                    not in (set(), {"public_source_verified_at_record"})
                 or receipt["contract_sha256"] != _digest(contract)
                 or receipt["goal_rev"] != root["goal_rev"]
                 or receipt["grant_rev"] != root["grant_rev"]
@@ -720,12 +797,29 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 raise ValueError("NATIVE_OPEN_RESEARCH_RECEIPT_INVALID")
             seen_research.add(digest)
             refs = proposal["source_refs"]
+            local_refs = [ref for ref in refs if "kind" not in ref]
+            remote_refs = [ref for ref in refs if ref.get("kind") == "github"]
+            receipts = receipt.get("public_source_verified_at_record")
+            if remote_refs:
+                if (not contract.get("allow_public_source_read")
+                    or not isinstance(receipts, list)
+                    or len(receipts) != len(remote_refs)
+                    or any(not isinstance(x, dict)
+                           or x != {**ref, "bytes": x.get("bytes")}
+                           or type(x.get("bytes")) is not int
+                           or not 1 <= x["bytes"] <= 131072
+                           for x, ref in zip(receipts, remote_refs))):
+                    raise ValueError("NATIVE_PUBLIC_SOURCE_RECEIPT_INVALID")
+            elif receipts is not None:
+                raise ValueError("NATIVE_PUBLIC_SOURCE_RECEIPT_INVALID")
             source_status = (
-                "NO_LOCAL_SOURCES_VERIFIED" if not refs
+                "SOURCE_STALE_OR_REMOVED"
+                if any(current_sources.get(ref["path"]) != ref["sha256"]
+                       for ref in local_refs)
+                else "GITHUB_PIN_VERIFIED_AT_RECORD_UNTRUSTED_SEMANTICS"
+                if remote_refs
                 else "SOURCE_PIN_CURRENT_UNVERIFIED_SEMANTICS"
-                if all(current_sources.get(ref["path"]) == ref["sha256"]
-                       for ref in refs)
-                else "SOURCE_STALE_OR_REMOVED")
+                if local_refs else "NO_LOCAL_SOURCES_VERIFIED")
             open_research.append({
                 "event_id": research_row["event_id"],
                 "proposal_sha256": digest,
