@@ -137,6 +137,31 @@ class GraphifyEvidenceTests(unittest.TestCase):
         self.assertIn("HOST_NATIVE_PLANNER_LINEAGE_UNPROVEN",
                       result["errors"])
 
+    def test_native_mcp_same_named_function_from_wrong_module_is_rejected(self):
+        """Same spelling + call line does NOT prove its implementation identity."""
+        repo=Path(__file__).resolve().parents[1]
+        dest=Path(self.tmp.name)/"src"/"cognition_agent_os"
+        dest.mkdir(parents=True,exist_ok=True)
+        for filename in ("capability_dispatch.py","native_mcp_bridge.py",
+                         "native_local_planner.py","host.py"):
+            original=(repo/"src"/"cognition_agent_os"/filename).read_text(
+                encoding="utf-8")
+            if filename=="native_mcp_bridge.py":
+                wrong="from .native_decision import ("
+                self.assertIn(wrong,original)
+                original=original.replace(
+                    wrong,"from .shadow_untrusted_decision import (")
+            (dest/filename).write_text(original,encoding="utf-8")
+        self.path.write_text(json.dumps(self.graph),encoding="utf-8")
+        with patch.object(checker.subprocess,"check_output",
+                          return_value=self.sha+"\n"):
+            result=checker.check(self.path,Path(self.tmp.name))
+        self.assertEqual(result["status"],"FAIL",result)
+        self.assertIn("NATIVE_MCP_RESEARCH_LINEAGE_UNPROVEN",
+                      result["errors"])
+        self.assertIn("NATIVE_MCP_ADMISSION_LINEAGE_UNPROVEN",
+                      result["errors"])
+
     def test_old_commit_is_rejected(self):
         self.graph["built_at_commit"]="b"*40
         self.assertIn("STALE_GRAPH_COMMIT",self.result()["errors"])
