@@ -11,7 +11,7 @@
     "defaultPrompt": "继续 cognition-agent-os：恢复完整用户目标及纠正；从实时 GitHub 和工具核实有效决策；自主质疑、研究、比较、合法执行并独立验收结果；失败纠偏，完整目标未实现不得报完成。"
   },
   "name": "cognition-agent-os-chatgpt",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Private ChatGPT skills-only plugin for cognition-agent-os goal recovery, tool selection, first-hand research, independent verification and safe correction. Does not itself connect a custom Host API.",
   "author": {
     "name": "cognition-agent-os owner"
