@@ -240,7 +240,7 @@ def verify_live_handoff(root):
     # but expensive competing PR bodies and complete history only on demand.
     # The former literal requirement to fetch ALL Draft PRs amplified context.
     require('GitHub default branch' in live and 'exact HEAD' in live
-            and 'PR **metadata**' in live
+            and 'live PR metadata' in live
             and 'only when identity, ancestry' in live,
             'handoff lacks task-scoped live-authority resolution requirement')
     require('BOOTSTRAP INDEX ONLY' in live
