@@ -142,6 +142,16 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 db_path, workspace, fixtures, row["task_id"])
             if (state.get("status") == "NATIVE_GOAL_UNVERIFIABLE"
                 or not isinstance(state.get("original_goal"), str)):
+                # An unverified registration is not a trustworthy owner goal,
+                # but silently removing its root hides an unfinished obligation
+                # and can make a cold multi-goal inventory appear unique.
+                # Return ONLY its opaque identity/status; never disclose
+                # unverified text, re-admit work, or infer a new grant.
+                recovered.append({
+                    "root_task_id": row["task_id"],
+                    "status": "NATIVE_GOAL_UNVERIFIABLE",
+                    "owner_outcome_verified": False,
+                })
                 continue
             recovered.append({
                 "root_task_id": row["task_id"],
@@ -154,7 +164,9 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 "goals": recovered, "truncated": more,
                 "next_after_task_id": page[-1]["task_id"] if more else None,
                 "ambiguous": len(recovered) > 1 or more
-                    or after_task_id is not None,
+                    or after_task_id is not None
+                    or any(item["status"] == "NATIVE_GOAL_UNVERIFIABLE"
+                           for item in recovered),
                 "selected_root_task_id": None,
                 "owner_outcome_verified": False}
 
