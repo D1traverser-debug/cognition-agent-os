@@ -156,6 +156,49 @@ class NativeLocalModelLoop(unittest.TestCase):
             self.db, self.workspace, self.fixtures, native,
             model="installed:test")
 
+    def test_old_invalid_native_roots_cannot_hide_later_owner_after_page_128(self):
+        """Real SQLite scan must not stop at first 128 DECOMPOSED native rows."""
+        from cognition_agent_os.ledger import create_task
+        from cognition_agent_os.native_local_planner import advance_native_local_goals
+        with closing(connect(self.db)) as db:
+            for ordinal in range(132):
+                create_task(db, {"kind": "native_goal", "old_invalid": ordinal},
+                            commit=False)
+            db.execute("UPDATE tasks SET state='DECOMPOSED' "
+                       "WHERE parent_task IS NULL AND state='PENDING'")
+            db.commit()
+        valid = register_native_goal(self.db, self.goal)
+        with patch("cognition_agent_os.native_local_planner.advance_native_adaptive_once",
+                   return_value={"status": "NATIVE_METHOD_ENQUEUED",
+                                 "root_task_id": valid}) as planner:
+            chosen = advance_native_local_goals(
+                self.db, self.workspace, self.fixtures,
+                model="installed:test", limit=1)
+        self.assertEqual(chosen[0]["root_task_id"], valid)
+        planner.assert_called_once_with(
+            self.db, self.workspace, self.fixtures, valid,
+            model="installed:test")
+
+    def test_model_reuses_unchanged_failure_to_schedule_another_owner(self):
+        """A known failed first method is evidence, not a permanent queue head."""
+        from cognition_agent_os.native_local_planner import advance_native_local_goals
+        older = [register_native_goal(self.db, self.goal) for _ in range(3)]
+        fresh = register_native_goal(self.db, self.goal)
+        def prior(_db, root, _obs, _model):
+            return ["FAILED", "FAILED"] if root in older else []
+        with patch("cognition_agent_os.native_local_planner._previous_no_progress",
+                   side_effect=prior), patch(
+                   "cognition_agent_os.native_local_planner.advance_native_adaptive_once",
+                   return_value={"status": "NATIVE_METHOD_ENQUEUED",
+                                 "root_task_id": fresh}) as planner:
+            selected = advance_native_local_goals(
+                self.db, self.workspace, self.fixtures,
+                model="installed:test", limit=1)
+        self.assertEqual(selected[0]["root_task_id"], fresh)
+        planner.assert_called_once_with(
+            self.db, self.workspace, self.fixtures, fresh,
+            model="installed:test")
+
     def test_durable_open_research_is_available_to_next_model_decision(self):
         """A saved competing-method study is useful only if a later planner reads it.
 

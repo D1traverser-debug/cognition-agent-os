@@ -996,6 +996,38 @@ def advance_native_adaptive_once(db_path: Path, workspace: Path,
         timeout=timeout, structured_output=structured_output)
 
 
+def _iter_native_goal_roots(db_path: Path):
+    """Keyset-page ALL live native roots; never truncate the authority queue.
+
+    This is a read-only projection of existing SQLite, not another scheduler.
+    Scan the entire committed population lazily so unresolved or stale older
+    entries cannot indefinitely hide a later authorized owner goal. A fixed
+    LIMIT protects each fetch's memory use, not the number of owner goals.
+    """
+    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        cursor = None
+        while True:
+            query = (
+                "SELECT task_id,source_spec,created_at FROM tasks "
+                "WHERE parent_task IS NULL AND state='DECOMPOSED' "
+                "AND (CASE WHEN json_valid(source_spec) "
+                "THEN json_extract(source_spec,'$.kind') ELSE NULL END)="
+                "'native_goal' "
+            )
+            args = []
+            if cursor is not None:
+                query += "AND (created_at,task_id) > (?,?) "
+                args.extend(cursor)
+            query += "ORDER BY created_at ASC,task_id ASC LIMIT 128"
+            rows = db.execute(query, args).fetchall()
+            if not rows:
+                return
+            for task_id, raw, _created in rows:
+                yield task_id, raw
+            cursor = (rows[-1][2], rows[-1][0])
+
+
 def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
                                *, model: str | None, limit: int = 2) -> list[dict]:
     """Host's current schedule, existing ledger, no second controller.
@@ -1005,25 +1037,14 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
     """
     if type(limit) is not int or not 1 <= limit <= 8:
         raise ValueError("INVALID_NATIVE_PLAN_BATCH")
-    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-        # One shared queue, no new scheduler: the oldest unfinished native
-        # owner goal has precedence over newly registered work. The old
-        # newest-first LIMIT 128 could indefinitely hide that owner when
-        # unrelated goals kept arriving. Model-free work can also coexist
-        # with unresolved tasks which must not consume the action budget.
-        rows = db.execute(
-            "SELECT task_id,source_spec FROM tasks "
-            "WHERE parent_task IS NULL AND state='DECOMPOSED' "
-            "AND (CASE WHEN json_valid(source_spec) "
-            "THEN json_extract(source_spec,'$.kind') ELSE NULL END)="
-            "'native_goal' "
-            "ORDER BY created_at ASC,task_id ASC LIMIT ?",
-            (4096 if model is None else 128,)).fetchall()
     results = []
     diagnostic = None
     verified = None
-    for root_id, raw in rows:
+    # The previous static first-128 / first-4096 sample was NOT a fair
+    # scheduler. In a long-lived SQLite ledger, failed or unrecognized older
+    # roots could hide every newer owner goal forever. The iterator is a
+    # bounded page read over the complete original authoritative queue.
+    for root_id, raw in _iter_native_goal_roots(db_path):
         try:
             spec = json.loads(raw)
         except (ValueError, TypeError):
@@ -1033,6 +1054,22 @@ def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
         state = inspect_native_goal(db_path,workspace,fixtures,root_id)
         if state.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
             continue
+        if model is not None:
+            # Earlier model/tool failures remain authoritative across cold
+            # restarts. Merely being one of the first 128 roots must not
+            # let a known non-progressing method consume another decision
+            # slot while untouched owner goals are never attempted.
+            prior = _previous_no_progress(
+                db_path, root_id, state["observation_sha256"], model)
+            if len(prior) >= 2 or "MODEL_ABSTAINED" in prior:
+                if diagnostic is None:
+                    diagnostic = {
+                        "status": "NATIVE_LOCAL_UNCHANGED_EVIDENCE_REFUSED",
+                        "root_task_id": root_id,
+                        "reason": "PREVIOUS_PROPOSAL_FAILED_WITH_SAME_EVIDENCE",
+                        "owner_outcome_verified": False,
+                    }
+                continue
         if model is None:
             # An unsupported owner goal is NOT an executable action, nor a
             # license for weak fallback inference. Keep one explicit
