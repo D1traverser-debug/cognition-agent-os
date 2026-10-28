@@ -143,24 +143,33 @@ def native_experiment_admission(body: str, read_revision):
     changed = []
     for path in _NATIVE_RETEST[reason]:
         previous = read_revision(path, PRIOR_NATIVE_EXPERIMENT_SHA)
+        just_before = read_revision(path, "HEAD^")
         current = read_revision(path, "HEAD")
         if isinstance(previous, bytes):
             previous = previous.decode("utf-8")
+        if isinstance(just_before, bytes):
+            just_before = just_before.decode("utf-8")
         if isinstance(current, bytes):
             current = current.decode("utf-8")
         if reason == "[native-retest:new-owner-cases]":
-            different = _native_cases(previous) != _native_cases(current)
+            # Reusing an already accepted experiment delta on a later
+            # unrelated commit must not buy an unlimited retry budget.
+            distinct_past = _native_cases(previous) != _native_cases(current)
+            distinct_now = _native_cases(just_before) != _native_cases(current)
         else:
-            different = _semantic_python_source(previous) != _semantic_python_source(current)
-        if different:
+            now = _semantic_python_source(current)
+            distinct_past = _semantic_python_source(previous) != now
+            distinct_now = _semantic_python_source(just_before) != now
+        if distinct_past and distinct_now:
             changed.append(path)
     if not changed:
-        raise ValueError("REUSE_PRIOR_NATIVE_EVIDENCE_NO_MECHANISM_OR_CASE_DELTA")
+        raise ValueError("REUSE_PRIOR_NATIVE_EVIDENCE_NO_FRESH_COMMIT_DELTA")
     return {
         "status": "NEW_NATIVE_EXPERIMENT_PROBE_ADMISSIBLE_NOT_VALIDATED",
         "prior_run": PRIOR_NATIVE_EXPERIMENT_RUN,
         "prior_source": PRIOR_NATIVE_EXPERIMENT_SHA,
         "requested_falsifier": reason,
+        "fresh_commit_scoped_delta": True,
         "changed_executable_or_owner_case_sources": changed,
         "real_model_ran": False,
         "owner_outcome_verified": False,

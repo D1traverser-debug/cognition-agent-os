@@ -119,8 +119,23 @@ class CISourceAndScopeTests(unittest.TestCase):
         def prose_only(path, revision):
             return ("# another research note\n" if revision == "HEAD" else
                     "# prior note\n") + source
-        with self.assertRaisesRegex(ValueError, "NO_MECHANISM_OR_CASE_DELTA"):
+        with self.assertRaisesRegex(ValueError, "NO_FRESH_COMMIT_DELTA"):
             native_experiment_admission(body, prose_only)
+
+
+    def test_preaction_old_retest_reason_cannot_run_again_after_unrelated_commit(self):
+        """A legitimate earlier delta cannot license infinite repeat inference."""
+        from verify_ci_evidence_scope import PRIOR_NATIVE_EXPERIMENT_SHA
+        old = "def plan():\n    return 1\n"
+        changed = "def plan():\n    return 2\n"
+        def reader(path, revision):
+            if path.endswith("native_local_planner.py"):
+                return old if revision == PRIOR_NATIVE_EXPERIMENT_SHA else changed
+            return old
+        with self.assertRaisesRegex(ValueError, "NO_FRESH_COMMIT_DELTA"):
+            native_experiment_admission(
+                "[run-real-native-schema][native-retest:changed-model-method]",
+                reader)
 
     def test_preaction_new_cases_need_changed_owner_goals_or_hidden_labels(self):
         old = "CASES = [{'id':'a','goal':'do x','files':{'a.csv':'v'},'target':'ensure_structure'}]\n"
