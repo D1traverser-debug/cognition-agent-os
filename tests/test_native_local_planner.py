@@ -593,7 +593,8 @@ class NativeLocalModelLoop(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, max_jobs=1,
                 planner_mode="ollama-local", local_model="installed:test",
                 auto_native_cognition=True)
-            self.assertEqual(first["processed"], 0)
+            self.assertEqual(first["processed"], 1)
+            self.assertEqual(first["tasks"][0]["status"], "NEEDS_REVIEW", first)
             self.assertEqual(first["native_cognition"][0]["status"],
                              "NATIVE_METHOD_ENQUEUED", first)
             second = run_tick(
@@ -607,7 +608,7 @@ class NativeLocalModelLoop(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, max_jobs=1,
                 planner_mode="ollama-local", local_model="installed:test",
                 auto_native_cognition=False)
-            self.assertEqual(third["tasks"][0]["status"], "NEEDS_REVIEW", third)
+            self.assertEqual(third["tasks"], [], third)
         final = inspect_native_goal(self.db, self.workspace, self.fixtures, root)
         self.assertEqual(final["decision_count"], 2)
         self.assertEqual([x["mechanical_verdict"] for x in final["decisions"]],
