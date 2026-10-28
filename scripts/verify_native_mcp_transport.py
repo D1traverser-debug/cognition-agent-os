@@ -695,37 +695,40 @@ async def run():
             stderr=asyncio.subprocess.PIPE)
         try:
             url = f"http://127.0.0.1:{loopback_port}/mcp"
-            connected = False
-            last_error = None
-            for _ in range(20):
+            # Wait for the TCP listener itself. MCP's HTTP client wraps
+            # startup connection errors inside an AnyIO ExceptionGroup; a
+            # generic OSError retry does not reliably catch those exceptions.
+            listening = False
+            for _ in range(40):
                 if http_proc.returncode is not None:
                     err = await http_proc.stderr.read()
                     raise AssertionError(
                         "HTTP_MCP_SUBPROCESS_EXITED: " + repr(err[:1500]))
                 try:
-                    async with Client(url) as remote_client:
-                        discovered = {
-                            tool.name for tool in (
-                                await remote_client.list_tools()).tools}
-                        assert "native_goal_inspect" in discovered
-                        assert "native_local_tick" not in discovered
-                        assert "native_source_read" not in discovered
-                        state = unwrap(await remote_client.call_tool(
-                            "native_goal_inspect", {"root_task_id": novel_id}))
-                        assert state["original_goal"] == unknown_goal, state
-                        assert state["open_research_count"] == 18, state
-                        assert state["status"] == "NATIVE_GRANT_REVOKED", state
-                        # Remote network clients cannot write after revocation.
-                        denied = await remote_client.call_tool(
-                            "native_goal_create", {
-                                "owner_goal": "Network transport cannot mint authority"})
-                        assert denied.is_error, denied
-                        connected = True
+                    with socket.create_connection(
+                            ("127.0.0.1", loopback_port), timeout=0.25):
+                        listening = True
                     break
-                except (OSError, ConnectionError, TimeoutError) as exc:
-                    last_error = repr(exc)
+                except OSError:
                     await asyncio.sleep(0.2)
-            assert connected, ("LOOPBACK_HTTP_MCP_UNREACHABLE", last_error)
+            assert listening, "LOOPBACK_HTTP_MCP_NOT_LISTENING"
+            async with Client(url) as remote_client:
+                discovered = {
+                    tool.name for tool in (
+                        await remote_client.list_tools()).tools}
+                assert "native_goal_inspect" in discovered
+                assert "native_local_tick" not in discovered
+                assert "native_source_read" not in discovered
+                state = unwrap(await remote_client.call_tool(
+                    "native_goal_inspect", {"root_task_id": novel_id}))
+                assert state["original_goal"] == unknown_goal, state
+                assert state["open_research_count"] == 18, state
+                assert state["status"] == "NATIVE_GRANT_REVOKED", state
+                # Network transport must not create work after revocation.
+                denied = await remote_client.call_tool(
+                    "native_goal_create", {
+                        "owner_goal": "Network transport cannot mint authority"})
+                assert denied.is_error, denied
             print(json.dumps({
                 "status": "LOCAL_MCP_HTTP_LOOPBACK_VERIFIED",
                 "network_transport": "STREAMABLE_HTTP_LOOPBACK_ONLY",
