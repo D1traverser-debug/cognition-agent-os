@@ -228,7 +228,7 @@ class CodexSessionContext(unittest.TestCase):
             self.assertEqual(module.main(), 0)
         packet = json.loads(stdout.getvalue())
         receipt = packet["hookSpecificOutput"]["additionalContext"]
-        self.assertLessEqual(len(receipt), 2000)
+        self.assertLessEqual(len(receipt), 6000)
         data = json.loads(receipt.partition(": ")[-1])
         self.assertEqual(data["status"], "NO_LOCAL_LEDGER_CONFIGURED")
         self.assertEqual(data["ledger_discovery"], "NO_LOCAL_LEDGER_CONFIGURED")
@@ -238,6 +238,34 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(
             data["repository_recovery"]["live_default_branch_head_and_ci"],
             "MUST_REFETCH")
+
+    def test_approximate_token_budget_does_not_drop_bounded_source_map(self):
+        """A >2k-character source map is not a >2k-token Codex violation."""
+        import importlib.util
+        import io
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location("bounded_source_hook", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        guide = dict(module._project_recovery_when_no_ledger())
+        guide["bounded_source_details"] = "source:" * 430
+        stdin = io.StringIO(json.dumps({"cwd": str(ROOT), "source": "startup"}))
+        stdout = io.StringIO()
+        with (patch.object(module, "_existing_database",
+                           return_value=(None, "NO_LOCAL_LEDGER_CONFIGURED")),
+              patch.object(module, "_project_recovery_when_no_ledger",
+                           return_value=guide),
+              patch.object(sys, "stdin", stdin),
+              patch.object(sys, "stdout", stdout)):
+            self.assertEqual(module.main(), 0)
+        receipt = json.loads(stdout.getvalue())["hookSpecificOutput"]["additionalContext"]
+        self.assertTrue(2000 < len(receipt) <= 6000)
+        recovered = json.loads(receipt.partition(": ")[-1])
+        self.assertEqual(recovered["status"], "NO_LOCAL_LEDGER_CONFIGURED")
+        self.assertEqual(recovered["repository_recovery"]["bounded_source_details"],
+                         guide["bounded_source_details"])
+        self.assertFalse(recovered["original_goal_verified"])
 
     def test_missing_source_never_invents_owner_goal(self):
         result = self._run(with_database=False)
@@ -282,8 +310,8 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("ChatGPT/Codex",
                       architecture["proposed_first_action"])
         self.assertIn("挑战", architecture["proposed_first_action"])
-        self.assertLessEqual(self.last_context_chars, 2000,
-                             "Codex hook advertised additionalContextLimit=2000")
+        self.assertLessEqual(self.last_context_chars, 6000,
+                             "Character cap must not be confused with Codex token threshold")
         topology = project["live_python_topology"]
         self.assertEqual(topology["kind"],
                          "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF")
