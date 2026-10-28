@@ -120,6 +120,41 @@ class NativeExternalPrimaryEvidenceTests(unittest.TestCase):
         self.assertEqual(inspect_native_goal(
             self.db, self.ws, self.fx, root)["open_research_count"], 0)
 
+    def test_revoked_grant_during_remote_read_cannot_commit_research(self):
+        root = register_native_goal(
+            self.db, self.goal, allow_public_source_read=True)
+        def change_authority(repo, path, ref):
+            with closing(connect(self.db)) as db:
+                db.execute("UPDATE authority SET grant_rev=grant_rev+1 "
+                           "WHERE singleton=1")
+                db.commit()
+            return _CONTENT
+        with patch("cognition_agent_os.native_decision.github_public_snapshot",
+                   side_effect=change_authority):
+            with self.assertRaisesRegex(
+                    ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+                record_native_open_research(
+                    self.db, self.ws, self.fx, root, self.proposal(root))
+        with closing(connect(self.db)) as db:
+            count = db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_OPEN_RESEARCH_RECORDED'",
+                (root,)).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_request_id_cannot_upgrade_metadata_grant_on_retry(self):
+        key = "native-source-scope-check-20261028"
+        first = register_native_goal(
+            self.db, self.goal, client_request_id=key,
+            allow_public_discovery=True)
+        self.assertEqual(register_native_goal(
+            self.db, self.goal, client_request_id=key,
+            allow_public_discovery=True), first)
+        with self.assertRaisesRegex(ValueError, "NATIVE_GOAL_IDEMPOTENCY_CONFLICT"):
+            register_native_goal(
+                self.db, self.goal, client_request_id=key,
+                allow_public_discovery=True, allow_public_source_read=True)
+
     def test_malformed_remote_source_is_rejected_without_network(self):
         root = register_native_goal(
             self.db, self.goal, allow_public_source_read=True)
