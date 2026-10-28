@@ -11,7 +11,7 @@
             "timeout": 8,
             "additionalContextLimit": 2000,
             "statusMessage": "Reattesting original goal from existing local SQLite",
-            "commandWindows": "python \"$(git rev-parse --show-toplevel)/scripts/codex_session_context.py\""
+            "commandWindows": "for /F \"delims=\" %G in ('git rev-parse --show-toplevel') do @python \"%G/scripts/codex_session_context.py\""
           }
         ]
       }
@@ -23,7 +23,7 @@
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/verify_ci_evidence_scope.py\" --codex-pretool",
-            "commandWindows": "python \"$(git rev-parse --show-toplevel)/scripts/verify_ci_evidence_scope.py\" --codex-pretool",
+            "commandWindows": "for /F \"delims=\" %G in ('git rev-parse --show-toplevel') do @python \"%G/scripts/verify_ci_evidence_scope.py\" --codex-pretool",
             "timeout": 8,
             "statusMessage": "Checking previously verified experiment evidence before external action"
           }
