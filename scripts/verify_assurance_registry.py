@@ -239,7 +239,7 @@ def verify_live_handoff(root):
     # Check the *new* recovery contract: fresh candidate identity via metadata,
     # but expensive competing PR bodies and complete history only on demand.
     # The former literal requirement to fetch ALL Draft PRs amplified context.
-    require('live GitHub' in live and 'exact HEAD' in live
+    require('GitHub default branch' in live and 'exact HEAD' in live
             and 'PR **metadata**' in live
             and 'only when identity, ancestry' in live,
             'handoff lacks task-scoped live-authority resolution requirement')
