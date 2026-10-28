@@ -170,10 +170,16 @@ class NativeLocalModelLoop(unittest.TestCase):
         valid = register_native_goal(self.db, self.goal)
         with patch("cognition_agent_os.native_local_planner.advance_native_adaptive_once",
                    return_value={"status": "NATIVE_METHOD_ENQUEUED",
-                                 "root_task_id": valid}) as planner:
+                                 "root_task_id": valid}) as planner, patch(
+                   "cognition_agent_os.native_local_planner.inspect_native_goal",
+                   wraps=inspect_native_goal) as audit:
             chosen = advance_native_local_goals(
                 self.db, self.workspace, self.fixtures,
                 model="installed:test", limit=1)
+        # The unreadable old rows must not each trigger an expensive
+        # audit or occupy the planner budget. Only the registered root
+        # reaches actual source/owner-lineage reattestation.
+        audit.assert_called_once()
         self.assertEqual(chosen[0]["root_task_id"], valid)
         planner.assert_called_once_with(
             self.db, self.workspace, self.fixtures, valid,

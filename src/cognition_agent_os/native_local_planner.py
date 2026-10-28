@@ -1014,6 +1014,14 @@ def _iter_native_goal_roots(db_path: Path):
                 "AND (CASE WHEN json_valid(source_spec) "
                 "THEN json_extract(source_spec,'$.kind') ELSE NULL END)="
                 "'native_goal' "
+                # Only an immutable native registration can become an
+                # executable root. Filtering the registered task-id set
+                # BEFORE calling the expensive source/lineage auditor keeps
+                # stale/forged DECOMPOSED rows from monopolizing each tick.
+                # The independent _audit still checks the complete original
+                # receipt and CAS; existence alone is never authorization.
+                "AND task_id IN (SELECT task_id FROM events "
+                "WHERE kind='NATIVE_GOAL_REGISTERED') "
             )
             args = []
             if cursor is not None:
