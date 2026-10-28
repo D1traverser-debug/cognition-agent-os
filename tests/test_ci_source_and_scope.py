@@ -107,7 +107,7 @@ class CISourceAndScopeTests(unittest.TestCase):
         from verify_ci_evidence_scope import PRIOR_NATIVE_EXPERIMENT_SHA
         def reader(path, revision):
             if path.endswith("native_local_planner.py"):
-                return source if revision == PRIOR_NATIVE_EXPERIMENT_SHA else changed
+                return source if revision != "HEAD" else changed
             return "def noop():\n    return None\n"
         body = "[run-real-native-schema][native-retest:changed-model-method]"
         allowed = native_experiment_admission(body, reader)
