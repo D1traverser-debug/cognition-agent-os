@@ -59,7 +59,8 @@ async def run():
                    allow_model_plan=False, public_goal=None):
             args = ["-m", "cognition_agent_os.native_mcp_bridge",
                     "--db", str(db), "--workspace", str(workspace),
-                    "--fixtures", str(sources)]
+                    "--fixtures", str(sources),
+                    "--allow-goal-writes"]
             if allow_tick:
                 args.append("--allow-host-tick")
             if allow_source_read:
