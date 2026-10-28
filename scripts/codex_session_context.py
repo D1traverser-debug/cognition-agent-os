@@ -225,9 +225,9 @@ def build_context(payload: dict) -> dict:
         context["status"] = origin
         context["repository_recovery"] = _project_recovery_when_no_ledger()
         return context
-    # Preserve the older checkout-root workspace/fixtures layout for legacy
-    # ledgers; only the Windows Host's runtime/state.sqlite default selects
-    # runtime/workspace and runtime/fixtures in the absence of env overrides.
+    # The registered Windows Host defaults to runtime/workspace but the
+    # checkout-root fixtures directory for both new and legacy ledgers.
+    # Preserve that one existing Host resource contract across entrypoints.
     # Compare canonical physical locations, not Windows 8.3 vs long names
     # or an explicit old-env DB spelling. A raw alias may designate exactly
     # the Windows Host's runtime ledger while differing as a Path string.
@@ -237,7 +237,7 @@ def build_context(payload: dict) -> dict:
         ws = _optional_existing_directory(
             WORKSPACE_ENV, "runtime/workspace" if runtime_layout else "workspace")
         fixtures = _optional_existing_directory(
-            FIXTURES_ENV, "runtime/fixtures" if runtime_layout else "fixtures")
+            FIXTURES_ENV, "fixtures")
     except ValueError:
         context["status"] = "CONFLICTING_RUNTIME_RESOURCE_ENV"
         return context

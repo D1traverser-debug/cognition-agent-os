@@ -38,7 +38,7 @@ def _paths() -> tuple[Path, Path, Path]:
     return (
         configured("DB", "runtime/state.sqlite"),
         configured("WORKSPACE", "runtime/workspace"),
-        configured("FIXTURES", "runtime/fixtures"),
+        configured("FIXTURES", "fixtures"),
     )
 
 

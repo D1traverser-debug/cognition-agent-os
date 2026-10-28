@@ -78,9 +78,18 @@ class CodexSessionContext(unittest.TestCase):
         db = runtime / "state.sqlite"
         db.write_bytes(self.db.read_bytes())
         workspace = runtime / "workspace"
-        fixtures = runtime / "fixtures"
+        fixtures = checkout / "fixtures"
         workspace.mkdir()
         fixtures.mkdir()
+        # Existing Windows Host registrations default to checkout-root
+        # fixtures. A stale runtime/fixtures must not win on another entry.
+        alternate_fixtures = runtime / "fixtures"
+        alternate_fixtures.mkdir()
+        registration = (ROOT / "scripts" / "register_windows_host.ps1").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            "if (-not $FixturesPath) { $FixturesPath=Join-Path $root 'fixtures' }",
+            registration)
         with patch.object(codex, "ROOT", checkout), patch.object(private, "_REPO", checkout):
             with patch.dict(os.environ, {}, clear=True):
                 found, source = codex._existing_database()
@@ -91,7 +100,18 @@ class CodexSessionContext(unittest.TestCase):
                 self.assertTrue(codex._optional_existing_directory(
                     "COGNITION_AGENT_OS_WORKSPACE", "runtime/workspace").samefile(workspace))
                 self.assertTrue(codex._optional_existing_directory(
-                    "COGNITION_AGENT_OS_FIXTURES", "runtime/fixtures").samefile(fixtures))
+                    "COGNITION_AGENT_OS_FIXTURES", "fixtures").samefile(fixtures))
+
+            # A configured alternate fixtures directory remains explicitly
+            # supported; the default must not silently override it.
+            with patch.dict(os.environ, {
+                    "COGNITION_AGENT_OS_DB": str(db),
+                    "COGNITION_AGENT_OS_FIXTURES": str(alternate_fixtures),
+            }, clear=True):
+                self.assertTrue(private._paths()[2].samefile(alternate_fixtures))
+                self.assertTrue(codex._optional_existing_directory(
+                    "COGNITION_AGENT_OS_FIXTURES", "fixtures").samefile(
+                        alternate_fixtures))
 
             # Both supported env schemes must identify the identical resource,
             # including relative paths interpreted against the repo checkout.
@@ -128,7 +148,7 @@ class CodexSessionContext(unittest.TestCase):
             legacy_db.write_bytes(self.db.read_bytes())
             root_ws, root_fx = checkout / "workspace", checkout / "fixtures"
             root_ws.mkdir()
-            root_fx.mkdir()
+            self.assertTrue(root_fx.samefile(fixtures))
             with patch.dict(os.environ, {
                     "COGNITION_OS_DB": str(raw_checkout / "ledger.sqlite")
             }, clear=True):
