@@ -120,21 +120,27 @@ def check(graph_path: Path, repo: Path) -> dict:
     # this evidence under a DISTINCT evidence type and line location.
     native_calls = (
         ("native_mcp_bridge.py", "native_open_research_record",
-         "record_native_open_research", "NATIVE_MCP_RESEARCH_LINEAGE_UNPROVEN"),
+         "record_native_open_research", "native_decision",
+         "NATIVE_MCP_RESEARCH_LINEAGE_UNPROVEN"),
         ("native_mcp_bridge.py", "native_decision_admit",
-         "admit_native_decision", "NATIVE_MCP_ADMISSION_LINEAGE_UNPROVEN"),
+         "admit_native_decision", "native_decision",
+         "NATIVE_MCP_ADMISSION_LINEAGE_UNPROVEN"),
         ("native_mcp_bridge.py", "native_owner_outcome",
-         "inspect_owner_local_outcome", "NATIVE_MCP_OUTCOME_LINEAGE_UNPROVEN"),
+         "inspect_owner_local_outcome", "owner_postcondition",
+         "NATIVE_MCP_OUTCOME_LINEAGE_UNPROVEN"),
         ("host.py", "run_tick",
-         "advance_native_local_goals", "HOST_NATIVE_PLANNER_LINEAGE_UNPROVEN"),
+         "advance_native_local_goals", "native_local_planner",
+         "HOST_NATIVE_PLANNER_LINEAGE_UNPROVEN"),
         ("native_local_planner.py", "advance_native_local_once",
-         "admit_native_decision", "LOCAL_MODEL_ADMISSION_LINEAGE_UNPROVEN"),
+         "admit_native_decision", "native_decision",
+         "LOCAL_MODEL_ADMISSION_LINEAGE_UNPROVEN"),
         ("native_local_planner.py", "advance_native_adaptive_once",
-         "admit_native_decision", "ADAPTIVE_NATIVE_ADMISSION_LINEAGE_UNPROVEN"),
+         "admit_native_decision", "native_decision",
+         "ADAPTIVE_NATIVE_ADMISSION_LINEAGE_UNPROVEN"),
     )
     native_provenance = []
     parsed_modules = {}
-    for filename, caller, callee, failure in native_calls:
+    for filename, caller, callee, imported_from, failure in native_calls:
         try:
             if filename not in parsed_modules:
                 source = (repo / "src" / "cognition_agent_os" / filename)
@@ -151,7 +157,10 @@ def check(graph_path: Path, repo: Path) -> dict:
             # relationships are not a call path. No semantic proof implied.
             imported = any(
                 isinstance(node, ast.ImportFrom)
-                and any(alias.name == callee for alias in node.names)
+                and node.level == 1
+                and node.module == imported_from
+                and any(alias.name == callee and alias.asname is None
+                        for alias in node.names)
                 for node in ast.walk(tree))
             called = [node for node in ast.walk(matches[0])
                       if isinstance(node, ast.Call)
@@ -161,6 +170,7 @@ def check(graph_path: Path, repo: Path) -> dict:
                 raise ValueError("MISSING_IMPORTED_DIRECT_CALL")
             native_provenance.append({
                 "caller": caller, "callee": callee,
+                "imported_from": "cognition_agent_os." + imported_from,
                 "source_file": "src/cognition_agent_os/" + filename,
                 "source_location": "L" + str(called[0].lineno),
                 "confidence": "SOURCE_AST_DIRECT",
