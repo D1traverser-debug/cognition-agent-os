@@ -205,8 +205,11 @@ def _codex_pretool() -> int:
             return 0
         tool = event.get("tool_name")
         args = event.get("tool_input")
-        if tool not in ("mcp__GitHub__update_pull_request",
-                        "mcp__GitHub__update_issue") or not isinstance(args, dict):
+        if (tool != "mcp__GitHub__update_pull_request"
+            or not isinstance(args, dict)
+            or args.get("repository_full_name") !=
+               "D1traverser-debug/cognition-agent-os"
+            or args.get("pr_number") != 50):
             return 0
         body = args.get("body", "")
         if not isinstance(body, str) or "[run-real-native-schema]" not in body:

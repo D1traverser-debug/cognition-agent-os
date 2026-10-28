@@ -159,13 +159,35 @@ class CISourceAndScopeTests(unittest.TestCase):
         import json
         event = {"hook_event_name": "PreToolUse",
                  "tool_name": "mcp__GitHub__update_pull_request",
-                 "tool_input": {"body": "[run-real-native-schema]"}}
+                 "tool_input": {"repository_full_name":
+                                "D1traverser-debug/cognition-agent-os",
+                                "pr_number": 50,
+                                "body": "[run-real-native-schema]"}}
         output = io.StringIO()
         with patch("sys.stdin", io.StringIO(json.dumps(event))), \
              contextlib.redirect_stdout(output):
             self.assertEqual(_codex_pretool(), 0)
         blocked = json.loads(output.getvalue())
         self.assertEqual(blocked["hookSpecificOutput"]["permissionDecision"], "deny")
+        event["tool_input"]["repository_full_name"] = "someone-else/project"
+        event["tool_input"]["body"] = "[run-real-native-schema]"
+        with patch("sys.stdin", io.StringIO(json.dumps(event))), \
+             contextlib.redirect_stdout(output := io.StringIO()):
+            self.assertEqual(_codex_pretool(), 0)
+        self.assertEqual(output.getvalue(), "")
+        event["tool_name"] = "mcp__GitHub__update_issue"
+        event["tool_input"]["repository_full_name"] = "D1traverser-debug/cognition-agent-os"
+        with patch("sys.stdin", io.StringIO(json.dumps(event))), \
+             contextlib.redirect_stdout(output := io.StringIO()):
+            self.assertEqual(_codex_pretool(), 0)
+        self.assertEqual(output.getvalue(), "")
+        event["tool_name"] = "mcp__GitHub__update_pull_request"
+        event["tool_input"]["pr_number"] = 51
+        with patch("sys.stdin", io.StringIO(json.dumps(event))), \
+             contextlib.redirect_stdout(output := io.StringIO()):
+            self.assertEqual(_codex_pretool(), 0)
+        self.assertEqual(output.getvalue(), "")
+
         event["tool_input"]["body"] = "Routine owner goal update, no experiment."
         with patch("sys.stdin", io.StringIO(json.dumps(event))), \
              contextlib.redirect_stdout(output := io.StringIO()):
