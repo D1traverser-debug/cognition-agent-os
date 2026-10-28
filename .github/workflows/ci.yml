@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - 'feat/free-local-inference-20261020'
   workflow_dispatch:
 
