@@ -169,6 +169,16 @@ class CISourceAndScopeTests(unittest.TestCase):
             self.assertEqual(_codex_pretool(), 0)
         blocked = json.loads(output.getvalue())
         self.assertEqual(blocked["hookSpecificOutput"]["permissionDecision"], "deny")
+        event["tool_input"]["body"] = (
+            "[run-real-native-schema][native-retest:changed-model-method]")
+        with patch("sys.stdin", io.StringIO(json.dumps(event))), \
+             contextlib.redirect_stdout(output := io.StringIO()):
+            self.assertEqual(_codex_pretool(), 0)
+        prepared = json.loads(output.getvalue())
+        self.assertIn("additionalContext", prepared["hookSpecificOutput"])
+        self.assertNotIn("permissionDecision", prepared["hookSpecificOutput"])
+        # The physical model run is still governed by native_experiment_admission;
+        # preparing text alone cannot meet its HEAD^-to-HEAD effect gate.
         event["tool_input"]["repository_full_name"] = "someone-else/project"
         event["tool_input"]["body"] = "[run-real-native-schema]"
         with patch("sys.stdin", io.StringIO(json.dumps(event))), \

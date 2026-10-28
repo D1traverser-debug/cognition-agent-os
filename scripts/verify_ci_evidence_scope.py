@@ -214,15 +214,32 @@ def _codex_pretool() -> int:
         body = args.get("body", "")
         if not isinstance(body, str) or "[run-real-native-schema]" not in body:
             return 0
-        try:
-            native_experiment_admission(body, _git_source_reader(Path(
-                event.get("cwd") or ".")))
-        except (ValueError, OSError) as exc:
+        # Editing a PR body only prepares an intent. It cannot itself
+        # download a model. Require one explicit prior-evidence comparison
+        # reason here; the ACTUAL GitHub Actions effect entry independently
+        # checks the prior source and fresh commit-specific executable delta.
+        # Requiring that delta before the intent can be configured would
+        # deadlock a legal 'set opt-in, then push correction' workflow.
+        motives = [name for name in _NATIVE_RETEST if name in body]
+        if len(motives) != 1:
             print(json.dumps({
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": str(exc),
+                    "permissionDecisionReason": (
+                        "REUSE_PRIOR_NATIVE_EVIDENCE_UNLESS_ONE_FALSIFIABLE_"
+                        "RETEST_CHANGE: PR #50 #6442492450"),
+                }
+            }))
+        else:
+            print(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "additionalContext": (
+                        "Experiment intent prepared only. The real CI "
+                        "pre-download gate must still verify fresh executable "
+                        "or owner-case delta on the triggering commit; this "
+                        "PR edit never certifies novelty or owner success."),
                 }
             }))
         return 0
