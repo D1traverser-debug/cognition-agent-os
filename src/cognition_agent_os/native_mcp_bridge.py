@@ -37,6 +37,7 @@ def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
 
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                      allow_host_tick: bool = False,
+                     allow_goal_writes: bool = True,
                      allow_source_read: bool = False,
                      allow_local_model_plan: bool = False,
                      public_discovery_goal_sha256: str | None = None,
@@ -60,9 +61,14 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             or any(ch not in "0123456789abcdef"
                    for ch in public_source_goal_sha256)):
         raise ValueError("INVALID_PUBLIC_SOURCE_GOAL_SCOPE_DIGEST")
+    if not allow_goal_writes and (allow_host_tick or allow_local_model_plan):
+        raise ValueError("READ_ONLY_MCP_CANNOT_ENABLE_WORKER_OR_MODEL_WRITES")
     mcp = MCPServer("cognition-agent-os-local")
+    # Registration is the actual server-side permission boundary. A caller
+    # without a write profile must not even discover queueing/ledger tools.
+    write_tool = mcp.tool if allow_goal_writes else (lambda: (lambda fn: fn))
 
-    @mcp.tool()
+    @write_tool()
     def native_goal_create(owner_goal: str,
                            client_request_id: str | None = None) -> dict:
         """Register exact original owner goal, safely replaying a lost ACK.
@@ -338,7 +344,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 "new_tool_execution_authorized": False,
             }
 
-    @mcp.tool()
+    @write_tool()
     def native_hypothesis_record(root_task_id: str, origin: str, idea: str,
                                  observation_sha256: str) -> dict:
         """Record a user/agent method idea as an untrusted, non-authorizing hypothesis."""
@@ -347,7 +353,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             origin=origin, idea=idea,
             observation_sha256=observation_sha256)
 
-    @mcp.tool()
+    @write_tool()
     def native_open_research_record(root_task_id: str, proposal: dict) -> dict:
         """Preserve competing UNREGISTERED professional methods across sessions.
 
@@ -360,7 +366,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return record_native_open_research(
             db_path, workspace, fixtures, root_task_id, proposal)
 
-    @mcp.tool()
+    @write_tool()
     def native_decision_admit(root_task_id: str, proposal: dict) -> dict:
         """Admit one compared typed method; fresh source/authority/lineage CAS required.
 
