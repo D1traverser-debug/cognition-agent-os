@@ -63,6 +63,18 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("SESSION_HANDOFF.md", codex)
         self.assertTrue(CODEX_SKILL.is_file())
 
+    def test_bootstrap_is_a_locator_not_a_bulk_history_download(self):
+        """Reject recurring context amplification, not certify native obedience."""
+        handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
+        self.assertIn("On-demand engineering provenance", handoff)
+        self.assertIn("possible competing active work", handoff)
+        self.assertIn("only when identity, ancestry", handoff)
+        self.assertNotIn("ALL open Draft PRs", handoff)
+        self.assertNotIn("fetch the active integration PR\u0027s **commit history**", handoff)
+        hook = (ROOT / "scripts" / "codex_session_context.py").read_text(encoding="utf-8")
+        self.assertIn("LIVE_GIT_PROVENANCE_ON_DEMAND", hook)
+        self.assertIn("task-relevant source, commits and diffs", hook)
+
     def test_each_surface_is_a_distinct_loading_boundary(self):
         chatgpt = SKILL.read_text(encoding="utf-8").lower()
         codex = AGENTS.read_text(encoding="utf-8").lower()

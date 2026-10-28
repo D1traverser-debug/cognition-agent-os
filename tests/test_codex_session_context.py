@@ -227,9 +227,10 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(project["continuation_policy"],
                          "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE")
         self.assertEqual(project["complete_work_log_location"],
-                         "LIVE_GIT_COMMIT_HISTORY_AND_DIFF")
+                         "LIVE_GIT_PROVENANCE_ON_DEMAND")
         self.assertIn("bootstrap index", project["proposed_action"])
-        self.assertIn("commit history/diff", project["proposed_action"])
+        self.assertIn("task-relevant source, commits and diffs", project["proposed_action"])
+        self.assertIn("conflicting evidence", project["proposed_action"])
         self.assertEqual(project["live_pr_head_and_ci"], "MUST_REFETCH")
         self.assertEqual(project["product_readiness_claim"], "NOT_VERIFIED")
         # An active architectural pivot must reach the actual cold-entry

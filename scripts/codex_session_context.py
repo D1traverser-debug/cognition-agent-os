@@ -182,7 +182,7 @@ def _project_recovery_when_no_ledger() -> dict:
         "near_term_priority": priority[:85] + ("…" if len(priority) > 85 else ""),
         "continuation_index": "SESSION_HANDOFF.md",
         "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
-        "complete_work_log_location": "LIVE_GIT_COMMIT_HISTORY_AND_DIFF",
+        "complete_work_log_location": "LIVE_GIT_PROVENANCE_ON_DEMAND",
         "product_readiness_claim": "NOT_VERIFIED",
         "live_pr_head_and_ci": "MUST_REFETCH",
         "original_user_utterances": "MUST_RECOVER_SEPARATELY",
@@ -190,7 +190,7 @@ def _project_recovery_when_no_ledger() -> dict:
         "live_python_topology": _live_python_topology(),
         "proposed_action": (
             "Use SESSION_HANDOFF.md as bootstrap index only; recover "
-            "owner originals, live PR/HEAD/CI and commit history/diff."
+            "owner originals, live integration PR/HEAD/CI, and only task-relevant source, commits and diffs. Expand history when conflicting evidence requires it."
         ),
     }
 
