@@ -33,9 +33,9 @@ class CodexSessionContext(unittest.TestCase):
 
     def _run(self, *, cwd=None, with_database=True, vars=None):
         environ = dict(os.environ)
-        environ.pop("COGNITION_AGENT_OS_DB", None)
-        environ.pop("COGNITION_AGENT_OS_WORKSPACE", None)
-        environ.pop("COGNITION_AGENT_OS_FIXTURES", None)
+        for name in ("DB", "WORKSPACE", "FIXTURES"):
+            environ.pop("COGNITION_AGENT_OS_" + name, None)
+            environ.pop("COGNITION_OS_" + name, None)
         if with_database:
             environ.update({
                 "COGNITION_AGENT_OS_DB": str(self.db),
@@ -55,6 +55,70 @@ class CodexSessionContext(unittest.TestCase):
         self.last_context_chars = len(msg)
         self.assertTrue(msg.startswith("Read-only project state observation"), msg)
         return json.loads(msg.partition(": ")[-1])
+
+    def test_codex_and_private_stdio_resolve_same_windows_host_by_default(self):
+        """Independent entrypoint path contract, with no new SQLite or grants."""
+        import importlib.util
+        from unittest.mock import patch
+
+        def load(name, filename):
+            spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / filename)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+
+        codex = load("codex_path_contract_probe", "codex_session_context.py")
+        private = load("chatgpt_path_contract_probe", "chatgpt_private_stdio.py")
+        checkout = self.tmp / "separate-checkout"
+        runtime = checkout / "runtime"
+        runtime.mkdir(parents=True)
+        db = runtime / "state.sqlite"
+        db.write_bytes(self.db.read_bytes())
+        workspace = runtime / "workspace"
+        fixtures = runtime / "fixtures"
+        workspace.mkdir()
+        fixtures.mkdir()
+        with patch.object(codex, "ROOT", checkout), patch.object(private, "_REPO", checkout):
+            with patch.dict(os.environ, {}, clear=True):
+                found, source = codex._existing_database()
+                self.assertEqual((found, source), (db, "DISCOVERED_EXISTING_LEDGER"))
+                self.assertEqual(private._paths(), (db, workspace, fixtures))
+                self.assertEqual(
+                    codex._optional_existing_directory(
+                        "COGNITION_AGENT_OS_WORKSPACE", "runtime/workspace"), workspace)
+                self.assertEqual(
+                    codex._optional_existing_directory(
+                        "COGNITION_AGENT_OS_FIXTURES", "runtime/fixtures"), fixtures)
+
+            # Both supported env schemes must identify the identical resource,
+            # including relative paths interpreted against the repo checkout.
+            with patch.dict(os.environ, {
+                    "COGNITION_AGENT_OS_DB": "runtime/state.sqlite",
+                    "COGNITION_OS_DB": str(db),
+                    "COGNITION_OS_WORKSPACE": str(workspace),
+                    "COGNITION_OS_FIXTURES": str(fixtures),
+            }, clear=True):
+                self.assertEqual(codex._existing_database()[0], db)
+                self.assertEqual(private._paths(), (db, workspace, fixtures))
+
+            # A silently different ledger is more dangerous than no ledger.
+            other = checkout / "other.sqlite"
+            other.write_bytes(self.db.read_bytes())
+            with patch.dict(os.environ, {
+                    "COGNITION_AGENT_OS_DB": str(db),
+                    "COGNITION_OS_DB": str(other),
+            }, clear=True):
+                self.assertEqual(codex._existing_database(),
+                                 (None, "CONFLICTING_LEDGER_ENV"))
+                with self.assertRaisesRegex(ValueError, "CONFLICTING_RUNTIME_RESOURCE_ENV"):
+                    private._paths()
+
+            # No arbitrary default selection if old and new files coexist.
+            (checkout / "state.sqlite").write_bytes(self.db.read_bytes())
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(codex._existing_database(),
+                                 (None, "AMBIGUOUS_LOCAL_LEDGERS"))
+                self.assertEqual(private._paths()[0], db)
 
     def test_missing_source_never_invents_owner_goal(self):
         result = self._run(with_database=False)
