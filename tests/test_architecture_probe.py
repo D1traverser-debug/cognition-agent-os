@@ -49,10 +49,10 @@ class ArchitectureProbeTests(unittest.TestCase):
             pkg = root / "src" / "cognition_agent_os"
             pkg.mkdir(parents=True)
             source = pkg / "alpha.py"
-            source.write_text('"""First purpose."""\\nfrom . import beta\\n'.replace(
-                "\\\\n", "\\n"), encoding="utf-8")
-            (pkg / "beta.py").write_text('"""Second purpose."""\\n'.replace(
-                "\\\\n", "\\n"), encoding="utf-8")
+            source.write_text('"""First purpose."""\nfrom . import beta\n',
+                              encoding="utf-8")
+            (pkg / "beta.py").write_text('"""Second purpose."""\n',
+                                         encoding="utf-8")
             before = probe.inspect(root)
             alpha = next(m for m in before["modules"] if m["name"] == "alpha")
             self.assertEqual(alpha["source_description"], "First purpose.")
