@@ -147,6 +147,24 @@ class AssuranceRegistryTests(unittest.TestCase):
                     RegistryError, 'task-scoped live-authority'):
                 verify_live_handoff(dst)
 
+    def test_cold_handoff_without_default_branch_resolution_fails(self):
+        """Merged integration must not force discovery of a nonexistent Draft."""
+        with tempfile.TemporaryDirectory() as d:
+            dst = Path(d)
+            (dst / 'README.md').write_text(
+                (ROOT / 'README.md').read_text(encoding='utf-8'),
+                encoding='utf-8')
+            live = (ROOT / 'SESSION_HANDOFF.md').read_text(encoding='utf-8')
+            self.assertIn('GitHub default branch', live)
+            live = live.replace('GitHub default branch', 'GitHub old open PR')
+            (dst / 'SESSION_HANDOFF.md').write_text(live, encoding='utf-8')
+            (dst / 'archive').mkdir()
+            source = ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md'
+            (dst / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').write_bytes(
+                source.read_bytes())
+            with self.assertRaisesRegex(RegistryError, 'task-scoped live-authority'):
+                verify_live_handoff(dst)
+
     def test_stale_handoff_substitution_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             dst = Path(d)
