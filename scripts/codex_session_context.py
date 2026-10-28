@@ -57,7 +57,7 @@ def _optional_existing_directory(env: str, fallback: str) -> Path | None:
     raw = os.getenv(env, "").strip()
     legacy = os.getenv(env.replace("COGNITION_AGENT_OS_", "COGNITION_OS_"), "").strip()
     if raw and legacy and _runtime_path(raw) != _runtime_path(legacy):
-        return None
+        raise ValueError("CONFLICTING_RUNTIME_RESOURCE_ENV")
     chosen = raw or legacy
     directory = Path(chosen).expanduser() if chosen else ROOT / fallback
     if not directory.is_absolute():
@@ -229,10 +229,14 @@ def build_context(payload: dict) -> dict:
     # ledgers; only the Windows Host's runtime/state.sqlite default selects
     # runtime/workspace and runtime/fixtures in the absence of env overrides.
     runtime_layout = db_path == ROOT / "runtime" / "state.sqlite"
-    ws = _optional_existing_directory(
-        WORKSPACE_ENV, "runtime/workspace" if runtime_layout else "workspace")
-    fixtures = _optional_existing_directory(
-        FIXTURES_ENV, "runtime/fixtures" if runtime_layout else "fixtures")
+    try:
+        ws = _optional_existing_directory(
+            WORKSPACE_ENV, "runtime/workspace" if runtime_layout else "workspace")
+        fixtures = _optional_existing_directory(
+            FIXTURES_ENV, "runtime/fixtures" if runtime_layout else "fixtures")
+    except ValueError:
+        context["status"] = "CONFLICTING_RUNTIME_RESOURCE_ENV"
+        return context
     if (ws is None) != (fixtures is None):
         ws = fixtures = None
     sys.path.insert(0, str(ROOT / "src"))
