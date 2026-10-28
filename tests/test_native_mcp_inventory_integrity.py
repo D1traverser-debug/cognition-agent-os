@@ -64,5 +64,35 @@ class NativeInventoryIntegrityTests(unittest.TestCase):
             self.assertFalse(inventory["owner_outcome_verified"])
 
 
+    def test_corrupt_source_spec_is_still_discoverable_by_original_registration(self):
+        with tempfile.TemporaryDirectory() as home:
+            root = Path(home)
+            db, workspace, sources = root / "ledger.sqlite", root / "work", root / "sources"
+            workspace.mkdir()
+            sources.mkdir()
+            with closing(connect(db)) as connection:
+                initialize(connection)
+            original = register_native_goal(db, "Investigate task with a retained registration")
+            # The JSON source-spec identity is lost but its original event
+            # remains. No result may interpret that event as a valid goal
+            # body, permission, or independent verification.
+            with closing(connect(db)) as connection:
+                connection.execute(
+                    "UPDATE tasks SET source_spec='{}' WHERE task_id=?", (original,))
+                connection.commit()
+            fake_mcp = types.ModuleType("mcp")
+            fake_server = types.ModuleType("mcp.server")
+            fake_server.MCPServer = _MCP
+            with patch.dict(sys.modules, {"mcp": fake_mcp, "mcp.server": fake_server}):
+                service = build_mcp_server(db, workspace, sources)
+            inventory = service.tools["native_goal_list"]()
+            self.assertEqual(len(inventory["goals"]), 1)
+            self.assertEqual(inventory["goals"][0]["root_task_id"], original)
+            self.assertEqual(inventory["goals"][0]["status"], "NATIVE_GOAL_UNVERIFIABLE")
+            self.assertNotIn("original_goal", inventory["goals"][0])
+            self.assertTrue(inventory["ambiguous"])
+            self.assertIsNone(inventory["selected_root_task_id"])
+
+
 if __name__ == "__main__":
     unittest.main()
