@@ -313,6 +313,61 @@ class NativeDecisionLoop(unittest.TestCase):
                          "SOURCE_STALE_OR_REMOVED")
         self.assertFalse(changed["owner_outcome_verified"])
 
+    def test_open_research_history_is_not_a_permanent_prompt_quota(self):
+        """Seventy genuine research events survive with a bounded, pageable read."""
+        goal = "Investigate an unregistered professional task without an external write."
+        root = register_native_goal(self.db, goal)
+        for index in range(70):
+            state = self.view(root)
+            self.assertEqual(state["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+            proposal = {
+                "observation_sha256": state["observation_sha256"],
+                "owner_clause": "unregistered professional task",
+                "unresolved_question": "Which independently verified method fits this novel domain?",
+                "competing_methods": [
+                    {"name": "source_comparison",
+                     "applicability": "Inspect original professional evidence.",
+                     "failure_mode": "One source may be biased or stale.",
+                     "falsifier": "Independent new evidence contradicts the claim."},
+                    {"name": "independent_replication",
+                     "applicability": "Repeat the observation using another method.",
+                     "failure_mode": "A replicated method may share hidden errors.",
+                     "falsifier": "Blind reference data falsify the observation."},
+                ],
+                "source_refs": [],
+                "next_research_step": (
+                    f"Investigate external reference approach number {index} independently."),
+                "uncertainty": "None of these proposals establishes the owner outcome.",
+            }
+            receipt = record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+            self.assertEqual(receipt["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        seen = []
+        before = None
+        for _ in range(6):
+            state = inspect_native_goal(
+                self.db, self.workspace, self.fixtures, root,
+                research_before_event_id=before)
+            self.assertEqual(state["open_research_count"], 70)
+            page = state["open_research"]
+            self.assertLessEqual(len(page), 16)
+            seen.extend(item["event_id"] for item in page)
+            before = state["open_research_next_before_event_id"]
+            if before is None:
+                break
+        self.assertEqual(len(seen), 70)
+        self.assertEqual(len(set(seen)), 70)
+        self.assertEqual(seen, sorted(seen, reverse=True))
+        # Old untrustworthy receipts must NOT disappear from the validation
+        # merely because they are no longer on the latest model-facing page.
+        with closing(connect(self.db)) as db:
+            db.execute(
+                "UPDATE events SET details=json_set(details,"
+                "'$.proposal.owner_clause','forged historical clause') "
+                "WHERE event_id=?", (min(seen),))
+            db.commit()
+        self.assertEqual(self.view(root)["status"], "NATIVE_GOAL_UNVERIFIABLE")
+
     def test_open_research_cannot_bypass_revoked_effect_authority(self):
         root = register_native_goal(
             self.db, "Investigate an unregistered professional task")
