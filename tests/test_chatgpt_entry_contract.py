@@ -68,6 +68,12 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
         self.assertIn("On-demand engineering provenance", handoff)
         self.assertIn("possible competing active work", handoff)
+        self.assertIn("default branch HEAD", handoff)
+        self.assertIn("merged PR is historical provenance", handoff)
+        self.assertIn("live default-branch HEAD", AGENTS.read_text(encoding="utf-8"))
+        self.assertIn("live default-branch HEAD", SKILL.read_text(encoding="utf-8"))
+        self.assertIn("default-branch HEAD and active-PR topology",
+                      (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("Active evidence frontier is always required", handoff)
         self.assertIn("Existing-capability survey BEFORE every substantive choice", handoff)
         self.assertIn("architecture_probe.py --repo .", handoff)
