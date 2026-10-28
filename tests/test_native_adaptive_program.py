@@ -122,7 +122,7 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         self.unchanged()
 
     def test_real_host_entry_requires_no_model_for_exact_owner_goal(self):
-        """Two original Host ticks, one SQLite lineage, no model transport."""
+        """One opted-in tick completes, next tick is a replay-safe readback."""
         root = register_native_goal(
             self.db, "Compare baseline.csv with actual.csv and report differences.")
         with patch("cognition_agent_os.local_model._request",
@@ -137,8 +137,9 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
             second = run_tick(
                 self.db, self.work, self.fixtures, max_jobs=1,
                 auto_native_cognition=True)
-        self.assertEqual(len(second["tasks"]), 1, second)
-        self.assertEqual(second["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertEqual(len(first["tasks"]), 1, first)
+        self.assertEqual(first["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertEqual(second["tasks"], [], second)
         self.assertEqual(second["native_cognition"][0]["status"],
                          "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED")
         result = inspect_owner_local_outcome(
@@ -174,8 +175,9 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
                 self.db, self.work, self.fixtures, max_jobs=1,
                 auto_native_cognition=True)
         provider.assert_not_called()
-        self.assertEqual(second["tasks"][0]["task_id"],
+        self.assertEqual(first["tasks"][0]["task_id"],
                          admitted["child_task_id"])
+        self.assertEqual(second["tasks"], [], second)
         actual = inspect_owner_local_outcome(
             self.db, self.work, self.fixtures, original)
         self.assertTrue(actual["local_owner_outcome_verified"], actual)
