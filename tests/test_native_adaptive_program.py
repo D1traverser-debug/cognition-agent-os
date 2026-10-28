@@ -89,6 +89,38 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
                          "ORIGINAL_SANDBOX_DRAFT_POSTCONDITION")
         self.unchanged()
 
+    def test_one_opted_in_host_tick_executes_and_checks_exact_owner_goal(self):
+        """A single explicit Host invocation must not stop after just planning.
+
+        The same tick must admit one existing registered local method, run
+        the existing worker under its current grant, and independently read
+        the complete local owner postcondition. No fresh scheduler invocation,
+        cloud model, recursive side-effect loop or extra authority is allowed.
+        """
+        root = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model was authorized")) as model:
+            tick = run_tick(self.db, self.work, self.fixtures, max_jobs=1,
+                            auto_native_cognition=True)
+        model.assert_not_called()
+        self.assertEqual(tick["status"], "PROCESSED", tick)
+        self.assertEqual(len(tick["native_cognition"]), 1, tick)
+        self.assertEqual(tick["native_cognition"][0]["status"],
+                         "NATIVE_METHOD_ENQUEUED", tick)
+        self.assertEqual(len(tick["tasks"]), 1, tick)
+        self.assertEqual(tick["tasks"][0]["task_id"],
+                         tick["native_cognition"][0]["child_task_id"], tick)
+        actual = inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)
+        self.assertTrue(actual["local_owner_outcome_verified"], actual)
+        self.assertFalse(actual["business_outcome_verified"])
+        self.unchanged()
+        resumed = run_tick(self.db, self.work, self.fixtures, max_jobs=1,
+                           auto_native_cognition=True)
+        self.assertEqual(resumed["tasks"], [], resumed)
+        self.unchanged()
+
     def test_real_host_entry_requires_no_model_for_exact_owner_goal(self):
         """Two original Host ticks, one SQLite lineage, no model transport."""
         root = register_native_goal(
