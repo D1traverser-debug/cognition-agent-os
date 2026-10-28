@@ -17,6 +17,66 @@ This is an **on-demand method**, not a second controller, standing prompt, grant
 
 When the owner names multiple defects or repeatedly corrects the agent, recover **every** item from direct utterances, including formatting, requirement interpretation, method choice, actual client loading and real outcomes. For EACH item record observable failure, competing causes, evidence/search coverage, different remedies, a preferred-route falsifier and acceptance status in the current work evidence—not a new registry. Shared root causes must be **demonstrated**, never assumed from labels like "context pollution." Study original implementations and independent failure cases before comparison; after choosing a remedy challenge it AGAIN with the neglected neighbor case. A remaining item is OPEN, not silently absorbed into a successful subtask.
 
+## Discover, verify, and select unfamiliar methods without waiting for a tool list
+
+Use a **source-discovery funnel**, scaled to the unknown and not a fixed
+requirement to call every service on every task:
+
+1. Translate the **owner's actual missing capability / failure invariant**
+   into multiple search queries, including alternate project names, source
+   categories, counterexamples, migration and security terms. Start from
+   first-hand local entrypoints and evidence of the failure, not whichever
+   tool the user or model mentioned most recently.
+2. **Discover candidates**, not truth: relevant GitHub repositories and
+   releases, official MCP registry, package-download and GitHub Trending/
+   star-growth lists; niche questions may first surface in Reddit, X,
+   小红书 or practitioner issue threads. Record the exact post, date, author
+   and link where accessible; if a social post is inaccessible or the
+   project's identity is ambiguous, mark UNKNOWN instead of borrowing
+   another project's reputation. Stars, downloads, endorsements, demo
+   videos and search rank are weak discovery signals, never correctness,
+   permissions or safety evidence.
+3. **Verify the actual mechanism**: open canonical repository and license,
+   current tagged release, source implementation, API/tool schemas,
+   official documentation, reproducible tests, unresolved issues,
+   vulnerabilities, maintenance status, migrations, known failures and
+   deployment/authentication/cost requirements. Distinguish a reference
+   MCP test server from production capability, a transient reasoning
+   transcript from durable memory, a graph of code calls from semantic
+   evidence, and a retrieval result from an independently proved fact.
+   Follow promising social leads to these primary sources; do not stop at
+   paraphrasing a post or README.
+4. **Compare real competing pathways** against the same failure and owner
+   outcome: existing tool/interface, adaption of a mature implementation,
+   replace a deficient component, add a narrowly authorized adapter, or
+   abstain/research further. For each viable option specify the part it
+   would replace, how it composes with current grant/Host/SQLite, immutable
+   source/version provenance, failure and rollback mode, true usage/hosting
+   cost, and the observation that would falsify the choice. Do not
+   implicitly prefer a keyword the owner supplied or the newest framework.
+5. **Test before promoting reusable knowledge**: use an isolated frozen
+   baseline with a previously unseen relevant case, a counterexample and
+   an unchanged-evidence/retry case; compare owner-level independent
+   outcome, costs and regressions, not just model opinions or green CI.
+   Write a concise decision and original links into the EXISTING active
+   PR/runtime event evidence with the winning method's applicability,
+   competing explanation, verified result, rejected candidate, and
+   reopen condition. Never create a second parent memory or permanent
+   dependency simply to record a search.
+
+Practical role distinctions: AOCI-like governed indices and Graphify-like
+AST dependency graphs can locate source/code context but not judge an
+external business result. Filesystem MCP is an effect-capable file
+interface requiring scoped path grants. Sequential Thinking is a
+revision/branching aid, not independently verified research or durable
+cross-session state by itself. Memory MCP, Hindsight or RAG can RETRIEVE
+potential knowledge but cannot authorize a changed action. Everything is
+a protocol conformance server; n8n-MCP needs real workflow credentials
+and an effect boundary. Harness-RSI-style candidate trials require a
+frozen independent evaluator and keep/revert, not recursive self-approval.
+These are research examples, **not installation decisions**. Compare
+fresh releases and first-hand evidence whenever materially relevant.
+
 ## Ask four expert questions *before* proposing the solution
 
 1. **Omissions:** Which checks, hidden assumptions, conflicting requirements, failure conditions or alternatives would domain experts raise that the user and agent did not ask for? Distinguish necessary protections from ceremony.
