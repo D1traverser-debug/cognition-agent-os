@@ -121,6 +121,38 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         self.assertEqual(resumed["tasks"], [], resumed)
         self.unchanged()
 
+    def test_real_host_worker_owner_outcome_not_starved_by_132_older_roots(self):
+        """Reproduce the old 128-root starvation at the ACTUAL Host entry.
+
+        Uses real SQLite registration, real Host tick, real local Worker and
+        independent owner/immutable-source readback. No decision model or
+        substituted planner, only deliberately unusable historical roots.
+        """
+        from cognition_agent_os.ledger import create_task
+        with closing(connect(self.db)) as con:
+            for old in range(132):
+                create_task(con, {"kind": "native_goal",
+                                  "legacy_unverified_root": old}, commit=False)
+            con.execute("UPDATE tasks SET state='DECOMPOSED' "
+                        "WHERE parent_task IS NULL AND state='PENDING'")
+            con.commit()
+        root = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model permitted")) as model:
+            tick = run_tick(self.db, self.work, self.fixtures, max_jobs=1,
+                            auto_native_cognition=True)
+        model.assert_not_called()
+        self.assertEqual(len(tick["native_cognition"]), 1, tick)
+        self.assertEqual(tick["native_cognition"][0]["status"],
+                         "NATIVE_METHOD_ENQUEUED", tick)
+        self.assertEqual(len(tick["tasks"]), 1, tick)
+        result = inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)
+        self.assertTrue(result["local_owner_outcome_verified"], result)
+        self.assertFalse(result["business_outcome_verified"], result)
+        self.unchanged()
+
     def test_one_opted_in_tick_stages_json_without_touching_original(self):
         """The same bounded Host invocation crosses a second registered method.
 
