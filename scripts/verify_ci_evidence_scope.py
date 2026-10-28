@@ -67,10 +67,187 @@ def classify_needs(needs: dict) -> tuple[dict, bool]:
     return receipt, not blocked
 
 
+
+# Prior first-hand, unmocked comparison (two Ollama models and independent
+# local owner readback), NOT a product/biz result. Verified before this rule
+# was introduced; see PR #50 comment #6442492450 and Actions #40506810543.
+# Do not spend another model/runner call on the same question just because
+# someone can type an opt-in marker. The CI runner has no semantic judgment
+# authority: it can only validate concrete changes to experiment input/method.
+PRIOR_NATIVE_EXPERIMENT_SHA = "f6355d3cc47155c0c7dbb01a0db5f22ad68bd8fa"
+PRIOR_NATIVE_EXPERIMENT_RUN = 40506810543
+_NATIVE_RETEST = {
+    "[native-retest:changed-model-method]": (
+        "src/cognition_agent_os/native_local_planner.py",
+        "src/cognition_agent_os/native_decision.py",
+        "src/cognition_agent_os/local_model.py",
+    ),
+    "[native-retest:changed-execution-oracle]": (
+        "src/cognition_agent_os/host.py",
+        "src/cognition_agent_os/owner_postcondition.py",
+        "evaluation/owner_outcome_oracle.py",
+    ),
+    "[native-retest:new-owner-cases]": (
+        "scripts/measure_real_native_goal.py",
+    ),
+}
+
+
+def _semantic_python_source(source: str) -> str:
+    """Compare Python executable AST, not comments or moved prose docstrings."""
+    import ast
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                             ast.AsyncFunctionDef)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(
+                    first.value, ast.Constant) and isinstance(first.value.value, str):
+                node.body.pop(0)
+    return ast.dump(tree, include_attributes=False)
+
+
+def _native_cases(source: str) -> list:
+    """Owner tasks and hidden labels, not a filename/change-count proxy."""
+    import ast
+    tree = ast.parse(source)
+    matches = [node.value for node in tree.body
+               if isinstance(node, ast.Assign)
+               and any(isinstance(target, ast.Name) and target.id == "CASES"
+                       for target in node.targets)]
+    if len(matches) != 1:
+        raise ValueError("NATIVE_EXPERIMENT_CASES_NOT_RECOVERABLE")
+    cases = ast.literal_eval(matches[0])
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("NATIVE_EXPERIMENT_CASES_NOT_RECOVERABLE")
+    return cases
+
+
+def native_experiment_admission(body: str, read_revision):
+    """Actual pre-action gate for optional REAL model inference.
+
+    read_revision(relative_path, revision) returns canonical file bytes/text.
+    A typed re-test hypothesis must correspond to a demonstrably changed
+    model/Host behavior or independently frozen goal cases; text-only or
+    unrelated changes cannot allow another model run. Admission is NOT a
+    reason to claim the new method is correct or the full owner goal is done.
+    """
+    if not isinstance(body, str) or "[run-real-native-schema]" not in body:
+        raise ValueError("NATIVE_EXPERIMENT_EXPLICIT_OPT_IN_REQUIRED")
+    motives = [name for name in _NATIVE_RETEST if name in body]
+    if len(motives) != 1:
+        raise ValueError(
+            "REUSE_PRIOR_NATIVE_EVIDENCE_UNLESS_ONE_FALSIFIABLE_RETEST_CHANGE: "
+            "PR #50 #6442492450 / Actions #40506810543")
+    reason = motives[0]
+    changed = []
+    for path in _NATIVE_RETEST[reason]:
+        previous = read_revision(path, PRIOR_NATIVE_EXPERIMENT_SHA)
+        current = read_revision(path, "HEAD")
+        if isinstance(previous, bytes):
+            previous = previous.decode("utf-8")
+        if isinstance(current, bytes):
+            current = current.decode("utf-8")
+        if reason == "[native-retest:new-owner-cases]":
+            different = _native_cases(previous) != _native_cases(current)
+        else:
+            different = _semantic_python_source(previous) != _semantic_python_source(current)
+        if different:
+            changed.append(path)
+    if not changed:
+        raise ValueError("REUSE_PRIOR_NATIVE_EVIDENCE_NO_MECHANISM_OR_CASE_DELTA")
+    return {
+        "status": "NEW_NATIVE_EXPERIMENT_PROBE_ADMISSIBLE_NOT_VALIDATED",
+        "prior_run": PRIOR_NATIVE_EXPERIMENT_RUN,
+        "prior_source": PRIOR_NATIVE_EXPERIMENT_SHA,
+        "requested_falsifier": reason,
+        "changed_executable_or_owner_case_sources": changed,
+        "real_model_ran": False,
+        "owner_outcome_verified": False,
+        "product_ready": False,
+    }
+
+
+def _git_source_reader(repo: Path):
+    import subprocess
+    root = repo.resolve()
+    def read(path: str, revision: str):
+        command = ["git", "-C", str(root), "show", revision + ":" + path]
+        result = subprocess.run(command, capture_output=True, timeout=8,
+                                check=False)
+        if result.returncode:
+            raise ValueError("PRIOR_OR_CURRENT_SOURCE_NOT_ACCESSIBLE:" + path)
+        return result.stdout
+    return read
+
+
+def _codex_pretool() -> int:
+    """Best-effort earlier Codex guard; CI preflight is authoritative here.
+
+    Codex hooks must be actually trusted/loaded. ChatGPT is a separate
+    invocation surface with no account-level hook installed by this repo.
+    """
+    import sys
+    try:
+        event = json.load(sys.stdin)
+        if not isinstance(event, dict):
+            return 0
+        if event.get("hook_event_name") != "PreToolUse":
+            return 0
+        tool = event.get("tool_name")
+        args = event.get("tool_input")
+        if tool not in ("mcp__GitHub__update_pull_request",
+                        "mcp__GitHub__update_issue") or not isinstance(args, dict):
+            return 0
+        body = args.get("body", "")
+        if not isinstance(body, str) or "[run-real-native-schema]" not in body:
+            return 0
+        try:
+            native_experiment_admission(body, _git_source_reader(Path(
+                event.get("cwd") or ".")))
+        except (ValueError, OSError) as exc:
+            print(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": str(exc),
+                }
+            }))
+        return 0
+    except (ValueError, TypeError, OSError, json.JSONDecodeError):
+        # Hook failure is not a trusted authority check; CI has the final
+        # actual model download barrier and will fail closed.
+        return 0
+
+
+def _native_experiment_preflight() -> int:
+    import sys
+    try:
+        event_path = os.environ.get("GITHUB_EVENT_PATH")
+        if not event_path or os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+            raise ValueError("NATIVE_EXPERIMENT_REQUIRES_PR_EVENT")
+        event = json.loads(Path(event_path).read_text(encoding="utf-8"))
+        body = event["pull_request"]["body"]
+        candidate = native_experiment_admission(
+            body, _git_source_reader(Path(__file__).resolve().parents[1]))
+        print("NATIVE_EXPERIMENT_PREFLIGHT " + json.dumps(candidate, sort_keys=True))
+        return 0
+    except (ValueError, TypeError, KeyError, OSError, TimeoutError) as exc:
+        print("NATIVE_EXPERIMENT_PREFLIGHT_REJECTED " + str(exc), file=sys.stderr)
+        return 1
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--native-experiment-preflight", action="store_true")
+    parser.add_argument("--codex-pretool", action="store_true")
     args = parser.parse_args()
+    if args.native_experiment_preflight:
+        raise SystemExit(_native_experiment_preflight())
+    if args.codex_pretool:
+        raise SystemExit(_codex_pretool())
+    if args.output is None:
+        parser.error("--output is required for evidence scope")
     raw = os.environ.get("COGNITION_CI_NEEDS")
     if not raw:
         raise ValueError("missing native GitHub Actions needs results")

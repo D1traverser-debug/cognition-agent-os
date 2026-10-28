@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from verify_ci_checkout_source import expected_sha, verify_checkout
 from verify_ci_merge_source import verify_merge_source
-from verify_ci_evidence_scope import CORE, OPTIONAL, classify_needs
+from verify_ci_evidence_scope import (CORE, OPTIONAL, classify_needs,
+    native_experiment_admission, _native_cases, _codex_pretool)
 
 
 class CISourceAndScopeTests(unittest.TestCase):
@@ -84,6 +85,90 @@ class CISourceAndScopeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CI_TESTED_WRONG_MERGE"):
             verify_merge_source({}, "push", actual, self.b,
                                 (self.b, self.a))
+
+
+    def test_preaction_rejects_repeat_even_with_green_previous_ci(self):
+        """A bare PR opt-in never silently reruns a known 0/2 model experiment."""
+        def unexpected_source(*_args):
+            self.fail("No revalidation reason: must reject before source or model I/O")
+        with self.assertRaisesRegex(ValueError, "REUSE_PRIOR_NATIVE_EVIDENCE"):
+            native_experiment_admission("[run-real-native-schema]",
+                                        unexpected_source)
+        with self.assertRaisesRegex(ValueError, "EXPLICIT_OPT_IN"):
+            native_experiment_admission("", unexpected_source)
+        with self.assertRaisesRegex(ValueError, "REUSE_PRIOR_NATIVE_EVIDENCE"):
+            native_experiment_admission(
+                "[run-real-native-schema][native-retest:changed-model-method]"
+                "[native-retest:new-owner-cases]", unexpected_source)
+
+    def test_preaction_retest_requires_real_executable_change_not_words(self):
+        source = "def plan():\n    return 'first'\n"
+        changed = "def plan():\n    return 'corrected'\n"
+        from verify_ci_evidence_scope import PRIOR_NATIVE_EXPERIMENT_SHA
+        def reader(path, revision):
+            if path.endswith("native_local_planner.py"):
+                return source if revision == PRIOR_NATIVE_EXPERIMENT_SHA else changed
+            return "def noop():\n    return None\n"
+        body = "[run-real-native-schema][native-retest:changed-model-method]"
+        allowed = native_experiment_admission(body, reader)
+        self.assertEqual(allowed["status"],
+                         "NEW_NATIVE_EXPERIMENT_PROBE_ADMISSIBLE_NOT_VALIDATED")
+        self.assertEqual(allowed["changed_executable_or_owner_case_sources"],
+                         ["src/cognition_agent_os/native_local_planner.py"])
+        self.assertFalse(allowed["real_model_ran"])
+        def prose_only(path, revision):
+            return ("# another research note\n" if revision == "HEAD" else
+                    "# prior note\n") + source
+        with self.assertRaisesRegex(ValueError, "NO_MECHANISM_OR_CASE_DELTA"):
+            native_experiment_admission(body, prose_only)
+
+    def test_preaction_new_cases_need_changed_owner_goals_or_hidden_labels(self):
+        old = "CASES = [{'id':'a','goal':'do x','files':{'a.csv':'v'},'target':'ensure_structure'}]\n"
+        new = old.replace("'do x'", "'do y'")
+        body = "[run-real-native-schema][native-retest:new-owner-cases]"
+        def reads(path, revision):
+            return old if revision != "HEAD" else new
+        self.assertNotEqual(_native_cases(old), _native_cases(new))
+        self.assertEqual(native_experiment_admission(body, reads)
+                         ["changed_executable_or_owner_case_sources"],
+                         ["scripts/measure_real_native_goal.py"])
+        with self.assertRaisesRegex(ValueError, "NO_MECHANISM_OR_CASE_DELTA"):
+            native_experiment_admission(
+                body, lambda _p, rev: old + ("\n# new comment" if rev == "HEAD" else ""))
+
+    def test_codex_pretool_denies_unfounded_experiment_mutation_only(self):
+        """The actual Codex tool event contract gets a real denial JSON."""
+        from unittest.mock import patch
+        import contextlib
+        import io
+        import json
+        event = {"hook_event_name": "PreToolUse",
+                 "tool_name": "mcp__GitHub__update_pull_request",
+                 "tool_input": {"body": "[run-real-native-schema]"}}
+        output = io.StringIO()
+        with patch("sys.stdin", io.StringIO(json.dumps(event))), \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(_codex_pretool(), 0)
+        blocked = json.loads(output.getvalue())
+        self.assertEqual(blocked["hookSpecificOutput"]["permissionDecision"], "deny")
+        event["tool_input"]["body"] = "Routine owner goal update, no experiment."
+        with patch("sys.stdin", io.StringIO(json.dumps(event))), \
+             contextlib.redirect_stdout(output := io.StringIO()):
+            self.assertEqual(_codex_pretool(), 0)
+        self.assertEqual(output.getvalue(), "")
+
+    def test_workflow_checks_research_reuse_before_downloading_model(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = workflow.split("  experimental_real_native_cognition:",1)[1].split(
+            "\n  experimental_live_open_goal_method:",1)[0]
+        self.assertLess(job.index("--native-experiment-preflight"),
+                        job.index("ollama pull"))
+        self.assertIn("fetch-depth: 0", job)
+        import json
+        hook = json.loads((ROOT / ".codex/hooks.json").read_text(encoding="utf-8"))
+        self.assertIn("PreToolUse", hook["hooks"])
+        self.assertIn("--codex-pretool",
+                      hook["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
 
     def test_real_inference_opt_in_requires_trusted_same_repo_source(self):
         """PR body alone must not allow outsiders to trigger model downloads."""

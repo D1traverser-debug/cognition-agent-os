@@ -681,8 +681,14 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - name: Attest exact checked-out source commit
         run: python scripts/verify_ci_checkout_source.py
+      - name: Prevent repeating an already evidenced local-model experiment
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: python scripts/verify_ci_evidence_scope.py --native-experiment-preflight
       - name: Install Ollama on disposable public CI runner
         shell: bash
         run: |
