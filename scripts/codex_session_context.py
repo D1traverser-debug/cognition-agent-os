@@ -23,7 +23,12 @@ CANDIDATE_NAMES = ("runtime/state.sqlite", "state.sqlite", "ledger.sqlite",
                    ".cognition-agent-os/ledger.sqlite",
                    "agent-state/ledger.sqlite")
 MAX_HOOK_INPUT = 32768
-MAX_CONTEXT_CHARS = 2000
+# Codex additionalContextLimit=2000 is an approximate TOKEN threshold, not
+# a 2,000-character wire limit. Use a conservative independent character cap
+# to preserve useful cold-entry evidence without unbounded hook output.
+# If the client still exceeds its token preview budget, Codex retains the
+# full output for on-demand reading; neither surface grants effects.
+MAX_CONTEXT_CHARS = 6000
 
 
 def _runtime_path(value: str) -> Path:
