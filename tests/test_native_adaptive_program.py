@@ -121,6 +121,35 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         self.assertEqual(resumed["tasks"], [], resumed)
         self.unchanged()
 
+    def test_one_opted_in_tick_stages_json_without_touching_original(self):
+        """The same bounded Host invocation crosses a second registered method.
+
+        Grant, independent sandbox effect and original-owner postcondition are
+        checked together; no model API and no extra replay on the next tick.
+        """
+        root = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model was authorized")) as model:
+            tick = run_tick(self.db, self.work, self.fixtures, max_jobs=1,
+                            auto_native_cognition=True, auto_stage_goals=True)
+        model.assert_not_called()
+        self.assertEqual(tick["native_cognition"][0]["status"],
+                         "NATIVE_METHOD_ENQUEUED", tick)
+        self.assertEqual(len(tick["tasks"]), 1, tick)
+        actual = inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)
+        self.assertTrue(actual["local_owner_outcome_verified"], actual)
+        self.assertEqual(actual["outcome_scope"],
+                         "ORIGINAL_SANDBOX_DRAFT_POSTCONDITION")
+        self.unchanged()
+        resumed = run_tick(self.db, self.work, self.fixtures,
+                           max_jobs=1, auto_native_cognition=True,
+                           auto_stage_goals=True)
+        self.assertEqual(resumed["tasks"], [], resumed)
+        self.unchanged()
+
     def test_real_host_entry_requires_no_model_for_exact_owner_goal(self):
         """One opted-in tick completes, next tick is a replay-safe readback."""
         root = register_native_goal(
