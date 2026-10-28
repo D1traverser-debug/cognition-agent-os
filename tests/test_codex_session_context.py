@@ -351,6 +351,84 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("REUSE_PRIOR_NATIVE_EVIDENCE",
                       decision["permissionDecisionReason"])
 
+    def test_windows_launcher_is_auditable_and_shell_neutral(self):
+        """The Windows command is executable under cmd and inherited PowerShell.
+
+        EncodedCommand avoids Codex's nested-quote corruption; decode the
+        *exact* configured launcher here so an opaque change cannot broaden
+        the script's actions or silently skip the real repo-root lookup.
+        """
+        import base64
+        config = json.loads((ROOT / ".codex" / "hooks.json").read_text())
+        for event, filename, options in (
+            ("SessionStart", "codex_session_context.py", ""),
+            ("PreToolUse", "verify_ci_evidence_scope.py", " --codex-pretool"),
+        ):
+            with self.subTest(event=event):
+                handler = config["hooks"][event][0]["hooks"][0]
+                command = handler["commandWindows"]
+                prefix = "powershell.exe -NoProfile -NonInteractive -EncodedCommand "
+                self.assertTrue(command.startswith(prefix), command)
+                wire = command[len(prefix):]
+                decoded = base64.b64decode(wire, validate=True).decode("utf-16le")
+                expected = (
+                    "$root = (& git rev-parse --show-toplevel).Trim(); "
+                    "if ($LASTEXITCODE -ne 0) { exit 1 }; "
+                    f"& python (Join-Path $root 'scripts/{filename}'){options}; "
+                    "exit $LASTEXITCODE"
+                )
+                self.assertEqual(decoded, expected)
+
+    @unittest.skipUnless(os.name == "nt", "Windows inherited PowerShell only")
+    def test_windows_inherited_powershell_hook_entrypoints(self):
+        """Prove both configured commands against the other actual Codex shell."""
+        with closing(connect(self.db)) as db:
+            root = create_task(db, {
+                "kind": "open_goal",
+                "goal": "Compare actual.csv with baseline.csv and report differences.",
+            })
+        config = json.loads((ROOT / ".codex" / "hooks.json").read_text())
+        environ = dict(os.environ)
+        environ.update({
+            "COGNITION_AGENT_OS_DB": str(self.db),
+            "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+            "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures),
+        })
+        event = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "mcp__GitHub__update_pull_request",
+            "tool_input": {
+                "repository_full_name": "D1traverser-debug/cognition-agent-os",
+                "pr_number": 50,
+                "body": "[run-real-native-schema]",
+            },
+        }
+        for kind, payload in (
+            ("SessionStart", {"cwd": str(ROOT / "src"), "source": "resume"}),
+            ("PreToolUse", event),
+        ):
+            with self.subTest(kind=kind):
+                handler = config["hooks"][kind][0]["hooks"][0]
+                # Codex can inherit PowerShell's -Command as its shell.
+                result = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-NonInteractive",
+                     "-Command", handler["commandWindows"]],
+                    cwd=ROOT / "src", input=json.dumps(payload), text=True,
+                    capture_output=True, env=environ, timeout=12,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                wire = json.loads(result.stdout)
+                outcome = wire["hookSpecificOutput"]
+                if kind == "SessionStart":
+                    self.assertEqual(outcome["hookEventName"], "SessionStart")
+                    context = json.loads(outcome["additionalContext"].partition(": ")[-1])
+                    self.assertEqual(context["root_task_id"], root)
+                    self.assertTrue(context["original_goal_verified"])
+                    self.assertFalse(context["business_outcome_verified"])
+                else:
+                    self.assertEqual(outcome["hookEventName"], "PreToolUse")
+                    self.assertEqual(outcome["permissionDecision"], "deny")
+
     def test_hook_lifecycle_registration_and_entry_path(self):
         config = json.loads((ROOT / ".codex" / "hooks.json").read_text())
         events = config["hooks"]["SessionStart"]
