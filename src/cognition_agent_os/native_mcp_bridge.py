@@ -286,6 +286,15 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                     raise PermissionError("PUBLIC_SOURCE_READ_NOT_AUTHORIZED")
             from .source import github_public_snapshot
             raw = github_public_snapshot(repository, file_path, commit_sha)
+            # A read grant that was revoked during the external request must
+            # not release source bytes after the request completes.
+            post_read = inspect_native_goal(
+                db_path, workspace, fixtures, root_task_id)
+            if post_read.get("status") not in (
+                    "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                    "NATIVE_AWAITING_WORKER",
+                    "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+                raise PermissionError("PUBLIC_SOURCE_GRANT_CHANGED_DURING_READ")
             if not raw or len(raw) > 131072:
                 raise ValueError("PUBLIC_SOURCE_EXCEEDS_READ_BUDGET")
             try:
