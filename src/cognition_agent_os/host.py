@@ -347,6 +347,18 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
         db_path,workspace,fixture_root,limit=min(max_jobs,8))
     # Capture source head before draining newly issued immutable evidence tasks.
     watches = poll_due_watches(db_path)
+    # In an explicitly opted-in native-cognition tick, first admit a bounded
+    # source-pinned method, then let the EXISTING Worker process it in this
+    # same tick. This eliminates a false stop after planning while preserving
+    # the one ledger, grant/CAS, worker and independent post-execution audit.
+    # Absent opt-in, no model/tool is selected and legacy worker order remains.
+    if auto_native_cognition:
+        from .native_local_planner import advance_native_local_goals
+        native_choices = advance_native_local_goals(
+            db_path, workspace, fixture_root, model=local_model,
+            limit=min(max_jobs,2))
+    else:
+        native_choices=[]
     results = []
     for _ in range(max_jobs):
         result = run_once(db_path, workspace, fixture_root,
@@ -392,16 +404,6 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             db_path,workspace,fixture_root,limit=min(max_jobs,4)))
     else:
         controlled=[]
-    # Model reasoning is an explicit, optional Host stage, not a daemon
-    # or independent authorization path. A newly admitted child is enqueued
-    # for the NEXT tick and checked again by the original Worker.
-    if auto_native_cognition:
-        from .native_local_planner import advance_native_local_goals
-        native_choices = advance_native_local_goals(
-            db_path, workspace, fixture_root, model=local_model,
-            limit=min(max_jobs,2))
-    else:
-        native_choices=[]
     # Observe objective-level evidence after the same Host has processed
     # approved public research; this does not authorize replanning or effects.
     from .goal_drift import observe_owner_goal_drift
