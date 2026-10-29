@@ -671,8 +671,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - model: 'qwen2.5-coder:7b'
-            label: coder-7b
+          - model: 'qwen2.5-coder:0.5b'
+            label: coder-05b
+          - model: 'qwen2.5:1.5b'
+            label: instruct-15b
     runs-on: ubuntu-latest
     timeout-minutes: 26
     steps:
@@ -886,7 +888,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Attest exact checked-out source commit
         run: python scripts/verify_ci_checkout_source.py
-      - name: Four live child contracts and two isolated native safety trials
+      - name: Real video and novel native execution with parent Host state re-observation
         shell: bash
         env:
           PYTHONPATH: src
@@ -898,7 +900,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-four-child-contracts-two-native-holdouts
+          name: native-two-child-readonly-evidence
           path: native_child_readback.json
           if-no-files-found: warn
 
