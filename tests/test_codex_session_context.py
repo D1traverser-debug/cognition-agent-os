@@ -622,6 +622,26 @@ class CodexSessionContext(unittest.TestCase):
         self.assertNotIn("next_task_id", recovered["readback"])
         self.assertFalse(recovered["scheduling_or_effects_performed"])
 
+    def test_multiple_registered_goals_do_not_hide_third_open_owner_goal(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        register_goal(self.db, self._registered_contract(task, "first-owner"))
+        register_goal(self.db, self._registered_contract(task, "second-owner"))
+        third = "A third standalone owner goal must not disappear on cold entry."
+        with closing(connect(self.db)) as db:
+            other = create_task(db, {"kind": "open_goal", "goal": third})
+        hook = self._run()
+        self.assertEqual(hook["status"], "AMBIGUOUS_ACTIVE_GOALS")
+        self.assertNotIn(third, json.dumps(hook))
+        recovered = self._readback_state(
+            hook["continuity_state_readback"]["arguments"])
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(
+            len(recovered["readback"]["registered_goals"]), 2)
+        self.assertEqual(recovered["readback"]["other_original_goals"], [
+            {"root_task_id": other, "original_goal": third}])
+        self.assertNotIn("next_task_id", recovered["readback"])
+
     def test_mixed_goal_readback_rejects_stale_source_and_preserves_revoke(self):
         with closing(connect(self.db)) as db:
             task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
