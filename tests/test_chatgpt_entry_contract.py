@@ -51,6 +51,22 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         # Metadata is discoverable; this test does not run ChatGPT.
         self.assertIn("not", content.lower())
 
+    def test_recurring_source_confusion_reenters_evidence_and_memory_decisions(self):
+        """Contract-only probe; NOT native ChatGPT invocation evidence."""
+        skill = SKILL.read_text(encoding="utf-8")
+        probes = PROBES.read_text(encoding="utf-8")
+        # A named parent-goal decision cannot treat dated handoffs or a
+        # repository-only inventory as proof that private owner memory is
+        # recovered or that all different surfaces were semantically read.
+        for required in (
+                "private Library", "stale index", "source coverage",
+                "working memory", "episodic memory", "semantic memory",
+                "procedural memory", "invalidation", "competing causes"):
+            self.assertIn(required, skill)
+        # A real negative control is still necessary to verify behavior.
+        self.assertIn("T. Stale-index first-mile retrieval", probes)
+        self.assertIn("NOT_TESTED", probes)
+
     def test_current_parent_and_child_permission_boundary(self):
         chatgpt = SKILL.read_text(encoding="utf-8")
         codex = AGENTS.read_text(encoding="utf-8")
