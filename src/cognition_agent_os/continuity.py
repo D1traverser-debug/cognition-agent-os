@@ -617,6 +617,16 @@ def resume_goal(db_path: Path, *, resolve_head=None,
             active = [r for r in rows
                       if r["goal_rev"] == authority["goal_rev"]]
             if not active:
+                # An expired legacy registration cannot become an implicit
+                # selector over a newer owner goal. Reuse the SAME canonical
+                # task ledger's current-root recovery and authority checks;
+                # historical rows remain intact, never reactivated.
+                current = _resume_existing_open_goal(
+                    db_path, db, authority, workspace=workspace,
+                    fixtures=fixtures)
+                if current["status"] not in (
+                        "NO_DURABLE_GOAL", "STALE_GOAL_REVISION"):
+                    return current
                 return _no_action("STALE_GOAL_REVISION",
                                   goal_ids=[r["goal_id"] for r in rows])
             if len(active) != 1:
