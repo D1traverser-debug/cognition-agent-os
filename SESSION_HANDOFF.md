@@ -4,6 +4,24 @@
 
 Historical pre-compaction text is preserved at `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for evidence only. Private user conversations must remain private.
 
+## Owner-activated continuity contract — corrected 2026-10-29
+
+Current explicit owner correction: "持续" is **owner-woken ChatGPT conversation
+continuity**, not self-starting background execution. Each wake (including a
+new chat) must recover the same full objective, previous corrections, state,
+failed approaches and remaining obligations; independently select and execute
+available legal next work, read back actual effects, and resume any unfinished
+part on a later user turn. A Host/SQLite-to-ChatGPT bridge, independent Codex
+Goal, cron, Work mode and permanent runtime are optional future branches, NOT
+requirements to complete this interactive objective. Do not infer the owner has
+authorized separate deployment or real business side effects. Keep the
+original goal intact even when a response is interrupted; do not claim any
+work ran between messages.
+
+Current exact status remains resolved exclusively from live repositories,
+actual connected tools, owner private evidence and observed readbacks. This
+bounded pointer is not an extra state ledger.
+
 ## Stable owner objective
 
 Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that preserves the COMPLETE owner goal and corrections; decomposes and challenges assumptions; independently searches/learns professional sources and existing tools; compares reuse/adapt/replace/new methods; lawfully executes; independently verifies full owner and child-business outcomes; changes method after failure; retains verified learning; resumes across interruption; transfers to unfamiliar domains; and reduces owner correction work and unnecessary complexity.

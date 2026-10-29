@@ -1,7 +1,6 @@
 # One cognition-agent-os product acceptance — engineering checkpoint 2026-10-25
 
-**Current disposition: NOT_READY for unattended autonomous use.** All six
-whole-product gates below are OPEN. No stage name, model response, PR, agent
+**Current disposition: INTERACTIVE_PHASE_OPEN; unattended autonomous operation is DEFERRED, not required.** The six legacy long-term deployment/product gates below remain OPEN, but are NOT the interactive-phase completion contract. No stage name, model response, PR, agent
 count, document, passing CI, registered local capability or hash can close a
 gate without the corresponding independent owner-outcome evidence.
 
@@ -76,6 +75,44 @@ acceptable; **universal automatic invocation in every ChatGPT conversation
 is NOT a product requirement or current acceptance gate**. The obsolete
 `uaos-controller-runtime` is not a prerequisite and must not be restored.
 
+**Owner clarification (2026-10-29, supersedes any implied always-on prerequisite):**
+"持续" means the owner can explicitly wake ChatGPT by messaging in the current
+or a fresh conversation, including after response interruption or large work
+spanning sessions. The same parent must independently recover original goals,
+corrections, unfinished work, current evidence and authorization, then make
+actual permissible progress until the complete goal is done. **No background
+operation, independent Codex Goal, localhost SQLite connection, permanent Host,
+cron, or Work mode is required to PASS the INTERACTIVE PHASE.** The owner may
+consider Codex/Work only if this interactive mode is empirically insufficient.
+Do not revive an optional Host as a blocker on the next wake; the same
+evidence-first recovery and allowed connected-tool actions must proceed.
+"Do not stop before finishing" means do not voluntarily end while an
+authorized action is feasible within this turn; between owner-triggered
+messages the system makes no claimed background progress.
+
+**INTERACTIVE PHASE acceptance (all required; no arbitrary future Host dependency):**
+- In a real opt-in current/new ChatGPT conversation, recover the complete
+  owner goal and latest correction from available original private materials;
+  identify what remains unknown without fabricating prior work or permissions.
+- Resolve actual GitHub default branch, active PRs, exact-HEAD CI, installed
+  Skill and relevant tool availability, versus stale or contradictory indexes;
+  avoid losing original clauses under summarization or context pressure.
+- Diagnose repeated or unfamiliar obstacles via competing causal explanations,
+  primary-source learning as needed, comparison/rejection of alternatives,
+  authorized connected-tool execution and **independent effect readback**.
+  Return to the original goal after errors/interruption, rather than stopping
+  on a method card, new test, draft PR or passing CI.
+- Demonstrate unseen opt-in task(s) and fresh-session/interruption resumes
+  from REAL observed client and tool traces, including negative controls
+  for unrelated conversations, stale summaries, missing sources, mid-task
+  insertion and false completion. Record omissions, corrections required,
+  unauthorized effects, costs and outcome. Passing a static assertion or
+  self-rated report is NOT native invocation/outcome proof.
+- Keep a single owner-facing durable continuity route in the existing
+  private sources and existing GitHub repo; never create a parallel task
+  authority or publish private originals. Degrade explicitly if retrieval
+  or tool access truly fails; legitimate available work continues.
+
 **Near-term priority:** Improve the opt-in interactive cognition workflow:
 full original goal and correction fidelity, context-appropriate investigation,
 independent comparison, lawful action with currently connected tools,
@@ -83,16 +120,15 @@ real-result readback and correction, without requiring the owner to repeatedly
 enumerate missing checks or integrations. Evaluate actual triggered use, not
 hypothetical blanket ChatGPT interception.
 
-**Deferred, not discarded:** Local/cloud deployment, unattended persistent
+**Deferred, not discarded and OPTIONAL for this owner:** Local/cloud deployment, unattended persistent
 Host scheduling, paid APIs, commercialization and a ChatGPT-to-host MCP/API
-bridge are later engineering/authorization phases. They are not prerequisites
+bridge are separate future engineering/authorization phases. They are not prerequisites
 for testing current opt-in ChatGPT behavior. When a persistent server is
 eventually adopted, storage can preserve goal/state/evidence independently
 of conversation text; new sessions still need scoped identity, goal selection,
 current grants and result-state rehydration. Do not prematurely build an
 extra chat-memory/Host layer or treat server storage alone as verified
-continuation. The six ultimate product gates below remain long-term
-criteria, not a mandate to deploy infrastructure in this phase.
+continuation. The six historical product/deployment gates below are only conditional future acceptance criteria, NOT a mandate to deploy infrastructure or a barrier to validating the owner-woken interactive phase.
 
 ## AI/model execution reliability — source-challenged hypotheses, not solved product claims
 
@@ -119,7 +155,7 @@ The owner requested **all failure classes** be investigated end to end, not one 
 
 **Phase rule:** under the user's current opt-in ChatGPT/Codex priority, do not expand static grammar, small-model prompts, extra controllers, role counts, or historical inventories in lieu of proving the real cognition workflow on unseen tasks. Some LLM limitations cannot be eliminated by instructions; prove detection, isolation, correction and real owner effects instead.
 
-## Six end-to-end release gates — same candidate, same original goal
+## Six conditional future deployment/product gates — NOT prerequisites for current interactive acceptance
 
 1. **Whole goal -> next legal choice.** With owner requirements (including
    conjunctive clauses), at least two genuinely applicable registered
@@ -222,5 +258,4 @@ third-party execution without approval.
 completion of a research stage.** Tests prove contracts or discriminate
 causes; a completed owner-relevant vertical outcome advances product status.
 No approval to merge, release, deploy to user device, spend on models or write
-to real external services is given by this document. Maintain NOT_READY until
-all six gates are independently satisfied at the same code SHA.
+to real external services is given by this document. Keep interactive acceptance OPEN until its real client/outcome gates above pass. If the owner later opts into unattended deployment, evaluate the separate six deployment gates at the same code SHA; do not conflate the phases.

@@ -7,6 +7,24 @@ description: Use for cognition-agent-os or selected child-agent work, 继续/继
 
 This Skill is the **interactive cognition entry**, not a permanent Host, a permission grant, an always-on worker or a promise that every ChatGPT session selects it. The currently installed account release, GitHub source, Codex instructions and Host may differ; verify the surface actually in use rather than assuming synchronization.
 
+## Owner-triggered continuity is the current product, not background automation
+
+The owner's 2026-10-29 clarification overrides stale always-on assumptions:
+"持续" means **each owner message can resume work**, including a fresh ChatGPT
+conversation after context limits or interruptions. On every in-scope wake,
+retrieve the original private objective and latest corrections, inspect actual
+unfinished work and live tool/source status, challenge the first route,
+perform any available legal work and independently verify its result. If the
+scope is too large for one turn, retain the *unchanged full objective* and
+continue from real evidence when the owner next speaks. Do not ask the owner
+to repeat known goals, tool lists or methods. Never claim work occurred
+between messages. An always-on Host, separate Codex Goal, scheduled run,
+Work mode or local SQLite connection is **not required for this interactive
+phase**; it is an optional design branch only if empirically needed.
+Use the existing private Library and GitHub as distinct sources, not as
+a second task/grant ledger. A missing Host cannot stop currently authorized
+ChatGPT-native actions. Evaluate actual owner results, not rule text.
+
 ## Route to the owner's complete goal
 
 - For a named parent/child project or supported in-conversation `继续`, resume THAT goal and its original success conditions. In a new ambiguous `继承`, first inspect accessible private prior goals and connected project evidence; choose an unambiguous target, ask ONE question only if materially different targets remain. Never silently route by newest timestamp.

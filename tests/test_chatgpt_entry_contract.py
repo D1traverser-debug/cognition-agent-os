@@ -51,6 +51,22 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         # Metadata is discoverable; this test does not run ChatGPT.
         self.assertIn("not", content.lower())
 
+    def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):
+        """Source policy only; cannot prove a fresh ChatGPT launch."""
+        gate = (ROOT / "docs/PRODUCT-READINESS-GATE.md").read_text(encoding="utf-8")
+        handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+        adr = (ROOT / "docs/01-ARCHITECTURE-DECISIONS.md").read_text(encoding="utf-8")
+        probes = PROBES.read_text(encoding="utf-8")
+        for body in (gate, handoff, skill, adr):
+            self.assertIn("2026-10-29", body)
+            self.assertTrue(("Host" in body or "SQLite" in body))
+        self.assertIn("INTERACTIVE PHASE acceptance", gate)
+        self.assertIn("owner-woken", skill)
+        self.assertIn("U. Owner-woken continuation", probes)
+        self.assertIn("V. Oversized multi-session objective", probes)
+        self.assertIn("NOT_TESTED", probes)
+
     def test_recurring_source_confusion_reenters_evidence_and_memory_decisions(self):
         """Contract-only probe; NOT native ChatGPT invocation evidence."""
         skill = SKILL.read_text(encoding="utf-8")
