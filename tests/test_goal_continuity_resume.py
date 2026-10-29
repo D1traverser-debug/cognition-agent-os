@@ -300,6 +300,45 @@ class GoalContinuityColdResume(unittest.TestCase):
                          {current_open, current_native})
         self.assertNotIn("next_task_id", state)
 
+    def test_many_historical_roots_cannot_hide_current_original(self):
+        """Archive size must not control current-goal identity recovery."""
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            for i in range(260):
+                create_task(db, {
+                    "kind": "open_goal",
+                    "goal": f"Superseded owner objective number {i}."
+                }, commit=False)
+            db.commit()
+            alter_authority(db, goal_change=True)
+            goal = "Current owner goal must survive large historical inventory."
+            current = create_task(db, {"kind": "open_goal", "goal": goal})
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["root_task_id"], current, result)
+        self.assertEqual(result["original_goal"], goal)
+        self.assertEqual(result["status"], "READY_TO_TICK")
+        self.assertEqual(result["next_task_id"], current)
+
+    def test_many_historical_roots_cannot_hide_current_competing_goals(self):
+        """Large history must not force a false unique/unknown current goal."""
+        with closing(connect(self.db_path)) as db:
+            for i in range(260):
+                create_task(db, {
+                    "kind": "open_goal",
+                    "goal": f"Historical unrelated goal number {i}."
+                }, commit=False)
+            db.commit()
+            alter_authority(db, goal_change=True)
+            current_open = create_task(db, {
+                "kind": "open_goal", "goal": "Current owner request one."})
+        current_native = register_native_goal(
+            self.db_path, "Current competing owner request two.")
+        result = resume_goal(self.db_path)
+        self.assertEqual(result["status"], "AMBIGUOUS_OPEN_OWNER_GOALS", result)
+        self.assertEqual({x["root_task_id"] for x in result["original_goals"]},
+                         {current_open, current_native})
+        self.assertNotIn("next_task_id", result)
+
     def test_new_goal_revision_requires_explicit_reconciliation(self):
         register_goal(self.db_path, self.contract())
         with closing(connect(self.db_path)) as db:
