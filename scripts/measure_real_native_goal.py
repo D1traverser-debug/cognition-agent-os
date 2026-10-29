@@ -157,8 +157,15 @@ def _native_trial(case: dict, home: Path) -> dict:
             result = inspect_owner_local_outcome(db, work, fixture, root)
             if result["local_owner_outcome_verified"]:
                 break
+            if response["status"] == "NATIVE_LOCAL_MODEL_UNAVAILABLE":
+                # The transport itself failed. Repeating the identical call
+                # immediately under unchanged source/model has no new evidence
+                # and previously consumed another full 120-second request.
+                # Preserve the failure for capacity/host diagnosis instead.
+                break
             if response["status"] != "NATIVE_METHOD_ENQUEUED":
-                # One explicit feedback-based retry is allowed; no more.
+                # Only a recoverable, evidence-distinct failure may use the
+                # remaining bounded decision cycle.
                 continue
 
     result = inspect_owner_local_outcome(db, work, fixture, root)
@@ -340,6 +347,24 @@ def score_trial_results(rows: list[dict]) -> dict:
                 for row in rows),
             "model_generation_calls": sum(
                 row[name].get("model_calls", 0) for row in rows),
+            # Evidence taxonomy: a successful GitHub job is not a successful
+            # model call. The genuine 7B comparison observed four 120s
+            # inference/transport errors and two explicit abstentions.
+            "model_transport_failures": sum(
+                bool(item.get("transport_error_class"))
+                for row in rows
+                for item in row[name].get(
+                    "model_trace_actual_not_mocked", [])),
+            "model_abstention_calls": sum(
+                item.get("model_plan_status") ==
+                    "NATIVE_LOCAL_MODEL_ABSTAINED"
+                for row in rows
+                for item in row[name].get("progress", [])),
+            "model_completed_generations": sum(
+                item.get("done") is True
+                for row in rows
+                for item in row[name].get(
+                    "model_trace_actual_not_mocked", [])),
             "independent_business_result_verified": False,
         }
     return scores
