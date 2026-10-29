@@ -202,6 +202,11 @@ def _project_recovery_when_no_ledger() -> dict:
     }
 
 
+def _unattested_source(*_args: object) -> str:
+    """Never manufacture an observed GitHub HEAD in the offline hook."""
+    raise RuntimeError("LIVE_SOURCE_NOT_QUERIED_BY_LOCAL_HOOK")
+
+
 def build_context(payload: dict, *, include_full_original: bool = False) -> dict:
     cwd_value = payload.get("cwd")
     if not isinstance(cwd_value, str) or not cwd_value.strip():
@@ -255,7 +260,7 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
         # The bootstrap itself never fetches GitHub. A remotely pinned goal
         # remains UNVERIFIED until an independently authorized fresh read.
         state = resume_goal(
-            db_path, resolve_head=lambda *_: "0" * 40,
+            db_path, resolve_head=_unattested_source,
             workspace=ws, fixtures=fixtures)
         # One version-bound readback for ALL existing continuity contracts,
         # including legacy registered, multi-registered, mixed and native
