@@ -8,6 +8,7 @@ user's current task, authenticated grants or independent effect verification.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -300,6 +301,18 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
             # into a startup hook merely because their identities are listed.
             context["ambiguous_goal_count"] = len(context["original_goals"])
             context.pop("original_goals", None)
+            ids = context.get("root_task_ids")
+            if (isinstance(ids, list) and ids
+                and all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{32}", v)
+                        for v in ids)):
+                identity = hashlib.sha256(json.dumps(
+                    sorted(ids), separators=(",", ":")).encode("utf-8")
+                ).hexdigest()
+                context["ambiguous_goal_readback"] = {
+                    "entrypoint": "scripts/codex_session_context.py",
+                    "arguments": ["--readback-ambiguous", identity],
+                    "source_role": "READ_ONLY_EXISTING_SQLITE_GOALS",
+                }
     except (ImportError, OSError, ValueError, TypeError) as exc:
         context["status"] = "DURABLE_CONTEXT_UNAVAILABLE"
         context["readback_error_class"] = type(exc).__name__
@@ -324,14 +337,34 @@ def _readback_original(root_id: str, expected_digest: str) -> dict:
 
 
 
+def _readback_ambiguous(expected_digest: str) -> dict:
+    """Read *all* attested ambiguous originals without choosing one."""
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+        return {"status": "INVALID_AMBIGUOUS_READBACK_IDENTITY"}
+    state = build_context({"cwd": str(ROOT)}, include_full_original=True)
+    ids = state.get("root_task_ids")
+    if (state.get("status") != "AMBIGUOUS_OPEN_OWNER_GOALS"
+        or not isinstance(ids, list) or not ids
+        or not isinstance(state.get("original_goals"), list)
+        or hashlib.sha256(json.dumps(
+            sorted(ids), separators=(",", ":")).encode("utf-8")
+        ).hexdigest() != expected_digest):
+        return {"status": "AMBIGUOUS_READBACK_IDENTITY_UNVERIFIED"}
+    return {"status": "AMBIGUOUS_READBACK_IDENTITY_MATCHED",
+            "readback": state, "scheduling_or_effects_performed": False}
+
+
 def main() -> int:
     if len(sys.argv) > 1:
-        if len(sys.argv) != 4 or sys.argv[1] != "--readback-original":
+        if len(sys.argv) == 4 and sys.argv[1] == "--readback-original":
+            result = _readback_original(sys.argv[2], sys.argv[3])
+        elif len(sys.argv) == 3 and sys.argv[1] == "--readback-ambiguous":
+            result = _readback_ambiguous(sys.argv[2])
+        else:
             print(json.dumps({"status": "INVALID_ORIGINAL_READBACK_ARGUMENTS",
                               "original_goal_verified": False}))
             return 2
-        print(json.dumps(_readback_original(sys.argv[2], sys.argv[3]),
-                         ensure_ascii=True, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0
     try:
         data = sys.stdin.read(MAX_HOOK_INPUT + 1)
