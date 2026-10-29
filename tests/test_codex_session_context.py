@@ -516,6 +516,7 @@ class CodexSessionContext(unittest.TestCase):
         locator = hook["original_goal_readback"]
         self.assertNotIn("original_goal", hook)
         self.assertNotIn(goal, json.dumps(hook))
+        self.assertNotIn("original_goal", hook.get("native_decision_state", {}))
         self.assertEqual(locator["source_role"], "READ_ONLY_EXISTING_SQLITE_GOAL")
         self.assertEqual(locator["arguments"][1:], [
             root, hook["original_contract_sha256"]])
