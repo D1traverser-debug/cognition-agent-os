@@ -671,10 +671,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - model: 'qwen2.5-coder:0.5b'
-            label: coder-05b
-          - model: 'qwen2.5:1.5b'
-            label: instruct-15b
+          - model: 'qwen2.5-coder:7b'
+            label: coder-7b
     runs-on: ubuntu-latest
     timeout-minutes: 26
     steps:
