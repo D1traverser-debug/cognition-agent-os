@@ -275,9 +275,32 @@
       "label": "learn-claude-code",
       "section": "Stage 3: Study One Modern Agent Harness",
       "atlas_line": 99,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
-      "nested_leads": []
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "shareAI-lab/learn-claude-code",
+          "path": "agents/s01_agent_loop.py",
+          "blob_sha": "bdd525ea952c0d201ad0485e4542478bbea28431",
+          "kind": "implementation"
+        },
+        {
+          "repo": "shareAI-lab/learn-claude-code",
+          "path": "s08_context_compact/code.py",
+          "blob_sha": "f4e0117def805445a19c029abdebd7b9dc003fe2",
+          "kind": "implementation"
+        },
+        {
+          "repo": "shareAI-lab/learn-claude-code",
+          "path": "tests/test_agent_loop_boundaries.py",
+          "blob_sha": "dbb20e0b8a9afb1f2e30cf68d43d3e2d6dde094e",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/shareAI-lab/learn-claude-code/blob/main/agents/s01_agent_loop.py",
+        "https://github.com/shareAI-lab/learn-claude-code/blob/main/s08_context_compact/code.py",
+        "https://github.com/shareAI-lab/learn-claude-code/blob/main/tests/test_agent_loop_boundaries.py"
+      ]
     },
     {
       "url": "https://github.com/shareAI-lab/claw0",
@@ -1322,6 +1345,48 @@
           "path": "src/cli/helpers/doctor-command.ts",
           "blob_sha": "8050525d3203330159c51e898a79ed69c1e65bfb",
           "kind": "implementation"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/shareAI-lab/learn-claude-code/blob/main/agents/s01_agent_loop.py",
+      "label": "Minimal tool loop: stop and execution boundary",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "shareAI-lab/learn-claude-code",
+          "path": "agents/s01_agent_loop.py",
+          "blob_sha": "bdd525ea952c0d201ad0485e4542478bbea28431",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/shareAI-lab/learn-claude-code/blob/main/s08_context_compact/code.py",
+      "label": "Context compaction: archive, trim and replay",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "shareAI-lab/learn-claude-code",
+          "path": "s08_context_compact/code.py",
+          "blob_sha": "f4e0117def805445a19c029abdebd7b9dc003fe2",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/shareAI-lab/learn-claude-code/blob/main/tests/test_agent_loop_boundaries.py",
+      "label": "Agent loop real tool-call and stop-boundary tests",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "shareAI-lab/learn-claude-code",
+          "path": "tests/test_agent_loop_boundaries.py",
+          "blob_sha": "dbb20e0b8a9afb1f2e30cf68d43d3e2d6dde094e",
+          "kind": "tests"
         }
       ],
       "nested_leads": []

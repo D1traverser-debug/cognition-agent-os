@@ -76,6 +76,18 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
                     or e.get("kind") not in {"redirect_and_boundary", "implementation",
                                              "tests", "docs", "design", "method", "benchmark"}):
                 raise AtlasError("UNATTESTED_STUDY_EVIDENCE")
+        # Evidence attached to a GitHub project must originate from that
+        # project, unless a pinned redirect/boundary record explicitly
+        # explains an upstream repository migration (e.g. OpenHands).
+        # A valid blob SHA from an unrelated repo is NOT study evidence.
+        parsed_url = urlparse(url)
+        route = parsed_url.path.strip("/").split("/")
+        if (parsed_url.netloc.lower() == "github.com"
+                and len(route) >= 2 and state != "DISCOVERED_NOT_DEEPLY_AUDITED"):
+            origin = (route[0] + "/" + route[1]).lower()
+            if not (any(e["repo"].lower() == origin for e in evidence)
+                    or any(e["kind"] == "redirect_and_boundary" for e in evidence)):
+                raise AtlasError("STUDY_EVIDENCE_SOURCE_MISMATCH")
         required_kinds = {
             "SOURCE_ROUTING_AUDITED": {"redirect_and_boundary"},
             "SOURCE_AND_CODE_READ": {"implementation"},

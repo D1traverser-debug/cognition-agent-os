@@ -41,6 +41,23 @@ class ResearchAtlasGuardTests(unittest.TestCase):
             for lead in record["nested_leads"]:
                 self.assertIn(lead, {r["url"] for r in self.data["nested_records"]})
 
+    def test_studied_github_repo_cannot_borrow_other_repo_evidence(self):
+        """A valid SHA in the wrong repository must NOT certify reading."""
+        evidence = copy.deepcopy(self.data)
+        entry = next(x for x in evidence["records"]
+                     if x["url"] == "https://github.com/shareAI-lab/learn-claude-code")
+        self.assertEqual(entry["status"], "SOURCE_AND_TEST_READ")
+        self.assertIn("s08_context_compact/code.py",
+                      [x["path"] for x in entry["evidence"]])
+        entry["evidence"] = [
+            {**item, "repo": "unrelated/misleading"} for item in entry["evidence"]]
+        with self.assertRaisesRegex(mod.AtlasError, "STUDY_EVIDENCE_SOURCE_MISMATCH"):
+            mod.validate(evidence, cards=self.cards)
+        self.assertIn("## Method card L", self.cards)
+        self.assertIn("client tests remain **NOT_TESTED**", self.cards)
+        self.assertFalse(mod.validate(self.data, cards=self.cards)
+                         ["native_skill_trigger_or_user_outcome_tested"])
+
     def test_context_doctor_primary_source_depth_and_discovery_boundary(self):
         """Study-status integrity, never a claimed live client launch."""
         doctor = next(x for x in self.data["nested_records"]
