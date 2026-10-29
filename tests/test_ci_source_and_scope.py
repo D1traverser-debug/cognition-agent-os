@@ -123,6 +123,46 @@ class CISourceAndScopeTests(unittest.TestCase):
             native_experiment_admission(body, prose_only)
 
 
+    def test_native_model_capacity_retest_requires_actual_fresh_matrix_change(self):
+        """Do not rerun failed weak models with labels or an old 7B commit."""
+        from verify_ci_evidence_scope import _native_job_models
+        old = (
+            "  experimental_real_native_cognition:\n"
+            "    strategy:\n"
+            "      matrix:\n"
+            "        include:\n"
+            "          - model: 'qwen2.5-coder:0.5b'\n"
+            "            label: coder-05b\n"
+            "          - model: 'qwen2.5:1.5b'\n"
+            "            label: instruct-15b\n"
+            "  experimental_live_open_goal_method:\n"
+        )
+        large = old.replace(
+            "          - model: 'qwen2.5-coder:0.5b'\n"
+            "            label: coder-05b\n"
+            "          - model: 'qwen2.5:1.5b'\n"
+            "            label: instruct-15b\n",
+            "          - model: 'qwen2.5-coder:7b'\n"
+            "            label: coder-7b\n")
+        body = "[run-real-native-schema][native-retest:model-capacity]"
+        self.assertEqual(_native_job_models(large), ("qwen2.5-coder:7b",))
+        def fresh(_path, ref):
+            return large if ref == "HEAD" else old
+        receipt = native_experiment_admission(body, fresh)
+        self.assertEqual(receipt["changed_executable_or_owner_case_sources"],
+                         [".github/workflows/ci.yml"])
+        with self.assertRaisesRegex(ValueError, "NO_FRESH_COMMIT_DELTA"):
+            native_experiment_admission(
+                body, lambda _path, ref: old if ref.endswith("prior")
+                else large)
+        with self.assertRaisesRegex(ValueError, "NO_FRESH_COMMIT_DELTA"):
+            native_experiment_admission(
+                body, lambda _path, ref: old if ref != "HEAD"
+                else old.replace("label: coder-05b", "label: dummy"))
+        with self.assertRaisesRegex(ValueError, "NO_FRESH_COMMIT_DELTA"):
+            native_experiment_admission(
+                body, lambda _path, ref: large)
+
     def test_preaction_old_retest_reason_cannot_run_again_after_unrelated_commit(self):
         """A legitimate earlier delta cannot license infinite repeat inference."""
         from verify_ci_evidence_scope import PRIOR_NATIVE_EXPERIMENT_SHA
