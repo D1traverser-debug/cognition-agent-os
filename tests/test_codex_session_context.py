@@ -482,6 +482,47 @@ class CodexSessionContext(unittest.TestCase):
         self.assertNotIn("next_task_id", result)
         self.assertFalse(result["business_outcome_verified"])
 
+    def test_direct_original_readback_rejects_drift_and_is_read_only(self):
+        """Codex can dereference its SAME SQLite root without any hook cache."""
+        goal = "Preserve the full owner goal, including the last prohibition. " * 117
+        root = register_native_goal(self.db, goal)
+        hook = self._run()
+        locator = hook["original_goal_readback"]
+        self.assertEqual(locator["source_role"], "READ_ONLY_EXISTING_SQLITE_GOAL")
+        self.assertEqual(locator["arguments"][1:], [
+            root, hook["original_contract_sha256"]])
+        env = dict(os.environ)
+        env.update({"COGNITION_AGENT_OS_DB": str(self.db),
+                    "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+                    "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures)})
+        def readback(arguments):
+            proc = subprocess.run(
+                [sys.executable, str(HOOK), *arguments], cwd=ROOT, env=env,
+                capture_output=True, text=True, timeout=8)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            return json.loads(proc.stdout)
+        with closing(connect(self.db)) as db:
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        actual = readback(locator["arguments"])
+        self.assertEqual(actual["status"], "ORIGINAL_READBACK_IDENTITY_MATCHED")
+        self.assertEqual(actual["readback"]["root_task_id"], root)
+        self.assertEqual(actual["readback"]["original_goal"], goal)
+        self.assertFalse(actual["scheduling_or_effects_performed"])
+        self.assertEqual(readback(["--readback-original", root, "0" * 64])["status"],
+                         "ORIGINAL_READBACK_IDENTITY_UNVERIFIED")
+        self.assertEqual(readback(["--readback-original", "bad", "0" * 64])["status"],
+                         "INVALID_ORIGINAL_READBACK_IDENTITY")
+        with closing(connect(self.db)) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM events").fetchone()[0], before)
+            alter_authority(db, revoke=True)
+        revoked = readback(locator["arguments"])
+        self.assertEqual(revoked["status"], "ORIGINAL_READBACK_IDENTITY_MATCHED")
+        self.assertEqual(revoked["readback"]["status"], "AUTHORITY_REVOKED")
+        self.assertIs(revoked["readback"]["authority_current"], False)
+        self.assertNotIn("next_task_id", revoked["readback"])
+        self.assertFalse(revoked["scheduling_or_effects_performed"])
+
     def test_cold_restart_resumes_exact_original_goal_without_new_ledger(self):
         goal = "Compare actual.csv with baseline.csv and report differences."
         with closing(connect(self.db)) as db:
