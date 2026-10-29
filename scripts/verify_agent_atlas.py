@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTER = ROOT / "docs/research/agent-learning-hub-source-register-20261029.json"
 CARDS = ROOT / "docs/research/agent-learning-hub-method-cards-20261029.md"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
-URLS = re.compile(r"\\[[^]]+\\]\\((https?://[^)]+)\\)")
+URLS = re.compile(r"\[[^]]+\]\((https?://[^)]+)\)")
 STATES = {"DISCOVERED_NOT_DEEPLY_AUDITED", "SOURCE_ROUTING_AUDITED",
           "SOURCE_AND_CODE_READ", "SOURCE_AND_TEST_READ",
           "SOURCE_AND_METHOD_READ", "SOURCE_AND_BENCHMARK_READ"}
