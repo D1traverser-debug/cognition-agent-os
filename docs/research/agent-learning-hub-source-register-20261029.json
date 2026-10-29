@@ -1,0 +1,994 @@
+{
+  "schema_version": 1,
+  "updated_utc": "2026-10-29",
+  "atlas": {
+    "repository": "datawhalechina/Agent-Learning-Hub",
+    "commit": "dddf777dde6788228136862f270203424a28efbc",
+    "readme_blob_sha": "987ea54da4b5f33b4af4859c919c2c3385a3cd27",
+    "README_lines": 400,
+    "url_count": 96
+  },
+  "status_definition": {
+    "DISCOVERED_NOT_DEEPLY_AUDITED": "Only first-hop README reference; not learned, evaluated or adopted",
+    "SOURCE_ROUTING_AUDITED": "Upstream pointer validated and next-level target identified; not full implementation study",
+    "SOURCE_AND_CODE_READ": "Read concrete source and technical docs; task-specific independent acceptance open",
+    "SOURCE_AND_TEST_READ": "Read concrete implementation and/or conformance tests; product adoption untested",
+    "SOURCE_AND_METHOD_READ": "Read implementation method/gate; no result-transfer proof",
+    "SOURCE_AND_BENCHMARK_READ": "Read published experimental design/results; not independently rerun"
+  },
+  "scope": "Public external methods only. No owner-private original conversations or permissions. This list is a research frontier, NOT a statement all links are mastered.",
+  "records": [
+    {
+      "url": "https://github.com/jjyaoao",
+      "label": "陈思州",
+      "section": "Maintainer",
+      "atlas_line": 9,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://www.anthropic.com/engineering/building-effective-agents",
+      "label": "Anthropic: Building effective agents",
+      "section": "Stage 0: Understand What An Agent Is",
+      "atlas_line": 39,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/",
+      "label": "OpenAI: A practical guide to building agents",
+      "section": "Stage 0: Understand What An Agent Is",
+      "atlas_line": 40,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://platform.openai.com/docs/guides/function-calling",
+      "label": "OpenAI Function Calling",
+      "section": "Stage 1: Build A Minimal Agent Loop",
+      "atlas_line": 55,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/function-calling",
+      "label": "Gemini API Function Calling",
+      "section": "Stage 1: Build A Minimal Agent Loop",
+      "atlas_line": 56,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview",
+      "label": "Claude Tool Use",
+      "section": "Stage 1: Build A Minimal Agent Loop",
+      "atlas_line": 57,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.llamaindex.ai/en/stable/use_cases/agents/",
+      "label": "LlamaIndex Agents",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 71,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.langchain.com/",
+      "label": "LangChain Docs",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 72,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://ai.google.dev/gemini-api/docs/code-execution",
+      "label": "Gemini API Code Execution",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 73,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://modelcontextprotocol.io/",
+      "label": "Model Context Protocol",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 74,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/assafelovic/gpt-researcher",
+      "label": "GPT Researcher",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 80,
+      "status": "SOURCE_AND_BENCHMARK_READ",
+      "evidence": [
+        {
+          "repo": "assafelovic/gpt-researcher",
+          "path": "docs/docs/gpt-researcher/gptr/context-filter.md",
+          "blob_sha": "d60a90ed9c4c50ae3c652370f83eceef5e880491",
+          "kind": "benchmark"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/assafelovic/gpt-researcher/tree/main/evals/context_filter"
+      ]
+    },
+    {
+      "url": "https://github.com/langchain-ai/open_deep_research",
+      "label": "Open Deep Research",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 81,
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "langchain-ai/open_deep_research",
+          "path": "src/open_deep_research/deep_researcher.py",
+          "blob_sha": "279dbffd9e49e07962fb4e1cfeff79e45adc43e9",
+          "kind": "implementation"
+        },
+        {
+          "repo": "langchain-ai/open_deep_research",
+          "path": "src/open_deep_research/state.py",
+          "blob_sha": "7578235e1369032276ef2c5ae3edf0c350ab7af8",
+          "kind": "implementation"
+        },
+        {
+          "repo": "langchain-ai/open_deep_research",
+          "path": "tests/evaluators.py",
+          "blob_sha": "e68e1c17ea43bde035fbf139e5280fc22d70c24f",
+          "kind": "tests"
+        },
+        {
+          "repo": "langchain-ai/open_deep_research",
+          "path": "tests/pairwise_evaluation.py",
+          "blob_sha": "74065057237a921bcc22638b661fe7feeaa9b500",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/langchain-ai/open_deep_research/blob/main/src/open_deep_research/deep_researcher.py"
+      ]
+    },
+    {
+      "url": "https://github.com/stanford-oval/storm",
+      "label": "STORM",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 82,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/khoj-ai/khoj",
+      "label": "Khoj",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 83,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/onyx-dot-app/onyx",
+      "label": "Onyx",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 84,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/Mintplex-Labs/anything-llm",
+      "label": "AnythingLLM",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 85,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/infiniflow/ragflow",
+      "label": "RAGFlow",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 86,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/mem0ai/mem0",
+      "label": "mem0",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 87,
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "mem0ai/mem0",
+          "path": "mem0/memory/main.py",
+          "blob_sha": "e750edbf19b4ed20b12d11118f2831ce6d700f6c",
+          "kind": "implementation"
+        },
+        {
+          "repo": "mem0ai/mem0",
+          "path": "docs/core-concepts/memory-operations/update.mdx",
+          "blob_sha": "b1e190b47b90d90c7030f22034d63b106448c53f",
+          "kind": "design"
+        },
+        {
+          "repo": "mem0ai/mem0",
+          "path": "docs/core-concepts/memory-operations/delete.mdx",
+          "blob_sha": "ddd86a8e30130f77048e477aeee4d5aca6352678",
+          "kind": "design"
+        },
+        {
+          "repo": "mem0ai/mem0",
+          "path": "docs/platform/features/memory-decay.mdx",
+          "blob_sha": "7dd03eb37275b19534ad0b7f5ebcbc5a862bce38",
+          "kind": "design"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/mem0ai/mem0/tree/main/tests"
+      ]
+    },
+    {
+      "url": "https://github.com/letta-ai/letta",
+      "label": "Letta",
+      "section": "Stage 2: Learn Tool Use, RAG, And Memory",
+      "atlas_line": 88,
+      "status": "SOURCE_ROUTING_AUDITED",
+      "evidence": [
+        {
+          "repo": "letta-ai/letta",
+          "path": "README.md",
+          "blob_sha": "9a23cb4226d462b555ae75052e32370a7d82adee",
+          "kind": "redirect_and_boundary"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/letta-ai/letta-code"
+      ]
+    },
+    {
+      "url": "https://code.claude.com/docs/en/overview",
+      "label": "Claude Code Docs",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 98,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/shareAI-lab/learn-claude-code",
+      "label": "learn-claude-code",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 99,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/shareAI-lab/claw0",
+      "label": "claw0",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 100,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/datawhalechina/hello-agents",
+      "label": "hello-agents",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 101,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/openclaw/openclaw",
+      "label": "OpenClaw",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 102,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/NousResearch/hermes-agent",
+      "label": "Hermes Agent",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 103,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/ttguy0707/CyberClaw",
+      "label": "CyberClaw",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 104,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://langchain-ai.github.io/langgraph/",
+      "label": "LangGraph",
+      "section": "Stage 3: Study One Modern Agent Harness",
+      "atlas_line": 105,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://code.claude.com/docs/en/sub-agents",
+      "label": "Claude Code Subagents",
+      "section": "Stage 4: Multi-Agent Is Coordination, Not Magic",
+      "atlas_line": 125,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://code.claude.com/docs/en/hooks",
+      "label": "Claude Code Hooks",
+      "section": "Stage 4: Multi-Agent Is Coordination, Not Magic",
+      "atlas_line": 126,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://google.github.io/adk-docs/",
+      "label": "Google Agent Development Kit",
+      "section": "Stage 4: Multi-Agent Is Coordination, Not Magic",
+      "atlas_line": 127,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://a2a-protocol.org/latest/specification/",
+      "label": "Agent2Agent Protocol",
+      "section": "Stage 4: Multi-Agent Is Coordination, Not Magic",
+      "atlas_line": 128,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://agentclientprotocol.com/",
+      "label": "Agent Client Protocol",
+      "section": "Stage 4: Multi-Agent Is Coordination, Not Magic",
+      "atlas_line": 129,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://code.claude.com/docs/en/skills",
+      "label": "Claude Code Skills",
+      "section": "Stage 5: Learn Skills, Protocols, And Capability Packaging",
+      "atlas_line": 148,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.claude.com/en/docs/agents-and-tools/agent-skills",
+      "label": "Claude Agent Skills",
+      "section": "Stage 5: Learn Skills, Protocols, And Capability Packaging",
+      "atlas_line": 149,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://code.claude.com/docs/en/agent-sdk/skills",
+      "label": "Claude Code Agent SDK Skills",
+      "section": "Stage 5: Learn Skills, Protocols, And Capability Packaging",
+      "atlas_line": 150,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/openclaw/openclaw/blob/main/docs/tools/skills.md",
+      "label": "OpenClaw Skills",
+      "section": "Stage 5: Learn Skills, Protocols, And Capability Packaging",
+      "atlas_line": 151,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/computer-use-tool",
+      "label": "Claude Computer Use",
+      "section": "Stage 6: Browser And Computer-Use Agents",
+      "atlas_line": 168,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/browser-use/browser-use",
+      "label": "browser-use",
+      "section": "Stage 6: Browser And Computer-Use Agents",
+      "atlas_line": 169,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2307.13854",
+      "label": "WebArena",
+      "section": "Stage 6: Browser And Computer-Use Agents",
+      "atlas_line": 170,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2401.13649",
+      "label": "VisualWebArena",
+      "section": "Stage 6: Browser And Computer-Use Agents",
+      "atlas_line": 171,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://platform.openai.com/docs/guides/evals",
+      "label": "OpenAI Evals",
+      "section": "Stage 7: Evaluation, Observability, And Safety",
+      "atlas_line": 186,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://openai.com/agent-platform/",
+      "label": "OpenAI Agent platform",
+      "section": "Stage 7: Evaluation, Observability, And Safety",
+      "atlas_line": 187,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.smith.langchain.com/",
+      "label": "LangSmith",
+      "section": "Stage 7: Evaluation, Observability, And Safety",
+      "atlas_line": 188,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2308.03688",
+      "label": "AgentBench",
+      "section": "Stage 7: Evaluation, Observability, And Safety",
+      "atlas_line": 189,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2310.06770",
+      "label": "SWE-bench",
+      "section": "Stage 7: Evaluation, Observability, And Safety",
+      "atlas_line": 190,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.claude.com/en/docs/claude-code/github-actions",
+      "label": "Claude Code GitHub Actions",
+      "section": "Official Guides And Blogs",
+      "atlas_line": 230,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://resources.anthropic.com/hubfs/Claude%20Code%20Advanced%20Patterns_%20Subagents%2C%20MCP%2C%20and%20Scaling%20to%20Real%20Codebases.pdf",
+      "label": "Claude Code Advanced Patterns",
+      "section": "Official Guides And Blogs",
+      "atlas_line": 231,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://openai.com/index/new-tools-for-building-agents/",
+      "label": "OpenAI: New tools for building agents",
+      "section": "Official Guides And Blogs",
+      "atlas_line": 233,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://platform.openai.com/docs/guides/agents-sdk/",
+      "label": "OpenAI Agents SDK",
+      "section": "Official Guides And Blogs",
+      "atlas_line": 234,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/openai/codex",
+      "label": "OpenAI Codex",
+      "section": "Project Map",
+      "atlas_line": 250,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/opencode-ai/opencode",
+      "label": "OpenCode",
+      "section": "Project Map",
+      "atlas_line": 250,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/All-Hands-AI/OpenHands",
+      "label": "OpenHands",
+      "section": "Project Map",
+      "atlas_line": 250,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/SWE-agent/SWE-agent",
+      "label": "SWE-agent",
+      "section": "Project Map",
+      "atlas_line": 250,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/earendil-works/pi",
+      "label": "pi",
+      "section": "Project Map",
+      "atlas_line": 250,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/bytedance/deer-flow",
+      "label": "DeerFlow",
+      "section": "Project Map",
+      "atlas_line": 251,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.llamaindex.ai/",
+      "label": "LlamaIndex",
+      "section": "Project Map",
+      "atlas_line": 252,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/NirDiamant/GenAI_Agents",
+      "label": "GenAI_Agents",
+      "section": "Project Map",
+      "atlas_line": 253,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/huggingface/smolagents",
+      "label": "smolagents",
+      "section": "Project Map",
+      "atlas_line": 253,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/NirDiamant/agents-towards-production",
+      "label": "agents-towards-production",
+      "section": "Project Map",
+      "atlas_line": 253,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/bytedance/UI-TARS-desktop",
+      "label": "UI-TARS-desktop",
+      "section": "Project Map",
+      "atlas_line": 254,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/modelcontextprotocol/servers",
+      "label": "官方 MCP Servers 合集",
+      "section": "Skills, Protocols, And Tooling",
+      "atlas_line": 261,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2603.15401",
+      "label": "SWE-Skills-Bench",
+      "section": "Skills, Protocols, And Tooling",
+      "atlas_line": 264,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2602.08004",
+      "label": "Agent Skills analysis",
+      "section": "Skills, Protocols, And Tooling",
+      "atlas_line": 264,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/microsoft/SkillOpt",
+      "label": "SkillOpt",
+      "section": "Skills, Protocols, And Tooling",
+      "atlas_line": 264,
+      "status": "SOURCE_AND_METHOD_READ",
+      "evidence": [
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "docs/guide/training-loop.md",
+          "blob_sha": "3ba0d524d36a5dc4774f918931d22732670e4006",
+          "kind": "design"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "plugins/codex/skills/skillopt-sleep/SKILL.md",
+          "blob_sha": "ac4a2bccfc0c9fb4fafd8f524b677f680a43b94b",
+          "kind": "method"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/microsoft/SkillOpt/blob/main/skillopt/engine/trainer.py"
+      ]
+    },
+    {
+      "url": "https://github.com/QwenLM/Qwen-Agent",
+      "label": "Qwen-Agent",
+      "section": "Modern Agent Systems",
+      "atlas_line": 280,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://pydantic.dev/docs/ai/core-concepts/agent/",
+      "label": "Pydantic AI",
+      "section": "Modern Agent Systems",
+      "atlas_line": 281,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://docs.crewai.com/",
+      "label": "CrewAI",
+      "section": "Legacy Or Optional Frameworks",
+      "atlas_line": 290,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://microsoft.github.io/autogen/",
+      "label": "AutoGen",
+      "section": "Legacy Or Optional Frameworks",
+      "atlas_line": 291,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2210.03629",
+      "label": "ReAct",
+      "section": "Papers",
+      "atlas_line": 298,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2302.04761",
+      "label": "Toolformer",
+      "section": "Papers",
+      "atlas_line": 299,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2303.11366",
+      "label": "Reflexion",
+      "section": "Papers",
+      "atlas_line": 300,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2304.03442",
+      "label": "Generative Agents",
+      "section": "Papers",
+      "atlas_line": 301,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2305.16291",
+      "label": "Voyager",
+      "section": "Papers",
+      "atlas_line": 302,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2308.08155",
+      "label": "AutoGen",
+      "section": "Papers",
+      "atlas_line": 303,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2311.12983",
+      "label": "GAIA",
+      "section": "Papers",
+      "atlas_line": 307,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2404.07972",
+      "label": "OSWorld",
+      "section": "Papers",
+      "atlas_line": 308,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2406.12045",
+      "label": "τ-bench",
+      "section": "Papers",
+      "atlas_line": 309,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2405.15793",
+      "label": "SWE-agent",
+      "section": "Papers",
+      "atlas_line": 310,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2604.14228",
+      "label": "Dive into Claude Code",
+      "section": "Papers",
+      "atlas_line": 311,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2605.13357",
+      "label": "AI Harness Engineering",
+      "section": "Papers",
+      "atlas_line": 312,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2602.14690",
+      "label": "Configuring Agentic AI Coding Tools",
+      "section": "Papers",
+      "atlas_line": 313,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2604.04759",
+      "label": "Your Agent, Their Asset",
+      "section": "Papers",
+      "atlas_line": 314,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/Aider-AI/aider",
+      "label": "Aider-AI/aider",
+      "section": "GitHub Repositories",
+      "atlas_line": 332,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/block/goose",
+      "label": "block/goose",
+      "section": "GitHub Repositories",
+      "atlas_line": 333,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/langchain-ai/langgraph",
+      "label": "langchain-ai/langgraph",
+      "section": "GitHub Repositories",
+      "atlas_line": 334,
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_prune.py",
+          "blob_sha": "a1d34f90ddc15760578bdc1013b84775bb446835",
+          "kind": "tests"
+        },
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_copy_thread.py",
+          "blob_sha": "04e3984aeceaf136a7d9c222970d02387a8e57c2",
+          "kind": "tests"
+        },
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/checkpoint-sqlite/README.md",
+          "blob_sha": "1064934f29da793430b7c2d111a5215c810dd3d3",
+          "kind": "docs"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-conformance"
+      ]
+    },
+    {
+      "url": "https://github.com/openai/openai-agents-python",
+      "label": "openai/openai-agents-python",
+      "section": "GitHub Repositories",
+      "atlas_line": 335,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/microsoft/ai-agents-for-beginners",
+      "label": "microsoft/ai-agents-for-beginners",
+      "section": "GitHub Repositories",
+      "atlas_line": 341,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/jjyaoao/HelloAgents",
+      "label": "jjyaoao/HelloAgents",
+      "section": "GitHub Repositories",
+      "atlas_line": 342,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://lilianweng.github.io/posts/2023-06-23-agent/",
+      "label": "Lilian Weng: LLM Powered Autonomous Agents",
+      "section": "Thoughtful Blogs",
+      "atlas_line": 349,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://simonwillison.net/tags/llms/",
+      "label": "Simon Willison: AI/LLM writing",
+      "section": "Thoughtful Blogs",
+      "atlas_line": 350,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://blog.langchain.com/",
+      "label": "LangChain Blog",
+      "section": "Thoughtful Blogs",
+      "atlas_line": 351,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://developers.googleblog.com/agent-development-kit-easy-to-build-multi-agent-applications/",
+      "label": "Google Developers Blog: ADK",
+      "section": "Thoughtful Blogs",
+      "atlas_line": 352,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://code.claude.com/docs/en/tutorials",
+      "label": "Claude Code Common Workflows",
+      "section": "Claude Code Study Path",
+      "atlas_line": 365,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://claudecoding.dev/",
+      "label": "Claude Code 源码解析",
+      "section": "Claude Code Study Path",
+      "atlas_line": 368,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://code.claudecn.com/",
+      "label": "Claude Code 源码分析地图",
+      "section": "Claude Code Study Path",
+      "atlas_line": 369,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://arxiv.org/abs/2604.17460",
+      "label": "Agentic Education",
+      "section": "Claude Code Study Path",
+      "atlas_line": 371,
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    }
+  ]
+}
