@@ -747,19 +747,32 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                     checkpoint_version=row["checkpoint_version"],
                     authority_current=False)
             if spec["source"] is not None:
+                # The *source freshness* and *owner original* are different
+                # invariants. A failed remote HEAD comparison revokes runnable
+                # continuation, not the verified immutable owner wording.
+                blocked_original = {
+                    "goal_id": row["goal_id"],
+                    "objective": spec["objective"],
+                    "acceptance": spec["acceptance"],
+                    "constraints": spec["constraints"],
+                    "contract_sha256": row["contract_sha256"],
+                    "checkpoint_version": row["checkpoint_version"],
+                    "authority_current": True,
+                }
                 src = spec["source"]
                 resolver = resolve_head or _public_branch_head
                 try:
                     observed = resolver(src["repo"], src["branch"])
                     if not isinstance(observed, str) or not _SHA.fullmatch(observed):
                         return _no_action("SOURCE_UNAVAILABLE",
-                                          goal_id=row["goal_id"])
+                                          **blocked_original)
                 except Exception:
                     return _no_action("SOURCE_UNAVAILABLE",
-                                      goal_id=row["goal_id"])
+                                      **blocked_original)
                 if observed != src["head_sha"]:
                     return _no_action(
-                        "SOURCE_REVALIDATION_REQUIRED", goal_id=row["goal_id"],
+                        "SOURCE_REVALIDATION_REQUIRED",
+                        **blocked_original,
                         pinned_head_sha=src["head_sha"],
                         observed_head_sha=observed)
             state = task["state"]
