@@ -345,9 +345,30 @@
       "label": "Hermes Agent",
       "section": "Stage 3: Study One Modern Agent Harness",
       "atlas_line": 103,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
-      "nested_leads": []
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "NousResearch/hermes-agent",
+          "path": "hermes_state_search.py",
+          "blob_sha": "e459688104053d82c65e789db81744d7fde12b5f",
+          "kind": "implementation"
+        },
+        {
+          "repo": "NousResearch/hermes-agent",
+          "path": "tests/hermes_state/test_hermes_state.py",
+          "blob_sha": "7513a7a64cf57a62c2a4d41b5b707632edae1bf3",
+          "kind": "tests"
+        },
+        {
+          "repo": "NousResearch/hermes-agent",
+          "path": "website/docs/user-guide/features/memory.md",
+          "blob_sha": "3bde00ee5eeebdf1a6aa8133d9e82c7d9c69cf79",
+          "kind": "design"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/NousResearch/hermes-agent/blob/main/hermes_state_search.py"
+      ]
     },
     {
       "url": "https://github.com/ttguy0707/CyberClaw",
@@ -1173,6 +1194,36 @@
           "path": "codex-rs/ext/goal/src/spec.rs",
           "blob_sha": "6d1d7a9230083a554bda372341337108a546c90a",
           "kind": "implementation"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/NousResearch/hermes-agent/blob/main/hermes_state_search.py",
+      "label": "Hermes exact transcript recovery and CJK search",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "NousResearch/hermes-agent",
+          "path": "hermes_state_search.py",
+          "blob_sha": "e459688104053d82c65e789db81744d7fde12b5f",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/NousResearch/hermes-agent/blob/main/tests/hermes_state/test_hermes_state.py"
+      ]
+    },
+    {
+      "url": "https://github.com/NousResearch/hermes-agent/blob/main/tests/hermes_state/test_hermes_state.py",
+      "label": "Hermes FTS and crashed index repair regressions",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "NousResearch/hermes-agent",
+          "path": "tests/hermes_state/test_hermes_state.py",
+          "blob_sha": "7513a7a64cf57a62c2a4d41b5b707632edae1bf3",
+          "kind": "tests"
         }
       ],
       "nested_leads": []
