@@ -630,9 +630,30 @@
       "label": "OpenHands",
       "section": "Project Map",
       "atlas_line": 250,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
-      "nested_leads": []
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "OpenHands/OpenHands",
+          "path": "README.md",
+          "blob_sha": "d2c59eb5c77b9afed050b5a2e28b79317f7fab18",
+          "kind": "redirect_and_boundary"
+        },
+        {
+          "repo": "OpenHands/software-agent-sdk",
+          "path": "openhands-sdk/openhands/sdk/conversation/stuck_detector.py",
+          "blob_sha": "3d685e4c9358a34f59aa3f44db2bc84daf6744fd",
+          "kind": "implementation"
+        },
+        {
+          "repo": "OpenHands/software-agent-sdk",
+          "path": "tests/cross/test_stuck_detector.py",
+          "blob_sha": "ef2510d57484788d79c08b1d8619506a46763974",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/OpenHands/software-agent-sdk/blob/main/openhands-sdk/openhands/sdk/conversation/stuck_detector.py"
+      ]
     },
     {
       "url": "https://github.com/SWE-agent/SWE-agent",
@@ -1223,6 +1244,36 @@
           "repo": "NousResearch/hermes-agent",
           "path": "tests/hermes_state/test_hermes_state.py",
           "blob_sha": "7513a7a64cf57a62c2a4d41b5b707632edae1bf3",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/OpenHands/software-agent-sdk/blob/main/openhands-sdk/openhands/sdk/conversation/stuck_detector.py",
+      "label": "OpenHands agent loop stuck detection implementation",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "OpenHands/software-agent-sdk",
+          "path": "openhands-sdk/openhands/sdk/conversation/stuck_detector.py",
+          "blob_sha": "3d685e4c9358a34f59aa3f44db2bc84daf6744fd",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/OpenHands/software-agent-sdk/blob/main/tests/cross/test_stuck_detector.py"
+      ]
+    },
+    {
+      "url": "https://github.com/OpenHands/software-agent-sdk/blob/main/tests/cross/test_stuck_detector.py",
+      "label": "OpenHands bounded stuck-detector regressions",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "OpenHands/software-agent-sdk",
+          "path": "tests/cross/test_stuck_detector.py",
+          "blob_sha": "ef2510d57484788d79c08b1d8619506a46763974",
           "kind": "tests"
         }
       ],
