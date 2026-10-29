@@ -382,12 +382,15 @@ def _readback_ambiguous(expected_digest: str) -> dict:
             "readback": state, "scheduling_or_effects_performed": False}
 
 
-def main() -> int:
-    if len(sys.argv) > 1:
-        if len(sys.argv) == 4 and sys.argv[1] == "--readback-original":
-            result = _readback_original(sys.argv[2], sys.argv[3])
-        elif len(sys.argv) == 3 and sys.argv[1] == "--readback-ambiguous":
-            result = _readback_ambiguous(sys.argv[2])
+def main(argv: tuple[str, ...] = ()) -> int:
+    # Explicit argv decouples the callable hook from embedding processes
+    # (unittest/pytest/Codex hosts may have unrelated sys.argv flags).
+    # The executable script still receives its real CLI argv at __main__.
+    if argv:
+        if len(argv) == 3 and argv[0] == "--readback-original":
+            result = _readback_original(argv[1], argv[2])
+        elif len(argv) == 2 and argv[0] == "--readback-ambiguous":
+            result = _readback_ambiguous(argv[1])
         else:
             print(json.dumps({"status": "INVALID_ORIGINAL_READBACK_ARGUMENTS",
                               "original_goal_verified": False}))
@@ -421,4 +424,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(tuple(sys.argv[1:])))
