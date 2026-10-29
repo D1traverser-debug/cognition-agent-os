@@ -296,6 +296,10 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
                 context.pop("original_goal", None)
                 context["original_goal_omitted_from_hook"] = True
                 context["original_goal_available_via_readback"] = True
+        if not include_full_original:
+            # Do not rely on a valid locator for confidentiality: an invalid
+            # registration may still return original words in a partial state.
+            context.pop("original_goal", None)
         if not include_full_original and isinstance(
                 context.get("native_decision_state"), dict):
             # Native audit contains raw original_goal and private research
