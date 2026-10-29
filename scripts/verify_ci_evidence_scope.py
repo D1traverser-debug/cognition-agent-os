@@ -134,11 +134,11 @@ def _native_job_models(workflow: str) -> tuple[str, ...]:
     if not isinstance(workflow, str):
         raise ValueError("NATIVE_EXPERIMENT_WORKFLOW_INVALID")
     try:
-        section = workflow.split("  experimental_real_native_cognition:\\n", 1)[1].split(
-            "\\n  experimental_live_open_goal_method:", 1)[0]
+        section = workflow.split("  experimental_real_native_cognition:\n", 1)[1].split(
+            "\n  experimental_live_open_goal_method:", 1)[0]
     except IndexError as exc:
         raise ValueError("NATIVE_EXPERIMENT_WORKFLOW_INVALID") from exc
-    models = tuple(re.findall(r"(?m)^\\s+- model: ['\\\"]([^'\\\"]+)['\\\"]\\s*$", section))
+    models = tuple(re.findall(r"(?m)^\s+- model: ['\"]([^'\"]+)['\"]\s*$", section))
     if not models or len(models) != len(set(models)):
         raise ValueError("NATIVE_EXPERIMENT_MODEL_LIST_INVALID")
     return models
