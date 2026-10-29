@@ -62,7 +62,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
             self.assertIn("2026-10-29", body)
             self.assertTrue(("Host" in body or "SQLite" in body))
         self.assertIn("INTERACTIVE PHASE acceptance", gate)
-        self.assertIn("owner-woken", skill)
+        self.assertIn("each owner message can resume work", skill)
         self.assertIn("U. Owner-woken continuation", probes)
         self.assertIn("V. Oversized multi-session objective", probes)
         self.assertIn("NOT_TESTED", probes)

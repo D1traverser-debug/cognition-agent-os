@@ -4,23 +4,13 @@
 
 Historical pre-compaction text is preserved at `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for evidence only. Private user conversations must remain private.
 
-## Owner-activated continuity contract — corrected 2026-10-29
+## Owner-activated continuity — 2026-10-29
 
-Current explicit owner correction: "持续" is **owner-woken ChatGPT conversation
-continuity**, not self-starting background execution. Each wake (including a
-new chat) must recover the same full objective, previous corrections, state,
-failed approaches and remaining obligations; independently select and execute
-available legal next work, read back actual effects, and resume any unfinished
-part on a later user turn. A Host/SQLite-to-ChatGPT bridge, independent Codex
-Goal, cron, Work mode and permanent runtime are optional future branches, NOT
-requirements to complete this interactive objective. Do not infer the owner has
-authorized separate deployment or real business side effects. Keep the
-original goal intact even when a response is interrupted; do not claim any
-work ran between messages.
-
-Current exact status remains resolved exclusively from live repositories,
-actual connected tools, owner private evidence and observed readbacks. This
-bounded pointer is not an extra state ledger.
+Each owner-woken chat (including new chats) resumes the full original goal,
+corrections and lawful unfinished work with real independent readback.
+No always-on Host, SQLite, Codex Goal, Work mode or cron is a current
+prerequisite; the private original owner contract governs. No background
+progress can be inferred from this dated index.
 
 ## Stable owner objective
 
@@ -49,7 +39,7 @@ For interruptions, context limits or a new `继续/继承`: rerun this recovery 
 
 ## Current unresolved product gates
 
-**NOT_READY.** Before release claims, independently demonstrate at minimum: high-capability ChatGPT/Codex solving an uncurated professional owner goal via autonomous research/comparison/tool use; real full-result verification and method change after failure; low owner correction burden; reliable opt-in Skill activation/version evidence; intended ChatGPT/Codex <-> durable Host continuity; child-native business acceptance without authority takeover; and measured simplification/removal of redundant runtime paths.
+**NOT_READY.** Before release claims, independently demonstrate at minimum: high-capability ChatGPT/Codex solving an uncurated professional owner goal via autonomous research/comparison/tool use; real full-result verification and method change after failure; low owner correction burden; reliable opt-in Skill activation/version evidence; real new ChatGPT-session owner-woken continuity; child-native business acceptance without authority takeover; and measured simplification/removal of redundant runtime paths.
 
 No main merge, production deployment, metered inference, child production mutation or new permission is implied by this file.
 

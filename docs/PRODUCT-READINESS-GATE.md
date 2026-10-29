@@ -1,6 +1,6 @@
 # One cognition-agent-os product acceptance — engineering checkpoint 2026-10-25
 
-**Current disposition: INTERACTIVE_PHASE_OPEN; unattended autonomous operation is DEFERRED, not required.** The six legacy long-term deployment/product gates below remain OPEN, but are NOT the interactive-phase completion contract. No stage name, model response, PR, agent
+**Current disposition: NOT_READY (interactive phase OPEN; unattended operation OPTIONAL).** The six long-term deployment/product gates below remain OPEN, but are NOT the interactive-phase completion contract. No stage name, model response, PR, agent
 count, document, passing CI, registered local capability or hash can close a
 gate without the corresponding independent owner-outcome evidence.
 
