@@ -1142,7 +1142,10 @@
           "kind": "tests"
         }
       ],
-      "nested_leads": []
+      "nested_leads": [
+        "https://github.com/letta-ai/letta-code/blob/main/src/skills/builtin/context-doctor/SKILL.md",
+        "https://github.com/letta-ai/letta-code/blob/main/src/cli/helpers/doctor-command.ts"
+      ]
     },
     {
       "url": "https://github.com/openclaw/openclaw/tree/main/extensions/knowledge",
@@ -1275,6 +1278,50 @@
           "path": "tests/cross/test_stuck_detector.py",
           "blob_sha": "ef2510d57484788d79c08b1d8619506a46763974",
           "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/letta-ai/letta-code/blob/main/src/skills/builtin/context-doctor/SKILL.md",
+      "label": "Letta context doctor: symptom-led source and context audit",
+      "status": "SOURCE_AND_METHOD_READ",
+      "evidence": [
+        {
+          "repo": "letta-ai/letta-code",
+          "path": "src/skills/builtin/context-doctor/SKILL.md",
+          "blob_sha": "30980fffcf03ecbf9277f8ad1c2009894fc78943",
+          "kind": "method"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/letta-ai/letta-code/blob/main/src/skills/builtin/context-doctor/references/auditing-memory.md"
+      ]
+    },
+    {
+      "url": "https://github.com/letta-ai/letta-code/blob/main/src/skills/builtin/context-doctor/references/auditing-memory.md",
+      "label": "Letta context doctor: link, stale placement and token budget checks",
+      "status": "SOURCE_AND_METHOD_READ",
+      "evidence": [
+        {
+          "repo": "letta-ai/letta-code",
+          "path": "src/skills/builtin/context-doctor/references/auditing-memory.md",
+          "blob_sha": "c2e66995ce05003e9bccb0c0087a35d06f10d597",
+          "kind": "method"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/letta-ai/letta-code/blob/main/src/cli/helpers/doctor-command.ts",
+      "label": "Letta native /doctor actual Skill-invoking command",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "letta-ai/letta-code",
+          "path": "src/cli/helpers/doctor-command.ts",
+          "blob_sha": "8050525d3203330159c51e898a79ed69c1e65bfb",
+          "kind": "implementation"
         }
       ],
       "nested_leads": []

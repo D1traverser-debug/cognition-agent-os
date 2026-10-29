@@ -41,6 +41,21 @@ class ResearchAtlasGuardTests(unittest.TestCase):
             for lead in record["nested_leads"]:
                 self.assertIn(lead, {r["url"] for r in self.data["nested_records"]})
 
+    def test_context_doctor_primary_source_depth_and_discovery_boundary(self):
+        """Study-status integrity, never a claimed live client launch."""
+        doctor = next(x for x in self.data["nested_records"]
+                      if x["url"].endswith("/context-doctor/SKILL.md"))
+        self.assertEqual(doctor["status"], "SOURCE_AND_METHOD_READ")
+        self.assertEqual(doctor["evidence"][0]["blob_sha"],
+                         "30980fffcf03ecbf9277f8ad1c2009894fc78943")
+        audit = next(x for x in self.data["nested_records"]
+                     if x["url"].endswith("/context-doctor/references/auditing-memory.md"))
+        self.assertIn(audit["url"], doctor["nested_leads"])
+        self.assertIn("link alone", self.cards)
+        self.assertIn("new-chat behavior is **not verified**", self.cards)
+        self.assertFalse(mod.validate(self.data, cards=self.cards)
+                         ["native_skill_trigger_or_user_outcome_tested"])
+
     def test_nested_link_without_status_record_is_rejected(self):
         fake = copy.deepcopy(self.data)
         fake["records"][0]["nested_leads"].append("https://example.org/deeper")
