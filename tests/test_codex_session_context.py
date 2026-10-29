@@ -642,6 +642,33 @@ class CodexSessionContext(unittest.TestCase):
             {"root_task_id": other, "original_goal": third}])
         self.assertNotIn("next_task_id", recovered["readback"])
 
+    def test_remote_source_unavailable_preserves_full_contract_but_no_action(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        owner = self._registered_contract(task, "remote-pinned-owner")
+        owner["source"] = {
+            "repo": "example/reference",
+            "branch": "main",
+            "head_sha": "a" * 40,
+        }
+        register_goal(self.db, owner)
+        hook = self._run()
+        # The startup hook deliberately has no live GitHub attestation.
+        self.assertEqual(hook["status"], "SOURCE_REVALIDATION_REQUIRED", hook)
+        self.assertNotIn(owner["objective"], json.dumps(hook))
+        self.assertNotIn(owner["acceptance"], json.dumps(hook))
+        self.assertNotIn("next_task_id", hook)
+        recovered = self._readback_state(
+            hook["continuity_state_readback"]["arguments"])
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(recovered["readback"]["objective"], owner["objective"])
+        self.assertEqual(recovered["readback"]["acceptance"], owner["acceptance"])
+        self.assertEqual(recovered["readback"]["constraints"], owner["constraints"])
+        self.assertEqual(recovered["readback"]["status"],
+                         "SOURCE_REVALIDATION_REQUIRED")
+        self.assertNotIn("next_task_id", recovered["readback"])
+        self.assertFalse(recovered["scheduling_or_effects_performed"])
+
     def test_mixed_goal_readback_rejects_stale_source_and_preserves_revoke(self):
         with closing(connect(self.db)) as db:
             task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
