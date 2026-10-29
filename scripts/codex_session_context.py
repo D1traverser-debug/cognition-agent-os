@@ -201,7 +201,7 @@ def _project_recovery_when_no_ledger() -> dict:
     }
 
 
-def build_context(payload: dict) -> dict:
+def build_context(payload: dict, *, include_full_original: bool = False) -> dict:
     cwd_value = payload.get("cwd")
     if not isinstance(cwd_value, str) or not cwd_value.strip():
         return {"status": "INVALID_HOOK_WORKSPACE"}
@@ -289,6 +289,17 @@ def build_context(payload: dict) -> dict:
                               context["original_contract_sha256"]],
                 "source_role": "READ_ONLY_EXISTING_SQLITE_GOAL",
             }
+            if not include_full_original:
+                # Don't put private owner text in native Codex spill temp files.
+                # The real text remains in the SAME verified SQLite task.
+                context.pop("original_goal", None)
+                context["original_goal_omitted_from_hook"] = True
+                context["original_goal_available_via_readback"] = True
+        if not include_full_original and "original_goals" in context:
+            # Ambiguous roots need selection; don't leak all private originals
+            # into a startup hook merely because their identities are listed.
+            context["ambiguous_goal_count"] = len(context["original_goals"])
+            context.pop("original_goals", None)
     except (ImportError, OSError, ValueError, TypeError) as exc:
         context["status"] = "DURABLE_CONTEXT_UNAVAILABLE"
         context["readback_error_class"] = type(exc).__name__
@@ -301,7 +312,7 @@ def _readback_original(root_id: str, expected_digest: str) -> dict:
         or not re.fullmatch(r"[0-9a-f]{64}", expected_digest)):
         return {"status": "INVALID_ORIGINAL_READBACK_IDENTITY",
                 "original_goal_verified": False}
-    state = build_context({"cwd": str(ROOT)})
+    state = build_context({"cwd": str(ROOT)}, include_full_original=True)
     if (state.get("root_task_id") != root_id
         or state.get("original_contract_sha256") != expected_digest
         or state.get("original_goal_verified") is not True):
