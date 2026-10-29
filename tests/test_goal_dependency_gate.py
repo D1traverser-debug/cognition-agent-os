@@ -82,6 +82,44 @@ class OrderedEvidenceGateTests(unittest.TestCase):
         self.assertEqual(self.get(second)["error_code"],
                          "CONFORMANCE_DEPENDENCY_PREDECESSOR_INVALIDATED")
 
+    def test_revoking_one_source_invalidates_all_previously_admitted_fanout(self):
+        """Current legal one-to-many edges; do not infer from task parentage."""
+        from cognition_agent_os.conformance import inspect_conformance
+        first,second=self.tasks()
+        with closing(connect(self.db)) as db:
+            third=create_task(db,{"kind":"goal_case","goal_type":"json_keys",
+                "input":"config.json","desired":{"third":"draft"}})
+        register_local_dependency(self.db,first,second)
+        register_local_dependency(self.db,first,third)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=3)
+        self.assertEqual(self.get(second)["state"],"NEEDS_REVIEW")
+        self.assertEqual(self.get(third)["state"],"NEEDS_REVIEW")
+        with closing(connect(self.db)) as db:
+            unrelated=create_task(db,{"kind":"fixture","old":"config.json",
+                                      "new":"config.json"})
+            db.execute("UPDATE tasks SET state='UNKNOWN',error_code='UPSTREAM_REVOKED' "
+                       "WHERE task_id=?",(first,))
+            db.commit()
+        report=inspect_conformance(self.db,self.workspace,self.fixtures,enforce=True)
+        findings={x["task_id"]:x for x in report["findings"]}
+        for dependent in (second,third):
+            self.assertEqual(findings[dependent]["proof"],
+                             "DEPENDENCY_PREDECESSOR_INVALIDATED")
+            self.assertEqual(self.get(dependent)["state"],"UNKNOWN")
+        self.assertEqual(self.get(unrelated)["state"],"PENDING")
+
+    def test_multihop_evidence_registration_is_explicitly_unsupported(self):
+        """No invented general recursive DAG from a single-edge contract."""
+        first,second=self.tasks()
+        with closing(connect(self.db)) as db:
+            third=create_task(db,{"kind":"goal_case","goal_type":"json_keys",
+                "input":"config.json","desired":{"third":"draft"}})
+        register_local_dependency(self.db,first,second)
+        with self.assertRaisesRegex(ValueError,"DUPLICATE_OR_CYCLIC_EDGE"):
+            register_local_dependency(self.db,second,third)
+        self.assertEqual(self.get(third)["state"],"PENDING")
+
     def test_unavailable_predecessor_source_does_not_forge_contradiction(self):
         """An outage is UNKNOWN, not automatically a confirmed false result."""
         from cognition_agent_os.conformance import inspect_conformance
