@@ -114,7 +114,7 @@ def _current_architecture_pivot() -> dict:
     return {
         "status": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
         "source_path": relative,
-        "proposed_first_action": candidate[:130] + ("…" if len(candidate) > 130 else ""),
+        "proposed_first_action": candidate,
     }
 
 
@@ -185,7 +185,7 @@ def _project_recovery_when_no_ledger() -> dict:
         "status": "PROJECT_GUIDANCE_FOUND",
         "source_path": relative,
         "source_role": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
-        "near_term_priority": priority[:60] + ("…" if len(priority) > 60 else ""),
+        "near_term_priority": priority,
         "continuation_index": "SESSION_HANDOFF.md",
         "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
         "complete_work_log_location": "LIVE_GIT_PROVENANCE_ON_DEMAND",

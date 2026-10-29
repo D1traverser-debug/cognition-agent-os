@@ -314,6 +314,8 @@ class CodexSessionContext(unittest.TestCase):
                          "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
         self.assertIn("opt-in interactive cognition workflow",
                       project["near_term_priority"])
+        self.assertIn("not hypothetical blanket ChatGPT interception",
+                      project["near_term_priority"])
         self.assertEqual(project["original_user_utterances"],
                          "MUST_RECOVER_SEPARATELY")
         self.assertEqual(project["continuation_index"], "SESSION_HANDOFF.md")
@@ -341,6 +343,7 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("ChatGPT/Codex",
                       architecture["proposed_first_action"])
         self.assertIn("挑战", architecture["proposed_first_action"])
+        self.assertIn("适应性减轻流程", architecture["proposed_first_action"])
         self.assertGreater(self.last_context_chars, 100,
                            "Native client owns the token overflow; hook must remain valid")
         topology = project["live_python_topology"]
