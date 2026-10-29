@@ -6,6 +6,7 @@ Does not pretend that source or CI proves a user's business result.
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 
 CORE = (
@@ -90,6 +91,11 @@ _NATIVE_RETEST = {
     "[native-retest:new-owner-cases]": (
         "scripts/measure_real_native_goal.py",
     ),
+    # Re-test a materially different inference-capacity hypothesis, not the
+    # same failed 0.5/1.5B baseline with a new note or code formatting.
+    "[native-retest:model-capacity]": (
+        ".github/workflows/ci.yml",
+    ),
 }
 
 
@@ -123,6 +129,21 @@ def _native_cases(source: str) -> list:
     return cases
 
 
+def _native_job_models(workflow: str) -> tuple[str, ...]:
+    """Actual installed model names from ONLY the native comparison job."""
+    if not isinstance(workflow, str):
+        raise ValueError("NATIVE_EXPERIMENT_WORKFLOW_INVALID")
+    try:
+        section = workflow.split("  experimental_real_native_cognition:\\n", 1)[1].split(
+            "\\n  experimental_live_open_goal_method:", 1)[0]
+    except IndexError as exc:
+        raise ValueError("NATIVE_EXPERIMENT_WORKFLOW_INVALID") from exc
+    models = tuple(re.findall(r"(?m)^\\s+- model: ['\\\"]([^'\\\"]+)['\\\"]\\s*$", section))
+    if not models or len(models) != len(set(models)):
+        raise ValueError("NATIVE_EXPERIMENT_MODEL_LIST_INVALID")
+    return models
+
+
 def native_experiment_admission(body: str, read_revision):
     """Actual pre-action gate for optional REAL model inference.
 
@@ -151,7 +172,17 @@ def native_experiment_admission(body: str, read_revision):
             just_before = just_before.decode("utf-8")
         if isinstance(current, bytes):
             current = current.decode("utf-8")
-        if reason == "[native-retest:new-owner-cases]":
+        if reason == "[native-retest:model-capacity]":
+            # Changing only experiment labels/docs cannot rerun inference.
+            # The fresh commit must actually replace the model matrix with
+            # ONE tested larger, locally runnable weight variant.
+            previous_models = _native_job_models(previous)
+            earlier_models = _native_job_models(just_before)
+            current_models = _native_job_models(current)
+            new_capacity = current_models == ("qwen2.5-coder:7b",)
+            distinct_past = new_capacity and previous_models != current_models
+            distinct_now = new_capacity and earlier_models != current_models
+        elif reason == "[native-retest:new-owner-cases]":
             # Reusing an already accepted experiment delta on a later
             # unrelated commit must not buy an unlimited retry budget.
             distinct_past = _native_cases(previous) != _native_cases(current)
