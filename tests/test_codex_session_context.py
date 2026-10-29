@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from cognition_agent_os.host import run_tick
+from cognition_agent_os.continuity import register_goal
 from cognition_agent_os.ledger import alter_authority, connect, create_task, initialize
 from cognition_agent_os.native_decision import register_native_goal
 
@@ -549,6 +550,111 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(revoked["status"], "ORIGINAL_READBACK_IDENTITY_MATCHED")
         self.assertEqual(revoked["readback"]["status"], "AUTHORITY_REVOKED")
         self.assertIs(revoked["readback"]["authority_current"], False)
+        self.assertNotIn("next_task_id", revoked["readback"])
+        self.assertFalse(revoked["scheduling_or_effects_performed"])
+
+
+    def _readback_state(self, locator):
+        environ = dict(os.environ)
+        environ.update({
+            "COGNITION_AGENT_OS_DB": str(self.db),
+            "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+            "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures),
+        })
+        proc = subprocess.run(
+            [sys.executable, str(HOOK), *locator],
+            cwd=ROOT, env=environ, capture_output=True,
+            text=True, timeout=8)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout)
+
+    def _registered_contract(self, task, goal_id="independent-original"):
+        return {
+            "goal_id": goal_id,
+            "objective": "Preserve all expert obligations and direct corrections.",
+            "acceptance": "Independently verify every owner postcondition.",
+            "constraints": ["Do not pay", "Do not merge main", "Never overwrite child state"],
+            "next_task_id": task,
+            "source": None,
+        }
+
+    def test_registered_continuity_recovers_full_original_without_hook_disclosure(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        contract = self._registered_contract(task)
+        register_goal(self.db, contract)
+        hook = self._run()
+        self.assertEqual(hook["status"], "READY_TO_TICK", hook)
+        self.assertNotIn(contract["objective"], json.dumps(hook))
+        self.assertNotIn(contract["acceptance"], json.dumps(hook))
+        locator = hook["continuity_state_readback"]["arguments"]
+        self.assertEqual(locator[0], "--readback-state")
+        recovered = self._readback_state(locator)
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(recovered["readback"]["objective"], contract["objective"])
+        self.assertEqual(recovered["readback"]["acceptance"], contract["acceptance"])
+        self.assertEqual(recovered["readback"]["constraints"], contract["constraints"])
+        self.assertEqual(recovered["readback"]["next_task_id"], task)
+        self.assertFalse(recovered["scheduling_or_effects_performed"])
+        with closing(connect(self.db)) as db:
+            self.assertGreaterEqual(
+                db.execute("SELECT COUNT(*) FROM events").fetchone()[0], before)
+
+    def test_two_registered_contracts_are_recovered_without_latest_goal_selection(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        first = self._registered_contract(task, "original-a")
+        second = self._registered_contract(task, "original-b")
+        second["objective"] = "Separate corrected owner objective B."
+        register_goal(self.db, first)
+        register_goal(self.db, second)
+        hook = self._run()
+        self.assertEqual(hook["status"], "AMBIGUOUS_ACTIVE_GOALS")
+        self.assertNotIn(first["objective"], json.dumps(hook))
+        self.assertNotIn(second["objective"], json.dumps(hook))
+        recovered = self._readback_state(
+            hook["continuity_state_readback"]["arguments"])
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(
+            {x["objective"] for x in recovered["readback"]["registered_goals"]},
+            {first["objective"], second["objective"]})
+        self.assertNotIn("next_task_id", recovered["readback"])
+        self.assertFalse(recovered["scheduling_or_effects_performed"])
+
+    def test_mixed_goal_readback_rejects_stale_source_and_preserves_revoke(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        contract = self._registered_contract(task)
+        register_goal(self.db, contract)
+        old = "Investigate all contradictory evidence; no external writes."
+        with closing(connect(self.db)) as db:
+            root = create_task(db, {"kind": "open_goal", "goal": old})
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        hook = self._run()
+        self.assertEqual(hook["status"], "AMBIGUOUS_DURABLE_GOALS")
+        self.assertNotIn(old, json.dumps(hook))
+        locator = hook["continuity_state_readback"]["arguments"]
+        initial = self._readback_state(locator)
+        self.assertEqual(initial["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(initial["readback"]["registered_goal"]["objective"],
+                         contract["objective"])
+        self.assertEqual(initial["readback"]["other_original_goals"], [
+            {"root_task_id": root, "original_goal": old}])
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?", (
+                json.dumps({"kind": "open_goal", "goal":
+                            "A different unregistered goal"}, sort_keys=True), root))
+            db.commit()
+        self.assertEqual(self._readback_state(locator)["status"],
+                         "CONTINUITY_STATE_READBACK_STALE")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        after = self._run()
+        self.assertFalse(after["authority_current"])
+        revoked = self._readback_state(after["continuity_state_readback"]["arguments"])
+        self.assertEqual(revoked["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertFalse(revoked["readback"]["authority_current"])
         self.assertNotIn("next_task_id", revoked["readback"])
         self.assertFalse(revoked["scheduling_or_effects_performed"])
 
