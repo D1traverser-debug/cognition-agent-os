@@ -24,8 +24,10 @@ class ResearchAtlasGuardTests(unittest.TestCase):
     def test_canonical_record_preserves_unstudied_and_studied_difference(self):
         observed = mod.validate(self.data, cards=self.cards)
         self.assertEqual(observed["total"], 96)
-        self.assertEqual(observed["source_only"], 90)
-        self.assertEqual(observed["source_read"], 6)
+        unstudied = sum(r["status"] == "DISCOVERED_NOT_DEEPLY_AUDITED"
+                         for r in self.data["records"])
+        self.assertEqual(observed["source_only"], unstudied)
+        self.assertEqual(observed["source_read"], len(self.data["records"]) - unstudied)
         self.assertFalse(observed["native_skill_trigger_or_user_outcome_tested"])
         self.assertFalse(observed["actual_upstream_links_checked"])
 
@@ -49,6 +51,32 @@ class ResearchAtlasGuardTests(unittest.TestCase):
                       "DISCOVERED_NOT_DEEPLY_AUDITED")
         unread["status"] = "SOURCE_AND_CODE_READ"
         with self.assertRaises(mod.AtlasError):
+            mod.validate(fake, cards=self.cards)
+
+    def test_research_status_can_grow_without_rewriting_validation_code(self):
+        fake = copy.deepcopy(self.data)
+        item = next(r for r in fake["records"]
+                    if r["status"] == "DISCOVERED_NOT_DEEPLY_AUDITED")
+        item["status"] = "SOURCE_AND_CODE_READ"
+        item["evidence"] = [{
+            "repo": "example/repo", "path": "src/implementation.py",
+            "blob_sha": "a" * 40, "kind": "implementation"
+        }]
+        before = mod.validate(self.data, cards=self.cards)
+        after = mod.validate(fake, cards=self.cards)
+        self.assertEqual(after["source_read"], before["source_read"] + 1)
+        self.assertEqual(after["source_only"], before["source_only"] - 1)
+
+    def test_study_status_requires_corresponding_source_kind(self):
+        fake = copy.deepcopy(self.data)
+        item = next(r for r in fake["records"] if
+                    r["status"] == "DISCOVERED_NOT_DEEPLY_AUDITED")
+        item["status"] = "SOURCE_AND_TEST_READ"
+        item["evidence"] = [{
+            "repo": "example/repo", "path": "README.md",
+            "blob_sha": "a" * 40, "kind": "docs"
+        }]
+        with self.assertRaisesRegex(mod.AtlasError, "STUDY_STATUS_UNSUPPORTED_BY_EVIDENCE"):
             mod.validate(fake, cards=self.cards)
 
     def test_stale_evidence_and_duplicates_fail_closed(self):

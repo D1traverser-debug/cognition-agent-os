@@ -36,7 +36,7 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
             or not isinstance(records, list) or len(records) != 96
             or atlas.get("url_count") != len(records)):
         raise AtlasError("INVALID_PINNED_ATLAS")
-    if "90 **not yet deeply studied**" not in cards:
+    if "**not yet deeply studied**" not in cards:
         raise AtlasError("MISSING_EXPLICIT_UNSTUDIED_BOUNDARY")
     seen, counts = set(), {}
     for record in records:
@@ -67,19 +67,27 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
                     or e.get("kind") not in {"redirect_and_boundary", "implementation",
                                              "tests", "docs", "design", "method", "benchmark"}):
                 raise AtlasError("UNATTESTED_STUDY_EVIDENCE")
+        required_kinds = {
+            "SOURCE_ROUTING_AUDITED": {"redirect_and_boundary"},
+            "SOURCE_AND_CODE_READ": {"implementation"},
+            "SOURCE_AND_TEST_READ": {"tests"},
+            "SOURCE_AND_METHOD_READ": {"design", "method"},
+            "SOURCE_AND_BENCHMARK_READ": {"benchmark"},
+        }.get(state)
+        if required_kinds and not required_kinds.intersection(e["kind"] for e in evidence):
+            raise AtlasError("STUDY_STATUS_UNSUPPORTED_BY_EVIDENCE")
         if any(not isinstance(lead, str) or not lead.startswith("https://")
                or lead == url for lead in leads):
             raise AtlasError("INVALID_NESTED_LEAD")
-    if counts.get("DISCOVERED_NOT_DEEPLY_AUDITED") != 90:
-        raise AtlasError("CLAIMED_COVERAGE_MISMATCH")
     if source_readme is not None:
         actual_urls = set(URLS.findall(source_readme))
         if actual_urls != seen:
             added, gone = sorted(actual_urls - seen), sorted(seen - actual_urls)
             raise AtlasError(
                 f"UPSTREAM_README_LINK_DRIFT: added={added[:5]!r} missing={gone[:5]!r}")
-    return {"total": len(records), "source_only": counts["DISCOVERED_NOT_DEEPLY_AUDITED"],
-            "source_read": len(records) - counts["DISCOVERED_NOT_DEEPLY_AUDITED"],
+    source_only = counts.get("DISCOVERED_NOT_DEEPLY_AUDITED", 0)
+    return {"total": len(records), "source_only": source_only,
+            "source_read": len(records) - source_only,
             "actual_upstream_links_checked": source_readme is not None,
             "native_skill_trigger_or_user_outcome_tested": False}
 

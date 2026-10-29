@@ -302,9 +302,43 @@
       "label": "OpenClaw",
       "section": "Stage 3: Study One Modern Agent Harness",
       "atlas_line": 102,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
-      "nested_leads": []
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "openclaw/openclaw",
+          "path": "docs/concepts/memory-architecture.md",
+          "blob_sha": "5b86ce9d3b0f4742024e5c1080ee31abcc9fb25d",
+          "kind": "design"
+        },
+        {
+          "repo": "openclaw/openclaw",
+          "path": "extensions/knowledge/src/lifecycle.ts",
+          "blob_sha": "7fb1f8a877e26962051fed5e84d3cb598003b04d",
+          "kind": "implementation"
+        },
+        {
+          "repo": "openclaw/openclaw",
+          "path": "extensions/knowledge/src/supersede.ts",
+          "blob_sha": "533e8ab2e62b269036e7d934ba032f2350ecbcd3",
+          "kind": "implementation"
+        },
+        {
+          "repo": "openclaw/openclaw",
+          "path": "docs/plugins/knowledge/corrections.md",
+          "blob_sha": "60288cea5a68899df326ce431cf9210bee2a8b16",
+          "kind": "docs"
+        },
+        {
+          "repo": "openclaw/openclaw",
+          "path": "packages/memory-host-sdk/src/host/session-files.provenance.test.ts",
+          "blob_sha": "52900e93500c0427dd9e690f544e7547b5b2c0d3",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/openclaw/openclaw/tree/main/extensions/knowledge",
+        "https://github.com/openclaw/openclaw/tree/main/packages/memory-host-sdk"
+      ]
     },
     {
       "url": "https://github.com/NousResearch/hermes-agent",
