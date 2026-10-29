@@ -76,6 +76,15 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
                     or e.get("kind") not in {"redirect_and_boundary", "implementation",
                                              "tests", "docs", "design", "method", "benchmark"}):
                 raise AtlasError("UNATTESTED_STUDY_EVIDENCE")
+        required_kinds = {
+            "SOURCE_ROUTING_AUDITED": {"redirect_and_boundary"},
+            "SOURCE_AND_CODE_READ": {"implementation"},
+            "SOURCE_AND_TEST_READ": {"tests"},
+            "SOURCE_AND_METHOD_READ": {"design", "method"},
+            "SOURCE_AND_BENCHMARK_READ": {"benchmark"},
+        }.get(state)
+        if required_kinds and not required_kinds.intersection(e["kind"] for e in evidence):
+            raise AtlasError("STUDY_STATUS_UNSUPPORTED_BY_EVIDENCE")
         # Evidence attached to a GitHub project must originate from that
         # project, unless a pinned redirect/boundary record explicitly
         # explains an upstream repository migration (e.g. OpenHands).
@@ -88,15 +97,6 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
             if not (any(e["repo"].lower() == origin for e in evidence)
                     or any(e["kind"] == "redirect_and_boundary" for e in evidence)):
                 raise AtlasError("STUDY_EVIDENCE_SOURCE_MISMATCH")
-        required_kinds = {
-            "SOURCE_ROUTING_AUDITED": {"redirect_and_boundary"},
-            "SOURCE_AND_CODE_READ": {"implementation"},
-            "SOURCE_AND_TEST_READ": {"tests"},
-            "SOURCE_AND_METHOD_READ": {"design", "method"},
-            "SOURCE_AND_BENCHMARK_READ": {"benchmark"},
-        }.get(state)
-        if required_kinds and not required_kinds.intersection(e["kind"] for e in evidence):
-            raise AtlasError("STUDY_STATUS_UNSUPPORTED_BY_EVIDENCE")
         if any(not isinstance(lead, str) or not lead.startswith("https://")
                or lead == url for lead in leads):
             raise AtlasError("INVALID_NESTED_LEAD")
