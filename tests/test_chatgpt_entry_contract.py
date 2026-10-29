@@ -83,6 +83,24 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("T. Stale-index first-mile retrieval", probes)
         self.assertIn("NOT_TESTED", probes)
 
+    def test_historical_source_supersession_is_not_naive_deletion(self):
+        """Static candidate policy; new-chat behavior still needs live traces."""
+        skill = SKILL.read_text(encoding="utf-8")
+        codex = AGENTS.read_text(encoding="utf-8")
+        adr = (ROOT / "docs/01-ARCHITECTURE-DECISIONS.md").read_text(encoding="utf-8")
+        probes = PROBES.read_text(encoding="utf-8")
+        for token in ("SOURCE_LIFECYCLE_CONFLICT", "superseded",
+                      "independently reread", "privacy deletion"):
+            self.assertIn(token, codex)
+        for token in ("Source lifecycle at the real retrieval/write boundary",
+                      "UNKNOWN", "dated history", "semantic search"):
+            self.assertIn(token, skill)
+        self.assertIn("失效不是删除", adr)
+        self.assertIn("HISTORICAL_PR26_BUILD_STATE_20261023.json", adr)
+        self.assertIn("W. Historical snapshot lifecycle", probes)
+        self.assertIn("current state UNKNOWN", probes)
+        self.assertIn("NOT_TESTED", probes)
+
     def test_current_parent_and_child_permission_boundary(self):
         chatgpt = SKILL.read_text(encoding="utf-8")
         codex = AGENTS.read_text(encoding="utf-8")

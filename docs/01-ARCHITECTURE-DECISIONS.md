@@ -158,6 +158,14 @@ P1 代码层的候选边界（可调整文件夹名，不应随意改变职责�
 | AOCI + Graphify + 代码搜索 / Playwright / Caveman | AOCI 提供版本化“架构语义先验”；Graphify 提供结构关系；Playwright 提供页面操作；Caveman 提供可恢复压缩 | 这些都是**工具能力**而非决策总控；AOCI 描述需源证和更新治理，图不等于语义，压缩可能丢目标约束；Playwright 的UI操作不授予写权限 | 在相关任务按需组合接入，分别测试准确性/费用/合法性；不设为强制依赖 |
 | UVM 式工程验收 | 将 vPlan/coverage、monitor、scoreboard、SVA 与正反故障注入理念用于 Agent 轨迹和结果 | UVM 是硬件验证方法，不负责开放式 Agent 推理；绿色测试也不能代替真实用户最终效果 | **采纳验收方法**，不复制 SystemVerilog 基础设施 |
 
+### 2026-10-29 来源生命周期与写入路径：失效不是删除
+
+**复现的上层故障：** 私有 Library `/Continuity/General_Learning/cognition-agent-os_ACTIVE_BUILD_STATE.json` 保留了 2026-10-23 PR #26 的 `canonical_delivery` 和 `COMPLETED_SUCCESS_EXACT_HEAD`，但文件仍在当前导航根目录并叫 `ACTIVE`；彼时状态与最新 GitHub 候选 PR #53 冲突。这是来源的**角色/版本失效**，不等于旧内容错误或必须删除。已将该原始 JSON 完整迁入 `/Continuity/General_Learning/2026-10-23/HISTORICAL_PR26_BUILD_STATE_20261023.json`，旧 PR #26 delivery review 同期归档；现行根目录只保留跨项目导航 `INDEX.md` 和属于另一知识主题的 2026-10-19 `MANIFEST.json`。这是独立的私有 Library 效果，公共仓库只引用路径/机制，不复制私有文件。
+
+**取舍与反例：** 参考 [OpenClaw knowledge lifecycle](https://github.com/openclaw/openclaw/blob/main/extensions/knowledge/src/lifecycle.ts)（已核源码，revision/hash 前提检查、superseded/withdrawn 生命周期）及 [supersede.ts](https://github.com/openclaw/openclaw/blob/main/extensions/knowledge/src/supersede.ts)（受作用域与依赖限制），[Letta Context Doctor](https://github.com/letta-ai/letta-code/blob/main/src/skills/builtin/context-doctor/references/auditing-memory.md)（索引发现和加载效果分开验证）。不另建第二个 SQLite 或全局新控制器；先修源头的状态写入/命名规则与现有精确检索路径。**任何新的工程快照**必须带采集时间、来源角色、对应 PR/commit/CI 和有效范围；只在有可靠当前提供方读回时才可称 current，其余存于日期归档，刷新需先以当前源为准再使旧结论及依赖失效。用户原话、实时 provider 与历史工程快照属于不同权威域，不可在搜索结果中互相顶替；隐私删除与版本过期分别处理。无需因旧 PR 已合并/旧快照过期就抹掉审计轨迹。
+
+**三个对照测试：** (a) 新旧快照同名 `ACTIVE`：以 GitHub 实际 PR/head/CI 判角色，不按搜索得分排序；(b) 长索引有一次过期标题：保留历史原文但不得把它视为当前用户目标；(c) GitHub 不可访问：返回当前工程状态 UNKNOWN，旧数据仍可作注明日期的历史证据，不可声称现在有效。上述操作已经实测私人源位置和 GitHub HEAD；但新 ChatGPT 会话是否调用本规则、衍生语义结论是否全链失效，仍未实测，整个产品 **NOT_READY**。
+
 ### 当前任务边界修正（2026-10-29，优先于旧的宿主前提）
 
 用户明确将“持续”定义为**由用户聊天唤醒后可靠接续与执行**，而非
