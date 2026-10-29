@@ -370,6 +370,7 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
               "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
+              "DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE",
               "SOURCE_CHANGED_SINCE_PROPOSAL","SOURCE_HAS_CHANGED",
               "RESEARCH_CONTRAST_UNRESOLVED"}
     # Holdout drift is inconclusive for an unreviewed proposal but is a
