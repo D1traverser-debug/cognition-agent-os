@@ -257,9 +257,26 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
         state = resume_goal(
             db_path, resolve_head=lambda *_: "0" * 40,
             workspace=ws, fixtures=fixtures)
+        # One version-bound readback for ALL existing continuity contracts,
+        # including legacy registered, multi-registered, mixed and native
+        # roots. A digest of the entire verified observation, rather than
+        # task IDs alone, rejects stale or revised original clauses.
+        state_digest = hashlib.sha256(json.dumps(
+            state, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":")).encode("utf-8")).hexdigest()
+        context["continuity_state_readback"] = {
+            "entrypoint": "scripts/codex_session_context.py",
+            "arguments": ["--readback-state", state_digest],
+            "source_role": "READ_ONLY_EXISTING_SQLITE_RESUME_OBSERVATION",
+        }
+        if include_full_original:
+            # Deliberate, explicit CLI readback receives every original
+            # field from the SAME resume_goal source, not a second index.
+            # The automatic SessionStart never contains this projection.
+            context.update(state)
         for key in (
             "status", "root_task_id", "root_task_ids", "original_goal",
-            "original_goals", "authority_current",
+            "original_goals", "goal_id", "goal_ids", "authority_current",
             "original_contract_sha256", "goal_rev", "grant_rev",
             "root_state", "source_of_truth", "next_task_id",
             "child_task_id", "child_state", "chosen_capability",
@@ -333,8 +350,14 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
             if (isinstance(ids, list) and ids
                 and all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{32}", v)
                         for v in ids)):
+                # Bind BOTH original identity and original wording. IDs
+                # alone survive a source edit and could reveal a different
+                # goal under a stale locator.
                 identity = hashlib.sha256(json.dumps(
-                    sorted(ids), separators=(",", ":")).encode("utf-8")
+                    sorted(state["original_goals"],
+                           key=lambda item: item["root_task_id"]),
+                    ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":")).encode("utf-8")
                 ).hexdigest()
                 context["ambiguous_goal_readback"] = {
                     "entrypoint": "scripts/codex_session_context.py",
@@ -375,10 +398,30 @@ def _readback_ambiguous(expected_digest: str) -> dict:
         or not isinstance(ids, list) or not ids
         or not isinstance(state.get("original_goals"), list)
         or hashlib.sha256(json.dumps(
-            sorted(ids), separators=(",", ":")).encode("utf-8")
+            sorted(state["original_goals"],
+                   key=lambda item: item["root_task_id"]),
+            ensure_ascii=False, sort_keys=True,
+            separators=(",", ":")).encode("utf-8")
         ).hexdigest() != expected_digest):
         return {"status": "AMBIGUOUS_READBACK_IDENTITY_UNVERIFIED"}
     return {"status": "AMBIGUOUS_READBACK_IDENTITY_MATCHED",
+            "readback": state, "scheduling_or_effects_performed": False}
+
+
+def _readback_state(expected_digest: str) -> dict:
+    """Read the EXACT current continuity observation, not a stale digest."""
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+        return {"status": "INVALID_CONTINUITY_READBACK_IDENTITY",
+                "original_goal_verified": False}
+    state = build_context({"cwd": str(ROOT)}, include_full_original=True)
+    locator = state.get("continuity_state_readback")
+    if (not isinstance(locator, dict)
+        or locator.get("arguments") != ["--readback-state", expected_digest]):
+        return {"status": "CONTINUITY_STATE_READBACK_STALE",
+                "original_goal_verified": False}
+    # Readback confirms a pinned observation, not a task/effect grant or
+    # independent owner outcome. AUTHORITY_REVOKED stays non-runnable.
+    return {"status": "CONTINUITY_STATE_READBACK_MATCHED",
             "readback": state, "scheduling_or_effects_performed": False}
 
 
@@ -387,7 +430,9 @@ def main(argv: tuple[str, ...] = ()) -> int:
     # (unittest/pytest/Codex hosts may have unrelated sys.argv flags).
     # The executable script still receives its real CLI argv at __main__.
     if argv:
-        if len(argv) == 3 and argv[0] == "--readback-original":
+        if len(argv) == 2 and argv[0] == "--readback-state":
+            result = _readback_state(argv[1])
+        elif len(argv) == 3 and argv[0] == "--readback-original":
             result = _readback_original(argv[1], argv[2])
         elif len(argv) == 2 and argv[0] == "--readback-ambiguous":
             result = _readback_ambiguous(argv[1])
