@@ -23,6 +23,11 @@ from cognition_agent_os.ledger import connect, create_task, initialize
 CHILDREN = (
     ("video", "video-growth-agent", "integrated_default_program"),
     ("novel", "novel-writing-agent", "study_state_ref"),
+    # The following domains have task-instance state refs, not a canonical
+    # global JSON checkpoint. Inspect their native manifest/capability
+    # contract, but do NOT invent a business instance or mutable owner state.
+    ("financial_writing", "financial-writing-agent", None),
+    ("ashare", "a-share-event-driven-agent", None),
 )
 
 
@@ -132,8 +137,9 @@ def main() -> None:
             checkouts[name] = checkout
             manifest = json.loads(
                 (checkout / ".uaos/MANIFEST.json").read_text(encoding="utf-8"))
-            state_path = manifest["domain_authority"][key]
-            if not isinstance(state_path, str):
+            state_path = (manifest["domain_authority"][key]
+                          if key is not None else None)
+            if key is not None and not isinstance(state_path, str):
                 raise AssertionError("Child did not declare a real state reference")
             observed_children.append((did, name, sha, key, state_path))
         pinned_children = tuple(observed_children)
@@ -149,8 +155,9 @@ def main() -> None:
             for did, name, sha, authority_key, _ in pinned_children:
                 spec = {"kind": "domain_contract",
                         "repo": "D1traverser-debug/" + name,
-                        "ref": sha, "domain_id": did,
-                        "state_authority_key": authority_key}
+                        "ref": sha, "domain_id": did}
+                if authority_key is not None:
+                    spec["state_authority_key"] = authority_key
                 ids[did] = create_task(ledger, spec)
 
         def source(repo: str, path: str, ref: str) -> bytes:
@@ -166,14 +173,14 @@ def main() -> None:
 
         with patch("cognition_agent_os.domain_contract.github_public_snapshot",
                    side_effect=source):
-            tick = run_tick(db, ws, fixtures, max_jobs=2)
+            tick = run_tick(db, ws, fixtures, max_jobs=4)
             reports = {did: audit_domain_contract(db, ws, ids[did])
                        for did in ids}
 
-        if len(tick["tasks"]) != 2 or any(
+        if len(tick["tasks"]) != 4 or any(
             task["status"] != "NEEDS_REVIEW" for task in tick["tasks"]
         ):
-            raise AssertionError(f"Parent Host did not observe two children: {tick}")
+            raise AssertionError(f"Parent Host did not observe four children: {tick}")
         # Refuse even disposable child work when parent independent intake
         # has not actually confirmed the scoped original child source.
         for did in ids:
@@ -188,20 +195,37 @@ def main() -> None:
         observations = {}
         for did, name, sha, key, path in pinned_children:
             review = reports[did]
-            observed = review.get("child_native_state_observation") or {}
-            actual_state = json.loads((checkouts[name] / path).read_text(encoding="utf-8"))
+            observed = review.get("child_native_state_observation")
             if (review.get("status") != "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED"
-                or observed.get("child_declared_state_ref") != path
-                or observed.get("status_from_child_source") != actual_state.get("status")
+                or review.get("legacy_parent_bound") is not True
                 or review.get("child_business_result_verified") is not False
                 or review.get("parent_replacement_admitted") is not False):
-                raise AssertionError(f"Child native checkpoint not safe: {review}")
+                raise AssertionError(f"Child source binding/admission changed: {review}")
+            if path is None:
+                if observed is not None:
+                    raise AssertionError("Invented native business state for unselected task")
+                state_status = "NO_BUSINESS_INSTANCE_SELECTED"
+                source_digest = None
+            else:
+                if not isinstance(observed, dict):
+                    raise AssertionError("Missing pinned child native checkpoint")
+                actual_state = json.loads(
+                    (checkouts[name] / path).read_text(encoding="utf-8"))
+                if (observed.get("child_declared_state_ref") != path
+                    or observed.get("status_from_child_source")
+                        != actual_state.get("status")):
+                    raise AssertionError("Independent child state readback mismatch")
+                state_status = observed["status_from_child_source"]
+                source_digest = observed["state_content_sha256"]
             observations[did] = {
                 "repo": name, "sha": sha, "state_path": path,
-                "source_sha256": observed["state_content_sha256"],
-                "status": observed["status_from_child_source"],
+                "source_sha256": source_digest,
+                "status": state_status,
                 "independently_reread": True,
-                "native_guard": native[did],
+                "legacy_parent_bound": True,
+                "native_guard": native.get(did, {
+                    "native_operation": "READ_ONLY_CONTRACT_NO_BUSINESS_INSTANCE",
+                    "business_effect_performed": False}),
                 "business_outcome_verified": False,
             }
         for _, name, _, _, _ in pinned_children:
@@ -209,13 +233,14 @@ def main() -> None:
             if dirty:
                 raise AssertionError(f"Child checkout was modified: {name}: {dirty}")
         print(json.dumps({
-            "test": "original-host-two-real-child-native-readonly-holdout",
+            "test": "original-host-four-real-child-contracts-two-native-sandbox-holdouts",
             "source": "immutable actual git checkouts, original child code",
             "github_tool_transport_in_live_parent": False,
             "parent_host_runtime": True,
             "child_repositories_modified": False,
             "isolated_native_business_project_created": True,
             "isolated_native_business_project_independently_verified": True,
+            "four_live_child_contracts_independently_reobserved": True,
             "production_execution_authorized": False,
             "whole_product_ready": False,
             "children": observations,
