@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -275,13 +276,52 @@ def build_context(payload: dict) -> dict:
             isinstance(state.get("original_goal"), str)
             and state.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
         )
+        # A direct, read-only path to the SAME immutable SQLite source.
+        # This survives loss of a native hook spill preview without a second
+        # memory index, and the caller must recheck both identity and digest.
+        if (context["original_goal_verified"]
+            and isinstance(context.get("root_task_id"), str)
+            and isinstance(context.get("original_contract_sha256"), str)):
+            context["original_goal_readback"] = {
+                "entrypoint": "scripts/codex_session_context.py",
+                "arguments": ["--readback-original",
+                              context["root_task_id"],
+                              context["original_contract_sha256"]],
+                "source_role": "READ_ONLY_EXISTING_SQLITE_GOAL",
+            }
     except (ImportError, OSError, ValueError, TypeError) as exc:
         context["status"] = "DURABLE_CONTEXT_UNAVAILABLE"
         context["readback_error_class"] = type(exc).__name__
     return context
 
 
+def _readback_original(root_id: str, expected_digest: str) -> dict:
+    """Explicit full-source dereference; never an execution permission."""
+    if (not re.fullmatch(r"[0-9a-f]{32}", root_id)
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_digest)):
+        return {"status": "INVALID_ORIGINAL_READBACK_IDENTITY",
+                "original_goal_verified": False}
+    state = build_context({"cwd": str(ROOT)})
+    if (state.get("root_task_id") != root_id
+        or state.get("original_contract_sha256") != expected_digest
+        or state.get("original_goal_verified") is not True):
+        return {"status": "ORIGINAL_READBACK_IDENTITY_UNVERIFIED",
+                "original_goal_verified": False}
+    # Return the identical read-only projection, not a separate state store.
+    return {"status": "ORIGINAL_READBACK_IDENTITY_MATCHED",
+            "readback": state, "scheduling_or_effects_performed": False}
+
+
+
 def main() -> int:
+    if len(sys.argv) > 1:
+        if len(sys.argv) != 4 or sys.argv[1] != "--readback-original":
+            print(json.dumps({"status": "INVALID_ORIGINAL_READBACK_ARGUMENTS",
+                              "original_goal_verified": False}))
+            return 2
+        print(json.dumps(_readback_original(sys.argv[2], sys.argv[3]),
+                         ensure_ascii=True, sort_keys=True))
+        return 0
     try:
         data = sys.stdin.read(MAX_HOOK_INPUT + 1)
         if len(data) > MAX_HOOK_INPUT:
