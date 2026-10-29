@@ -244,7 +244,9 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(
             encoding="utf-8")
         self.assertIn("chatgpt_plugin_release_bundle:", workflow)
-        self.assertIn("[bundle-chatgpt-plugin]", workflow)
+        self.assertIn("chatgpt_plugin_release_bundle:", workflow)
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", workflow)
+        self.assertNotIn("contains(github.event.pull_request.body, '[bundle-chatgpt-plugin]')", workflow)
         self.assertIn("manifest['version']", workflow)
         self.assertNotIn("manifest['version'] == '0.1.3'", workflow)
         self.assertIn("No installation or owner account mutation occurs in CI",
