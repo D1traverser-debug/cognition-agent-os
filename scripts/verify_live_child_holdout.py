@@ -176,6 +176,28 @@ def main() -> None:
             tick = run_tick(db, ws, fixtures, max_jobs=4)
             reports = {did: audit_domain_contract(db, ws, ids[did])
                        for did in ids}
+            # Adversarial negative: a per-article template or Python class
+            # is not the currently selected native JSON business instance.
+            from cognition_agent_os.domain_contract import (
+                DomainContractInvalid, observe_native_domain)
+            for did, name, bad_key in (
+                ("financial_writing", "financial-writing-agent", "article_identity"),
+                ("ashare", "a-share-event-driven-agent", "market_day_state"),
+            ):
+                selected = next(item for item in pinned_children
+                                if item[0] == did)
+                bad = {"kind": "domain_contract",
+                       "repo": "D1traverser-debug/" + name,
+                       "ref": selected[2], "domain_id": did,
+                       "state_authority_key": bad_key}
+                try:
+                    observe_native_domain(bad)
+                except DomainContractInvalid as exc:
+                    if str(exc) != "CHILD_STATE_AUTHORITY_UNVERIFIABLE":
+                        raise
+                else:
+                    raise AssertionError(
+                        "Parent invented a current child task from a template")
 
         if len(tick["tasks"]) != 4 or any(
             task["status"] != "NEEDS_REVIEW" for task in tick["tasks"]
