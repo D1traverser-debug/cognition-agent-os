@@ -486,6 +486,27 @@ class CodexSessionContext(unittest.TestCase):
         self.assertFalse(result["original_goal_verified"])
         self.assertNotIn("next_task_id", result)
         self.assertFalse(result["business_outcome_verified"])
+        locator = result["ambiguous_goal_readback"]
+        self.assertEqual(locator["source_role"], "READ_ONLY_EXISTING_SQLITE_GOALS")
+        env = dict(os.environ)
+        env.update({"COGNITION_AGENT_OS_DB": str(self.db),
+                    "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+                    "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures)})
+        def reread(args):
+            proc = subprocess.run([sys.executable, str(HOOK), *args],
+                                  cwd=ROOT, env=env, capture_output=True,
+                                  text=True, timeout=8)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            return json.loads(proc.stdout)
+        actual = reread(locator["arguments"])
+        self.assertEqual(actual["status"], "AMBIGUOUS_READBACK_IDENTITY_MATCHED")
+        self.assertEqual(
+            {entry["original_goal"] for entry in actual["readback"]["original_goals"]},
+            {first_goal, second_goal})
+        self.assertFalse(actual["scheduling_or_effects_performed"])
+        invalid = reread(["--readback-ambiguous", "0" * 64])
+        self.assertEqual(invalid["status"], "AMBIGUOUS_READBACK_IDENTITY_UNVERIFIED")
+        self.assertNotIn("readback", invalid)
 
     def test_direct_original_readback_rejects_drift_and_is_read_only(self):
         """Codex can dereference its SAME SQLite root without any hook cache."""
