@@ -51,6 +51,24 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         # Metadata is discoverable; this test does not run ChatGPT.
         self.assertIn("not", content.lower())
 
+    def test_unnamed_in_scope_continuation_is_discoverable_at_metadata_boundary(self):
+        """Only tests metadata/spec coverage; not native client selection."""
+        body = SKILL.read_text(encoding="utf-8")
+        meta = metadata(body)
+        desc = meta["description"]
+        self.assertLess(len(desc), 400)
+        for topic in ("主支分支", "知识库", "跨对话继承", "长上下文",
+                      "记忆架构", "loop/graph/skills/harness/RSI",
+                      "轮询质疑", "增删改查", "合并清理"):
+            self.assertIn(topic, desc)
+        self.assertIn("without its name", desc)
+        self.assertIn("never for unrelated", desc)
+        self.assertIn("Unlabeled but still in-scope follow-ups", body)
+        self.assertIn("do not guess the named repo", body)
+        self.assertIn("X. Named-project-free architecture continuation", 
+                      PROBES.read_text(encoding="utf-8"))
+        self.assertIn("NOT_TESTED", PROBES.read_text(encoding="utf-8"))
+
     def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):
         """Source policy only; cannot prove a fresh ChatGPT launch."""
         gate = (ROOT / "docs/PRODUCT-READINESS-GATE.md").read_text(encoding="utf-8")

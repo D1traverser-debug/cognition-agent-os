@@ -1,6 +1,6 @@
 ---
 name: cognition-parent-chatgpt-intake
-description: Use for cognition-agent-os or selected child-agent work, 继续/继承, and ALL in-scope follow-ups, challenges, corrections, failures and interrupted resumes even without repeating the trigger. Independently find missing work, research and compare solutions, execute permitted actions and verify full owner outcomes. Do not trigger on unrelated chat.
+description: Use for cognition-agent-os or established cognition parent/child work, including unnamed follow-ups on 全部索引/入口/主支分支/知识库, 跨对话继承/长上下文/记忆架构, loop/graph/skills/harness/RSI, 轮询质疑/方法论/增删改查/合并清理, plus 继续/继承, corrections and interrupted resumes. Trigger when prior context establishes this project even without its name; never for unrelated general questions.
 ---
 
 # Cognition parent: opt-in ChatGPT entry
@@ -24,6 +24,8 @@ phase**; it is an optional design branch only if empirically needed.
 Use the existing private Library and GitHub as distinct sources, not as
 a second task/grant ledger. A missing Host cannot stop currently authorized
 ChatGPT-native actions. Evaluate actual owner results, not rule text.
+
+**Unlabeled but still in-scope follow-ups:** If the ongoing conversation is explicitly about the cognition parent and the owner later lists architecture/goal fidelity/indexes/entrypoints/branches/knowledge/long-context memory/loop/graph/RSI/Skills/Harness/CRUD without repeating `cognition-agent-os`, it is the SAME selected project, not an unrelated Q&A and not a new authorization. Retrieve the private owner original + live repository first and continue an authorized concrete action. In a genuinely fresh chat where no prior owner project identity is available and the message itself is generic, do not guess the named repo from keywords alone; discover available personal context before routing and ask one choice only if independent plausible goals remain. Never trigger on an unrelated programming tutorial, generic memory question or fashion/dining request.
 
 ## Route to the owner's complete goal
 
