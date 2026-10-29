@@ -274,22 +274,41 @@ def _no_action(status: str, **extra: object) -> dict:
 
 
 def _all_open_goal_roots(db: sqlite3.Connection) -> list[sqlite3.Row] | None:
-    """Scan the one authoritative ledger, with a bounded fail-closed result."""
-    roots = []
-    for row in db.execute(
-        "SELECT * FROM tasks WHERE parent_task IS NULL "
-        "ORDER BY created_at,task_id"
-    ):
-        try:
-            source = json.loads(row["source_spec"])
-        except (ValueError, TypeError):
-            continue
-        if (isinstance(source, dict)
-            and source.get("kind") in ("open_goal", "native_goal")):
-            roots.append(row)
-            if len(roots) > 256:
-                return None
-    return roots
+    """Recover current owner roots first; older versions are only fallback.
+
+    Historical goal growth must not exhaust the current-version read budget.
+    This read-only selector uses the SAME ledger authority and task rows.
+    A genuinely excessive CURRENT root set still fails closed rather than
+    choosing a recent goal or silently dropping a competing owner original.
+    """
+    authority = db.execute(
+        "SELECT goal_rev FROM authority WHERE singleton=1").fetchone()
+    if authority is None:
+        return None
+    version = authority["goal_rev"]
+
+    def _matching_roots(predicate: str) -> list[sqlite3.Row] | None:
+        roots = []
+        for row in db.execute(
+            "SELECT * FROM tasks WHERE parent_task IS NULL AND "
+            + predicate + " ORDER BY created_at,task_id", (version,)
+        ):
+            try:
+                source = json.loads(row["source_spec"])
+            except (ValueError, TypeError):
+                continue
+            if (isinstance(source, dict)
+                and source.get("kind") in ("open_goal", "native_goal")):
+                roots.append(row)
+                if len(roots) > 256:
+                    return None
+        return roots
+
+    current = _matching_roots("goal_rev=?")
+    if current is None or current:
+        return current
+    # Preserve stale-only diagnostics; do not re-admit old revisions.
+    return _matching_roots("goal_rev<>?")
 
 
 def _attested_owner_root(
