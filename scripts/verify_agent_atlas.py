@@ -29,29 +29,38 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
         raise AtlasError("INVALID_SCHEMA_VERSION")
     atlas = data.get("atlas", {})
     records = data.get("records")
+    nested_records = data.get("nested_records", [])
     if (not isinstance(atlas, dict)
             or not isinstance(atlas.get("repository"), str)
             or not SHA.fullmatch(atlas.get("commit", ""))
             or not SHA.fullmatch(atlas.get("readme_blob_sha", ""))
             or not isinstance(records, list) or len(records) != 96
+            or not isinstance(nested_records, list)
             or atlas.get("url_count") != len(records)):
         raise AtlasError("INVALID_PINNED_ATLAS")
     if "**not yet deeply studied**" not in cards:
         raise AtlasError("MISSING_EXPLICIT_UNSTUDIED_BOUNDARY")
+    # Keep the 96 first-hop README links immutable as a pinned corpus; recursive
+    # discoveries are separate nodes, never appended to the README's URL claim.
+    # Each canonical URL occurs once even when multiple sources link to it.
+    all_records = records + nested_records
     seen, counts = set(), {}
-    for record in records:
+    for idx, record in enumerate(all_records):
         if not isinstance(record, dict):
             raise AtlasError("INVALID_RECORD")
+        first_hop = idx < len(records)
         url, state = record.get("url"), record.get("status")
         if (not isinstance(url, str) or not url.startswith("https://")
                 or not urlparse(url).netloc or url in seen
                 or state not in STATES
-                or not isinstance(record.get("label"), str)
-                or not isinstance(record.get("atlas_line"), int)
-                or record["atlas_line"] < 1):
+                or not isinstance(record.get("label"), str) or not record["label"]
+                or (first_hop and (not isinstance(record.get("atlas_line"), int)
+                    or record["atlas_line"] < 1))
+                or (not first_hop and "atlas_line" in record)):
             raise AtlasError("INVALID_RECORD_OR_DUPLICATE")
         seen.add(url)
-        counts[state] = counts.get(state, 0) + 1
+        if first_hop:
+            counts[state] = counts.get(state, 0) + 1
         evidence, leads = record.get("evidence"), record.get("nested_leads")
         if not isinstance(evidence, list) or not isinstance(leads, list):
             raise AtlasError("INVALID_EVIDENCE_SHAPE")
@@ -79,15 +88,40 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
         if any(not isinstance(lead, str) or not lead.startswith("https://")
                or lead == url for lead in leads):
             raise AtlasError("INVALID_NESTED_LEAD")
+    by_url = {r["url"]: r for r in all_records}
+    nested_urls = {r["url"] for r in nested_records}
+    leads = {lead for r in all_records for lead in r["nested_leads"]}
+    if leads != nested_urls:
+        raise AtlasError("NESTED_LEAD_MISSING_OR_UNLINKED_RECORD")
+    # Traversal must reach every nested entry from a pinned README root.
+    # A URL may appear in multiple link paths, but is learned only once.
+    visited = {r["url"] for r in records}
+    frontier = list(visited)
+    while frontier:
+        parent = by_url[frontier.pop()]
+        for child in parent["nested_leads"]:
+            if child not in visited:
+                visited.add(child)
+                frontier.append(child)
+    if visited != seen:
+        raise AtlasError("NESTED_ORPHAN_OR_UNREACHABLE")
     if source_readme is not None:
         actual_urls = set(URLS.findall(source_readme))
-        if actual_urls != seen:
-            added, gone = sorted(actual_urls - seen), sorted(seen - actual_urls)
+        root_urls = {r["url"] for r in records}
+        if actual_urls != root_urls:
+            added, gone = sorted(actual_urls - root_urls), sorted(root_urls - actual_urls)
             raise AtlasError(
                 f"UPSTREAM_README_LINK_DRIFT: added={added[:5]!r} missing={gone[:5]!r}")
     source_only = counts.get("DISCOVERED_NOT_DEEPLY_AUDITED", 0)
+    nested_read = sum(r["status"] != "DISCOVERED_NOT_DEEPLY_AUDITED"
+                      for r in nested_records)
     return {"total": len(records), "source_only": source_only,
             "source_read": len(records) - source_only,
+            "nested_total": len(nested_records),
+            "nested_read": nested_read,
+            "nested_frontier": len(nested_records) - nested_read,
+            "all_total": len(all_records),
+            "all_read": len(records) - source_only + nested_read,
             "actual_upstream_links_checked": source_readme is not None,
             "native_skill_trigger_or_user_outcome_tested": False}
 

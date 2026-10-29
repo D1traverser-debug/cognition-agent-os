@@ -31,6 +31,59 @@ class ResearchAtlasGuardTests(unittest.TestCase):
         self.assertFalse(observed["native_skill_trigger_or_user_outcome_tested"])
         self.assertFalse(observed["actual_upstream_links_checked"])
 
+    def test_nested_research_graph_reaches_all_linked_sources(self):
+        observed = mod.validate(self.data, cards=self.cards)
+        self.assertEqual(observed["nested_total"], len(self.data["nested_records"]))
+        self.assertGreater(observed["nested_total"], 0)
+        self.assertEqual(observed["all_total"],
+                         observed["total"] + observed["nested_total"])
+        for record in self.data["records"]:
+            for lead in record["nested_leads"]:
+                self.assertIn(lead, {r["url"] for r in self.data["nested_records"]})
+
+    def test_nested_link_without_status_record_is_rejected(self):
+        fake = copy.deepcopy(self.data)
+        fake["records"][0]["nested_leads"].append("https://example.org/deeper")
+        with self.assertRaisesRegex(mod.AtlasError, "NESTED_LEAD_MISSING_OR_UNLINKED_RECORD"):
+            mod.validate(fake, cards=self.cards)
+
+    def test_unlinked_nested_record_and_duplicate_url_are_rejected(self):
+        fake = copy.deepcopy(self.data)
+        fake["nested_records"][0]["url"] = "https://example.org/unlinked"
+        with self.assertRaisesRegex(mod.AtlasError, "NESTED_LEAD_MISSING_OR_UNLINKED_RECORD"):
+            mod.validate(fake, cards=self.cards)
+        fake = copy.deepcopy(self.data)
+        fake["nested_records"].append(copy.deepcopy(fake["nested_records"][0]))
+        with self.assertRaisesRegex(mod.AtlasError, "INVALID_RECORD_OR_DUPLICATE"):
+            mod.validate(fake, cards=self.cards)
+
+    def test_new_recursive_depth_is_admitted_with_status_and_evidence(self):
+        fake = copy.deepcopy(self.data)
+        parent = fake["nested_records"][0]
+        parent["nested_leads"].append("https://example.org/third-level")
+        fake["nested_records"].append({
+            "url": "https://example.org/third-level",
+            "label": "Independent third-level target",
+            "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+            "evidence": [], "nested_leads": []
+        })
+        observed = mod.validate(fake, cards=self.cards)
+        self.assertEqual(observed["nested_total"], len(self.data["nested_records"]) + 1)
+        self.assertEqual(observed["nested_frontier"],
+                         mod.validate(self.data, cards=self.cards)["nested_frontier"] + 1)
+
+    def test_nested_research_cannot_claim_test_evidence_from_docs_only(self):
+        fake = copy.deepcopy(self.data)
+        target = next(x for x in fake["nested_records"]
+                      if x["status"] == "DISCOVERED_NOT_DEEPLY_AUDITED")
+        target["status"] = "SOURCE_AND_TEST_READ"
+        target["evidence"] = [{
+            "repo": "sample/other", "path": "README.md",
+            "blob_sha": "c" * 40, "kind": "docs"
+        }]
+        with self.assertRaisesRegex(mod.AtlasError, "STUDY_STATUS_UNSUPPORTED_BY_EVIDENCE"):
+            mod.validate(fake, cards=self.cards)
+
     def test_current_link_set_snapshot_with_explicit_readme_is_consistent(self):
         # Synthetic URL corpus tests comparison mechanism, not actual live Hub.
         snapshot = "\n".join(

@@ -9,14 +9,14 @@
     "url_count": 96
   },
   "status_definition": {
-    "DISCOVERED_NOT_DEEPLY_AUDITED": "Only first-hop README reference; not learned, evaluated or adopted",
+    "DISCOVERED_NOT_DEEPLY_AUDITED": "Discovered source or nested lead; no implementation/test-specific source evidence yet",
     "SOURCE_ROUTING_AUDITED": "Upstream pointer validated and next-level target identified; not full implementation study",
     "SOURCE_AND_CODE_READ": "Read concrete source and technical docs; task-specific independent acceptance open",
     "SOURCE_AND_TEST_READ": "Read concrete implementation and/or conformance tests; product adoption untested",
     "SOURCE_AND_METHOD_READ": "Read implementation method/gate; no result-transfer proof",
     "SOURCE_AND_BENCHMARK_READ": "Read published experimental design/results; not independently rerun"
   },
-  "scope": "Public external methods only. No owner-private original conversations or permissions. This list is a research frontier, NOT a statement all links are mastered.",
+  "scope": "PUBLIC research frontier with a pinned first-hop README and dynamically expanding nested source graph; no owner-private transcripts or permission grants.",
   "records": [
     {
       "url": "https://github.com/jjyaoao",
@@ -570,9 +570,30 @@
       "label": "OpenAI Codex",
       "section": "Project Map",
       "atlas_line": 250,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
-      "nested_leads": []
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "openai/codex",
+          "path": "codex-rs/ext/goal/src/spec.rs",
+          "blob_sha": "6d1d7a9230083a554bda372341337108a546c90a",
+          "kind": "implementation"
+        },
+        {
+          "repo": "openai/codex",
+          "path": "codex-rs/ext/goal/src/extension.rs",
+          "blob_sha": "bdc75350c32da5ae18274a046b230e5339e1230e",
+          "kind": "implementation"
+        },
+        {
+          "repo": "openai/codex",
+          "path": "codex-rs/ext/goal/templates/goals/continuation.md",
+          "blob_sha": "0e0a273389d62226c31e1d28b1bd8dbae0ccbda8",
+          "kind": "design"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/openai/codex/tree/main/codex-rs/ext/goal"
+      ]
     },
     {
       "url": "https://github.com/opencode-ai/opencode",
@@ -1022,6 +1043,138 @@
       "atlas_line": 371,
       "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
       "evidence": [],
+      "nested_leads": []
+    }
+  ],
+  "nested_records": [
+    {
+      "url": "https://github.com/assafelovic/gpt-researcher/tree/main/evals/context_filter",
+      "label": "GPT Researcher context-filter evaluation",
+      "status": "SOURCE_AND_BENCHMARK_READ",
+      "evidence": [
+        {
+          "repo": "assafelovic/gpt-researcher",
+          "path": "evals/context_filter/replay.py",
+          "blob_sha": "9fe486b93b517ec2e6c876bf2d84a1b7e3df2c67",
+          "kind": "benchmark"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/langchain-ai/open_deep_research/blob/main/src/open_deep_research/deep_researcher.py",
+      "label": "Open Deep Research graph implementation",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "langchain-ai/open_deep_research",
+          "path": "src/open_deep_research/deep_researcher.py",
+          "blob_sha": "279dbffd9e49e07962fb4e1cfeff79e45adc43e9",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/mem0ai/mem0/tree/main/tests",
+      "label": "Mem0 tests: deeper learning frontier",
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/letta-ai/letta-code",
+      "label": "Letta Code actual memory implementation",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "letta-ai/letta-code",
+          "path": "src/agent/memory-conflict-repair.ts",
+          "blob_sha": "122400e6a2f0415d8bd334cf58d3d054879b4909",
+          "kind": "implementation"
+        },
+        {
+          "repo": "letta-ai/letta-code",
+          "path": "src/agent/memory-conflict-repair.test.ts",
+          "blob_sha": "71e2c829196f5d53b63e08bbe558fa7490dfaff5",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/openclaw/openclaw/tree/main/extensions/knowledge",
+      "label": "OpenClaw Knowledge dependency invalidation",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "openclaw/openclaw",
+          "path": "extensions/knowledge/src/lifecycle.ts",
+          "blob_sha": "7fb1f8a877e26962051fed5e84d3cb598003b04d",
+          "kind": "implementation"
+        },
+        {
+          "repo": "openclaw/openclaw",
+          "path": "extensions/knowledge/src/supersede.ts",
+          "blob_sha": "533e8ab2e62b269036e7d934ba032f2350ecbcd3",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/openclaw/openclaw/tree/main/packages/memory-host-sdk",
+      "label": "OpenClaw memory ingestion provenance tests",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "openclaw/openclaw",
+          "path": "packages/memory-host-sdk/src/host/session-files.provenance.test.ts",
+          "blob_sha": "52900e93500c0427dd9e690f544e7547b5b2c0d3",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/microsoft/SkillOpt/blob/main/skillopt/engine/trainer.py",
+      "label": "SkillOpt trainer: unexplored deeper code",
+      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
+      "evidence": [],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-conformance",
+      "label": "LangGraph checkpoint conformance",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_prune.py",
+          "blob_sha": "a1d34f90ddc15760578bdc1013b84775bb446835",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/openai/codex/tree/main/codex-rs/ext/goal",
+      "label": "Codex native Goal engine",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "openai/codex",
+          "path": "codex-rs/ext/goal/src/extension.rs",
+          "blob_sha": "bdc75350c32da5ae18274a046b230e5339e1230e",
+          "kind": "implementation"
+        },
+        {
+          "repo": "openai/codex",
+          "path": "codex-rs/ext/goal/src/spec.rs",
+          "blob_sha": "6d1d7a9230083a554bda372341337108a546c90a",
+          "kind": "implementation"
+        }
+      ],
       "nested_leads": []
     }
   ]
