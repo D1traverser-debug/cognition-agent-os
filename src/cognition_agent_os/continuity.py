@@ -626,6 +626,7 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                 # Validate EACH contract and its pinned task before exposing
                 # those originals; no arbitrary newest-goal selection.
                 registered = []
+                registered_root_ids = set()
                 for candidate in active:
                     raw_contract = candidate["contract"].encode("utf-8")
                     if (hashlib.sha256(raw_contract).hexdigest()
@@ -646,16 +647,37 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                         or _task_fingerprint(current_task)
                             != candidate["task_spec_sha256"]):
                         return _no_action("TASK_LINEAGE_UNVERIFIABLE")
+                    ancestor = _lineage_root_id(db, current_task)
+                    if ancestor is None:
+                        return _no_action("TASK_LINEAGE_UNVERIFIABLE")
+                    registered_root_ids.add(ancestor)
                     registered.append({
                         "goal_id": original["goal_id"],
                         "objective": original["objective"],
                         "acceptance": original["acceptance"],
                         "constraints": original["constraints"],
                     })
+                # Competing unregistered roots are still legitimate owner
+                # goals. Do not let the >=2 registered-goal shortcut hide
+                # them, and do not double-count an ancestor already selected
+                # by a registered pointer.
+                roots = _all_open_goal_roots(db)
+                if roots is None:
+                    return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
+                others = [
+                    root for root in roots
+                    if (root["goal_rev"] == authority["goal_rev"]
+                        and root["task_id"] not in registered_root_ids)
+                ]
+                other_originals = [_attested_owner_root(db, root)
+                                   for root in others]
+                if any(item is None for item in other_originals):
+                    return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
                 return _no_action(
                     "AMBIGUOUS_ACTIVE_GOALS",
                     goal_ids=[r["goal_id"] for r in active],
                     registered_goals=registered,
+                    other_original_goals=other_originals,
                     authority_current=bool(authority["write_allowed"]))
             row = active[0]
             raw = row["contract"].encode("utf-8")
