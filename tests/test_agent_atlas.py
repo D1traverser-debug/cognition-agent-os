@@ -53,6 +53,16 @@ class ResearchAtlasGuardTests(unittest.TestCase):
             {**item, "repo": "unrelated/misleading"} for item in entry["evidence"]]
         with self.assertRaisesRegex(mod.AtlasError, "STUDY_EVIDENCE_SOURCE_MISMATCH"):
             mod.validate(evidence, cards=self.cards)
+        # An unrelated repository cannot certify a migrated source simply
+        # by claiming that one of its documents is a redirect.
+        entry["evidence"].append({
+            "repo": "unrelated/not-this-project",
+            "path": "README.md",
+            "blob_sha": "0" * 40,
+            "kind": "redirect_and_boundary",
+        })
+        with self.assertRaisesRegex(mod.AtlasError, "STUDY_EVIDENCE_SOURCE_MISMATCH"):
+            mod.validate(evidence, cards=self.cards)
         self.assertIn("## Method card L", self.cards)
         self.assertIn("client tests remain **NOT_TESTED**", self.cards)
         self.assertFalse(mod.validate(self.data, cards=self.cards)

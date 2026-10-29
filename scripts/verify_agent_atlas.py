@@ -95,7 +95,9 @@ def validate(data: dict, *, cards: str, source_readme: str | None = None) -> dic
                 and len(route) >= 2 and state != "DISCOVERED_NOT_DEEPLY_AUDITED"):
             origin = (route[0] + "/" + route[1]).lower()
             if not (any(e["repo"].lower() == origin for e in evidence)
-                    or any(e["kind"] == "redirect_and_boundary" for e in evidence)):
+                    or any(e["kind"] == "redirect_and_boundary"
+                           and e["repo"].split("/")[-1].lower() == route[1].lower()
+                           for e in evidence)):
                 raise AtlasError("STUDY_EVIDENCE_SOURCE_MISMATCH")
         if any(not isinstance(lead, str) or not lead.startswith("https://")
                or lead == url for lead in leads):
