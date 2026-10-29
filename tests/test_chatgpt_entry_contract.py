@@ -89,7 +89,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         codex = AGENTS.read_text(encoding="utf-8")
         adr = (ROOT / "docs/01-ARCHITECTURE-DECISIONS.md").read_text(encoding="utf-8")
         probes = PROBES.read_text(encoding="utf-8")
-        for token in ("SOURCE_LIFECYCLE_CONFLICT", "superseded",
+        for token in ("SOURCE_LIFECYCLE_CONFLICT", "supersedes its claim",
                       "independently reread", "privacy deletion"):
             self.assertIn(token, codex)
         for token in ("Source lifecycle at the real retrieval/write boundary",
