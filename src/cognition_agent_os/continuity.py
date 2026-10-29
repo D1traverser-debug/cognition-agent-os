@@ -620,9 +620,43 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                 return _no_action("STALE_GOAL_REVISION",
                                   goal_ids=[r["goal_id"] for r in rows])
             if len(active) != 1:
+                # Every registered owner contract remains recoverable when
+                # multiple goals compete. Returning only IDs silently drops
+                # objective, acceptance and prohibitions on a cold start.
+                # Validate EACH contract and its pinned task before exposing
+                # those originals; no arbitrary newest-goal selection.
+                registered = []
+                for candidate in active:
+                    raw_contract = candidate["contract"].encode("utf-8")
+                    if (hashlib.sha256(raw_contract).hexdigest()
+                            != candidate["contract_sha256"]):
+                        return _no_action("INTEGRITY_CONFLICT")
+                    try:
+                        original = _validate(json.loads(raw_contract))
+                    except (ValueError, TypeError, KeyError, OverflowError):
+                        return _no_action("INTEGRITY_CONFLICT")
+                    if original["goal_id"] != candidate["goal_id"]:
+                        return _no_action("INTEGRITY_CONFLICT")
+                    current_task = db.execute(
+                        "SELECT * FROM tasks WHERE task_id=?",
+                        (original["next_task_id"],)).fetchone()
+                    if (current_task is None
+                        or current_task["goal_rev"] != candidate["goal_rev"]
+                        or current_task["grant_rev"] != candidate["grant_rev"]
+                        or _task_fingerprint(current_task)
+                            != candidate["task_spec_sha256"]):
+                        return _no_action("TASK_LINEAGE_UNVERIFIABLE")
+                    registered.append({
+                        "goal_id": original["goal_id"],
+                        "objective": original["objective"],
+                        "acceptance": original["acceptance"],
+                        "constraints": original["constraints"],
+                    })
                 return _no_action(
                     "AMBIGUOUS_ACTIVE_GOALS",
-                    goal_ids=[r["goal_id"] for r in active])
+                    goal_ids=[r["goal_id"] for r in active],
+                    registered_goals=registered,
+                    authority_current=bool(authority["write_allowed"]))
             row = active[0]
             raw = row["contract"].encode("utf-8")
             if hashlib.sha256(raw).hexdigest() != row["contract_sha256"]:
