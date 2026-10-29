@@ -654,7 +654,8 @@ class CodexSessionContext(unittest.TestCase):
         register_goal(self.db, owner)
         hook = self._run()
         # The startup hook deliberately has no live GitHub attestation.
-        self.assertEqual(hook["status"], "SOURCE_REVALIDATION_REQUIRED", hook)
+        self.assertEqual(hook["status"], "SOURCE_UNAVAILABLE", hook)
+        self.assertNotIn("observed_head_sha", hook)
         self.assertNotIn(owner["objective"], json.dumps(hook))
         self.assertNotIn(owner["acceptance"], json.dumps(hook))
         self.assertNotIn("next_task_id", hook)
@@ -665,7 +666,8 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(recovered["readback"]["acceptance"], owner["acceptance"])
         self.assertEqual(recovered["readback"]["constraints"], owner["constraints"])
         self.assertEqual(recovered["readback"]["status"],
-                         "SOURCE_REVALIDATION_REQUIRED")
+                         "SOURCE_UNAVAILABLE")
+        self.assertNotIn("observed_head_sha", recovered["readback"])
         self.assertNotIn("next_task_id", recovered["readback"])
         self.assertFalse(recovered["scheduling_or_effects_performed"])
 
