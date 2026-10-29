@@ -465,6 +465,23 @@ class CodexSessionContext(unittest.TestCase):
         self.assertNotIn("next_task_id", state)
         self.assertFalse(state["business_outcome_verified"])
 
+    def test_multiple_original_owner_goals_survive_cold_start_ambiguity(self):
+        """A hook must not drop distinct user goals or select a recent winner."""
+        first_goal = "Reconcile source A without writing external systems."
+        second_goal = "Investigate source B and preserve contradictory evidence."
+        with closing(connect(self.db)) as db:
+            first_root = create_task(db, {"kind": "open_goal", "goal": first_goal})
+            second_root = create_task(db, {"kind": "open_goal", "goal": second_goal})
+        result = self._run()
+        self.assertEqual(result["status"], "AMBIGUOUS_OPEN_OWNER_GOALS")
+        self.assertEqual(set(result["root_task_ids"]), {first_root, second_root})
+        self.assertEqual(
+            {item["original_goal"] for item in result["original_goals"]},
+            {first_goal, second_goal})
+        self.assertFalse(result["original_goal_verified"])
+        self.assertNotIn("next_task_id", result)
+        self.assertFalse(result["business_outcome_verified"])
+
     def test_cold_restart_resumes_exact_original_goal_without_new_ledger(self):
         goal = "Compare actual.csv with baseline.csv and report differences."
         with closing(connect(self.db)) as db:
