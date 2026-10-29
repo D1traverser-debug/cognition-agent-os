@@ -421,14 +421,16 @@ class CodexSessionContext(unittest.TestCase):
         with closing(connect(self.db)) as db:
             create_task(db, {"kind": "open_goal", "goal": owner})
         result = self._run()
-        self.assertEqual(result["original_goal"], owner)
+        self.assertNotIn("original_goal", result)
         self.assertTrue(result["original_goal_verified"])
+        self.assertTrue(result["original_goal_available_via_readback"])
+        self.assertTrue(result["original_goal_omitted_from_hook"])
         self.assertNotIn("repository_recovery", result)
 
-    def test_large_valid_owner_goal_remains_exact_in_native_hook_output(self):
-        # Native-goal admission permits 8,192 original characters. The
-        # read-only hook must preserve its exact original without inventing
-        # its own transport budget. Codex owns native spill and preview.
+    def test_large_valid_owner_goal_remains_in_ledger_not_hook_spill(self):
+        # Native-goal admission permits 8,192 original characters. The hook
+        # carries checked identity; only explicit same-ledger readback reveals
+        # original private text (never arbitrary substring truncation).
         goal = ("Check evidence and permissions without skipping any original "
                 "clauses. " + "compare sources and verify results; " * 220)
         self.assertTrue(7500 < len(goal) <= 8192)
@@ -440,8 +442,9 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(first["source_of_truth"], "ORIGINAL_SQLITE_TASK")
         self.assertRegex(first["original_contract_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(first["ledger_discovery"], "CONFIGURED_LEDGER")
-        self.assertEqual(first["original_goal"], goal)
+        self.assertNotIn("original_goal", first)
         self.assertTrue(first["original_goal_verified"])
+        self.assertTrue(first["original_goal_available_via_readback"])
         self.assertFalse(first["business_outcome_verified"])
         self.assertFalse(first["scheduling_or_effects_performed"])
         with closing(connect(self.db)) as db:
@@ -459,8 +462,9 @@ class CodexSessionContext(unittest.TestCase):
         state = self._run()
         self.assertEqual(state["root_task_id"], root)
         self.assertEqual(state["status"], "AUTHORITY_REVOKED")
-        self.assertEqual(state["original_goal"], goal)
+        self.assertNotIn("original_goal", state)
         self.assertTrue(state["original_goal_verified"])
+        self.assertTrue(state["original_goal_available_via_readback"])
         self.assertIs(state["authority_current"], False)
         self.assertNotIn("next_task_id", state)
         self.assertFalse(state["business_outcome_verified"])
@@ -475,9 +479,10 @@ class CodexSessionContext(unittest.TestCase):
         result = self._run()
         self.assertEqual(result["status"], "AMBIGUOUS_OPEN_OWNER_GOALS")
         self.assertEqual(set(result["root_task_ids"]), {first_root, second_root})
-        self.assertEqual(
-            {item["original_goal"] for item in result["original_goals"]},
-            {first_goal, second_goal})
+        self.assertEqual(result["ambiguous_goal_count"], 2)
+        self.assertNotIn("original_goals", result)
+        self.assertNotIn(first_goal, json.dumps(result))
+        self.assertNotIn(second_goal, json.dumps(result))
         self.assertFalse(result["original_goal_verified"])
         self.assertNotIn("next_task_id", result)
         self.assertFalse(result["business_outcome_verified"])
@@ -488,6 +493,8 @@ class CodexSessionContext(unittest.TestCase):
         root = register_native_goal(self.db, goal)
         hook = self._run()
         locator = hook["original_goal_readback"]
+        self.assertNotIn("original_goal", hook)
+        self.assertNotIn(goal, json.dumps(hook))
         self.assertEqual(locator["source_role"], "READ_ONLY_EXISTING_SQLITE_GOAL")
         self.assertEqual(locator["arguments"][1:], [
             root, hook["original_contract_sha256"]])
@@ -533,8 +540,9 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["status"], "READY_TO_TICK")
         self.assertEqual(first["root_task_id"], root)
-        self.assertEqual(first["original_goal"], goal)
+        self.assertNotIn("original_goal", first)
         self.assertTrue(first["original_goal_verified"])
+        self.assertTrue(first["original_goal_available_via_readback"])
         self.assertFalse(first["business_outcome_verified"])
         self.assertEqual(first["next_task_id"], root)
         with closing(connect(self.db)) as db:
@@ -618,7 +626,8 @@ class CodexSessionContext(unittest.TestCase):
         context = json.loads(
             wire["hookSpecificOutput"]["additionalContext"].partition(": ")[-1])
         self.assertEqual(context["root_task_id"], root, context)
-        self.assertEqual(context["original_goal"], goal)
+        self.assertNotIn("original_goal", context)
+        self.assertTrue(context["original_goal_available_via_readback"])
         self.assertEqual(context["status"], "READY_TO_TICK")
         self.assertFalse(context["scheduling_or_effects_performed"])
 
