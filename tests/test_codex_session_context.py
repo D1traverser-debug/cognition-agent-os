@@ -228,12 +228,14 @@ class CodexSessionContext(unittest.TestCase):
             self.assertEqual(module.main(), 0)
         packet = json.loads(stdout.getvalue())
         receipt = packet["hookSpecificOutput"]["additionalContext"]
-        self.assertLessEqual(len(receipt), 6000)
+        self.assertGreater(len(receipt), 6000)
         data = json.loads(receipt.partition(": ")[-1])
         self.assertEqual(data["status"], "NO_LOCAL_LEDGER_CONFIGURED")
         self.assertEqual(data["ledger_discovery"], "NO_LOCAL_LEDGER_CONFIGURED")
         self.assertFalse(data["original_goal_verified"])
         self.assertNotIn("original_goal", data)
+        self.assertEqual(data["repository_recovery"]["extra_untrusted_detail"],
+                         "x" * 10000)
         self.assertNotEqual(data["status"], "FULL_LEDGER_READBACK_REQUIRED")
         self.assertEqual(
             data["repository_recovery"]["live_default_branch_head_and_ci"],
@@ -260,12 +262,40 @@ class CodexSessionContext(unittest.TestCase):
               patch.object(sys, "stdout", stdout)):
             self.assertEqual(module.main(), 0)
         receipt = json.loads(stdout.getvalue())["hookSpecificOutput"]["additionalContext"]
-        self.assertTrue(2000 < len(receipt) <= 6000)
+        self.assertGreater(len(receipt), 2000)
         recovered = json.loads(receipt.partition(": ")[-1])
         self.assertEqual(recovered["status"], "NO_LOCAL_LEDGER_CONFIGURED")
         self.assertEqual(recovered["repository_recovery"]["bounded_source_details"],
                          guide["bounded_source_details"])
         self.assertFalse(recovered["original_goal_verified"])
+
+    def test_no_ledger_long_source_is_not_silently_discarded(self):
+        """No extra index: let Codex native spill, keeping original repo guidance."""
+        import importlib.util
+        import io
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location("source_spill_hook", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        extra = "重要约束:不得合并、不许写子系统; " * 500
+        guide = dict(module._project_recovery_when_no_ledger())
+        guide["additional_constraints"] = extra
+        stdin = io.StringIO(json.dumps({"cwd": str(ROOT), "source": "startup"}))
+        stdout = io.StringIO()
+        with (patch.object(module, "_existing_database",
+                           return_value=(None, "NO_LOCAL_LEDGER_CONFIGURED")),
+              patch.object(module, "_project_recovery_when_no_ledger",
+                           return_value=guide),
+              patch.object(sys, "stdin", stdin),
+              patch.object(sys, "stdout", stdout)):
+            self.assertEqual(module.main(), 0)
+        full = json.loads(stdout.getvalue())["hookSpecificOutput"]["additionalContext"]
+        result = json.loads(full.partition(": ")[-1])
+        self.assertEqual(result["repository_recovery"]["additional_constraints"], extra)
+        self.assertEqual(result["repository_recovery"]["live_default_branch_head_and_ci"],
+                         "MUST_REFETCH")
+        self.assertFalse(result["original_goal_verified"])
 
     def test_missing_source_never_invents_owner_goal(self):
         result = self._run(with_database=False)
@@ -310,8 +340,8 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("ChatGPT/Codex",
                       architecture["proposed_first_action"])
         self.assertIn("挑战", architecture["proposed_first_action"])
-        self.assertLessEqual(self.last_context_chars, 6000,
-                             "Character cap must not be confused with Codex token threshold")
+        self.assertGreater(self.last_context_chars, 100,
+                           "Native client owns the token overflow; hook must remain valid")
         topology = project["live_python_topology"]
         self.assertEqual(topology["kind"],
                          "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF")
@@ -395,10 +425,10 @@ class CodexSessionContext(unittest.TestCase):
         self.assertTrue(result["original_goal_verified"])
         self.assertNotIn("repository_recovery", result)
 
-    def test_large_valid_owner_goal_preserves_sqlite_locator_not_partial_text(self):
+    def test_large_valid_owner_goal_remains_exact_in_native_hook_output(self):
         # Native-goal admission permits 8,192 original characters. The
-        # read-only SessionStart hook must not erase its identity simply
-        # because that legitimate original exceeds the model-context budget.
+        # read-only hook must preserve its exact original without inventing
+        # its own transport budget. Codex owns native spill and preview.
         goal = ("Check evidence and permissions without skipping any original "
                 "clauses. " + "compare sources and verify results; " * 220)
         self.assertTrue(7500 < len(goal) <= 8192)
@@ -406,16 +436,12 @@ class CodexSessionContext(unittest.TestCase):
         first = self._run()
         second = self._run()
         self.assertEqual(first, second)
-        self.assertEqual(first["status"], "FULL_LEDGER_READBACK_REQUIRED")
         self.assertEqual(first["root_task_id"], root)
         self.assertEqual(first["source_of_truth"], "ORIGINAL_SQLITE_TASK")
         self.assertRegex(first["original_contract_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(first["ledger_discovery"], "CONFIGURED_LEDGER")
-        self.assertTrue(first["original_goal_persisted_in_ledger"])
-        self.assertTrue(first["original_goal_omitted_from_hook"])
-        self.assertFalse(first["original_goal_verified"])
-        self.assertNotIn("original_goal", first)
-        self.assertNotIn("next_task_id", first)
+        self.assertEqual(first["original_goal"], goal)
+        self.assertTrue(first["original_goal_verified"])
         self.assertFalse(first["business_outcome_verified"])
         self.assertFalse(first["scheduling_or_effects_performed"])
         with closing(connect(self.db)) as db:
@@ -432,9 +458,10 @@ class CodexSessionContext(unittest.TestCase):
             alter_authority(db, revoke=True)
         state = self._run()
         self.assertEqual(state["root_task_id"], root)
-        self.assertEqual(state["status"], "FULL_LEDGER_READBACK_REQUIRED")
-        self.assertEqual(state["observed_runtime_status"], "AUTHORITY_REVOKED")
-        self.assertFalse(state["original_goal_verified"])
+        self.assertEqual(state["status"], "AUTHORITY_REVOKED")
+        self.assertEqual(state["original_goal"], goal)
+        self.assertTrue(state["original_goal_verified"])
+        self.assertIs(state["authority_current"], False)
         self.assertNotIn("next_task_id", state)
         self.assertFalse(state["business_outcome_verified"])
 
