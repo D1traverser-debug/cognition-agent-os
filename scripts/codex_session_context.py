@@ -296,6 +296,30 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
                 context.pop("original_goal", None)
                 context["original_goal_omitted_from_hook"] = True
                 context["original_goal_available_via_readback"] = True
+        if not include_full_original and isinstance(
+                context.get("native_decision_state"), dict):
+            # Native audit contains raw original_goal and private research
+            # proposals. Do not embed them in a Codex SessionStart/spill.
+            # Only the explicit, checked same-ledger dereference may expose
+            # original evidence when the reasoning task actually needs it.
+            decision = context["native_decision_state"]
+            context["native_decision_state"] = {
+                key: decision[key] for key in (
+                    "status", "observation_sha256", "decision_count",
+                    "open_research_count", "owner_outcome_verified",
+                    "business_outcome_verified")
+                if key in decision
+            }
+        if not include_full_original and isinstance(
+                context.get("original_obligation_progress"), list):
+            # Owner clause wording stays in the canonical task/child source.
+            context["original_obligation_progress"] = [{
+                key: item[key] for key in (
+                    "child_task_id", "task_state", "error_code",
+                    "owner_outcome_verified")
+                if key in item
+            } for item in context["original_obligation_progress"]
+                if isinstance(item, dict)]
         if not include_full_original and "original_goals" in context:
             # Ambiguous roots need selection; don't leak all private originals
             # into a startup hook merely because their identities are listed.
