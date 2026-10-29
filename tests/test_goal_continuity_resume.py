@@ -255,6 +255,51 @@ class GoalContinuityColdResume(unittest.TestCase):
                          self.contract()["constraints"])
         self.assertNotIn("next_task_id", state)
 
+    def test_stale_legacy_registration_cannot_hide_current_open_goal(self):
+        """Historical contracts cannot mask the current author's original."""
+        register_goal(self.db_path, self.contract())
+        current_text = "Reassess the current goal using new original evidence."
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db, goal_change=True)
+            current = create_task(db, {"kind": "open_goal", "goal": current_text})
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        state = resume_goal(self.db_path)
+        self.assertEqual(state["root_task_id"], current, state)
+        self.assertEqual(state["original_goal"], current_text)
+        self.assertEqual(state["status"], "READY_TO_TICK")
+        self.assertEqual(state["next_task_id"], current)
+        with closing(connect(self.db_path)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM events")
+                             .fetchone()[0], before)
+
+    def test_stale_legacy_registration_cannot_hide_current_native_goal(self):
+        """A new native original is not erased by a stale legacy selector."""
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db, goal_change=True)
+        new_text = "Investigate unfamiliar engineering evidence independently."
+        current = register_native_goal(self.db_path, new_text)
+        state = resume_goal(self.db_path)
+        self.assertEqual(state["root_task_id"], current, state)
+        self.assertEqual(state["original_goal"], new_text)
+        self.assertEqual(state["status"], "SOURCE_AND_OUTCOME_READBACK_REQUIRED")
+        self.assertNotIn("next_task_id", state)
+
+    def test_stale_legacy_registration_preserves_all_current_roots(self):
+        """Current ambiguity outranks an expired legacy-only record."""
+        register_goal(self.db_path, self.contract())
+        with closing(connect(self.db_path)) as db:
+            alter_authority(db, goal_change=True)
+            current_open = create_task(db, {
+                "kind": "open_goal", "goal": "Current research plan A."})
+        current_native = register_native_goal(
+            self.db_path, "Current independent evidence review B.")
+        state = resume_goal(self.db_path)
+        self.assertEqual(state["status"], "AMBIGUOUS_OPEN_OWNER_GOALS", state)
+        self.assertEqual({x["root_task_id"] for x in state["original_goals"]},
+                         {current_open, current_native})
+        self.assertNotIn("next_task_id", state)
+
     def test_new_goal_revision_requires_explicit_reconciliation(self):
         register_goal(self.db_path, self.contract())
         with closing(connect(self.db_path)) as db:
