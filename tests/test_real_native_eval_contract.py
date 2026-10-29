@@ -78,6 +78,64 @@ class NativeRealModelEvalContract(unittest.TestCase):
                     self.assertNotEqual(result["independent_owner_result"],
                                         "LOCAL_OWNER_RESULT_VERIFIED", result)
 
+    def test_7b_transport_failure_is_distinct_from_model_abstention(self):
+        """Genuine model error receipts never count as model cognition."""
+        bench = load_benchmark()
+        rows = [{
+            "withheld_local_owner_required": True,
+            "withheld_expected_method": "compare_records",
+            "native": {
+                "whole_local_owner_verified": False, "source_preserved": True,
+                "method_alignment": False, "model_calls": 3,
+                "model_trace_actual_not_mocked": [
+                    {"transport_error_class": "LocalModelUnavailable",
+                     "elapsed_seconds": 120.05},
+                    {"transport_error_class": "LocalModelUnavailable",
+                     "elapsed_seconds": 120.07},
+                    {"done": True, "raw_response": '{"abstain":true}'},
+                ],
+                "progress": [
+                    {"model_plan_status": "NATIVE_LOCAL_MODEL_UNAVAILABLE"},
+                    {"model_plan_status": "NATIVE_LOCAL_MODEL_ABSTAINED"},
+                ],
+                "selected_objectives": [],
+            },
+            "baseline": {
+                "whole_local_owner_verified": True, "source_preserved": True,
+                "method_alignment": True, "model_calls": 0,
+                "selected_objectives": ["compare_records"],
+            },
+        }]
+        results = bench.score_trial_results(rows)
+        self.assertEqual(results["native"]["owner_goals_completed"], 0)
+        self.assertEqual(results["native"]["model_generation_calls"], 3)
+        self.assertEqual(results["native"]["model_transport_failures"], 2)
+        self.assertEqual(results["native"]["model_abstention_calls"], 1)
+        self.assertEqual(results["native"]["model_completed_generations"], 1)
+        self.assertEqual(results["baseline"]["owner_goals_completed"], 1)
+        self.assertEqual(results["baseline"]["model_transport_failures"], 0)
+
+    def test_unavailable_local_model_is_not_blindly_retried_in_same_trial(self):
+        """No extra 120s cost on unchanged evidence after genuine transport loss."""
+        from unittest.mock import patch
+        bench = load_benchmark()
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            case = bench.CASES[0]
+            with patch.object(bench, "advance_native_local_once",
+                return_value={"status": "NATIVE_LOCAL_MODEL_UNAVAILABLE",
+                              "reason": "local timeout",
+                              "owner_outcome_verified": False}) as attempt:
+                result = bench._native_trial(case, home)
+            self.assertEqual(attempt.call_count, 1)
+            self.assertEqual(result["independent_owner_result"],
+                             "OWNER_POSTCONDITION_UNVERIFIED")
+            self.assertEqual(
+                [x["model_plan_status"] for x in result["progress"]],
+                ["NATIVE_LOCAL_MODEL_UNAVAILABLE"])
+            self.assertTrue(result["source_preserved"])
+            self.assertFalse(result["whole_local_owner_verified"])
+
     def test_three_arm_scores_expose_real_model_invocation_cost(self):
         """A deterministic win must not be mislabeled as model cognition."""
         bench = load_benchmark()
