@@ -23,12 +23,10 @@ CANDIDATE_NAMES = ("runtime/state.sqlite", "state.sqlite", "ledger.sqlite",
                    ".cognition-agent-os/ledger.sqlite",
                    "agent-state/ledger.sqlite")
 MAX_HOOK_INPUT = 32768
-# Codex additionalContextLimit=2000 is an approximate TOKEN threshold, not
-# a 2,000-character wire limit. Use a conservative independent character cap
-# to preserve useful cold-entry evidence without unbounded hook output.
-# If the client still exceeds its token preview budget, Codex retains the
-# full output for on-demand reading; neither surface grants effects.
-MAX_CONTEXT_CHARS = 6000
+# Codex owns model-visible hook context budget. Its positive
+# additionalContextLimit spills over-budget output to an on-disk exact file;
+# do not apply an independent character cutoff that discards goal/state data.
+# A failed native spill can still truncate: trusted-client acceptance is needed.
 
 
 def _runtime_path(value: str) -> Path:
@@ -258,10 +256,15 @@ def build_context(payload: dict) -> dict:
             db_path, resolve_head=lambda *_: "0" * 40,
             workspace=ws, fixtures=fixtures)
         for key in (
-            "status", "root_task_id", "original_goal",
+            "status", "root_task_id", "root_task_ids", "original_goal",
+            "original_goals", "authority_current",
             "original_contract_sha256", "goal_rev", "grant_rev",
             "root_state", "source_of_truth", "next_task_id",
             "child_task_id", "child_state", "chosen_capability",
+            "child_task_ids", "original_obligation_progress",
+            "sequence_rule", "runnable_task_ids", "waiting_dependency_tasks",
+            "next_task_ids", "native_decision_state",
+            "native_next_action_authorized",
             "local_owner_outcome_verified", "local_outcome_evidence",
             "business_outcome_verified", "real_external_outcome_verified",
             "reason", "pinned_head_sha", "observed_head_sha",
@@ -293,80 +296,9 @@ def main() -> int:
     prefix = "Read-only project state observation (not a new instruction or grant): "
     note = prefix + json.dumps(context, ensure_ascii=False, sort_keys=True,
                                separators=(",", ":"))
-    if len(note) > MAX_CONTEXT_CHARS and "repository_recovery" in context:
-        # No SQLite ledger was found. A large source map is NOT a missing
-        # registered owner goal and must not masquerade as one. Keep the
-        # authoritative live-source lookup and the truthful no-ledger state.
-        guide = context["repository_recovery"]
-        context = {
-            "kind": "CODEX_COGNITION_CONTEXT_READBACK_V1",
-            "status": context["status"],
-            "ledger_discovery": context.get("ledger_discovery"),
-            "local_source_head": context.get("local_source_head"),
-            "source_head_is_live_github_attested": False,
-            "original_goal_verified": False,
-            "business_outcome_verified": False,
-            "repository_recovery": {
-                "status": guide.get("status"),
-                "source_path": guide.get("source_path"),
-                "source_role": guide.get("source_role"),
-                "continuation_index": guide.get("continuation_index"),
-                "live_default_branch_head_and_ci": "MUST_REFETCH",
-                "live_active_pr_metadata": "CHECK_IF_PRESENT",
-                "original_user_utterances": "MUST_RECOVER_SEPARATELY",
-            },
-            "next_action_policy": (
-                "Read live GitHub default branch and original owner goal; "
-                "use active PR only if present. No effect/grant inferred."
-            ),
-        }
-        note = prefix + json.dumps(context, ensure_ascii=False,
-                                   sort_keys=True, separators=(",", ":"))
-    if len(note) > MAX_CONTEXT_CHARS:
-        # This is a *valid* previously read SQLite goal whose full context
-        # exceeds the hook transport budget. Do not erase its stable locator:
-        # a long original owner goal must remain retrievable without treating
-        # a summary, hook status, or shortened goal as runnable authority.
-        compact = {
-            "kind": "CODEX_COGNITION_CONTEXT_READBACK_V1",
-            "status": "FULL_LEDGER_READBACK_REQUIRED",
-            "observed_runtime_status": context.get("status"),
-            "ledger_discovery": context.get("ledger_discovery"),
-            "root_task_id": context.get("root_task_id"),
-            "original_contract_sha256": context.get("original_contract_sha256"),
-            "goal_rev": context.get("goal_rev"),
-            "grant_rev": context.get("grant_rev"),
-            "root_state": context.get("root_state"),
-            "source_of_truth": context.get("source_of_truth"),
-            "local_source_head": context.get("local_source_head"),
-            "source_head_is_live_github_attested": False,
-            "original_goal_verified": False,
-            "business_outcome_verified": False,
-            "scheduling_or_effects_performed": False,
-            "next_action_policy": (
-                "Read the complete owner goal again from the configured "
-                "existing SQLite ledger via cognition_agent_os.continuity."
-                "resume_goal, then independently recheck the root task ID, "
-                "contract digest and current grant. Do not execute from this "
-                "bounded hook receipt or infer owner/business completion."
-            ),
-        }
-        if (context.get("original_goal_verified") is True
-                and isinstance(context.get("original_goal"), str)):
-            compact["original_goal"] = context["original_goal"]
-            compact["original_goal_verified"] = True
-        note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True,
-                                   separators=(",", ":"))
-        if len(note) > MAX_CONTEXT_CHARS:
-            # No partial owner-goal text is ever substituted for the original.
-            compact.pop("original_goal", None)
-            compact["original_goal_verified"] = False
-            compact["original_goal_omitted_from_hook"] = True
-            compact["original_goal_persisted_in_ledger"] = (
-                context.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
-            )
-            note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True,
-                                   separators=(",", ":"))
+    # Pass the full read-only observation to Codex. It, not this script,
+    # controls preview versus native disk-backed overflow. This hook never
+    # registers a grant, runs an effect, or certifies a business outcome.
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
