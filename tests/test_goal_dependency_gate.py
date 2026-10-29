@@ -54,6 +54,55 @@ class OrderedEvidenceGateTests(unittest.TestCase):
         self.assertEqual(json.loads((self.fixtures/"config.json").read_text()),
                          {"existing":"keep"})
 
+    def test_released_successor_retracted_when_predecessor_invalidated(self):
+        """A formerly admitted sibling result cannot outlive source revocation."""
+        from cognition_agent_os.conformance import inspect_conformance
+        first,second=self.tasks()
+        register_local_dependency(self.db,first,second)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        self.assertEqual(self.get(first)["state"],"NEEDS_REVIEW")
+        self.assertEqual(self.get(second)["state"],"NEEDS_REVIEW")
+        before=inspect_conformance(self.db,self.workspace,self.fixtures)
+        states={x["task_id"]:x for x in before["findings"]}
+        self.assertEqual(states[first]["disposition"],"PASS",before)
+        self.assertEqual(states[second]["disposition"],"PASS",before)
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET state='UNKNOWN',error_code='SOURCE_WITHDRAWN' "
+                       "WHERE task_id=?",(first,))
+            db.commit()
+        found=inspect_conformance(self.db,self.workspace,self.fixtures)
+        findings={x["task_id"]:x for x in found["findings"]}
+        self.assertEqual(findings[second]["disposition"],
+                         "CONFIRMED_INCONSISTENCY",found)
+        self.assertEqual(findings[second]["proof"],
+                         "DEPENDENCY_PREDECESSOR_INVALIDATED")
+        inspect_conformance(self.db,self.workspace,self.fixtures,enforce=True)
+        self.assertEqual(self.get(second)["state"],"UNKNOWN")
+        self.assertEqual(self.get(second)["error_code"],
+                         "CONFORMANCE_DEPENDENCY_PREDECESSOR_INVALIDATED")
+
+    def test_unavailable_predecessor_source_does_not_forge_contradiction(self):
+        """An outage is UNKNOWN, not automatically a confirmed false result."""
+        from cognition_agent_os.conformance import inspect_conformance
+        (self.fixtures/"other.json").write_text("{}")
+        with closing(connect(self.db)) as db:
+            first=create_task(db,{"kind":"goal_case","goal_type":"json_keys",
+                "input":"config.json","desired":{"diagnostic":"ready"}})
+            second=create_task(db,{"kind":"goal_case","goal_type":"json_keys",
+                "input":"other.json","desired":{"next_step":"draft"}})
+        register_local_dependency(self.db,first,second)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        run_tick(self.db,self.workspace,self.fixtures,max_jobs=1)
+        (self.fixtures/"config.json").unlink()
+        checked=inspect_conformance(self.db,self.workspace,self.fixtures)
+        findings={x["task_id"]:x for x in checked["findings"]}
+        self.assertEqual(findings[second]["proof"],
+                         "DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE",checked)
+        self.assertEqual(findings[second]["disposition"],"INSUFFICIENT_EVIDENCE")
+        self.assertNotEqual(findings[second]["disposition"],"PASS")
+        self.assertEqual(self.get(second)["state"],"NEEDS_REVIEW")
+
     def test_bad_source_blocks_not_executes_successor(self):
         first,second=self.tasks()
         register_local_dependency(self.db,first,second)

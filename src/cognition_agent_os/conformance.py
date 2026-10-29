@@ -183,6 +183,39 @@ def _verify_consistent(row: sqlite3.Row, fixtures: Path) -> str:
         return "SUCCESS_EVIDENCE_UNAVAILABLE"
 
 
+def _check_released_dependency(db: sqlite3.Connection, row: sqlite3.Row,
+                               db_path: Path, workspace: Path,
+                               fixtures: Path) -> str | None:
+    """A released ordered source is a continuing result dependency.
+
+    Task parentage and evidence predecessor edges are different graphs. The
+    original worker validates before action; conformance must reattest both.
+    """
+    has_table=db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' "
+        "AND name='task_dependencies'").fetchone()
+    if has_table is None:
+        return None  # Backward compatible with a legacy initialized ledger.
+    edge=db.execute(
+        "SELECT predecessor_task,evidence_kind,released_at "
+        "FROM task_dependencies WHERE task_id=?", (row["task_id"],)).fetchone()
+    if edge is None:
+        return None
+    predecessor=db.execute(
+        "SELECT state,goal_rev,grant_rev FROM tasks WHERE task_id=?",
+        (edge["predecessor_task"],)).fetchone()
+    if (edge["released_at"] is None or predecessor is None
+        or predecessor["goal_rev"]!=row["goal_rev"]
+        or predecessor["grant_rev"]!=row["grant_rev"]
+        or predecessor["state"] not in ("NEEDS_REVIEW","VERIFIED")):
+        return "DEPENDENCY_PREDECESSOR_INVALIDATED"
+    from .dependency_gate import _independent_proof
+    if not _independent_proof(db_path,workspace,fixtures,
+                              edge["predecessor_task"],edge["evidence_kind"]):
+        return "DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE"
+    return None
+
+
 def _check_one(db, row: sqlite3.Row, db_path: Path,
                workspace: Path, fixtures: Path) -> dict:
     tid=row["task_id"]
@@ -326,6 +359,14 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             proof="UNSUPPORTED_EVIDENCE_STATE"
     except (ValueError,TypeError,KeyError,OSError,sqlite3.Error):
         proof="EVIDENCE_RECHECK_UNAVAILABLE"
+    if proof=="MECHANICALLY_VALID":
+        try:
+            dependency=_check_released_dependency(
+                db,row,db_path,workspace,fixtures)
+        except (sqlite3.Error,ValueError,TypeError,KeyError,OSError):
+            dependency="DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE"
+        if dependency is not None:
+            proof=dependency
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
               "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
