@@ -31,7 +31,7 @@ Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that pr
 9. **Child-business truth:** inspect each selected child repository's native contracts, permissions and outcome oracle. Parent `domain_contract.py` is not child authority.
 10. **On-demand engineering provenance:** GitHub commit history and Files changed remain the available complete audit trail, **not a mandatory cold-start download**. Begin with the active task's relevant source/tests and current failing evidence; follow selected commit/patch links only when they can resolve a cause, competing hypothesis, missing requirement or regression. Preserve conflicting and original evidence; never discard it solely to save context. Do not preload hundreds of commits, unrelated PRs or every implementation family.
 
-**Historical branch/PR cleanup is an ON-DEMAND provenance task, not a cold-start preload.** When a concrete merge, deletion, branch closure or missing experiment is under review, retrieve `evaluation/historical_branch_provenance_v1.json` as a dated **source-hash inventory only**, independently requery the LIVE full branch and open-PR set, follow old exact blob and any relocated `archive/` path, then examine changed same-path implementations and consumer/regression effects. The 2026-10-30 receipt preserves 28 then-open legacy Draft observations and 27 then-unattached branches; it does **not** prove semantic equivalence or authorize automatic cleanup. Missing information stays OPEN; never close by a stale count, filename similarity, or green CI alone.
+Branch cleanup (ON-DEMAND): read dated `evaluation/historical_branch_provenance_v1.json`; LIVE GitHub outranks it.
 
 ## Work cycle after recovery
 
