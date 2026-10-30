@@ -407,7 +407,13 @@ def review_repo(db_path,workspace,fixtures,tid):
     # observed and quarantined by the shared conformance entrypoint.
     preflight=effect_preflight(db_path,workspace,fixtures)
     if not preflight["admitted"]:
-        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
+        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED",
+                "reason":preflight["reason"],
+                "preflight_status":preflight["status"],
+                "checked":preflight["checked"],
+                "eligible":preflight["eligible"],
+                "quarantined":preflight["quarantined"],
+                "emergency_stops":preflight["emergency_stops"]}
     initial=audit_repo(db_path,workspace,fixtures,tid)
     if initial["status"]!="REPO_BYTES_MECHANICALLY_VALID":
         return {"task_id":tid,"status":"NOT_ADMITTED","reason":initial.get("reason")}
