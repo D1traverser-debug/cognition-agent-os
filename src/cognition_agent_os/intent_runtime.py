@@ -10,6 +10,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from .ledger import readonly_snapshot
 from .ledger import connect, create_task, current_guard, event, finalize_observed
 from .intent_planner import compile_intent, IntentError
 
@@ -64,9 +65,7 @@ def audit_intent_plan(db_path: Path, task_id: str) -> dict:
     if not db_path.is_file() or db_path.is_symlink():
         return {**fail,"reason":"MISSING_LEDGER"}
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             parent=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             rows=db.execute("""SELECT details FROM events WHERE task_id=?
                                AND kind='INTENT_DECOMPOSED'""",(task_id,)).fetchall()
