@@ -131,6 +131,31 @@ class RepoLabTest(unittest.TestCase):
         self.assertEqual(inspect_conformance(
             self.dbpath,self.ws,self.fx)["mechanically_valid"],1)
 
+    def test_artifact_changed_after_initial_audit_is_not_staged(self):
+        from cognition_agent_os import repo_repair
+        tid=self.plan()
+        artifact=self.ws/"artifacts"/(tid+".json")
+        original=artifact.read_bytes()
+        real_audit=repo_repair.audit_repo
+        calls=0
+        def mutate_after_initial_audit(*args,**kwargs):
+            nonlocal calls
+            result=real_audit(*args,**kwargs)
+            calls+=1
+            if calls==1:
+                self.assertEqual(result["status"],"REPO_BYTES_MECHANICALLY_VALID")
+                artifact.write_bytes(original+b"\\n")
+            return result
+        with patch.object(repo_repair,"audit_repo",side_effect=mutate_after_initial_audit):
+            with patch.object(repo_repair,"run_suite",
+                              side_effect=AssertionError("changed artifact must not reach Docker")) as run:
+                result=review_repo(self.dbpath,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"NOT_ADMITTED",result)
+        self.assertEqual(result["reason"],"ARTIFACT_CHANGED_AFTER_AUDIT")
+        self.assertFalse(run.called)
+        self.assertFalse((self.ws/"repo_lab"/tid).exists())
+        self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
+
     def test_p30_hidden_gold_drifts_after_docker_before_review_commit(self):
         tid=self.plan()
         contaminated=b'[{"input":{},"expected":{"net":999}}]'

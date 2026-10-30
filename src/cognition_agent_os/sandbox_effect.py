@@ -19,6 +19,7 @@ from .diagnostics import record_audit_failure, reject_review_if_untrusted
 from .goal_loop import validate_goal
 from .source import safe_fixture
 from .isolated_filesystem import stage_immutable
+from .runner import ArtifactConflict, read_audited_artifact
 
 MAX_STAGE_BYTES=128*1024
 MAX_REPLANS=2
@@ -144,8 +145,22 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
             event(db,task_id,"SANDBOX_REFUSED",{"reason":audit["status"]})
             db.commit()
             return _result(task_id,"NOT_ADMITTED",reason=audit["status"])
-        path=workspace/"artifacts"/(task_id+".json")
-        record=json.loads(path.read_bytes())
+        if audit.get("artifact_sha256") != task["artifact_hash"]:
+            event(db,task_id,"SANDBOX_REFUSED",{
+                "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})
+            db.commit()
+            return _result(task_id,"NOT_ADMITTED",
+                           reason="ARTIFACT_CHANGED_AFTER_AUDIT")
+        try:
+            raw_artifact=read_audited_artifact(
+                workspace,task_id,audit,max_bytes=65536)
+        except (ArtifactConflict,OSError,ValueError):
+            event(db,task_id,"SANDBOX_REFUSED",{
+                "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})
+            db.commit()
+            return _result(task_id,"NOT_ADMITTED",
+                           reason="ARTIFACT_CHANGED_AFTER_AUDIT")
+        record=json.loads(raw_artifact)
         spec=json.loads(task["source_spec"])
         validate_goal(spec)
         original=safe_fixture(fixtures,spec["input"])

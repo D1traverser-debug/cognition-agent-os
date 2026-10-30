@@ -19,7 +19,7 @@ from .ledger import readonly_snapshot
 from .container_lab import candidate_changes,cases_from_bytes,run_suite,ContainerUnavailable
 from .repo_repair import audit_repo,_sources,_candidate_from_model,sha
 from .source import safe_fixture
-from .runner import store_once,ArtifactConflict
+from .runner import store_once,ArtifactConflict,read_audited_artifact
 from .ledger import connect,create_task,event,current_guard
 
 MAX_ATTEMPTS_PER_LINEAGE=3
@@ -134,8 +134,12 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
             remaining=min(max_attempts,MAX_ATTEMPTS_PER_LINEAGE-prior)
             if remaining<=0:
                 return _deny("REFINEMENT_BUDGET_EXHAUSTED")
+            if task["artifact_hash"] != audit.get("artifact_sha256"):
+                return _deny("PARENT_EVIDENCE_UNVERIFIABLE",
+                             reason="ARTIFACT_CHANGED_AFTER_AUDIT")
             parent=dict(task)
-        frozen=json.loads((workspace/"artifacts"/(tid+".json")).read_bytes())
+        frozen=json.loads(read_audited_artifact(
+            workspace,tid,audit,max_bytes=65536))
         # P21 may have spent TWO generations before initial freeze
         # (first no-change, second differing). Do not silently exceed
         # the 3-call model budget through subsequent PUBLIC refinement.

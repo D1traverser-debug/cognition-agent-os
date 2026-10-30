@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from .ledger import readonly_snapshot
 from .isolated_filesystem import stage_immutable
+from .runner import ArtifactConflict, read_audited_artifact
 import re
 import sqlite3
 from contextlib import closing
@@ -100,6 +101,7 @@ def audit_patch(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
             artifact_raw=path.read_bytes()
             if hashlib.sha256(artifact_raw).hexdigest()!=task["artifact_hash"]:
                 return {**fail,"reason":"ARTIFACT_HASH_MISMATCH"}
+            fail["artifact_sha256"]=hashlib.sha256(artifact_raw).hexdigest()
             doc=json.loads(artifact_raw)
             if (doc["task_id"]!=task_id or doc["goal_rev"]!=task["goal_rev"]
                 or doc["source_spec"]!=spec or doc["status"]!="PROPOSAL_NOT_APPROVED"
@@ -199,8 +201,23 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
             db.commit()
             return {"task_id":task_id,"status":"AUTHORITY_BLOCKED","reason":reason}
         decision=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=True)
+        if decision["status"] in ("HOLDOUT_REFUTED","HOLDOUT_ACCEPTED"):
+            if decision.get("artifact_sha256") != row["artifact_hash"]:
+                event(db,task_id,"REPAIR_EFFECT_REFUSED",{
+                    "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})
+                db.commit()
+                return {"task_id":task_id,"status":"NOT_ADMITTED",
+                        "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
         if decision["status"]=="HOLDOUT_REFUTED":
-            frozen=json.loads((workspace/"artifacts"/(task_id+".json")).read_bytes())
+            try:
+                frozen=json.loads(read_audited_artifact(
+                    workspace,task_id,decision,max_bytes=32000))
+            except (ArtifactConflict,OSError,ValueError):
+                event(db,task_id,"REPAIR_EFFECT_REFUSED",{
+                    "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})
+                db.commit()
+                return {"task_id":task_id,"status":"NOT_ADMITTED",
+                        "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
             frozen_spec=json.loads(row["source_spec"])
             db.execute("""UPDATE tasks SET state='UNKNOWN',error_code='REPAIR_HOLDOUT_REFUTED',
                 lease_until=NULL,claim_token=NULL,state_version=state_version+1 WHERE task_id=?""",
@@ -236,7 +253,15 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
             return {"task_id":task_id,
                     "status":"HOLDOUT_RETRY_EXHAUSTED" if attempts>=3 else "HOLDOUT_UNVERIFIABLE",
                     "attempts":attempts,"reason":decision.get("reason")}
-        artifact=json.loads((workspace/"artifacts"/(task_id+".json")).read_bytes())
+        try:
+            artifact=json.loads(read_audited_artifact(
+                workspace,task_id,decision,max_bytes=32000))
+        except (ArtifactConflict,OSError,ValueError):
+            event(db,task_id,"REPAIR_EFFECT_REFUSED",{
+                "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})
+            db.commit()
+            return {"task_id":task_id,"status":"NOT_ADMITTED",
+                    "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
         try:
             patch_sha=_stage_patch(workspace,task_id,
                                    artifact["selected"]["candidate_text"].encode())
@@ -260,6 +285,7 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
         except OSError:
             staged_consistent=False
         if (post["status"]!="HOLDOUT_ACCEPTED"
+            or post.get("artifact_sha256")!=decision.get("artifact_sha256")
             or post.get("candidate_sha256")!=patch_sha
             or post.get("holdout_passes")!=decision.get("holdout_passes")
             or post.get("holdout_total")!=decision.get("holdout_total")

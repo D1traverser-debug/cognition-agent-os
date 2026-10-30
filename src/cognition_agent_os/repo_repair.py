@@ -19,7 +19,7 @@ import sqlite3
 from .container_lab import (
     validate_task_spec,candidate_changes,cases_from_bytes,run_suite,
     ContainerUnavailable)
-from .runner import store_once,ArtifactConflict
+from .runner import store_once,ArtifactConflict,read_audited_artifact
 from .source import safe_fixture
 from .ledger import connect,finalize_observed,event,current_guard
 
@@ -330,6 +330,7 @@ def audit_repo(db_path,workspace,fixtures,tid,*,require_staged=False):
             raw=path.read_bytes()
             if sha(raw)!=task["artifact_hash"]:
                 return {**fail,"reason":"PROPOSAL_HASH_CHANGED"}
+            fail["artifact_sha256"]=sha(raw)
             doc=json.loads(raw)
             if (doc["task_id"]!=tid or doc["goal_rev"]!=task["goal_rev"]
                 or doc["source_spec"]!=spec
@@ -409,7 +410,8 @@ def review_repo(db_path,workspace,fixtures,tid):
         return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
     # A container runtime is a PRECONDITION, never a host-execution fallback.
     try:
-        raw=(workspace/"artifacts"/(tid+".json")).read_bytes()
+        raw=read_audited_artifact(
+            workspace,tid,initial,max_bytes=65536)
         doc=json.loads(raw)
         spec=validate_task_spec(doc["source_spec"])
         base=_sources(spec,fixtures)
@@ -446,6 +448,9 @@ def review_repo(db_path,workspace,fixtures,tid):
 
         if not row or row["state"]!="NEEDS_REVIEW":
             db.commit();return {"task_id":tid,"status":"NOT_PENDING_REVIEW"}
+        if row["artifact_hash"] != initial.get("artifact_sha256"):
+            db.commit()
+            return {"task_id":tid,"status":"EVIDENCE_CHANGED_BEFORE_ACCEPTANCE"}
         allowed,reason=current_guard(db,dict(row),needs_write=True)
         if not allowed:
             db.commit();return {"task_id":tid,"status":"AUTHORITY_BLOCKED","reason":reason}
@@ -456,6 +461,7 @@ def review_repo(db_path,workspace,fixtures,tid):
             db.commit();return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
         fresh=audit_repo(db_path,workspace,fixtures,tid)
         if (fresh["status"]!="REPO_BYTES_MECHANICALLY_VALID" or
+            fresh.get("artifact_sha256")!=initial.get("artifact_sha256") or
             fresh["changes"]!=initial["changes"]):
             db.commit();return {"task_id":tid,"status":"EVIDENCE_CHANGED_BEFORE_ACCEPTANCE"}
         # The Docker result was calculated from hidden OUTSIDE this DB
@@ -493,6 +499,7 @@ def review_repo(db_path,workspace,fixtures,tid):
         except (OSError,ValueError):
             holdout_still_pinned=False
         if (post["status"]!="REPO_BYTES_MECHANICALLY_VALID"
+            or post.get("artifact_sha256")!=initial.get("artifact_sha256")
             or post["changes"]!=initial["changes"]
             or not holdout_still_pinned
             or any((workspace/"repo_lab"/tid/p).read_bytes()!=content
