@@ -21,9 +21,9 @@ Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that pr
 ## Recovery order and responsibility map
 
 1. **Owner authority:** read current/previous direct owner corrections or private source; distinguish grants from assistant proposals. Unavailable original clauses remain UNKNOWN.
-2. **Live engineering:** resolve the GitHub default branch and live PR metadata, then active task's exact HEAD, base, source and same-HEAD CI. Inspect other PRs only when identity, ancestry, provenance or observed conflicts demand it. Never trust a cached SHA or dated index as current.
-3. **Unfinished evidence:** recover every OPEN obligation, relevant failed outcome, rejected method and falsifier; no visible conflict does not mean no unfinished work.
-4. **Alternatives first:** inspect current code, connected tools, prior failures, pinned Agent-Learning-Hub research and `docs/ENGINEERING-COGNITION-TOOLCHAIN.md`. Use `scripts/architecture_probe.py --repo . --focus MODULE --hops 1` when relevant; AST, code graphs and hashes do not prove behavior or business success.
+2. **Live engineering:** resolve GitHub default branch HEAD, live PR metadata, active task's exact HEAD/base/source/CI and possible competing active work. Inspect other PRs only when identity, ancestry, provenance or observed conflicts demand it. A merged PR is historical provenance, not the live candidate; never trust a cached SHA.
+3. **Active evidence frontier is always required:** recover every OPEN obligation, relevant failed outcome, rejected method and falsifier; no visible conflict does not mean no unfinished work.
+4. **Existing-capability survey BEFORE every substantive choice:** inspect current code, connected tools, prior failures, pinned Agent-Learning-Hub research and `docs/ENGINEERING-COGNITION-TOOLCHAIN.md`. Use `scripts/architecture_probe.py --repo . --focus MODULE --hops 1` when relevant; AST, code graphs and hashes do not prove behavior or business success.
 5. **Architecture/gates:** read applicable `docs/01-ARCHITECTURE-DECISIONS.md` and `docs/PRODUCT-READINESS-GATE.md`, challenge their proposals against owner outcomes.
 6. **Codex:** read `AGENTS.md` and selectively `.agents/skills/goal-grounded-semantic-review/SKILL.md`; file presence does not establish native activation.
 7. **ChatGPT:** compare installed Skill with `integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md`; repository source alone cannot prove client routing.
