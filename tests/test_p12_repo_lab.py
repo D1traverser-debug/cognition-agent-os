@@ -144,7 +144,7 @@ class RepoLabTest(unittest.TestCase):
             calls+=1
             if calls==1:
                 self.assertEqual(result["status"],"REPO_BYTES_MECHANICALLY_VALID")
-                artifact.write_bytes(original+b"\n")
+                artifact.write_bytes(original+b" ")
             return result
         with patch.object(repo_repair,"audit_repo",side_effect=mutate_after_initial_audit):
             with patch.object(repo_repair,"run_suite",
@@ -181,10 +181,12 @@ class RepoLabTest(unittest.TestCase):
                 return {"admitted":True}
             return real_preflight(*args,**kwargs)
 
-        with patch.object(repo_repair,"audit_repo",side_effect=mutate_after_audit),\\
-             patch.object(conformance,"effect_preflight",side_effect=preflight),\\
-             patch.object(repo_repair,"run_suite",
-                          side_effect=AssertionError("untrusted proposal reached Docker")) as run:
+        with (
+            patch.object(repo_repair,"audit_repo",side_effect=mutate_after_audit),
+            patch.object(conformance,"effect_preflight",side_effect=preflight),
+            patch.object(repo_repair,"run_suite",
+                         side_effect=AssertionError("untrusted proposal reached Docker")) as run,
+        ):
             first=review_repo(self.dbpath,self.ws,self.fx,tid)
             self.assertEqual(first["reason"],"ARTIFACT_CHANGED_AFTER_AUDIT")
             self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
