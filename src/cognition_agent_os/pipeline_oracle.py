@@ -152,12 +152,13 @@ def review_pipeline(db_path,workspace,fixtures,tid):
     if (capability_disabled(db_path)
         or capability_disabled(db_path,REPAIR_LAB_CAPABILITY)):
         return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
-    before=audit_pipeline(db_path,workspace,fixtures,tid)
-    if before["status"]!="VISIBLE_PIPELINE_VERIFIED":
-        return {"task_id":tid,"status":"NOT_ADMITTED","reason":before.get("reason")}
+    # The shared enforcement sweep must precede task-specific early returns.
     pf=effect_preflight(db_path,workspace,fixtures)
     if not pf["admitted"]:
         return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
+    before=audit_pipeline(db_path,workspace,fixtures,tid)
+    if before["status"]!="VISIBLE_PIPELINE_VERIFIED":
+        return {"task_id":tid,"status":"NOT_ADMITTED","reason":before.get("reason")}
     db=connect(db_path)
     try:
         db.execute("BEGIN IMMEDIATE")
