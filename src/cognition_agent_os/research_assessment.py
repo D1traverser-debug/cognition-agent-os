@@ -96,6 +96,12 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         if (assessment["goal_rev"]!=child["goal_rev"]
             or assessment["grant_rev"]!=child["grant_rev"]):
             raise ValueError("ASSESSMENT_AUTHORITY_STALE")
+        authority = check.execute(
+            "SELECT * FROM authority WHERE singleton=1").fetchone()
+        if (not authority or authority["write_allowed"] != 1
+            or (authority["goal_rev"], authority["grant_rev"]) !=
+               (child["goal_rev"], child["grant_rev"])):
+            raise ValueError("ASSESSMENT_AUTHORITY_STALE")
         orig = json.loads(child["source_spec"])
         if orig.get("kind") != "research_gap":
             raise ValueError("BAD_PARENT")
@@ -121,7 +127,7 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         # reader while waiting for it; the eventual decision is read-only and
         # must be invalidated if this original admission snapshot changes.
         observed = (tuple(assessment), tuple(child), tuple(parent),
-                    tuple(x[0] for x in receipts), siblings)
+                    tuple(authority), tuple(x[0] for x in receipts), siblings)
         check.execute("ROLLBACK")
         (a, refs_a), (b, refs_b) = (
             _evidence(fixtures, src, orig["goal_key"], routes)
@@ -138,9 +144,13 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
             (tid,)).fetchall()
         fresh_siblings = check.execute(
             "SELECT COUNT(*) FROM tasks WHERE parent_task=?", (tid,)).fetchone()[0]
+        fresh_authority = check.execute(
+            "SELECT * FROM authority WHERE singleton=1").fetchone()
         if (not fresh_assessment or not fresh_child or not fresh_parent
+            or not fresh_authority
             or (tuple(fresh_assessment), tuple(fresh_child),
-                tuple(fresh_parent), tuple(x[0] for x in fresh_receipts),
+                tuple(fresh_parent), tuple(fresh_authority),
+                tuple(x[0] for x in fresh_receipts),
                 fresh_siblings) != observed):
             raise ValueError("ASSESSMENT_CHANGED_DURING_SOURCE_READ")
         if (sources[0].get("kind") == "github" and sources[1].get("kind") == "github"
