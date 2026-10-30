@@ -287,6 +287,39 @@ class PublicRevisionTests(unittest.TestCase):
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
 
+    def test_artifact_changed_after_audit_is_rejected_before_refinement(self):
+        from cognition_agent_os import repo_refinement
+        artifact=self.ws/"artifacts"/(self.parent+".json")
+        original=artifact.read_bytes()
+        real_audit=repo_refinement.audit_repo
+
+        def audit_then_mutate(*args,**kwargs):
+            result=real_audit(*args,**kwargs)
+            artifact.write_bytes(original+b" ")
+            return result
+
+        with patch("cognition_agent_os.conformance.effect_preflight",
+                   return_value={"admitted":True}),\\
+             patch("cognition_agent_os.repo_refinement.audit_repo",
+                   side_effect=audit_then_mutate),\\
+             patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite) as suite,\\
+             patch("cognition_agent_os.repo_refinement._candidate_from_model") as model:
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b")
+
+        self.assertEqual(result["status"],"PARENT_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(result["reason"],"ARTIFACT_CHANGED_AFTER_AUDIT")
+        suite.assert_not_called()
+        model.assert_not_called()
+        self.assertEqual(self.task(self.parent)["state"],"NEEDS_REVIEW")
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
+            self.assertEqual(db.execute(
+                """SELECT COUNT(*) FROM events WHERE task_id=?
+                AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",
+                (self.parent,)).fetchone()[0],0)
+
     def test_original_public_working_refuses_to_refine(self):
         def passed(base,changes,entrypoint,cases,*,include_observed=False):
             return {"passes":len(cases),"total":len(cases),
