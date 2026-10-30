@@ -498,6 +498,67 @@ def effect_preflight(db_path: Path, workspace: Path, fixtures: Path) -> dict:
             "emergency_stops":len(result.get("emergency_stops",[]))}
 
 
+
+def _conformance_page(db, last: str, max_cases: int, *, wrap: bool):
+    """One bounded candidate page reused by preview and enforcement."""
+    total=db.execute("""SELECT COUNT(*) FROM tasks
+                WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')""").fetchone()[0]
+    selected=db.execute("""SELECT * FROM tasks
+             WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')
+               AND task_id>? ORDER BY task_id LIMIT ?""",(last,max_cases)).fetchall()
+    if wrap and len(selected)<max_cases and last:
+        selected+=db.execute("""SELECT * FROM tasks
+             WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')
+               AND task_id<=? ORDER BY task_id LIMIT ?""",
+             (last,max_cases-len(selected))).fetchall()
+    return total, selected
+
+
+def _prepare_conformance_readback(db_path: Path, workspace: Path,
+                                  fixtures: Path, max_cases: int):
+    """Audit independent evidence BEFORE acquiring an SQLite write lock.
+
+    Legacy-mode read-only SELECT statements do not pin a transaction. Track
+    PRAGMA data_version on the same connection across all observations. If
+    ANY other writer commits, reject the entire preview; do not enforce a
+    mixed view or let a source read block independent SQLite writers.
+    """
+    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
+    probe = sqlite3.connect(uri, uri=True, timeout=5)
+    try:
+        probe.row_factory = sqlite3.Row
+        version = probe.execute("PRAGMA data_version").fetchone()[0]
+        table = probe.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='conformance_scan'").fetchone()
+        last = (probe.execute("SELECT last_task_id FROM conformance_scan "
+                              "WHERE singleton=1").fetchone()[0]
+                if table else "")
+        total, rows = _conformance_page(probe, last, max_cases, wrap=True)
+        decisions = {}
+        for row in rows:
+            current = probe.execute(
+                "SELECT state FROM tasks WHERE task_id=?",
+                (row["task_id"],)).fetchone()
+            if not current or current[0] != row["state"]:
+                decisions[row["task_id"]] = {
+                    "task_id": row["task_id"],
+                    "state_at_observation": row["state"],
+                    "proof": "ALREADY_TRANSITIONED",
+                    "mechanical_conformance": False,
+                    "disposition": "SKIPPED_DUE_TO_PRIOR_REMEDIATION"}
+            else:
+                decisions[row["task_id"]] = _check_one(
+                    probe, row, db_path, workspace, fixtures)
+        if probe.execute("PRAGMA data_version").fetchone()[0] != version:
+            probe.close()
+            return None
+        return (probe, version, last, total, rows, decisions)
+    except BaseException:
+        probe.close()
+        raise
+
+
 def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                         *, enforce: bool=False, max_cases: int=64) -> dict:
     """No DB creation on read-only path, no external writes on enforce.
@@ -513,13 +574,34 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
         return _blocked("NOT_CONFIGURED",checked=0,findings=[])
     if workspace.is_symlink():
         return _blocked("UNSAFE_WORKSPACE",checked=0,findings=[])
-    if enforce:
-        db=connect(db_path)
-    else:
-        db=open_readonly_snapshot(db_path)
+    preview = None
     try:
         if enforce:
+            preview = _prepare_conformance_readback(
+                db_path, workspace, fixtures, max_cases)
+            if preview is None:
+                return _blocked("CONCURRENT_CONFORMANCE_STATE_CHANGED",
+                                checked=0, findings=[])
+    except (sqlite3.Error, OSError, ValueError, TypeError, KeyError):
+        return _blocked("EVIDENCE_UNAVAILABLE", checked=0, findings=[])
+    probe = preview[0] if preview is not None else None
+    db = None
+    try:
+        if enforce:
+            db=connect(db_path)
+        else:
+            uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
+            db=sqlite3.connect(uri, uri=True, timeout=5)
+            db.row_factory=sqlite3.Row
+            read_version=db.execute("PRAGMA data_version").fetchone()[0]
+        if enforce:
             db.execute("BEGIN IMMEDIATE")
+            # A write lock now excludes new writers. Detect every committed
+            # ledger change across remote I/O on this SAME probe connection.
+            if probe.execute("PRAGMA data_version").fetchone()[0] != preview[1]:
+                db.rollback()
+                return _blocked("CONCURRENT_CONFORMANCE_STATE_CHANGED",
+                                checked=0, findings=[])
             db.execute("""CREATE TABLE IF NOT EXISTS conformance_scan (
                 singleton INTEGER PRIMARY KEY CHECK(singleton=1),
                 last_task_id TEXT NOT NULL)""")
@@ -530,16 +612,15 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             last=db.execute("SELECT last_task_id FROM conformance_scan WHERE singleton=1").fetchone()[0]
         else:
             last=""
-        total=db.execute("""SELECT COUNT(*) FROM tasks
-                    WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')""").fetchone()[0]
-        selected=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')
-                   AND task_id>? ORDER BY task_id LIMIT ?""",(last,max_cases)).fetchall()
-        if enforce and len(selected)<max_cases and last:
-            selected+=db.execute("""SELECT * FROM tasks
-                 WHERE state IN ('NEEDS_REVIEW','DECOMPOSED','RESEARCH_NEEDED','SANDBOX_VERIFIED','VERIFIED','REPAIR_LAB_VERIFIED','CONTROL_CANDIDATE_MATCHED','CONTROL_ACTIVE','FEEDBACK_ACTIVE','FEEDBACK_EVIDENCE_READY')
-                   AND task_id<=? ORDER BY task_id LIMIT ?""",
-                 (last,max_cases-len(selected))).fetchall()
+        total, selected = _conformance_page(
+            db, last, max_cases, wrap=enforce)
+        if enforce and (
+            last != preview[2] or total != preview[3]
+            or [dict(x) for x in selected] !=
+               [dict(x) for x in preview[4]]):
+            db.rollback()
+            return _blocked("CONCURRENT_CONFORMANCE_STATE_CHANGED",
+                            checked=0, findings=[])
         findings=[]
         quarantined=[]
         emergency_stops=[]
@@ -555,7 +636,11 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                                  "mechanical_conformance":False,
                                  "disposition":"SKIPPED_DUE_TO_PRIOR_REMEDIATION"})
                 continue
-            finding=_check_one(db,row,db_path,workspace,fixtures)
+            # All potentially remote/expensive independent audits ran with
+            # NO held write or read transaction. In the writer phase use only
+            # the version-fenced result, not a second network call.
+            finding=(preview[5][row["task_id"]] if enforce else
+                     _check_one(db,row,db_path,workspace,fixtures))
             findings.append(finding)
             if enforce and finding["disposition"]=="CONFIRMED_INCONSISTENCY":
                 try:
@@ -618,6 +703,9 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             db.execute("UPDATE conformance_scan SET last_task_id=? WHERE singleton=1",
                        (next_cursor,))
             db.commit()
+        elif db.execute("PRAGMA data_version").fetchone()[0] != read_version:
+            return _blocked("CONCURRENT_CONFORMANCE_STATE_CHANGED",
+                            checked=0, findings=[])
         status=("CONFORMANCE_VIOLATIONS" if any(
                     f.get("disposition")=="CONFIRMED_INCONSISTENCY" for f in findings)
                 else "EVIDENCE_INSUFFICIENT" if any(
@@ -649,4 +737,7 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
         return _blocked("EVIDENCE_UNAVAILABLE",checked=0,findings=[],
                         diagnostic=type(exc).__name__)
     finally:
-        db.close()
+        if db is not None:
+            db.close()
+        if probe is not None:
+            probe.close()
