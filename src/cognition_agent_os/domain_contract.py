@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import sqlite3
 
+from .ledger import readonly_snapshot
 from .source import github_public_snapshot, SourceUnavailable, SourceTransportUnavailable
 from .ledger import finalize_observed, require_initialized_ledger
 from .runner import store_once, verify_artifact
@@ -257,9 +258,7 @@ def run_domain_contract(db: sqlite3.Connection, task: dict, workspace: Path) -> 
 def audit_domain_contract(db_path: Path, workspace: Path, task_id: str) -> dict:
     """Independently refetch actual child contracts, not worker's self-claim."""
     require_initialized_ledger(db_path)
-    db_uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(db_uri, uri=True, timeout=5)) as db:
-        db.row_factory = sqlite3.Row
+    with readonly_snapshot(db_path) as db:
         task = db.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         authority = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
         if task is None or task["state"] != "NEEDS_REVIEW":
