@@ -9,6 +9,7 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
+from .ledger import readonly_snapshot
 from .ledger import finalize_observed, event
 from .runner import store_once, ArtifactConflict
 from .research_gap import audit_gap
@@ -81,8 +82,7 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         raise ValueError("INDEPENDENCE_UNKNOWN")
     if not db_path.is_file() or db_path.is_symlink():
         raise ValueError("NO_LEDGER")
-    with closing(sqlite3.connect(db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as check:
-        check.row_factory = sqlite3.Row
+    with readonly_snapshot(db_path) as check:
         assessment=check.execute("SELECT * FROM tasks WHERE task_id=?", (assessment_id,)).fetchone()
         if (assessment is None or assessment["parent_task"]!=tid
             or json.loads(assessment["source_spec"])!=spec):
@@ -194,8 +194,7 @@ def audit_assessment(db_path: Path, workspace: Path, fixtures: Path, task_id: st
     if not db_path.is_file() or db_path.is_symlink() or workspace.is_symlink():
         return bad
     try:
-        with closing(sqlite3.connect(db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True)) as db:
-            db.row_factory = sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
             if row is None or row["state"] != "NEEDS_REVIEW":
                 return bad
