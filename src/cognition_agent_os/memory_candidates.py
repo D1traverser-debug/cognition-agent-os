@@ -177,10 +177,22 @@ def record_candidate(db_path: Path, source_root: Path, *,
 
 
 def inspect_candidates(db_path: Path, source_root: Path, *,
-                       root_task_id: str) -> dict:
-    """Read-only full-root check: never silently omit old/stale dependencies."""
-    if not isinstance(root_task_id, str) or not _ID.fullmatch(root_task_id):
-        raise MemoryContractError("INVALID_ROOT")
+                       root_task_id: str,
+                       after_memory_id: str | None = None,
+                       limit: int = 50) -> dict:
+    """Read-only keyset page with complete bounded dependency ancestry.
+
+    Every returned candidate must be checked against its *full* source and
+    ancestors, including those outside this page. Never infer verified truth.
+    Individual pages are consistent SQLite snapshots, not a frozen snapshot
+    across separate client requests.
+    """
+    if (not isinstance(root_task_id, str) or not _ID.fullmatch(root_task_id)
+        or (after_memory_id is not None and
+            (not isinstance(after_memory_id, str)
+             or not _ID.fullmatch(after_memory_id)))
+        or type(limit) is not int or not 1 <= limit <= 50):
+        raise MemoryContractError("INVALID_MEMORY_CURSOR_OR_LIMIT")
     require_initialized_ledger(db_path)
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
@@ -191,33 +203,85 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
         if not exists:
             return {"status": "NO_MEMORY_CANDIDATES", "items": [],
                     "any_semantic_truth_verified": False}
-        rows = db.execute("SELECT * FROM knowledge_candidates "
-                          "WHERE root_task_id=? ORDER BY memory_id LIMIT ?",
-                          (root_task_id, _MAX_NODES + 1)).fetchall()
-        if len(rows) > _MAX_NODES:
-            return {"status": "MEMORY_SCOPE_TOO_LARGE", "items": [],
-                    "any_semantic_truth_verified": False}
-        keys = {row["memory_id"] for row in rows}
-        edges = {x: [] for x in keys}
-        scope = tuple(sorted(keys))
-        placeholders = ",".join("?" for _ in scope)
-        edge_query = ("SELECT child_id,parent_id FROM knowledge_candidate_edges "
-                      "WHERE child_id IN (" + placeholders + ")")
-        for e in (db.execute(edge_query, scope) if scope else ()):
-                if e["parent_id"] not in keys:
-                    return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
-                            "any_semantic_truth_verified": False}
-                edges[e["child_id"]].append(e["parent_id"])
+        if after_memory_id is not None and db.execute(
+            "SELECT 1 FROM knowledge_candidates WHERE root_task_id=? "
+            "AND memory_id=?", (root_task_id, after_memory_id)
+        ).fetchone() is None:
+            raise MemoryContractError("CURSOR_NOT_IN_OWNER_ROOT")
+        q = ("SELECT * FROM knowledge_candidates WHERE root_task_id=? "
+             + ("AND memory_id>? " if after_memory_id is not None else "")
+             + "ORDER BY memory_id LIMIT ?")
+        params = ((root_task_id, after_memory_id, limit + 1)
+                  if after_memory_id is not None else (root_task_id, limit + 1))
+        observed = db.execute(q, params).fetchall()
+        more = len(observed) > limit
+        page = observed[:limit]
+        if not page:
+            return {"status": "READ_ONLY_CANDIDATES", "items": [],
+                    "has_more": False, "next_after_memory_id": None,
+                    "any_semantic_truth_verified": False,
+                    "cross_page_snapshot_pinned": False}
+        all_rows = {row["memory_id"]: row for row in page}
+        parents = {key: [] for key in all_rows}
+        frontier = list(all_rows)
+        # Bounded exact ancestor closure: do not validate a dependent method
+        # while silently omitting its source knowledge on another page.
+        while frontier:
+            if len(all_rows) > _MAX_NODES:
+                return {"status": "MEMORY_LINEAGE_TOO_LARGE", "items": [],
+                        "any_semantic_truth_verified": False}
+            next_frontier = set()
+            for i in range(0, len(frontier), 80):
+                subset = frontier[i:i + 80]
+                placeholders = ",".join("?" for _ in subset)
+                query = ("SELECT child_id,parent_id FROM knowledge_candidate_edges "
+                         "WHERE child_id IN (" + placeholders + ")")
+                for edge in db.execute(query, subset):
+                    child, parent = edge["child_id"], edge["parent_id"]
+                    parents[child].append(parent)
+                    if parent not in all_rows:
+                        next_frontier.add(parent)
+            if not next_frontier:
+                break
+            if len(all_rows) + len(next_frontier) > _MAX_NODES:
+                return {"status": "MEMORY_LINEAGE_TOO_LARGE", "items": [],
+                        "any_semantic_truth_verified": False}
+            newly = []
+            sorted_ids = sorted(next_frontier)
+            for i in range(0, len(sorted_ids), 80):
+                ids = sorted_ids[i:i + 80]
+                placeholders = ",".join("?" for _ in ids)
+                query = ("SELECT * FROM knowledge_candidates WHERE memory_id IN ("
+                         + placeholders + ")")
+                newly.extend(db.execute(query, ids))
+            if len(newly) != len(sorted_ids) or any(
+                row["root_task_id"] != root_task_id for row in newly
+            ):
+                return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
+                        "any_semantic_truth_verified": False}
+            frontier = [row["memory_id"] for row in newly]
+            for row in newly:
+                all_rows[row["memory_id"]] = row
+                parents[row["memory_id"]] = []
+
+        all_ids = tuple(sorted(all_rows))
         superseded = set()
-        replace_query = ("SELECT old_id,new_id FROM knowledge_candidate_supersessions "
-                         "WHERE old_id IN (" + placeholders + ")")
-        for x in (db.execute(replace_query, scope) if scope else ()):
-                if x["new_id"] not in keys:
+        for i in range(0, len(all_ids), 80):
+            ids = all_ids[i:i + 80]
+            placeholders = ",".join("?" for _ in ids)
+            query = ("SELECT old_id,new_id FROM knowledge_candidate_supersessions "
+                     "WHERE old_id IN (" + placeholders + ")")
+            for link in db.execute(query, ids):
+                referenced = db.execute(
+                    "SELECT root_task_id FROM knowledge_candidates "
+                    "WHERE memory_id=?", (link["new_id"],)).fetchone()
+                if referenced is None or referenced["root_task_id"] != root_task_id:
                     return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
                             "any_semantic_truth_verified": False}
-                superseded.add(x["old_id"])
-        source_state = {}
-        for row in rows:
+                superseded.add(link["old_id"])
+
+        source_state: dict[tuple[str, str], str | None] = {}
+        for row in all_rows.values():
             identity = (row["source_rel"], row["source_sha256"])
             if identity not in source_state:
                 try:
@@ -226,28 +290,56 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
                         raw.decode("utf-8") if _sha(raw) == identity[1] else None)
                 except (OSError, ValueError, UnicodeDecodeError):
                     source_state[identity] = None
-        status = {row["memory_id"]: (
-            "SUPERSEDED" if row["memory_id"] in superseded else
-            "SOURCE_CHANGED_OR_UNAVAILABLE" if
-              source_state[(row["source_rel"], row["source_sha256"])] is None
-              or row["quote"] not in
-                source_state[(row["source_rel"], row["source_sha256"])] else
-            "CANDIDATE_UNVERIFIED") for row in rows}
-        for _ in range(_MAX_NODES):
-            changed = False
-            for child, parents in edges.items():
-                if (status[child] == "CANDIDATE_UNVERIFIED"
-                    and any(status[p] != "CANDIDATE_UNVERIFIED" for p in parents)):
-                    status[child] = "DEPENDENCY_INVALIDATED"
-                    changed = True
-            if not changed:
-                break
+        statuses = {}
+        for key, row in all_rows.items():
+            source = source_state[(row["source_rel"], row["source_sha256"])]
+            statuses[key] = (
+                "SUPERSEDED" if key in superseded else
+                "SOURCE_CHANGED_OR_UNAVAILABLE"
+                if source is None or row["quote"] not in source else
+                "CANDIDATE_UNVERIFIED")
+        # Kahn evaluation: a cycle (including forged cross-edge) must not
+        # become a false clean candidate simply because every source exists.
+        remaining = {key: len(deps) for key, deps in parents.items()}
+        children = {key: [] for key in all_rows}
+        for child, deps in parents.items():
+            for parent in deps:
+                if parent not in children:
+                    return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
+                            "any_semantic_truth_verified": False}
+                children[parent].append(child)
+        ready = [key for key, count in remaining.items() if count == 0]
+        visited = 0
+        while ready:
+            parent = ready.pop()
+            visited += 1
+            for child in children[parent]:
+                if (statuses[child] == "CANDIDATE_UNVERIFIED"
+                    and statuses[parent] != "CANDIDATE_UNVERIFIED"):
+                    statuses[child] = "DEPENDENCY_INVALIDATED"
+                remaining[child] -= 1
+                if remaining[child] == 0:
+                    ready.append(child)
+        if visited != len(all_rows):
+            return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
+                    "any_semantic_truth_verified": False}
+        items = []
+        for row in page:
+            key = row["memory_id"]
+            valid = statuses[key] == "CANDIDATE_UNVERIFIED"
+            items.append({
+                "memory_id": key, "kind": row["kind"],
+                "source_rel": row["source_rel"],
+                "source_sha256": row["source_sha256"],
+                "status": statuses[key], "origin": row["origin"],
+                # Stale / superseded text cannot be silently re-injected.
+                "quote": row["quote"] if valid else None,
+                "interpretation": row["interpretation"] if valid else None,
+                "untrusted_data": True,
+                "authorizes_action": False
+            })
         return {"status": "READ_ONLY_CANDIDATES",
-                "items": [{"memory_id": row["memory_id"], "kind": row["kind"],
-                           "source_rel": row["source_rel"],
-                           "source_sha256": row["source_sha256"],
-                           "status": status[row["memory_id"]],
-                           "origin": row["origin"],
-                           "authorizes_action": False}
-                          for row in rows],
-                "any_semantic_truth_verified": False}
+                "items": items, "has_more": more,
+                "next_after_memory_id": page[-1]["memory_id"] if more else None,
+                "any_semantic_truth_verified": False,
+                "cross_page_snapshot_pinned": False}
