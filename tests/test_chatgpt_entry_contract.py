@@ -69,6 +69,31 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
                       PROBES.read_text(encoding="utf-8"))
         self.assertIn("NOT_TESTED", PROBES.read_text(encoding="utf-8"))
 
+    def test_ordinary_chat_is_the_required_parent_entry_surface(self):
+        """Regression for wrong Project-only architecture; static candidate only."""
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertIn("Ordinary new chats are the required entry surface", skill)
+        self.assertIn("OUTSIDE ChatGPT Projects", skill)
+        self.assertIn("Project instructions are not an account-wide trigger", skill)
+        self.assertIn("account Custom Instructions", skill)
+        self.assertIn("allow_implicit_invocation: true", skill)
+        self.assertIn("No tool here is authorized/capable", skill)
+        self.assertIn("Root-before-leaves dependency gate", skill)
+        self.assertLess(skill.index("Root-before-leaves dependency gate"),
+                        skill.index("## Work on the problem, not the instructions"))
+        self.assertIn("ordinary new ChatGPT chat", PROBES.read_text(encoding="utf-8"))
+
+    def test_material_decisions_have_owner_visible_receipts(self):
+        """Traceable comparison is required; native output cannot be asserted here."""
+        skill = SKILL.read_text(encoding="utf-8")
+        for term in ("Owner-visible decision and execution evidence",
+                     "competing root-cause hypotheses", "counterevidence",
+                     "reuse/adapt/replace/build", "falsifier/rollback",
+                     "NOT_TESTED/UNKNOWN", "private chain-of-thought"):
+            self.assertIn(term, skill)
+        self.assertIn("AB. Ordinary-chat entry versus Project-only false baseline",
+                      PROBES.read_text(encoding="utf-8"))
+
     def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):
         """Source policy only; cannot prove a fresh ChatGPT launch."""
         gate = (ROOT / "docs/PRODUCT-READINESS-GATE.md").read_text(encoding="utf-8")
