@@ -171,7 +171,8 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
     # A preliminary check minimizes transactions; every decision is rechecked
     # under the single SQLite write lock before an effect or state change.
     from .conformance import (
-        capability_disabled,effect_preflight,REPAIR_LAB_CAPABILITY)
+        capability_disabled,effect_preflight,capability_disabled_in_transaction,
+        REPAIR_LAB_CAPABILITY)
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return {"task_id":task_id,"status":"CAPABILITY_DISABLED"}
     # Run shared governance before task-specific audit can return early.
@@ -188,10 +189,8 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
         db.execute("BEGIN IMMEDIATE")
         row=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
 
-        circuit=db.execute("""SELECT 1 FROM conformance_capability_guard
-              WHERE disabled=1 AND kind IN (?,?) LIMIT 1""",
-              ("goal_sandbox_stage",REPAIR_LAB_CAPABILITY)).fetchone()
-        if circuit:
+        if capability_disabled_in_transaction(
+                db,"goal_sandbox_stage",REPAIR_LAB_CAPABILITY):
             db.commit()
             return {"task_id":task_id,"status":"CAPABILITY_DISABLED"}
         if not row or row["state"]!="NEEDS_REVIEW":
