@@ -21,6 +21,7 @@ import sqlite3
 import subprocess
 import time
 
+from .ledger import readonly_snapshot
 from .repair_oracle import audit_patch
 
 MAX_STATEMENT=8192
@@ -115,9 +116,7 @@ def prepare_unsigned_outcome(db_path:Path, workspace:Path, fixtures:Path,
     if current.get("status")!="HOLDOUT_ACCEPTED":
         return _failure("LAB_EVIDENCE_NOT_INDEPENDENTLY_RECHECKED")
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             if task is None or task["state"]!="REPAIR_LAB_VERIFIED":
                 return _failure("SIGNED_SUBJECT_NOT_VERIFIED")
@@ -192,9 +191,7 @@ def verify_signed_outcome(db_path:Path, workspace:Path, fixtures:Path,
            timeout=8,check=False)
         if checked.returncode!=0:
             return _failure("REVIEWER_SIGNATURE_INVALID")
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             row=db.execute("SELECT * FROM tasks WHERE task_id=?",
                            (statement["task_id"],)).fetchone()
             if row is None:
