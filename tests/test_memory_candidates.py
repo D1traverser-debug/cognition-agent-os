@@ -65,13 +65,13 @@ class CandidateMemoryTests(unittest.TestCase):
         self.assertFalse(missing.exists())
 
     def test_no_schema_upgrade_on_read_and_no_claim_of_truth(self):
-        with closing(sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)) as db:
+        with closing(sqlite3.connect(self.db.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             names_before = {x[0] for x in db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}
         state = self.snapshot()
         self.assertEqual(state["status"], "NO_MEMORY_CANDIDATES")
         self.assertFalse(state["any_semantic_truth_verified"])
-        with closing(sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)) as db:
+        with closing(sqlite3.connect(self.db.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             names_after = {x[0] for x in db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertEqual(names_before, names_after)
