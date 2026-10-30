@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_utc": "2026-10-29",
+  "updated_utc": "2026-10-30",
   "atlas": {
     "repository": "datawhalechina/Agent-Learning-Hub",
     "commit": "dddf777dde6788228136862f270203424a28efbc",
@@ -307,8 +307,21 @@
       "label": "claw0",
       "section": "Stage 3: Study One Modern Agent Harness",
       "atlas_line": 100,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "shareAI-lab/claw0",
+          "path": "sessions/en/s09_resilience.py",
+          "blob_sha": "36f745ed3b67063399d81ee30c3f2a0c59c3e232",
+          "kind": "implementation"
+        },
+        {
+          "repo": "shareAI-lab/claw0",
+          "path": "sessions/en/s10_concurrency.py",
+          "blob_sha": "060e418532fedcdcd8e8996ed4339a98ebef84ce",
+          "kind": "implementation"
+        }
+      ],
       "nested_leads": []
     },
     {
@@ -398,8 +411,21 @@
       "label": "CyberClaw",
       "section": "Stage 3: Study One Modern Agent Harness",
       "atlas_line": 104,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "ttguy0707/CyberClaw",
+          "path": "cyberclaw/core/context.py",
+          "blob_sha": "94f9c2d74bd2be60b1c3fc4f5e79719ffeb947ab",
+          "kind": "implementation"
+        },
+        {
+          "repo": "ttguy0707/CyberClaw",
+          "path": "tests/test_context_advanced.py",
+          "blob_sha": "ed8f260cf72ce06b8f5a61cd65468210f83f4857",
+          "kind": "tests"
+        }
+      ],
       "nested_leads": []
     },
     {
@@ -1206,10 +1232,20 @@
     },
     {
       "url": "https://github.com/microsoft/SkillOpt/blob/main/skillopt/engine/trainer.py",
-      "label": "SkillOpt trainer: unexplored deeper code",
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
-      "nested_leads": []
+      "label": "SkillOpt trajectory-driven rollout/reflect/update trainer",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt/engine/trainer.py",
+          "blob_sha": "144e37dc2c157de48540b13691298eada57bc64a",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": [
+        "https://github.com/microsoft/SkillOpt/blob/main/skillopt/evaluation/gate.py",
+        "https://github.com/microsoft/SkillOpt/blob/main/skillopt_sleep/evalkit.py"
+      ]
     },
     {
       "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-conformance",
@@ -1387,6 +1423,40 @@
           "path": "tests/test_agent_loop_boundaries.py",
           "blob_sha": "dbb20e0b8a9afb1f2e30cf68d43d3e2d6dde094e",
           "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/microsoft/SkillOpt/blob/main/skillopt/evaluation/gate.py",
+      "label": "SkillOpt strict candidate acceptance vs existing skill",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt/evaluation/gate.py",
+          "blob_sha": "10461a98756ebacbf7d5a8bbdc67657950e2c199",
+          "kind": "implementation"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "tests/test_gate.py",
+          "blob_sha": "d6a9bf5878b6331c101ef51bec92b4170a3d7cc1",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/microsoft/SkillOpt/blob/main/skillopt_sleep/evalkit.py",
+      "label": "SkillOpt A/B kit paired manifest with null controls",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/evalkit.py",
+          "blob_sha": "1c3ba313ce2f960d65be10e67dd4416013daacff",
+          "kind": "implementation"
         }
       ],
       "nested_leads": []
