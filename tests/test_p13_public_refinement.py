@@ -118,6 +118,31 @@ class PublicRevisionTests(unittest.TestCase):
         self.assertEqual(len(observations),2)
         self.assertEqual([json.loads(x[0])["public_passes"] for x in observations],[1,2])
 
+    def test_capability_circuit_tripped_during_model_blocks_revision_freeze(self):
+        def model_then_trip(*args,**kwargs):
+            with closing(connect(self.db)) as db:
+                db.execute("""INSERT OR REPLACE INTO conformance_capability_guard
+                    (kind,disabled,reason,trigger_task)
+                    VALUES('pure_code_repair_lab',1,'TEST_INTEGRITY_BREACH',?)""",
+                    (self.parent,))
+                db.commit()
+            return self.model_output(self.good)
+
+        with patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite), \
+             patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   side_effect=model_then_trip):
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=1)
+        self.assertEqual(result["status"],"CAPABILITY_DISABLED",result)
+        self.assertEqual(self.task(self.parent)["state"],"NEEDS_REVIEW")
+        with closing(connect(self.db)) as db:
+            children=db.execute(
+                "SELECT task_id FROM tasks WHERE parent_task=?",(self.parent,)).fetchall()
+            self.assertFalse(children)
+        self.assertFalse((self.ws/"repo_lab").exists())
+        self.assertFalse(result["production_write_authorized"])
+
     def test_blocked_ancestor_during_model_cannot_freeze_revision(self):
         """A late ancestor stop invalidates the revision, not just the model."""
         with closing(connect(self.db)) as db:
