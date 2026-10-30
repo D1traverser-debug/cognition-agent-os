@@ -112,7 +112,7 @@ class AssuranceRegistryTests(unittest.TestCase):
             self.assertEqual(verify_live_handoff(root)["status"], "DATED_HANDOFF_VALID")
             # Git checkout may materialize CRLF on Windows; this must be
             # semantically equivalent without changing archived source bytes.
-            source.write_bytes(rewritten.replace("\\r\\n", "\\n").replace("\\n", "\\r\\n").encode("utf-8"))
+            source.write_bytes(rewritten.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
             self.assertEqual(verify_live_handoff(root)["status"], "DATED_HANDOFF_VALID")
             source.write_text(rewritten, encoding="utf-8")
             weakened = re.sub(
