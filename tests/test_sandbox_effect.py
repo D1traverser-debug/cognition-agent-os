@@ -160,7 +160,7 @@ class SandboxEffectTests(unittest.TestCase):
                                  "CANDIDATE_MECHANICALLY_VALID")
                 changed=(json.dumps(
                     json.loads(original_record["candidate_text"]),
-                    ensure_ascii=False,separators=(",",":"))+"\\n")
+                    ensure_ascii=False,separators=(",",":"))+"\n")
                 self.assertNotEqual(changed.encode("utf-8"),approved)
                 original_record["candidate_text"]=changed
                 original_record["candidate_sha256"]=hashlib.sha256(
