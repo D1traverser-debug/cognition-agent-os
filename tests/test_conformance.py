@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from unittest.mock import patch
 import sqlite3
 import subprocess
 import sys
@@ -102,6 +103,51 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(r["status"],"MECHANICAL_EVIDENCE_OBSERVED")
         self.assertFalse(r["production_mutation_authorized"])
         self.assertEqual(self.task(tid)["state"],"SANDBOX_VERIFIED")
+
+    def test_enforcement_does_not_quarantine_source_repaired_after_preview(self):
+        # The DB row and PRAGMA data_version stay unchanged while a separate
+        # writer repairs the actual file after the first evidence scan.
+        from cognition_agent_os import conformance
+        task_id = self.create_staged()
+        staged = self.ws / "sandbox" / (task_id + ".candidate")
+        original = staged.read_bytes()
+        staged.write_bytes(b"tampered")
+        real_prepare = conformance._prepare_conformance_readback
+
+        def repair_after_preview(*args, **kwargs):
+            candidate = real_prepare(*args, **kwargs)
+            self.assertEqual(candidate[5][task_id]["disposition"],
+                             "CONFIRMED_INCONSISTENCY")
+            staged.write_bytes(original)
+            return candidate
+
+        with patch.object(conformance, "_prepare_conformance_readback",
+                          side_effect=repair_after_preview):
+            result = self.check(enforce=True)
+        self.assertEqual(result["quarantined"], [], result)
+        self.assertEqual(self.task(task_id)["state"], "SANDBOX_VERIFIED")
+        self.assertEqual(self.events(task_id, "CONFORMANCE_VIOLATION"), [])
+
+    def test_enforcement_detects_source_corruption_after_clean_preview(self):
+        from cognition_agent_os import conformance
+        task_id = self.create_staged()
+        staged = self.ws / "sandbox" / (task_id + ".candidate")
+        real_prepare = conformance._prepare_conformance_readback
+
+        def corrupt_after_preview(*args, **kwargs):
+            candidate = real_prepare(*args, **kwargs)
+            self.assertEqual(candidate[5][task_id]["disposition"], "PASS")
+            staged.write_bytes(b"tampered")
+            return candidate
+
+        with patch.object(conformance, "_prepare_conformance_readback",
+                          side_effect=corrupt_after_preview):
+            result = self.check(enforce=True)
+        # Even if no destructive action is appropriate during the race,
+        # the stale clean result must not be asserted as fresh conformance.
+        self.assertNotEqual(result["status"], "MECHANICAL_EVIDENCE_OBSERVED")
+        self.assertEqual(result["mechanically_valid"], 0)
+        self.assertEqual(self.task(task_id)["state"], "SANDBOX_VERIFIED")
 
     def test_forged_staged_success_without_effect_quarantined(self):
         self.fx.joinpath("config.json").write_text("{}")
