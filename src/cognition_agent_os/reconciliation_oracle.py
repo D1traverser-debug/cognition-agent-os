@@ -12,6 +12,8 @@ import re
 import sqlite3
 from contextlib import closing
 
+from .ledger import readonly_snapshot
+
 _COL=re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,63}\Z")
 
 
