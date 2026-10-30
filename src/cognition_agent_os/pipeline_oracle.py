@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from .ledger import readonly_snapshot
 from .isolated_filesystem import stage_immutable
+from .runner import ArtifactConflict, read_audited_artifact
 import sqlite3
 import time
 
@@ -63,6 +64,7 @@ def _audit_internal(db_path,workspace,fixtures,tid,*,hidden,staged):
             raw=proposal.read_bytes()
             if digest(raw)!=row["artifact_hash"]:
                 return {**fail,"reason":"PROPOSAL_HASH_CHANGED"}
+            fail["artifact_sha256"]=digest(raw)
             record=json.loads(raw)
             if (record["task_id"]!=tid or record["goal_rev"]!=row["goal_rev"]
                 or record["source_spec"]!=spec or record["status"]!="PROPOSAL_NOT_APPROVED"
@@ -150,12 +152,13 @@ def review_pipeline(db_path,workspace,fixtures,tid):
     if (capability_disabled(db_path)
         or capability_disabled(db_path,REPAIR_LAB_CAPABILITY)):
         return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
-    before=audit_pipeline(db_path,workspace,fixtures,tid)
-    if before["status"]!="VISIBLE_PIPELINE_VERIFIED":
-        return {"task_id":tid,"status":"NOT_ADMITTED","reason":before.get("reason")}
+    # The shared enforcement sweep must precede task-specific early returns.
     pf=effect_preflight(db_path,workspace,fixtures)
     if not pf["admitted"]:
         return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
+    before=audit_pipeline(db_path,workspace,fixtures,tid)
+    if before["status"]!="VISIBLE_PIPELINE_VERIFIED":
+        return {"task_id":tid,"status":"NOT_ADMITTED","reason":before.get("reason")}
     db=connect(db_path)
     try:
         db.execute("BEGIN IMMEDIATE")
@@ -184,7 +187,21 @@ def review_pipeline(db_path,workspace,fixtures,tid):
             db.commit()
             return {"task_id":tid,"status":"HOLDOUT_UNVERIFIABLE",
                     "reason":first.get("reason")}
-        record=json.loads((workspace/"artifacts"/(tid+".json")).read_bytes())
+        if first.get("artifact_sha256") != row["artifact_hash"]:
+            event(db,tid,"PIPELINE_EFFECT_REFUSED",{
+                "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})
+            db.commit()
+            return {"task_id":tid,"status":"NOT_ADMITTED",
+                    "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
+        try:
+            record=json.loads(read_audited_artifact(
+                workspace,tid,first,max_bytes=32000))
+        except (ArtifactConflict,OSError,ValueError):
+            event(db,tid,"PIPELINE_EFFECT_REFUSED",{
+                "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})
+            db.commit()
+            return {"task_id":tid,"status":"NOT_ADMITTED",
+                    "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
         spec=json.loads(row["source_spec"])
         try:
             _stage(workspace,tid,[s["source"] for s in spec["stages"]],
@@ -194,6 +211,7 @@ def review_pipeline(db_path,workspace,fixtures,tid):
             return {"task_id":tid,"status":"STAGING_UNVERIFIABLE"}
         post=audit_pipeline(db_path,workspace,fixtures,tid,hidden=True)
         if (post["status"]!="HOLDOUT_ACCEPTED" or
+            post.get("artifact_sha256")!=first.get("artifact_sha256") or
             post["candidate_shas"]!=first["candidate_shas"] or
             post["passes"]!=first["passes"]):
             db.execute("""UPDATE tasks SET state='UNKNOWN',

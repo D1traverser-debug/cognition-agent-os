@@ -580,7 +580,13 @@ def _local_conformance_reattestable(db: sqlite3.Connection,
         eligible = (
             (state == "NEEDS_REVIEW" and kind in {
                 "goal_case", "record_reconciliation", "investigate_goal",
-                "public_tool_discovery", "fixture", "github", "research_gap"})
+                "public_tool_discovery", "fixture", "github", "research_gap",
+                "repo_container_repair", "pipeline_code_repair", "pure_code_repair"})
+            # These three repair auditors are bounded local AST/JSON/file
+            # readbacks. They do not launch Docker, invoke a model, or access
+            # the network, so they can safely re-attest under the writer lock.
+            or (state == "REPAIR_LAB_VERIFIED" and kind in {
+                "repo_container_repair", "pipeline_code_repair", "pure_code_repair"})
             or (state == "DECOMPOSED" and kind in {
                 "goal_intent", "knowledge_intent", "open_goal"})
             or (state == "RESEARCH_NEEDED" and kind == "knowledge_intent")

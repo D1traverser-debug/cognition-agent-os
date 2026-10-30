@@ -347,6 +347,69 @@ class PureRepairTests(unittest.TestCase):
         self.assertEqual(out.read_bytes(),previous)
         self.assertEqual(len(self.receipt(tid,"REPAIR_HOLDOUT_ACCEPTED")),1)
 
+    def test_retry_after_artifact_drift_runs_conformance_before_early_audit(self):
+        from cognition_agent_os import repair_oracle as oracle,conformance
+        tid,_=self.example_compare()
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        artifact=self.ws/"artifacts"/(tid+".json")
+        original=artifact.read_bytes()
+        real_audit=oracle.audit_patch
+        real_preflight=conformance.effect_preflight
+        mutated=False
+        preflight_calls=0
+
+        def mutate_after_final_audit(*args,**kwargs):
+            nonlocal mutated
+            result=real_audit(*args,**kwargs)
+            if kwargs.get("reveal_holdout") is True and not mutated:
+                self.assertEqual(result["status"],"HOLDOUT_ACCEPTED")
+                artifact.write_bytes(original+b" ")
+                mutated=True
+            return result
+
+        def preflight(*args,**kwargs):
+            nonlocal preflight_calls
+            preflight_calls+=1
+            if preflight_calls==1:
+                return {"admitted":True}
+            return real_preflight(*args,**kwargs)
+
+        with (
+            patch.object(oracle,"audit_patch",side_effect=mutate_after_final_audit),
+            patch.object(conformance,"effect_preflight",side_effect=preflight),
+        ):
+            first=review_patch(self.db,self.ws,self.fx,tid)
+            self.assertEqual(first.get("reason"),"ARTIFACT_CHANGED_AFTER_AUDIT",first)
+            self.assertEqual(self.row(tid)["state"],"NEEDS_REVIEW")
+            second=review_patch(self.db,self.ws,self.fx,tid)
+
+        self.assertEqual(preflight_calls,2)
+        self.assertEqual(self.row(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.row(tid)["error_code"],
+                         "CONFORMANCE_" + "ARTIFACT_HASH_MISMATCH")
+
+    def test_artifact_changed_after_final_holdout_audit_is_not_staged(self):
+        tid,_=self.example_compare()
+        self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
+        artifact=self.ws/"artifacts"/(tid+".json")
+        original=artifact.read_bytes()
+        from cognition_agent_os import repair_oracle as oracle
+        real_audit=oracle.audit_patch
+        calls=0
+        def mutate_after_final_audit(*args,**kwargs):
+            nonlocal calls
+            result=real_audit(*args,**kwargs)
+            if kwargs.get("reveal_holdout") is True:
+                self.assertEqual(result["status"],"HOLDOUT_ACCEPTED")
+                artifact.write_bytes(original+b"\n")
+            return result
+        with patch.object(oracle,"audit_patch",side_effect=mutate_after_final_audit):
+            result=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"NOT_ADMITTED",result)
+        self.assertEqual(result["reason"],"ARTIFACT_CHANGED_AFTER_AUDIT")
+        self.assertFalse((self.ws/"repair_lab"/(tid+".py")).exists())
+        self.assertEqual(self.row(tid)["state"],"NEEDS_REVIEW")
+
     def test_post_effect_holdout_substitution_refuses_false_success(self):
         tid,_=self.example_compare()
         self.assertEqual(run_once(self.db,self.ws,self.fx)["status"],"NEEDS_REVIEW")
