@@ -358,8 +358,7 @@ class PureRepairTests(unittest.TestCase):
         def mutate_after_final_audit(*args,**kwargs):
             nonlocal calls
             result=real_audit(*args,**kwargs)
-            calls+=1
-            if calls==2:
+            if kwargs.get("reveal_holdout") is True:
                 self.assertEqual(result["status"],"HOLDOUT_ACCEPTED")
                 artifact.write_bytes(original+b"\n")
             return result
