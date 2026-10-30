@@ -523,6 +523,53 @@ class GoalContinuityColdResume(unittest.TestCase):
         self.assertEqual(committed["status"], "CHECKPOINT_COMMITTED")
 
 
+    def test_resume_source_resolver_releases_wal_reader_before_external_io(self):
+        """A slow remote HEAD request must not pin the ledger WAL checkpoint."""
+        source = {"repo":"example/public-repo", "branch":"main",
+                  "head_sha":"a"*40}
+        register_goal(self.db_path, self.contract(source=source))
+        observations = []
+        def while_remote(_repo, _branch):
+            with closing(sqlite3.connect(str(self.db_path), timeout=0.05)) as other:
+                other.execute("PRAGMA busy_timeout=50")
+                # Under the old implementation this returns busy=1: an outer
+                # readonly_snapshot remained active across the resolver.
+                observations.append(other.execute(
+                    "PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0])
+            return "a"*40
+        result = resume_goal(self.db_path, resolve_head=while_remote)
+        self.assertEqual(observations, [0])
+        self.assertEqual(result["status"], "READY_TO_TICK", result)
+
+    def test_resume_remote_call_revocation_invalidates_runnable_pointer(self):
+        source = {"repo":"example/public-repo", "branch":"main",
+                  "head_sha":"a"*40}
+        register_goal(self.db_path, self.contract(source=source))
+        def revoke_during_remote(_repo, _branch):
+            with closing(connect(self.db_path)) as writer:
+                alter_authority(writer, revoke=True)
+            return "a"*40
+        result = resume_goal(self.db_path, resolve_head=revoke_during_remote)
+        self.assertEqual(result["status"], "AUTHORITY_REVOKED", result)
+        self.assertNotIn("next_task_id", result)
+        self.assertEqual(result["objective"], self.contract()["objective"])
+        self.assertFalse(result["authority_current"])
+
+    def test_resume_remote_call_rechecks_competing_owner_goals(self):
+        source = {"repo":"example/public-repo", "branch":"main",
+                  "head_sha":"a"*40}
+        register_goal(self.db_path, self.contract(source=source))
+        def new_owner_root(_repo, _branch):
+            with closing(connect(self.db_path)) as writer:
+                create_task(writer, {
+                    "kind":"open_goal",
+                    "goal":"A different legitimate owner objective appears."})
+                writer.commit()
+            return "a"*40
+        result = resume_goal(self.db_path, resolve_head=new_owner_root)
+        self.assertEqual(result["status"], "AMBIGUOUS_DURABLE_GOALS", result)
+        self.assertNotIn("next_task_id", result)
+
     def test_recovered_task_implementation_must_equal_pinned_registration(self):
         register_goal(self.db_path, self.contract())
         with closing(connect(self.db_path)) as db:
