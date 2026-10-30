@@ -12,6 +12,7 @@ import re
 import sqlite3
 from contextlib import closing
 
+from .ledger import readonly_snapshot
 from .bounded_outcome_oracle import assess_local_record
 from .goal_audit import audit_goal
 from .source import safe_fixture
@@ -148,9 +149,7 @@ def audit_controlled_candidate(db_path:Path,workspace:Path,
     if not db_path.is_file() or db_path.is_symlink():
         return {**fail,"reason":"MISSING_LEDGER"}
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             root=db.execute("SELECT * FROM tasks WHERE task_id=?",(root_id,)).fetchone()
             if not root or root["state"]!="CONTROL_CANDIDATE_MATCHED":
                 return {**fail,"reason":"NOT_MATCHED"}
