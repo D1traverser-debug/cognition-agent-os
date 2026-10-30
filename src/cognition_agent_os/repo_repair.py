@@ -399,7 +399,8 @@ def _stage(workspace, tid, changes):
 
 
 def review_repo(db_path,workspace,fixtures,tid):
-    from .conformance import effect_preflight,capability_disabled,REPAIR_LAB_CAPABILITY
+    from .conformance import (effect_preflight,capability_disabled,
+        capability_disabled_in_transaction,REPAIR_LAB_CAPABILITY)
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
     # Governance must run before task-specific early returns. Otherwise a
@@ -469,10 +470,8 @@ def review_repo(db_path,workspace,fixtures,tid):
         allowed,reason=current_guard(db,dict(row),needs_write=True)
         if not allowed:
             db.commit();return {"task_id":tid,"status":"AUTHORITY_BLOCKED","reason":reason}
-        circuit=db.execute("""SELECT 1 FROM conformance_capability_guard
-               WHERE disabled=1 AND kind IN ('goal_sandbox_stage','pure_code_repair_lab')
-               LIMIT 1""").fetchone()
-        if circuit:
+        if capability_disabled_in_transaction(
+                db,"goal_sandbox_stage",REPAIR_LAB_CAPABILITY):
             db.commit();return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
         fresh=audit_repo(db_path,workspace,fixtures,tid)
         if (fresh["status"]!="REPO_BYTES_MECHANICALLY_VALID" or
