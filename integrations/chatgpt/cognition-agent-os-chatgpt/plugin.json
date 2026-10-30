@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cognition-agent-os-chatgpt",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Private ChatGPT skills-only plugin for cognition-agent-os goal recovery, tool selection, first-hand research, independent verification and safe correction. Does not itself connect a custom Host API.",
   "author": {
     "name": "cognition-agent-os owner"
