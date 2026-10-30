@@ -148,7 +148,8 @@ def _stage(workspace, tid, stage_files, patched):
 
 def review_pipeline(db_path,workspace,fixtures,tid):
     from .conformance import (
-        effect_preflight,capability_disabled,REPAIR_LAB_CAPABILITY)
+        effect_preflight,capability_disabled,capability_disabled_in_transaction,
+        REPAIR_LAB_CAPABILITY)
     if (capability_disabled(db_path)
         or capability_disabled(db_path,REPAIR_LAB_CAPABILITY)):
         return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
@@ -168,10 +169,8 @@ def review_pipeline(db_path,workspace,fixtures,tid):
         allowed,reason=current_guard(db,dict(row),needs_write=True)
         if not allowed:
             db.commit();return {"task_id":tid,"status":"AUTHORITY_BLOCKED","reason":reason}
-        circuit=db.execute("""SELECT 1 FROM conformance_capability_guard
-           WHERE disabled=1 AND kind IN ('goal_sandbox_stage',?) LIMIT 1""",
-           (REPAIR_LAB_CAPABILITY,)).fetchone()
-        if circuit:
+        if capability_disabled_in_transaction(
+                db,"goal_sandbox_stage",REPAIR_LAB_CAPABILITY):
             db.commit();return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
         first=audit_pipeline(db_path,workspace,fixtures,tid,hidden=True)
         if first["status"]=="HOLDOUT_REFUTED":
