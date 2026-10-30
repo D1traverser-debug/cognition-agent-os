@@ -180,6 +180,47 @@ class SandboxEffectTests(unittest.TestCase):
         self.assertNotEqual(hashlib.sha256(artifact.read_bytes()).hexdigest(),
                             self.task(tid)["artifact_hash"])
 
+    def test_retry_after_artifact_drift_runs_conformance_before_early_audit(self):
+        from cognition_agent_os import sandbox_effect,conformance
+        tid,_,_=self.make()
+        artifact=self.out/"artifacts"/(tid+".json")
+        original=artifact.read_bytes()
+        real_audit=sandbox_effect.audit_goal
+        real_preflight=conformance.effect_preflight
+        audit_calls=0
+        preflight_calls=0
+
+        def mutate_after_final_audit(*args,**kwargs):
+            nonlocal audit_calls
+            result=real_audit(*args,**kwargs)
+            audit_calls+=1
+            if audit_calls==2:
+                self.assertEqual(result["status"],"CANDIDATE_MECHANICALLY_VALID")
+                artifact.write_bytes(original+b" ")
+            return result
+
+        def preflight(*args,**kwargs):
+            nonlocal preflight_calls
+            preflight_calls+=1
+            if preflight_calls==1:
+                return {"admitted":True}
+            return real_preflight(*args,**kwargs)
+
+        with (
+            patch.object(sandbox_effect,"audit_goal",side_effect=mutate_after_final_audit),
+            patch.object(conformance,"effect_preflight",side_effect=preflight),
+        ):
+            first=stage_one(self.db,self.out,self.fx,tid)
+            self.assertEqual(first.get("reason"),"ARTIFACT_CHANGED_AFTER_AUDIT",first)
+            self.assertEqual(self.task(tid)["state"],"NEEDS_REVIEW")
+            second=stage_one(self.db,self.out,self.fx,tid)
+
+        self.assertEqual(preflight_calls,2)
+        self.assertEqual(self.task(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.task(tid)["error_code"],
+                         "CONFORMANCE_ARTIFACT_HASH_MISMATCH")
+        self.assertFalse((self.out/"sandbox"/(tid+".candidate")).exists())
+
     def test_reconcile_crash_between_stage_file_and_db_commit(self):
         tid,name,_=self.make()
         code=("from pathlib import Path;from cognition_agent_os.sandbox_effect import stage_one;"
