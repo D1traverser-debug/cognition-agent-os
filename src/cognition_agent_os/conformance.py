@@ -693,6 +693,7 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                     return _blocked(
                         "CONFORMANCE_EVIDENCE_CHANGED_AFTER_PREVIEW",
                         checked=0, findings=[], quarantined=[],
+                        mechanically_valid=0, eligible=total, exhaustive=False,
                         evidence_task_id=row["task_id"],
                         previous_proof=finding["proof"],
                         current_proof=latest_finding["proof"])
