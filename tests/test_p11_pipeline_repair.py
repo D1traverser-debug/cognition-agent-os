@@ -113,6 +113,44 @@ class CoupledRepairTest(unittest.TestCase):
         report=inspect_conformance(self.dbpath,self.ws,self.fx)
         self.assertEqual(report["mechanically_valid"],1)
 
+    def test_retry_after_artifact_drift_runs_conformance_before_early_audit(self):
+        from cognition_agent_os import pipeline_oracle as oracle,conformance
+        tid=self.prepare()
+        artifact=self.ws/"artifacts"/(tid+".json")
+        original=artifact.read_bytes()
+        real_audit=oracle.audit_pipeline
+        real_preflight=conformance.effect_preflight
+        mutated=False
+        preflight_calls=0
+
+        def mutate_after_final_audit(*args,**kwargs):
+            nonlocal mutated
+            result=real_audit(*args,**kwargs)
+            if kwargs.get("hidden") is True and not mutated:
+                self.assertEqual(result["status"],"HOLDOUT_ACCEPTED")
+                artifact.write_bytes(original+b" ")
+                mutated=True
+            return result
+
+        def preflight(*args,**kwargs):
+            nonlocal preflight_calls
+            preflight_calls+=1
+            if preflight_calls==1:
+                return {"admitted":True}
+            return real_preflight(*args,**kwargs)
+
+        with patch.object(oracle,"audit_pipeline",side_effect=mutate_after_final_audit),\\
+             patch.object(conformance,"effect_preflight",side_effect=preflight):
+            first=review_pipeline(self.dbpath,self.ws,self.fx,tid)
+            self.assertEqual(first.get("reason"),"ARTIFACT_CHANGED_AFTER_AUDIT",first)
+            self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
+            second=review_pipeline(self.dbpath,self.ws,self.fx,tid)
+
+        self.assertEqual(preflight_calls,2)
+        self.assertEqual(self.state(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.state(tid)["error_code"],
+                         "CONFORMANCE_PROPOSAL_HASH_CHANGED")
+
     def test_artifact_changed_after_final_holdout_audit_is_not_staged(self):
         from cognition_agent_os import pipeline_oracle as oracle
         tid=self.prepare()
