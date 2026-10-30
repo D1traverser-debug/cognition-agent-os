@@ -176,7 +176,7 @@ class AssuranceRegistryTests(unittest.TestCase):
             (dst / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').write_bytes(
                 (ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').read_bytes())
             with self.assertRaisesRegex(
-                    RegistryError, 'task-scoped live-authority'):
+                    RegistryError, 'unconditional context-heavy recovery'):
                 verify_live_handoff(dst)
 
     def test_cold_handoff_without_default_branch_resolution_fails(self):
