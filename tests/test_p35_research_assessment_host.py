@@ -135,6 +135,73 @@ class ResearchAssessmentHostTests(unittest.TestCase):
                 assess(self.db,self.work,self.fx,spec,task_id)
         self.assertEqual(len(calls),2)
 
+    def test_enforced_conformance_does_not_hold_writer_during_public_reaudit(self):
+        """One Host conformance sweep must not lock out unrelated work on I/O."""
+        from cognition_agent_os.conformance import inspect_conformance
+        sources=[]
+        data={}
+        for name,publisher in (("test_a","publisher_a"),
+                               ("test_b","publisher_b")):
+            entry=self.put_evidence(name,publisher,{
+                "structure":"supports","compare":"refutes"})
+            entry.update({"kind":"github","repo":"example/"+name,"ref":"a"*40})
+            sources.append(entry)
+            data[(entry["repo"],entry["path"],entry["ref"])]=(
+                self.fx/entry["path"]).read_bytes()
+        child=self.setup_research(sources)
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=lambda repo,path,ref:data[(repo,path,ref)]):
+            task,result=self.review(child,*sources)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        acquired=[]
+        def source_reader(repo,path,ref):
+            with closing(sqlite3.connect(str(self.db),timeout=0.05)) as other:
+                other.execute("PRAGMA busy_timeout=50")
+                other.execute("BEGIN IMMEDIATE")
+                other.rollback()
+            acquired.append(True)
+            return data[(repo,path,ref)]
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=source_reader):
+            inspection=inspect_conformance(
+                self.db,self.work,self.fx,enforce=True,max_cases=64)
+        self.assertGreaterEqual(len(acquired),2,inspection)
+        self.assertNotEqual(inspection["status"],"EVIDENCE_UNAVAILABLE",inspection)
+
+    def test_enforced_conformance_rejects_concurrent_authority_change(self):
+        from cognition_agent_os.conformance import inspect_conformance
+        from cognition_agent_os.ledger import alter_authority
+        sources=[]
+        data={}
+        for name,publisher in (("test_a","publisher_a"),
+                               ("test_b","publisher_b")):
+            entry=self.put_evidence(name,publisher,{
+                "structure":"supports","compare":"refutes"})
+            entry.update({"kind":"github","repo":"example/"+name,"ref":"a"*40})
+            sources.append(entry)
+            data[(entry["repo"],entry["path"],entry["ref"])]=(
+                self.fx/entry["path"]).read_bytes()
+        child=self.setup_research(sources)
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=lambda repo,path,ref:data[(repo,path,ref)]):
+            task,result=self.review(child,*sources)
+        self.assertEqual(result["status"],"NEEDS_REVIEW")
+        changed=[]
+        def mutate_during_read(repo,path,ref):
+            if not changed:
+                with closing(connect(self.db)) as writer:
+                    alter_authority(writer,revoke=True)
+                changed.append(True)
+            return data[(repo,path,ref)]
+        with patch("cognition_agent_os.research_assessment.github_public_snapshot",
+                   side_effect=mutate_during_read):
+            inspection=inspect_conformance(
+                self.db,self.work,self.fx,enforce=True,max_cases=64)
+        self.assertEqual(changed,[True])
+        self.assertEqual(inspection["status"],
+                         "CONCURRENT_CONFORMANCE_STATE_CHANGED",inspection)
+        self.assertFalse(inspection["production_mutation_authorized"])
+
     def test_immutable_public_source_is_read_by_real_host_without_fixture_duplication(self):
         stances={"structure":"supports","compare":"refutes"}
         a=self.put_evidence("independent_a","publisher_one",stances)
