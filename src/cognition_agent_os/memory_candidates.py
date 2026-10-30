@@ -205,6 +205,10 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
         db.row_factory = sqlite3.Row
+        # A read-only connection does not imply a multi-SELECT transaction in
+        # Python sqlite3 legacy mode. Pin the authority/root/candidate/lineage
+        # reads to one SQLite snapshot; other pages intentionally revalidate.
+        db.execute("BEGIN")
         exists = db.execute(
             "SELECT 1 FROM sqlite_master WHERE name='knowledge_candidates' "
             "AND type='table'").fetchone()
