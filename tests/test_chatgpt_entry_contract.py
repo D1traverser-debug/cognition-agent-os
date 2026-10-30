@@ -136,7 +136,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
         recovery = handoff.split("## Recovery order and responsibility map", 1)[1].split(
             "## Work cycle after recovery", 1)[0]
-        steps = re.findall(r"(?m)^(\d+)\.\s+\*\*([^*\n]+)\*\*:", recovery)
+        steps = re.findall(r"(?m)^(\d+)\.\s+\*\*([^*\n]+):\*\*", recovery)
         self.assertEqual([int(n) for n, _ in steps], list(range(1, 11)))
         self.assertLess(len(handoff.encode("utf-8")), 8192)
         self.assertNotIn("ALL open Draft PRs", recovery)

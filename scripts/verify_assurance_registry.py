@@ -244,7 +244,7 @@ def verify_live_handoff(root):
             "\n## Work cycle after recovery", 1)[0]
     except IndexError as exc:
         raise RegistryError("missing recovery route") from exc
-    steps = re.findall(r"(?m)^(\d+)\.\s+\*\*([^*\n]+)\*\*:\s*(.+)$", recovery)
+    steps = re.findall(r"(?m)^(\d+)\.\s+\*\*([^*\n]+):\*\*\s*(.+)$", recovery)
     require(len(steps) == 10 and
             [int(number) for number, _, _ in steps] == list(range(1, 11)),
             'handoff requires ten ordered recovery responsibilities')
