@@ -20,7 +20,7 @@ from .goal_audit import audit_goal, _constraints
 from .reconciliation_oracle import audit_stored_report
 from .intent_runtime import audit_intent_plan
 from .runner import verify_artifact
-from .ledger import event, connect, readonly_snapshot
+from .ledger import event, connect, readonly_snapshot, open_readonly_snapshot
 
 TASK_ID=re.compile(r"[0-9a-f]{32}\Z")
 EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED","CONTROL_CANDIDATE_MATCHED","CONTROL_ACTIVE",
@@ -516,12 +516,7 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
     if enforce:
         db=connect(db_path)
     else:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        db=sqlite3.connect(uri,uri=True,timeout=5)
-        db.row_factory=sqlite3.Row
-        # The caller owns this connection until the finally/close below.
-        # Pin all count/selection/lineage checks to one readonly snapshot.
-        db.execute("BEGIN")
+        db=open_readonly_snapshot(db_path)
     try:
         if enforce:
             db.execute("BEGIN IMMEDIATE")
