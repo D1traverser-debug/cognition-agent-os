@@ -1,0 +1,268 @@
+{
+  "schema": "cognition-historical-branches-frozen-source-inventory-v1",
+  "observed_date": "2026-10-30",
+  "status": "HISTORICAL_EVIDENCE_NOT_CURRENT_GITHUB_OR_OWNER_AUTHORITY",
+  "reference_candidate": {
+    "repository": "D1traverser-debug/cognition-agent-os",
+    "head_sha": "949981334edf934ec78a81ea4977d47da38d0037"
+  },
+  "old_pr_observations": [
+    {
+      "pr": 49,
+      "observed_head_sha": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+      "observed_draft": true
+    },
+    {
+      "pr": 48,
+      "observed_head_sha": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+      "observed_draft": true
+    },
+    {
+      "pr": 47,
+      "observed_head_sha": "6ead8dadca0776b1dbe93af40cc5be4ce0422a66",
+      "observed_draft": true
+    },
+    {
+      "pr": 46,
+      "observed_head_sha": "37b605d4eadf0dbfb074002b9b6affe0e217edb0",
+      "observed_draft": true
+    },
+    {
+      "pr": 45,
+      "observed_head_sha": "e0826ca9e33abe1b513619fe0050130b79138809",
+      "observed_draft": true
+    },
+    {
+      "pr": 43,
+      "observed_head_sha": "d1ea38236f7438dd50594fd3b522278fe53358d4",
+      "observed_draft": true
+    },
+    {
+      "pr": 42,
+      "observed_head_sha": "6a33b7fad1cbabb462b7494e75ea5da677c80a58",
+      "observed_draft": true
+    },
+    {
+      "pr": 41,
+      "observed_head_sha": "ea4f01cdbd9ddd64e342d56be4fc7b1d5555625f",
+      "observed_draft": true
+    },
+    {
+      "pr": 40,
+      "observed_head_sha": "7b0c32863f409395930218e855fe57dce6d2a26c",
+      "observed_draft": true
+    },
+    {
+      "pr": 39,
+      "observed_head_sha": "ed4fc6d41540faa8710bea64f8999437d69cf7b2",
+      "observed_draft": true
+    },
+    {
+      "pr": 38,
+      "observed_head_sha": "c7227050a77ed1a51381a991fe6718930118766c",
+      "observed_draft": true
+    },
+    {
+      "pr": 37,
+      "observed_head_sha": "86e8e34c09868d8c6687f5678548d85132ef2415",
+      "observed_draft": true
+    },
+    {
+      "pr": 36,
+      "observed_head_sha": "659810a7cf9808fa079ee278c4b47fb3b881ab76",
+      "observed_draft": true
+    },
+    {
+      "pr": 35,
+      "observed_head_sha": "8ff6623e9130037c4697e75061eebe07104166dd",
+      "observed_draft": true
+    },
+    {
+      "pr": 34,
+      "observed_head_sha": "66aefce1298b100f4ac5357bb4b7a4fcbb209638",
+      "observed_draft": true
+    },
+    {
+      "pr": 33,
+      "observed_head_sha": "08045133c371ec280be0dabdb95c67edb1013c63",
+      "observed_draft": true
+    },
+    {
+      "pr": 32,
+      "observed_head_sha": "de8b96b69db89de0944d7f4666c5e4bed4918bca",
+      "observed_draft": true
+    },
+    {
+      "pr": 31,
+      "observed_head_sha": "9936303abaa8aa3178a539b71599ad48adeb98a6",
+      "observed_draft": true
+    },
+    {
+      "pr": 30,
+      "observed_head_sha": "dedec93ccefee45de581b4589f421a5b74d286d8",
+      "observed_draft": true
+    },
+    {
+      "pr": 29,
+      "observed_head_sha": "5cac4317ae94bd75b9cc81179ce8484748375ae3",
+      "observed_draft": true
+    },
+    {
+      "pr": 28,
+      "observed_head_sha": "b9315becb016adf9c5b9f3b18225d1b54bc235b9",
+      "observed_draft": true
+    },
+    {
+      "pr": 27,
+      "observed_head_sha": "d6431daaa9352b606f1afa829c6beed44b7433a8",
+      "observed_draft": true
+    },
+    {
+      "pr": 26,
+      "observed_head_sha": "2d5c2b43ba070ee201a595d0ddba5b853b4d4f13",
+      "observed_draft": true
+    },
+    {
+      "pr": 25,
+      "observed_head_sha": "49ae66b45299d94657ab2de1d55fcf400876d3c1",
+      "observed_draft": true
+    },
+    {
+      "pr": 24,
+      "observed_head_sha": "54c6de63caa47ced87f1e0cc534dec175e39dcf6",
+      "observed_draft": true
+    },
+    {
+      "pr": 23,
+      "observed_head_sha": "ecea57dc1bb531c4d95be9e7729606a3cea6efad",
+      "observed_draft": true
+    },
+    {
+      "pr": 22,
+      "observed_head_sha": "bd89418532a6753a83643d9f973c5751a2a2fafc",
+      "observed_draft": true
+    },
+    {
+      "pr": 21,
+      "observed_head_sha": "b3955852b83696ffe635ae04c542f94e2277da5d",
+      "observed_draft": true
+    }
+  ],
+  "archived_byte_identical_from_pr49": {
+    "observed_head_sha": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+    "mappings": [
+      {
+        "original_path": "README-P1.md",
+        "original_git_blob_sha1": "e105b60cbd94e29bb7b4f5e1d5d345e9119cdce8",
+        "preserved_path": "archive/legacy-root/README-P1.md"
+      },
+      {
+        "original_path": "audits/2026-10-24/WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json",
+        "original_git_blob_sha1": "6c55ee668bb20429e3140ebef0066367d75751e7",
+        "preserved_path": "archive/audits/2026-10-24/WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-01.json",
+        "original_git_blob_sha1": "69e1845f3bc6ffe8dc855dc0f754519544014a8c",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-01.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-02.json",
+        "original_git_blob_sha1": "791d36589215e5a4f6056cc59eea0fd8dc20f100",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-02.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-03.json",
+        "original_git_blob_sha1": "aa8b6a0f26e753559b23cd29553d66efa920d3d6",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-03.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-04.json",
+        "original_git_blob_sha1": "56b805b6252a481f5de131667d0f5a0a1ca65f90",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-04.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-05.json",
+        "original_git_blob_sha1": "30ba4fdd240e0455a5c547406fc94356506fe7df",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-05.json"
+      }
+    ]
+  },
+  "isolated_not_promoted_from_pr32": {
+    "observed_head_sha": "de8b96b69db89de0944d7f4666c5e4bed4918bca",
+    "paths": [
+      {
+        "path": "docs/29-EVIDENCE-RELEVANCE-EXPERIMENT.md",
+        "git_blob_sha1": "72df2a6eb9acaef34c28d94416bf3866e1798f02"
+      },
+      {
+        "path": "docs/30-EXTERNAL-BEIR-METHOD-EXPERIMENT.md",
+        "git_blob_sha1": "caa63e99f3a42e422bf117af23231d5701437ff1"
+      },
+      {
+        "path": "docs/31-ORIGINAL-SCIFACT-CLAIM-JUDGMENT.md",
+        "git_blob_sha1": "79a62e71ccfb6020cdc588bf4b35ebb168df5fd7"
+      },
+      {
+        "path": "docs/32-SCIFACT-SCHEMA-ORDER-CAUSAL-STUDY.md",
+        "git_blob_sha1": "c764977be5d183e5cf4596f5442e9712caa18883"
+      },
+      {
+        "path": "evaluation/evidence_roles_holdout_v2.json",
+        "git_blob_sha1": "eef6d08b90c999e75815508100f4d871a6abcfe1"
+      },
+      {
+        "path": "evaluation/evidence_selection_holdout_v1.json",
+        "git_blob_sha1": "af750f8e604fbaad6b0aef503d3ac5584cf16277"
+      },
+      {
+        "path": "scripts/evaluate_evidence_retrieval.py",
+        "git_blob_sha1": "4a39b2efceb680e139d9d2b3849556b890021307"
+      },
+      {
+        "path": "scripts/measure_external_beir_retrieval.py",
+        "git_blob_sha1": "f955ddcb01bfe2fc59aea19891b34068e33639be"
+      },
+      {
+        "path": "scripts/measure_external_scifact_claim_judgment.py",
+        "git_blob_sha1": "1afdab43a22bcfbbf4fd07762f11ab27dfbf2acd"
+      },
+      {
+        "path": "scripts/measure_scifact_enum_order.py",
+        "git_blob_sha1": "09c13be5b47464c1e9c5bd211d2a121532a55eb5"
+      },
+      {
+        "path": "src/cognition_agent_os/evidence_ranker.py",
+        "git_blob_sha1": "530a36a4c183d68fff6a97d9fa658330e2ab6147"
+      },
+      {
+        "path": "tests/test_evidence_ranker.py",
+        "git_blob_sha1": "5e89198680e0f34b3e26469e2a3ffef94650037f"
+      },
+      {
+        "path": "tests/test_external_beir_methods.py",
+        "git_blob_sha1": "713da7fcb20cc00b36a0b12e99782e8e9abc7f94"
+      },
+      {
+        "path": "tests/test_original_scifact_judgment.py",
+        "git_blob_sha1": "e00c0a60ce9f2bb4909cce2741cafbb42af97b4e"
+      },
+      {
+        "path": "tests/test_scifact_enum_order.py",
+        "git_blob_sha1": "d09da13dc7972ab3dbf2f7a7c80b56b3b24ef243"
+      }
+    ]
+  },
+  "prohibitions": [
+    "DO_NOT_AUTOMATICALLY_CLOSE_OR_MERGE_BRANCHES",
+    "DO_NOT_TREAT_HISTORICAL_PR_AS_CURRENT_OWNER_OR_CODE_TRUTH",
+    "DO_NOT_PROMOTE_ISOLATED_RETRIEVAL_RESEARCH_AS_AUTHORITY",
+    "DO_NOT_DELETE_ARCHIVED_SOURCE"
+  ],
+  "evidence_limitations": [
+    "Only exact Git blob identity and missing paths checked; semantic equivalence of modified same-path files remains UNVERIFIED.",
+    "Archived PR49 sources are preserved bytes, NOT current runtime behavior.",
+    "PR32 retrieval experiments are still research artifacts, NOT a production knowledge/memory integration.",
+    "Live PR existence and fresh HEAD require provider reread, not this dated JSON."
+  ]
+}
