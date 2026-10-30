@@ -90,6 +90,34 @@ class HistoricalBranchProvenanceTests(unittest.TestCase):
                           "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT",
                           "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED"})
 
+    def test_non_pr_unique_sources_are_byte_preserved_but_not_enabled(self):
+        from pathlib import Path
+        prefixes = {
+            "METHOD_SELECTION_SKILL_ISOLATED": "nonpr-engineering-method",
+            "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT": "nonpr-graphify-old-workflow",
+            "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED": "nonpr-model-quality-v5",
+        }
+        sources = self.data["isolated_unpromoted_non_pr_artifacts"]
+        self.assertEqual(len(sources), 9)
+        for item in sources:
+            archive = (ROOT / "archive" / "research" / prefixes[item["kind"]]
+                       / item["path"])
+            self.assertTrue(archive.is_file() and not archive.is_symlink(),
+                            item["path"])
+            self.assertTrue(archive.resolve().is_relative_to(ROOT))
+            self.assertEqual(git_blob_sha1(archive.read_bytes()),
+                             item["git_blob_sha1"], item["path"])
+            self.assertFalse((ROOT/item["path"]).exists(),
+                             "unreviewed source must remain isolated")
+        original_audit = (
+            ROOT / "archive/research/nonpr-safe-fixture-audit/audits/2026-10-24"
+            / "WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json")
+        self.assertTrue(original_audit.is_file() and not original_audit.is_symlink())
+        self.assertEqual(git_blob_sha1(original_audit.read_bytes()),
+                         "2f334551e23bb4566c87644051c8a42016d2c59c")
+        self.assertIn("DO_NOT_AUTOMATICALLY_CLOSE_OR_MERGE_BRANCHES",
+                      self.data["prohibitions"])
+
     def test_historical_provenance_is_discoverable_from_existing_entry(self):
         handoff=(ROOT/"SESSION_HANDOFF.md").read_text(encoding="utf-8")
         self.assertIn("evaluation/historical_branch_provenance_v1.json",handoff)
