@@ -635,6 +635,7 @@ jobs:
               'agents/openai.yaml',
               'skills/cognition-parent-chatgpt-intake/SKILL.md',
               'skills/cognition-parent-chatgpt-intake/references/scope-probes.md',
+              'skills/cognition-parent-chatgpt-intake/references/parent-protocol.md',
           ]
           manifest = json.loads((base/'plugin.json').read_text(encoding='utf-8'))
           native = json.loads((base/'.codex-plugin/plugin.json').read_text(encoding='utf-8'))
