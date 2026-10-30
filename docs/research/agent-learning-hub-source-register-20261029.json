@@ -1244,7 +1244,8 @@
       ],
       "nested_leads": [
         "https://github.com/microsoft/SkillOpt/blob/main/skillopt/evaluation/gate.py",
-        "https://github.com/microsoft/SkillOpt/blob/main/skillopt_sleep/evalkit.py"
+        "https://github.com/microsoft/SkillOpt/blob/main/skillopt_sleep/evalkit.py",
+        "https://github.com/microsoft/SkillOpt/blob/main/skillopt/optimizer/skill_aware.py"
       ]
     },
     {
@@ -1456,6 +1457,26 @@
           "repo": "microsoft/SkillOpt",
           "path": "skillopt_sleep/evalkit.py",
           "blob_sha": "1c3ba313ce2f960d65be10e67dd4416013daacff",
+          "kind": "implementation"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/microsoft/SkillOpt/blob/main/skillopt/optimizer/skill_aware.py",
+      "label": "SkillOpt distinguishes instruction defects from execution lapses",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt/optimizer/skill_aware.py",
+          "blob_sha": "de39427ed0cc85fa1e716363a22140c91090b2d6",
+          "kind": "implementation"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt/optimizer/appendix.py",
+          "blob_sha": "25092606ccf5a22ab48b93a6e705bc914385e53b",
           "kind": "implementation"
         }
       ],
