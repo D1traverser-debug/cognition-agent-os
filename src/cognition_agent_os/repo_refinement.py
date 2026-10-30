@@ -102,14 +102,17 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
     from .conformance import effect_preflight,capability_disabled,REPAIR_LAB_CAPABILITY
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return _deny("CAPABILITY_DISABLED")
+    # Run shared governance before a task-specific audit can return early.
+    # A previously tampered parent must be quarantined on retry, not remain
+    # indefinitely NEEDS_REVIEW behind the same local-audit failure.
+    admit=effect_preflight(db_path,workspace,fixtures)
+    if not admit["admitted"]:
+        return _deny("PREFLIGHT_BLOCKED")
     # Verify exact immutable original proposal, task, and public source
     # identities before any candidate is executed or passed to a model.
     audit=audit_repo(db_path,workspace,fixtures,tid)
     if audit["status"]!="REPO_BYTES_MECHANICALLY_VALID":
         return _deny("PARENT_EVIDENCE_UNVERIFIABLE",reason=audit.get("reason"))
-    admit=effect_preflight(db_path,workspace,fixtures)
-    if not admit["admitted"]:
-        return _deny("PREFLIGHT_BLOCKED")
     try:
         with readonly_snapshot(db_path) as db:
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
