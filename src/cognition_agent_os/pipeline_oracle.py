@@ -156,7 +156,11 @@ def review_pipeline(db_path,workspace,fixtures,tid):
     # The shared enforcement sweep must precede task-specific early returns.
     pf=effect_preflight(db_path,workspace,fixtures)
     if not pf["admitted"]:
-        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
+        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED",
+                "reason":pf["reason"],"preflight_status":pf["status"],
+                "checked":pf["checked"],"eligible":pf["eligible"],
+                "quarantined":pf["quarantined"],
+                "emergency_stops":pf["emergency_stops"]}
     before=audit_pipeline(db_path,workspace,fixtures,tid)
     if before["status"]!="VISIBLE_PIPELINE_VERIFIED":
         return {"task_id":tid,"status":"NOT_ADMITTED","reason":before.get("reason")}
