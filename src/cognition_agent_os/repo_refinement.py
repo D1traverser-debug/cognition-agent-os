@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import sqlite3
 
+from .ledger import readonly_snapshot
 from .container_lab import candidate_changes,cases_from_bytes,run_suite,ContainerUnavailable
 from .repo_repair import audit_repo,_sources,_candidate_from_model,sha
 from .source import safe_fixture
@@ -110,9 +111,7 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
     if not admit["admitted"]:
         return _deny("PREFLIGHT_BLOCKED")
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
             auth=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             old_trials=db.execute("""SELECT details FROM events WHERE task_id=?
