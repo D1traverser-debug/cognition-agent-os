@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
 SKILL = BASE / "skills/cognition-parent-chatgpt-intake/SKILL.md"
 PROBES = SKILL.parent / "references/scope-probes.md"
+PROTOCOL = SKILL.parent / "references/parent-protocol.md"
 CODEX_SKILL = ROOT / ".agents/skills/goal-grounded-semantic-review/SKILL.md"
 AGENTS = ROOT / "AGENTS.md"
 
@@ -27,6 +28,10 @@ def metadata(source):
         for line in parts[1].splitlines()
         if ":" in line
     }
+
+
+def complete_policy():
+    return SKILL.read_text(encoding='utf-8') + '\n' + PROTOCOL.read_text(encoding='utf-8')
 
 
 class ChatGPTSourceBoundaries(unittest.TestCase):
@@ -94,6 +99,27 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("AB. Ordinary-chat entry versus Project-only false baseline",
                       PROBES.read_text(encoding="utf-8"))
 
+    def test_progressive_disclosure_preserves_semantic_guardrails(self):
+        core = SKILL.read_text(encoding="utf-8")
+        protocol = PROTOCOL.read_text(encoding="utf-8")
+        self.assertLess(len(core.encode("utf-8")), 9000)
+        self.assertGreater(len(protocol), 16000)
+        self.assertIn("references/parent-protocol.md", core)
+        self.assertIn("The concise `../SKILL.md` is the interactive execution entrance", protocol)
+        for token in ("SOURCE_LIFECYCLE_CONFLICT", "Source lifecycle at the real retrieval/write boundary",
+                      "working memory", "episodic memory", "semantic memory", "procedural memory",
+                      "invalidation", "competing causes"):
+            self.assertIn(token, complete_policy())
+
+    def test_decision_also_challenges_own_prompt_method_and_test(self):
+        core = SKILL.read_text(encoding="utf-8")
+        for token in ("Decision self-critique", "goal, prompt/entry, source",
+                      "SKILL_DEFECT", "EXECUTION_LAPSE", "ENTRY_NOT_SELECTED",
+                      "Bounded critique", "without new evidence", "independent readback"):
+            self.assertIn(token, core)
+        self.assertLess(core.index("Decision self-critique"), core.index("Execute & verify"))
+        self.assertIn("Do not rewrite an existing valid rule", core)
+
     def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):
         """Source policy only; cannot prove a fresh ChatGPT launch."""
         gate = (ROOT / "docs/PRODUCT-READINESS-GATE.md").read_text(encoding="utf-8")
@@ -112,7 +138,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
 
     def test_recurring_source_confusion_reenters_evidence_and_memory_decisions(self):
         """Contract-only probe; NOT native ChatGPT invocation evidence."""
-        skill = SKILL.read_text(encoding="utf-8")
+        skill = complete_policy()
         probes = PROBES.read_text(encoding="utf-8")
         # A named parent-goal decision cannot treat dated handoffs or a
         # repository-only inventory as proof that private owner memory is
@@ -128,7 +154,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
 
     def test_historical_source_supersession_is_not_naive_deletion(self):
         """Static candidate policy; new-chat behavior still needs live traces."""
-        skill = SKILL.read_text(encoding="utf-8")
+        skill = complete_policy()
         codex = AGENTS.read_text(encoding="utf-8")
         adr = (ROOT / "docs/01-ARCHITECTURE-DECISIONS.md").read_text(encoding="utf-8")
         probes = PROBES.read_text(encoding="utf-8")
@@ -244,6 +270,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
             "agents/openai.yaml",
             "skills/cognition-parent-chatgpt-intake/SKILL.md",
             "skills/cognition-parent-chatgpt-intake/references/scope-probes.md",
+            "skills/cognition-parent-chatgpt-intake/references/parent-protocol.md",
         )
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
