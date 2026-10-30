@@ -138,8 +138,12 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
                 return _deny("PARENT_EVIDENCE_UNVERIFIABLE",
                              reason="ARTIFACT_CHANGED_AFTER_AUDIT")
             parent=dict(task)
-        frozen=json.loads(read_audited_artifact(
-            workspace,tid,audit,max_bytes=65536))
+        try:
+            frozen_raw=read_audited_artifact(
+                workspace,tid,audit,max_bytes=65536)
+        except ArtifactConflict as exc:
+            return _deny("PARENT_EVIDENCE_UNVERIFIABLE",reason=str(exc))
+        frozen=json.loads(frozen_raw)
         # P21 may have spent TWO generations before initial freeze
         # (first no-change, second differing). Do not silently exceed
         # the 3-call model budget through subsequent PUBLIC refinement.
