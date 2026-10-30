@@ -174,14 +174,15 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
         capability_disabled,effect_preflight,REPAIR_LAB_CAPABILITY)
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return {"task_id":task_id,"status":"CAPABILITY_DISABLED"}
-    first=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=False)
-    if first["status"]!="VISIBLE_PATCH_MECHANICALLY_VALID":
-        return {"task_id":task_id,"status":"NOT_ADMITTED",
-                "reason":first.get("reason",first["status"])}
+    # Run shared governance before task-specific audit can return early.
     preflight=effect_preflight(db_path,workspace,fixtures)
     if not preflight["admitted"]:
         return {"task_id":task_id,"status":"PREFLIGHT_BLOCKED",
                 "reason":preflight["reason"]}
+    first=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=False)
+    if first["status"]!="VISIBLE_PATCH_MECHANICALLY_VALID":
+        return {"task_id":task_id,"status":"NOT_ADMITTED",
+                "reason":first.get("reason",first["status"])}
     db=connect(db_path)
     try:
         db.execute("BEGIN IMMEDIATE")
