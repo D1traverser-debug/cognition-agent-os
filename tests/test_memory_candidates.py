@@ -156,6 +156,20 @@ class CandidateMemoryTests(unittest.TestCase):
                                     "MEMORY_GRANT_OR_ROOT_UNAVAILABLE"):
             self.add(quote="Fact beta.")
 
+    def test_future_unrecognized_root_state_fails_closed(self):
+        prior = self.add()
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET state='FUTURE_UNKNOWN' WHERE task_id=?",
+                       (self.root_id,))
+            db.commit()
+        result = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(result[prior["memory_id"]]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(result[prior["memory_id"]]["quote"])
+        with self.assertRaisesRegex(MemoryContractError,
+                                    "MEMORY_GRANT_OR_ROOT_UNAVAILABLE"):
+            self.add(quote="Fact beta.")
+
     def test_cross_goal_dependency_cannot_cross_authority(self):
         with closing(connect(self.db)) as db:
             other = create_task(db, {"kind": "native_goal", "goal": "different root"})
