@@ -199,15 +199,19 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
                     "any_semantic_truth_verified": False}
         keys = {row["memory_id"] for row in rows}
         edges = {x: [] for x in keys}
-        for e in db.execute("SELECT child_id,parent_id FROM knowledge_candidate_edges"):
-            if e["child_id"] in keys:
+        scope = tuple(sorted(keys))
+        placeholders = ",".join("?" for _ in scope)
+        edge_query = ("SELECT child_id,parent_id FROM knowledge_candidate_edges "
+                      "WHERE child_id IN (" + placeholders + ")")
+        for e in (db.execute(edge_query, scope) if scope else ()):
                 if e["parent_id"] not in keys:
                     return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
                             "any_semantic_truth_verified": False}
                 edges[e["child_id"]].append(e["parent_id"])
         superseded = set()
-        for x in db.execute("SELECT old_id,new_id FROM knowledge_candidate_supersessions"):
-            if x["old_id"] in keys:
+        replace_query = ("SELECT old_id,new_id FROM knowledge_candidate_supersessions "
+                         "WHERE old_id IN (" + placeholders + ")")
+        for x in (db.execute(replace_query, scope) if scope else ()):
                 if x["new_id"] not in keys:
                     return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
                             "any_semantic_truth_verified": False}
@@ -219,14 +223,15 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
                 try:
                     raw = safe_fixture(source_root, identity[0])
                     source_state[identity] = (
-                        _sha(raw) == identity[1]
-                        and row["quote"] in raw.decode("utf-8"))
+                        raw.decode("utf-8") if _sha(raw) == identity[1] else None)
                 except (OSError, ValueError, UnicodeDecodeError):
-                    source_state[identity] = False
+                    source_state[identity] = None
         status = {row["memory_id"]: (
             "SUPERSEDED" if row["memory_id"] in superseded else
-            "SOURCE_CHANGED_OR_UNAVAILABLE" if not source_state[
-                (row["source_rel"], row["source_sha256"])] else
+            "SOURCE_CHANGED_OR_UNAVAILABLE" if
+              source_state[(row["source_rel"], row["source_sha256"])] is None
+              or row["quote"] not in
+                source_state[(row["source_rel"], row["source_sha256"])] else
             "CANDIDATE_UNVERIFIED") for row in rows}
         for _ in range(_MAX_NODES):
             changed = False
