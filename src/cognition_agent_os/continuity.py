@@ -601,9 +601,9 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
 
 
 
-def resume_goal(db_path: Path, *, resolve_head=None,
-                workspace: Path | None = None,
-                fixtures: Path | None = None) -> dict:
+def _resume_goal_local(db_path: Path, *,
+                       workspace: Path | None = None,
+                       fixtures: Path | None = None) -> dict:
     """No writes, no guessed goals, no implicit trust in a handoff file.
 
     When a GitHub branch is pinned, the head must be checked against a live
@@ -771,35 +771,6 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                     contract_sha256=row["contract_sha256"],
                     checkpoint_version=row["checkpoint_version"],
                     authority_current=False)
-            if spec["source"] is not None:
-                # The *source freshness* and *owner original* are different
-                # invariants. A failed remote HEAD comparison revokes runnable
-                # continuation, not the verified immutable owner wording.
-                blocked_original = {
-                    "goal_id": row["goal_id"],
-                    "objective": spec["objective"],
-                    "acceptance": spec["acceptance"],
-                    "constraints": spec["constraints"],
-                    "contract_sha256": row["contract_sha256"],
-                    "checkpoint_version": row["checkpoint_version"],
-                    "authority_current": True,
-                }
-                src = spec["source"]
-                resolver = resolve_head or _public_branch_head
-                try:
-                    observed = resolver(src["repo"], src["branch"])
-                    if not isinstance(observed, str) or not _SHA.fullmatch(observed):
-                        return _no_action("SOURCE_UNAVAILABLE",
-                                          **blocked_original)
-                except Exception:
-                    return _no_action("SOURCE_UNAVAILABLE",
-                                      **blocked_original)
-                if observed != src["head_sha"]:
-                    return _no_action(
-                        "SOURCE_REVALIDATION_REQUIRED",
-                        **blocked_original,
-                        pinned_head_sha=src["head_sha"],
-                        observed_head_sha=observed)
             state = task["state"]
             next_action = {
                 "PENDING": ("NOT_DUE" if task["due_at"] > time.time()
@@ -835,6 +806,73 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                 result["next_task_id"] = spec["next_task_id"]
             else:
                 result["task_id_for_review"] = spec["next_task_id"]
+            # Private handoff only. The caller must check any pinned remote
+            # source AFTER closing this SQLite snapshot, and reread authority.
+            if spec["source"] is not None:
+                result["_source_check"] = spec["source"]
             return result
     except (sqlite3.Error, OSError, UnicodeError):
         return _no_action("CONTINUITY_UNAVAILABLE")
+
+
+
+def resume_goal(db_path: Path, *, resolve_head=None,
+                workspace: Path | None = None,
+                fixtures: Path | None = None) -> dict:
+    """Resume under one local snapshot; do remote I/O with NO SQLite reader.
+
+    A pinned GitHub HEAD is verified against the live provider, then the
+    complete local goal/authority/root selection is observed AGAIN before
+    returning a runnable hint. Neither the hint nor source SHA is an effect
+    grant; the Worker admission boundary still repeats current CAS checks.
+    """
+    first = _resume_goal_local(db_path, workspace=workspace, fixtures=fixtures)
+    pinned = first.pop("_source_check", None)
+    if pinned is None:
+        return first
+    resolver = resolve_head or _public_branch_head
+    try:
+        live = resolver(pinned["repo"], pinned["branch"])
+        source_valid = isinstance(live, str) and _SHA.fullmatch(live)
+    except Exception:
+        live = None
+        source_valid = False
+
+    # Re-read AFTER the remote call (and after the first snapshot is CLOSED).
+    # This rejects revocation, new competing roots, checkpoint movement,
+    # source replacement or task-state changes while network I/O ran.
+    latest = _resume_goal_local(db_path, workspace=workspace, fixtures=fixtures)
+    current = latest.pop("_source_check", None)
+    if current is None:
+        return latest
+    if (current != pinned
+        or first.get("contract_sha256") != latest.get("contract_sha256")
+        or first.get("checkpoint_version") != latest.get("checkpoint_version")
+        or first.get("goal_id") != latest.get("goal_id")):
+        # Never export a stale next_task_id as a side effect of discovering
+        # that the original contract changed while contacting a provider.
+        return _no_action(
+            "SOURCE_REVALIDATION_REQUIRED",
+            goal_id=latest.get("goal_id"),
+            objective=latest.get("objective"),
+            acceptance=latest.get("acceptance"),
+            constraints=latest.get("constraints"),
+            contract_sha256=latest.get("contract_sha256"),
+            checkpoint_version=latest.get("checkpoint_version"),
+            authority_current=False)
+    blocked_original = {
+        "goal_id": latest["goal_id"],
+        "objective": latest["objective"],
+        "acceptance": latest["acceptance"],
+        "constraints": latest["constraints"],
+        "contract_sha256": latest["contract_sha256"],
+        "checkpoint_version": latest["checkpoint_version"],
+        "authority_current": True,
+    }
+    if not source_valid:
+        return _no_action("SOURCE_UNAVAILABLE", **blocked_original)
+    if live != current["head_sha"]:
+        return _no_action(
+            "SOURCE_REVALIDATION_REQUIRED", **blocked_original,
+            pinned_head_sha=current["head_sha"], observed_head_sha=live)
+    return latest
