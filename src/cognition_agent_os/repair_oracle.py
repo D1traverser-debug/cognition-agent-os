@@ -179,7 +179,12 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
     preflight=effect_preflight(db_path,workspace,fixtures)
     if not preflight["admitted"]:
         return {"task_id":task_id,"status":"PREFLIGHT_BLOCKED",
-                "reason":preflight["reason"]}
+                "reason":preflight["reason"],
+                "preflight_status":preflight["status"],
+                "checked":preflight["checked"],
+                "eligible":preflight["eligible"],
+                "quarantined":preflight["quarantined"],
+                "emergency_stops":preflight["emergency_stops"]}
     first=audit_patch(db_path,workspace,fixtures,task_id,reveal_holdout=False)
     if first["status"]!="VISIBLE_PATCH_MECHANICALLY_VALID":
         return {"task_id":task_id,"status":"NOT_ADMITTED",
