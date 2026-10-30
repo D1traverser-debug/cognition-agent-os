@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing, contextmanager
 import time
 import uuid
 from pathlib import Path
@@ -21,6 +22,26 @@ class LedgerNotConfigured(RuntimeError):
     """Execution cannot mint an authority or modify an uninitialized ledger."""
 
 
+@contextmanager
+def readonly_snapshot(path: Path, *, timeout: float = 5):
+    """One read-only SQLite snapshot for multi-query authority/evidence reads.
+
+    Python's legacy sqlite3 mode does not begin a transaction for SELECT.
+    A bare read-only connection can therefore mix authority, task and lineage
+    from different commits. BEGIN pins ONE read snapshot on its first SELECT;
+    closing the context releases it without ever granting write authority.
+    A new invocation must open a new snapshot to observe later revocation.
+    Cross-invocation pagination remains explicitly NOT snapshot-pinned.
+    """
+    if not path.is_file() or path.is_symlink():
+        raise LedgerNotConfigured("Ledger is not initialized or configured")
+    uri = path.resolve(strict=True).as_uri() + "?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True, timeout=timeout)) as db:
+        db.row_factory = sqlite3.Row
+        db.execute("BEGIN")
+        yield db
+
+
 def require_initialized_ledger(path: Path) -> None:
     """Read-only admission for every operational entrypoint, not just the host.
 
@@ -33,8 +54,7 @@ def require_initialized_ledger(path: Path) -> None:
     if not path.is_file() or path.is_symlink():
         raise LedgerNotConfigured("Ledger is not initialized or configured")
     try:
-        uri = path.resolve(strict=True).as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        with readonly_snapshot(path) as db:
             grant = db.execute(
                 "SELECT goal_rev,grant_rev,write_allowed "
                 "FROM authority WHERE singleton=1"
