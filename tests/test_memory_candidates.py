@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from cognition_agent_os.ledger import (
     connect, initialize, create_task, alter_authority
@@ -242,6 +243,77 @@ class CandidateMemoryTests(unittest.TestCase):
                        (a["memory_id"], b["memory_id"]))
             db.commit()
         self.assertEqual(self.snapshot()["status"], "MEMORY_LINEAGE_CORRUPT")
+
+    def test_read_page_uses_one_sqlite_snapshot_across_concurrent_root_change(self):
+        """A page must not combine pre-revoke authority and post-revoke edges.
+
+        The in-flight read has the old consistent snapshot. A subsequent
+        independent read must see the BLOCKED root and hide candidate words.
+        Pagination across *multiple* calls is not falsely called pinned.
+        """
+        entry = self.add()
+        original_connect = sqlite3.connect
+        read_connections = 0
+        triggered = []
+
+        class ReadProbe:
+            def __init__(self, connection):
+                self.connection = connection
+
+            @property
+            def row_factory(self):
+                return self.connection.row_factory
+
+            @row_factory.setter
+            def row_factory(self, value):
+                self.connection.row_factory = value
+
+            def execute(self, sql, params=()):
+                if (not triggered and
+                    sql.startswith("SELECT * FROM knowledge_candidates WHERE root_task_id")):
+                    self.assert_snapshot_started()
+                    with closing(original_connect(self_db, timeout=5)) as writer:
+                        writer.execute(
+                            "UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                            (self_root_id,))
+                        writer.commit()
+                    triggered.append(True)
+                return self.connection.execute(sql, params)
+
+            def assert_snapshot_started(self):
+                if not self.connection.in_transaction:
+                    raise AssertionError("Read-only SQLite SELECTs need explicit BEGIN")
+
+            def close(self):
+                return self.connection.close()
+
+        self_db, self_root_id = self.db, self.root_id
+
+        def observed_connect(database, *args, **kwargs):
+            nonlocal read_connections
+            conn = original_connect(database, *args, **kwargs)
+            if isinstance(database, str) and "?mode=ro" in database:
+                read_connections += 1
+                # First read-only connection is the initialized-ledger guard.
+                # The second is the actual catalog reader under test.
+                if read_connections == 2:
+                    return ReadProbe(conn)
+            return conn
+
+        with patch("cognition_agent_os.memory_candidates.sqlite3.connect",
+                   side_effect=observed_connect):
+            in_flight = self.snapshot()
+        self.assertEqual(triggered, [True])
+        self.assertEqual(in_flight["status"], "READ_ONLY_CANDIDATES")
+        self.assertEqual(in_flight["items"][0]["status"], "CANDIDATE_UNVERIFIED")
+        self.assertFalse(in_flight["cross_page_snapshot_pinned"])
+
+        fresh = self.snapshot()
+        self.assertEqual(fresh["items"][0]["memory_id"], entry["memory_id"])
+        self.assertEqual(fresh["items"][0]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(fresh["items"][0]["quote"])
+        self.assertIsNone(fresh["items"][0]["interpretation"])
 
     def test_research_candidate_cannot_automatically_become_a_verified_method(self):
         semantic = self.add(kind="semantic")
