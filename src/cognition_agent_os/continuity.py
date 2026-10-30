@@ -16,7 +16,7 @@ import time
 from contextlib import closing
 from pathlib import Path
 
-from .ledger import connect
+from .ledger import connect, readonly_snapshot
 from .source import github_public_branch_head, github_public_branch_head_nested
 
 _ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
@@ -192,9 +192,7 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
     # shared SQLite write transaction; a stale result can only be submitted
     # through the digest/version compare-and-set below. A subsequent resume
     # performs an independent fresh HEAD observation.
-    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as probe:
-        probe.row_factory = sqlite3.Row
+    with readonly_snapshot(db_path) as probe:
         observed_row = probe.execute(
             "SELECT * FROM goal_continuity WHERE goal_id=?", (goal_id,)).fetchone()
         observed_authority = probe.execute(
@@ -614,9 +612,7 @@ def resume_goal(db_path: Path, *, resolve_head=None,
     if not _db_exists(db_path):
         return _no_action("LEDGER_NOT_INITIALIZED")
     try:
-        uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-            db.row_factory = sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             authority = db.execute(
                 "SELECT * FROM authority WHERE singleton=1").fetchone()
             table = db.execute("""SELECT 1 FROM sqlite_master
