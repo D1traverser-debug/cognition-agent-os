@@ -263,6 +263,173 @@
     "Only exact Git blob identity and missing paths checked; semantic equivalence of modified same-path files remains UNVERIFIED.",
     "Archived PR49 sources are preserved bytes, NOT current runtime behavior.",
     "PR32 retrieval experiments are still research artifacts, NOT a production knowledge/memory integration.",
-    "Live PR existence and fresh HEAD require provider reread, not this dated JSON."
+    "Live PR existence and fresh HEAD require provider reread, not this dated JSON.",
+    "Same-path modified blobs require semantic review before branch closure; byte-only inventory cannot prove complete equivalence."
+  ],
+  "non_pr_branch_observations": [
+    {
+      "branch": "archive/pre-consolidation-cognition-20261025",
+      "observed_head_sha": "a3cc0240c4a37412cf681770ddc5bd3c9341dc7d"
+    },
+    {
+      "branch": "docs/architecture-baseline-20261020",
+      "observed_head_sha": "0c2de90cd2662ce76adde364079221f9fbe120c4"
+    },
+    {
+      "branch": "experiment/assurance-forged-approval-mutant-20261023",
+      "observed_head_sha": "ee88a873490728b3739527a3f30377afb3ec9729"
+    },
+    {
+      "branch": "experiment/assurance-inventory-ci-gate-20261023",
+      "observed_head_sha": "737a2a9c3647404ba1999b8171025f064d7a716b"
+    },
+    {
+      "branch": "experiment/controller-active-intake-integrity-20261023",
+      "observed_head_sha": "2cf3490bc3ebca6652f542b5c626f0280dd09a35"
+    },
+    {
+      "branch": "experiment/durable-same-goal-local-controller-20261023",
+      "observed_head_sha": "b3c002a196e09674ebd4e183ad5f6ea3685e75ce"
+    },
+    {
+      "branch": "experiment/engineering-method-activation-20261023",
+      "observed_head_sha": "faec07003d86a3f7df865605f06b90a5a378b29e"
+    },
+    {
+      "branch": "experiment/goal-feedback-alternative-baseline-20261023",
+      "observed_head_sha": "f6a7a57f4e435fd36c64883a973f7c885f0397f0"
+    },
+    {
+      "branch": "experiment/owner-pinned-outcome-oracle-20261023",
+      "observed_head_sha": "3f0912f63d8fecdae0a8d3bbe18b900014cbebe7"
+    },
+    {
+      "branch": "experiment/pr14-acceptance-mutant-20261023",
+      "observed_head_sha": "6cd7c56b489977d52773d7b02eb0232471173bb0"
+    },
+    {
+      "branch": "experiment/research-model-quality-ab-20261024",
+      "observed_head_sha": "1d3a25799494a1520621bf19355223008518baf8"
+    },
+    {
+      "branch": "feat/free-local-inference-20261020",
+      "observed_head_sha": "1407c007b84a6a8bd3d7581295b12f2700ddf9a9"
+    },
+    {
+      "branch": "feat/local-scheduled-host-20261020",
+      "observed_head_sha": "c507375a8a5627946af8bd33c87d2c85e92b582a"
+    },
+    {
+      "branch": "feat/p0-p1-durable-evidence-20261020",
+      "observed_head_sha": "6c2b72529e8ba0a45b158539336fe4b64ba0273d"
+    },
+    {
+      "branch": "feat/p3-live-source-cursor-20261020",
+      "observed_head_sha": "4bfe725aa96da7929c8ed4fa889bb589d386c4cf"
+    },
+    {
+      "branch": "feat/p4-evidence-oracle-20261020",
+      "observed_head_sha": "3fa5a2ff2c99db093d9247f41edced09488488be"
+    },
+    {
+      "branch": "feat/p5-bounded-goal-loop-20261020",
+      "observed_head_sha": "ba61f70186f7e2f3fe5199db698e8c0e58c3d1b4"
+    },
+    {
+      "branch": "feat/p6-sandbox-outcome-loop-20261020",
+      "observed_head_sha": "c051266adea1b5ccd8c6695588ad9fdfd1b6f628"
+    },
+    {
+      "branch": "feat/p7-diagnosis-fairness-20261020",
+      "observed_head_sha": "e44dd7b130108cf2f22b66f69a6d721ef4ce398f"
+    },
+    {
+      "branch": "feat/p8-evidence-reconciliation-20261020",
+      "observed_head_sha": "0d4a0fa177416b131dfdfcf7a1e727261daf27fc"
+    },
+    {
+      "branch": "feat/p9-intent-contract-20261020",
+      "observed_head_sha": "4569bd95b60ce012fb7cd6ab8f249aaa5c4580d0"
+    },
+    {
+      "branch": "feat/p10-runtime-conformance-20261020",
+      "observed_head_sha": "3c0fc7912124f3760ce1081a056ad46c1d99751b"
+    },
+    {
+      "branch": "feat/p35-research-observation-integration-20261022",
+      "observed_head_sha": "bfe06a2ddfc064cec692fa0bc070e3aa6768cca0"
+    },
+    {
+      "branch": "feature/owner-feedback-continuation-20261025",
+      "observed_head_sha": "7e0eb070afc51fd99330e0b700a5606090977c6d"
+    },
+    {
+      "branch": "feature/owner-postcondition-runtime-20261025",
+      "observed_head_sha": "101921c7e1101e978b5c4ba5b0edb81368849afc"
+    },
+    {
+      "branch": "fix/main-ci-continuity-20261029",
+      "observed_head_sha": "47eed2f843906bbf6f66809bf45778b3666ebc43"
+    },
+    {
+      "branch": "fix/postmerge-codex-bootstrap-20261029",
+      "observed_head_sha": "76e9ad70026d3f5c711c4507ad11cd084a1f54d0"
+    }
+  ],
+  "isolated_unpromoted_non_pr_artifacts": [
+    {
+      "path": ".agents/skills/engineering-solution-assessment/SKILL.md",
+      "git_blob_sha1": "29b8c035040ef00daf6c4c5727d2b5170d270854",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".agents/skills/engineering-solution-assessment/references/failure-classes.md",
+      "git_blob_sha1": "494dd31460ece2cbad2276de0e2ecc2196ba13b3",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".agents/skills/engineering-solution-assessment/references/learning-and-transfer.md",
+      "git_blob_sha1": "44efba1ab0d09955e8d2acb466190a7aa109ebac",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".agents/skills/engineering-solution-assessment/references/method-selection.md",
+      "git_blob_sha1": "a546f75f579d9b8ee65873bd6e4b933473b51eec",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": "evaluation/engineering_method_behavior_cases_v1.json",
+      "git_blob_sha1": "bf5f29fbcac18e991b30786cb87caf4a6f3e1bf5",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": "knowledge/engineering-methods/method_cards_v1.json",
+      "git_blob_sha1": "302f6b6054a7a5fa8e3c4b4f7c39851279e15d3f",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": "tests/test_engineering_skill_package.py",
+      "git_blob_sha1": "0b1bce06fc49a299d4b69bfed971b0eb1678eb53",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".github/workflows/graphify-code-inventory.yml",
+      "git_blob_sha1": "fc894a42a203aa1a74acb43817d8bd9e728a9a07",
+      "source_branch": "experiment/assurance-forged-approval-mutant-20261023",
+      "kind": "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT"
+    },
+    {
+      "path": "evaluation/inspect_unseen_goal_set_v5.json",
+      "git_blob_sha1": "f4949b62ccf10c1c3c0a3e7b7aa4ade1959030ce",
+      "source_branch": "experiment/research-model-quality-ab-20261024",
+      "kind": "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED"
+    }
   ]
 }

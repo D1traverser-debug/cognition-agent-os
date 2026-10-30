@@ -24,6 +24,10 @@ class HistoricalBranchProvenanceTests(unittest.TestCase):
     def setUp(self):
         self.data=json.loads(RECEIPT.read_text(encoding="utf-8"))
 
+    def test_archive_git_attributes_disable_platform_text_translation(self):
+        policy=(ROOT/".gitattributes").read_text(encoding="utf-8")
+        self.assertIn("/archive/** -text", policy)
+
     def test_archive_is_bitwise_identical_to_prior_branch_not_just_same_name(self):
         obs=self.data["archived_byte_identical_from_pr49"]["mappings"]
         self.assertEqual(len(obs),7)
@@ -50,6 +54,24 @@ class HistoricalBranchProvenanceTests(unittest.TestCase):
                              "research candidate accidentally entered active tree")
         self.assertIn("DO_NOT_PROMOTE_ISOLATED_RETRIEVAL_RESEARCH_AS_AUTHORITY",
                       self.data["prohibitions"])
+
+    def test_non_pr_branch_frozen_inventory_is_not_implicitly_discarded(self):
+        branches=self.data["non_pr_branch_observations"]
+        self.assertEqual(len(branches),27)
+        self.assertEqual(len({x["branch"] for x in branches}),len(branches))
+        self.assertTrue(all(SHA.fullmatch(x["observed_head_sha"]) for x in branches))
+        self.assertNotIn("main",{x["branch"] for x in branches})
+        isolated=self.data["isolated_unpromoted_non_pr_artifacts"]
+        self.assertEqual(len(isolated),9)
+        self.assertEqual(len({x["path"] for x in isolated}),len(isolated))
+        for row in isolated:
+            self.assertRegex(row["git_blob_sha1"],SHA)
+            self.assertFalse((ROOT/row["path"]).exists(),
+                             "isolated research artifact must not silently become active")
+        self.assertEqual({x["kind"] for x in isolated},
+                         {"METHOD_SELECTION_SKILL_ISOLATED",
+                          "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT",
+                          "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED"})
 
     def test_history_is_versioned_not_an_instruction_to_close_pr(self):
         d=self.data
