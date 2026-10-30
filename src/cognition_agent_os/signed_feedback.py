@@ -85,6 +85,9 @@ def bind_owner_review_trust(db_path:Path,workspace:Path,fixtures:Path,
         try:
             uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
             with closing(sqlite3.connect(uri,uri=True,timeout=5)) as check:
+                # Pin both preflight reads; writer admission still rechecks
+                # current authority independently under BEGIN IMMEDIATE.
+                check.execute("BEGIN")
                 check.execute("SELECT task_id FROM tasks LIMIT 1").fetchall()
                 prebound=check.execute(
                     "SELECT write_allowed FROM authority WHERE singleton=1").fetchone()
