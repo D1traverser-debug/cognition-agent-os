@@ -299,11 +299,11 @@ class PublicRevisionTests(unittest.TestCase):
             return result
 
         with patch("cognition_agent_os.conformance.effect_preflight",
-                   return_value={"admitted":True}),\\
+                   return_value={"admitted":True}),\
              patch("cognition_agent_os.repo_refinement.audit_repo",
-                   side_effect=audit_then_mutate),\\
+                   side_effect=audit_then_mutate),\
              patch("cognition_agent_os.repo_refinement.run_suite",
-                   side_effect=self.suite) as suite,\\
+                   side_effect=self.suite) as suite,\
              patch("cognition_agent_os.repo_refinement._candidate_from_model") as model:
             result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
                                       model="installed:7b")
