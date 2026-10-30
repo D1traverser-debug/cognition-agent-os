@@ -402,6 +402,12 @@ def review_repo(db_path,workspace,fixtures,tid):
     from .conformance import effect_preflight,capability_disabled,REPAIR_LAB_CAPABILITY
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
+    # Governance must run before task-specific early returns. Otherwise a
+    # tampered artifact can fail its local audit forever without being
+    # observed and quarantined by the shared conformance entrypoint.
+    preflight=effect_preflight(db_path,workspace,fixtures)
+    if not preflight["admitted"]:
+        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
     initial=audit_repo(db_path,workspace,fixtures,tid)
     if initial["status"]!="REPO_BYTES_MECHANICALLY_VALID":
         return {"task_id":tid,"status":"NOT_ADMITTED","reason":initial.get("reason")}
@@ -414,9 +420,6 @@ def review_repo(db_path,workspace,fixtures,tid):
                 "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
     except (OSError,ValueError,KeyError,TypeError):
         return {"task_id":tid,"status":"EXECUTION_EVIDENCE_UNAVAILABLE"}
-    preflight=effect_preflight(db_path,workspace,fixtures)
-    if not preflight["admitted"]:
-        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
     # A container runtime is a PRECONDITION, never a host-execution fallback.
     try:
         spec=validate_task_spec(doc["source_spec"])
