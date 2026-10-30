@@ -164,13 +164,28 @@ class SandboxEffectTests(unittest.TestCase):
         env=os.environ.copy();env["PYTHONPATH"]=str(ROOT/"src")
         processes=[subprocess.Popen([sys.executable,"-c",code],env=env,
                     stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True) for _ in range(2)]
-        statuses=[]
+        results=[]
         for p in processes:
             stdout,stderr=p.communicate(timeout=20)
             self.assertEqual(p.returncode,0,stderr)
-            statuses.append(json.loads(stdout)["status"])
-        self.assertEqual(statuses.count("SANDBOX_VERIFIED"),1)
-        self.assertEqual(statuses.count("NOT_ADMITTED")+statuses.count("NOT_PENDING_REVIEW"),1)
+            results.append(json.loads(stdout))
+        statuses=[result["status"] for result in results]
+        self.assertEqual(statuses.count("SANDBOX_VERIFIED"),1,results)
+        losers=[item for item in results if item["status"]!="SANDBOX_VERIFIED"]
+        self.assertEqual(len(losers),1,results)
+        self.assertIn(losers[0]["status"],
+                      {"NOT_ADMITTED","NOT_PENDING_REVIEW","PREFLIGHT_BLOCKED"},
+                      results)
+        if losers[0]["status"]=="PREFLIGHT_BLOCKED":
+            # Another process changing the ledger during preflight is a
+            # safely rejected effect, not a second accepted sandbox write.
+            self.assertEqual(losers[0]["reason"],"PREFLIGHT_NOT_SATISFIED")
+            self.assertIn(losers[0]["preflight_status"],
+                          {"CONCURRENT_CONFORMANCE_STATE_CHANGED",
+                           "EVIDENCE_INSUFFICIENT"},results)
+        self.assertEqual(self.task(tid)["state"],"SANDBOX_VERIFIED",results)
+        self.assertEqual(len([e for e in self.events(tid)
+                              if e["kind"]=="SANDBOX_EFFECT_VERIFIED"]),1,results)
 
     def test_auto_stage_opt_in_off_is_no_op(self):
         tid,_,_=self.make()
