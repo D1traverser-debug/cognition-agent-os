@@ -156,6 +156,50 @@ class RepoLabTest(unittest.TestCase):
         self.assertFalse((self.ws/"repo_lab"/tid).exists())
         self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
 
+    def test_direct_repo_review_quarantines_tampered_artifact_on_retry(self):
+        from cognition_agent_os import conformance,repo_repair
+        tid=self.plan()
+        artifact=self.ws/"artifacts"/(tid+".json")
+        original=artifact.read_bytes()
+        real_audit=repo_repair.audit_repo
+        real_preflight=conformance.effect_preflight
+        mutated=False
+        preflight_calls=0
+
+        def mutate_after_audit(*args,**kwargs):
+            nonlocal mutated
+            result=real_audit(*args,**kwargs)
+            if not mutated and result["status"]=="REPO_BYTES_MECHANICALLY_VALID":
+                artifact.write_bytes(original+b"\\n")
+                mutated=True
+            return result
+
+        def preflight(*args,**kwargs):
+            nonlocal preflight_calls
+            preflight_calls+=1
+            if preflight_calls==1:
+                return {"admitted":True}
+            return real_preflight(*args,**kwargs)
+
+        with patch.object(repo_repair,"audit_repo",side_effect=mutate_after_audit),\\
+             patch.object(conformance,"effect_preflight",side_effect=preflight),\\
+             patch.object(repo_repair,"run_suite",
+                          side_effect=AssertionError("untrusted proposal reached Docker")) as run:
+            first=review_repo(self.dbpath,self.ws,self.fx,tid)
+            self.assertEqual(first["reason"],"ARTIFACT_CHANGED_AFTER_AUDIT")
+            self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
+            second=review_repo(self.dbpath,self.ws,self.fx,tid)
+
+        self.assertEqual(preflight_calls,2)
+        self.assertEqual(self.state(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.state(tid)["error_code"],
+                         "CONFORMANCE_PROPOSAL_HASH_CHANGED")
+        self.assertFalse(run.called)
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? AND kind='CONFORMANCE_VIOLATION'",
+                (tid,)).fetchone()[0],1)
+
     def test_p30_hidden_gold_drifts_after_docker_before_review_commit(self):
         tid=self.plan()
         contaminated=b'[{"input":{},"expected":{"net":999}}]'
