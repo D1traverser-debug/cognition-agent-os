@@ -18,6 +18,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from .ledger import readonly_snapshot
 from . import local_model
 from .ledger import finalize_observed
 from .runner import ArtifactConflict, store_once
@@ -524,10 +525,7 @@ def audit_investigation(db_path: Path, workspace: Path,
         or workspace.is_symlink()):
         return failed
     try:
-        with closing(sqlite3.connect(
-            db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True
-        )) as db:
-            db.row_factory = sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
             if row is None or row["state"] != "NEEDS_REVIEW":
                 return failed
