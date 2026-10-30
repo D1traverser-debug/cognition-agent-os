@@ -71,6 +71,33 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(stage_one(self.dbpath,self.ws,self.fx,tid)["status"],"SANDBOX_VERIFIED")
         return tid
 
+    def test_transactional_capability_guard_is_legacy_schema_safe(self):
+        from cognition_agent_os.conformance import capability_disabled_in_transaction
+
+        db=connect(self.dbpath)
+        try:
+            # A database initialized before the optional conformance guard
+            # table existed remains a valid ledger and is never migrated by
+            # this operational read path.
+            self.assertIsNone(db.execute("""SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='conformance_capability_guard'""").fetchone())
+            self.assertFalse(capability_disabled_in_transaction(
+                db,"goal_sandbox_stage","pure_code_repair_lab"))
+            self.assertIsNone(db.execute("""SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='conformance_capability_guard'""").fetchone())
+
+            db.execute("""CREATE TABLE conformance_capability_guard(
+                kind TEXT PRIMARY KEY, disabled INTEGER NOT NULL,
+                reason TEXT NOT NULL, trigger_task TEXT NOT NULL)""")
+            db.execute("""INSERT INTO conformance_capability_guard
+                VALUES('pure_code_repair_lab',1,'TEST_BREACH','test-task')""")
+            self.assertTrue(capability_disabled_in_transaction(
+                db,"goal_sandbox_stage","pure_code_repair_lab"))
+            self.assertFalse(capability_disabled_in_transaction(
+                db,"unrelated_capability"))
+        finally:
+            db.close()
+
     def test_empty_initialized_runtime_cannot_claim_operational_success(self):
         r=self.check()
         self.assertEqual(r["status"],"NO_RUNTIME_EVIDENCE")
