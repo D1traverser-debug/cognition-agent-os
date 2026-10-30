@@ -240,7 +240,10 @@ def verify_live_handoff(root):
     # Inspect each named responsibility in its own step instead of requiring
     # incidental phrases. A harmless rewrite must not force context bloat.
     try:
-        recovery = live.split("## Recovery order and responsibility map\n", 1)[1].split(
+        # Only normalize line endings for policy parsing; preserve raw bytes
+        # for size checks and immutable archive provenance on all platforms.
+        structural_live = live.replace("\r\n", "\n")
+        recovery = structural_live.split("## Recovery order and responsibility map\n", 1)[1].split(
             "\n## Work cycle after recovery", 1)[0]
     except IndexError as exc:
         raise RegistryError("missing recovery route") from exc
