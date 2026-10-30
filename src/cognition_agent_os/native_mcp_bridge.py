@@ -16,7 +16,7 @@ import sqlite3
 
 from .host import _admit_existing_ledger
 from .runner import run_once
-from .ledger import require_initialized_ledger
+from .ledger import require_initialized_ledger, open_readonly_snapshot
 from .native_decision import _sources
 from .source import safe_fixture
 from .native_decision import (
@@ -30,10 +30,7 @@ from .memory_candidates import record_candidate, inspect_candidates
 def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
     """A model-visible read must never create or silently revive the ledger."""
     require_initialized_ledger(db_path)
-    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    db = sqlite3.connect(uri, uri=True, timeout=5)
-    db.row_factory = sqlite3.Row
-    return db
+    return open_readonly_snapshot(db_path)
 
 
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
