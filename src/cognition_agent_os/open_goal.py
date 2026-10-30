@@ -15,6 +15,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from .ledger import readonly_snapshot
 from . import local_model
 from .intent_planner import compile_intent, IntentError
 from .ledger import create_task, current_guard, event, finalize_observed, renew_claim
@@ -854,10 +855,7 @@ def audit_open_goal(db_path: Path, fixtures: Path, task_id: str) -> dict:
         or not db_path.is_file() or db_path.is_symlink()):
         return fail
     try:
-        with closing(sqlite3.connect(
-            db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True
-        )) as db:
-            db.row_factory = sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             parent = db.execute("SELECT * FROM tasks WHERE task_id=?",
                                 (task_id,)).fetchone()
             receipts = db.execute("SELECT details FROM events WHERE task_id=? "
