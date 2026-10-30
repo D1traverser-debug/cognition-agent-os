@@ -6,7 +6,7 @@ from contextlib import closing
 import time
 from pathlib import Path
 
-from .ledger import connect, LedgerNotConfigured, require_initialized_ledger
+from .ledger import connect, LedgerNotConfigured, require_initialized_ledger, readonly_snapshot
 from .runner import run_once
 from .watch import poll_due_watches
 from .sandbox_effect import advance_due_reviews
@@ -56,9 +56,7 @@ def _pending_research_actions(path: Path, workspace: Path, *, limit: int = 16) -
     if not 1 <= limit <= 64:
         raise ValueError("Research projection limit out of bounds")
     from .runner import verify_artifact
-    with closing(sqlite3.connect(path.resolve(strict=True).as_uri()+"?mode=ro",
-                                 uri=True, timeout=5)) as db:
-        db.row_factory=sqlite3.Row
+    with readonly_snapshot(path) as db:
         rows=db.execute("""SELECT t.*,e.details FROM tasks t
             JOIN events e ON e.task_id=t.task_id
             JOIN authority a ON a.singleton=1
@@ -102,9 +100,7 @@ def _goal_progress(path: Path, workspace: Path | None = None,
     A deterministic observation of the ONE task ledger, not a planner,
     authorization authority, or business-outcome oracle.
     """
-    with closing(sqlite3.connect(path.resolve(strict=True).as_uri()+"?mode=ro",
-                                 uri=True, timeout=5)) as db:
-        db.row_factory=sqlite3.Row
+    with readonly_snapshot(path) as db:
         authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
         count=db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
         # Display newest work within a finite cost window. The previous
