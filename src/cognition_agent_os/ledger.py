@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing, contextmanager
 import time
 import uuid
 from pathlib import Path
@@ -21,6 +22,37 @@ class LedgerNotConfigured(RuntimeError):
     """Execution cannot mint an authority or modify an uninitialized ledger."""
 
 
+def open_readonly_snapshot(path: Path, *, timeout: float = 5) -> sqlite3.Connection:
+    """Caller-owned read-only SQLite connection with an explicit pinned view.
+
+    Multi-SELECT callers that manage their own close/finally must not bypass
+    the same transaction rule as contextmanager-based observers.
+    """
+    if not path.is_file() or path.is_symlink():
+        raise LedgerNotConfigured("Ledger is not initialized or configured")
+    uri = path.resolve(strict=True).as_uri() + "?mode=ro"
+    db = sqlite3.connect(uri, uri=True, timeout=timeout)
+    try:
+        db.row_factory = sqlite3.Row
+        db.execute("BEGIN")
+        return db
+    except BaseException:
+        db.close()
+        raise
+
+
+@contextmanager
+def readonly_snapshot(path: Path, *, timeout: float = 5):
+    """One read-only SQLite snapshot for authority/goal/lineage observations.
+
+    Bare sqlite3 SELECTs in legacy mode do not begin a multi-query
+    transaction. A new invocation opens a new view to observe later grants
+    or source changes. Pages across invocations are NOT snapshot-pinned.
+    """
+    with closing(open_readonly_snapshot(path, timeout=timeout)) as db:
+        yield db
+
+
 def require_initialized_ledger(path: Path) -> None:
     """Read-only admission for every operational entrypoint, not just the host.
 
@@ -33,8 +65,7 @@ def require_initialized_ledger(path: Path) -> None:
     if not path.is_file() or path.is_symlink():
         raise LedgerNotConfigured("Ledger is not initialized or configured")
     try:
-        uri = path.resolve(strict=True).as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        with readonly_snapshot(path) as db:
             grant = db.execute(
                 "SELECT goal_rev,grant_rev,write_allowed "
                 "FROM authority WHERE singleton=1"

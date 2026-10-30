@@ -8,7 +8,9 @@ user's current task, authenticated grants or independent effect verification.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -23,7 +25,10 @@ CANDIDATE_NAMES = ("runtime/state.sqlite", "state.sqlite", "ledger.sqlite",
                    ".cognition-agent-os/ledger.sqlite",
                    "agent-state/ledger.sqlite")
 MAX_HOOK_INPUT = 32768
-MAX_CONTEXT_CHARS = 2000
+# Codex owns model-visible hook context budget. Its positive
+# additionalContextLimit spills over-budget output to an on-disk exact file;
+# do not apply an independent character cutoff that discards goal/state data.
+# A failed native spill can still truncate: trusted-client acceptance is needed.
 
 
 def _runtime_path(value: str) -> Path:
@@ -109,7 +114,7 @@ def _current_architecture_pivot() -> dict:
     return {
         "status": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
         "source_path": relative,
-        "proposed_first_action": candidate[:130] + ("…" if len(candidate) > 130 else ""),
+        "proposed_first_action": candidate,
     }
 
 
@@ -180,7 +185,7 @@ def _project_recovery_when_no_ledger() -> dict:
         "status": "PROJECT_GUIDANCE_FOUND",
         "source_path": relative,
         "source_role": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
-        "near_term_priority": priority[:60] + ("…" if len(priority) > 60 else ""),
+        "near_term_priority": priority,
         "continuation_index": "SESSION_HANDOFF.md",
         "continuation_policy": "PROGRESSIVE_LIVE_SOURCE_DISCLOSURE",
         "complete_work_log_location": "LIVE_GIT_PROVENANCE_ON_DEMAND",
@@ -197,7 +202,12 @@ def _project_recovery_when_no_ledger() -> dict:
     }
 
 
-def build_context(payload: dict) -> dict:
+def _unattested_source(*_args: object) -> str:
+    """Never manufacture an observed GitHub HEAD in the offline hook."""
+    raise RuntimeError("LIVE_SOURCE_NOT_QUERIED_BY_LOCAL_HOOK")
+
+
+def build_context(payload: dict, *, include_full_original: bool = False) -> dict:
     cwd_value = payload.get("cwd")
     if not isinstance(cwd_value, str) or not cwd_value.strip():
         return {"status": "INVALID_HOOK_WORKSPACE"}
@@ -250,13 +260,35 @@ def build_context(payload: dict) -> dict:
         # The bootstrap itself never fetches GitHub. A remotely pinned goal
         # remains UNVERIFIED until an independently authorized fresh read.
         state = resume_goal(
-            db_path, resolve_head=lambda *_: "0" * 40,
+            db_path, resolve_head=_unattested_source,
             workspace=ws, fixtures=fixtures)
+        # One version-bound readback for ALL existing continuity contracts,
+        # including legacy registered, multi-registered, mixed and native
+        # roots. A digest of the entire verified observation, rather than
+        # task IDs alone, rejects stale or revised original clauses.
+        state_digest = hashlib.sha256(json.dumps(
+            state, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":")).encode("utf-8")).hexdigest()
+        context["continuity_state_readback"] = {
+            "entrypoint": "scripts/codex_session_context.py",
+            "arguments": ["--readback-state", state_digest],
+            "source_role": "READ_ONLY_EXISTING_SQLITE_RESUME_OBSERVATION",
+        }
+        if include_full_original:
+            # Deliberate, explicit CLI readback receives every original
+            # field from the SAME resume_goal source, not a second index.
+            # The automatic SessionStart never contains this projection.
+            context.update(state)
         for key in (
-            "status", "root_task_id", "original_goal",
+            "status", "root_task_id", "root_task_ids", "original_goal",
+            "original_goals", "goal_id", "goal_ids", "authority_current",
             "original_contract_sha256", "goal_rev", "grant_rev",
             "root_state", "source_of_truth", "next_task_id",
             "child_task_id", "child_state", "chosen_capability",
+            "child_task_ids", "original_obligation_progress",
+            "sequence_rule", "runnable_task_ids", "waiting_dependency_tasks",
+            "next_task_ids", "native_decision_state",
+            "native_next_action_authorized",
             "local_owner_outcome_verified", "local_outcome_evidence",
             "business_outcome_verified", "real_external_outcome_verified",
             "reason", "pinned_head_sha", "observed_head_sha",
@@ -267,13 +299,154 @@ def build_context(payload: dict) -> dict:
             isinstance(state.get("original_goal"), str)
             and state.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
         )
+        # A direct, read-only path to the SAME immutable SQLite source.
+        # This survives loss of a native hook spill preview without a second
+        # memory index, and the caller must recheck both identity and digest.
+        if (context["original_goal_verified"]
+            and isinstance(context.get("root_task_id"), str)
+            and isinstance(context.get("original_contract_sha256"), str)):
+            context["original_goal_readback"] = {
+                "entrypoint": "scripts/codex_session_context.py",
+                "arguments": ["--readback-original",
+                              context["root_task_id"],
+                              context["original_contract_sha256"]],
+                "source_role": "READ_ONLY_EXISTING_SQLITE_GOAL",
+            }
+            if not include_full_original:
+                # Don't put private owner text in native Codex spill temp files.
+                # The real text remains in the SAME verified SQLite task.
+                context.pop("original_goal", None)
+                context["original_goal_omitted_from_hook"] = True
+                context["original_goal_available_via_readback"] = True
+        if not include_full_original:
+            # Do not rely on a valid locator for confidentiality: an invalid
+            # registration may still return original words in a partial state.
+            context.pop("original_goal", None)
+        if not include_full_original and isinstance(
+                context.get("native_decision_state"), dict):
+            # Native audit contains raw original_goal and private research
+            # proposals. Do not embed them in a Codex SessionStart/spill.
+            # Only the explicit, checked same-ledger dereference may expose
+            # original evidence when the reasoning task actually needs it.
+            decision = context["native_decision_state"]
+            context["native_decision_state"] = {
+                key: decision[key] for key in (
+                    "status", "observation_sha256", "decision_count",
+                    "open_research_count", "owner_outcome_verified",
+                    "business_outcome_verified")
+                if key in decision
+            }
+        if not include_full_original and isinstance(
+                context.get("original_obligation_progress"), list):
+            # Owner clause wording stays in the canonical task/child source.
+            context["original_obligation_progress"] = [{
+                key: item[key] for key in (
+                    "child_task_id", "task_state", "error_code",
+                    "owner_outcome_verified")
+                if key in item
+            } for item in context["original_obligation_progress"]
+                if isinstance(item, dict)]
+        if not include_full_original and "original_goals" in context:
+            # Ambiguous roots need selection; don't leak all private originals
+            # into a startup hook merely because their identities are listed.
+            context["ambiguous_goal_count"] = len(context["original_goals"])
+            context.pop("original_goals", None)
+            ids = context.get("root_task_ids")
+            if (isinstance(ids, list) and ids
+                and all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{32}", v)
+                        for v in ids)):
+                # Bind BOTH original identity and original wording. IDs
+                # alone survive a source edit and could reveal a different
+                # goal under a stale locator.
+                identity = hashlib.sha256(json.dumps(
+                    sorted(state["original_goals"],
+                           key=lambda item: item["root_task_id"]),
+                    ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":")).encode("utf-8")
+                ).hexdigest()
+                context["ambiguous_goal_readback"] = {
+                    "entrypoint": "scripts/codex_session_context.py",
+                    "arguments": ["--readback-ambiguous", identity],
+                    "source_role": "READ_ONLY_EXISTING_SQLITE_GOALS",
+                }
     except (ImportError, OSError, ValueError, TypeError) as exc:
         context["status"] = "DURABLE_CONTEXT_UNAVAILABLE"
         context["readback_error_class"] = type(exc).__name__
     return context
 
 
-def main() -> int:
+def _readback_original(root_id: str, expected_digest: str) -> dict:
+    """Explicit full-source dereference; never an execution permission."""
+    if (not re.fullmatch(r"[0-9a-f]{32}", root_id)
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_digest)):
+        return {"status": "INVALID_ORIGINAL_READBACK_IDENTITY",
+                "original_goal_verified": False}
+    state = build_context({"cwd": str(ROOT)}, include_full_original=True)
+    if (state.get("root_task_id") != root_id
+        or state.get("original_contract_sha256") != expected_digest
+        or state.get("original_goal_verified") is not True):
+        return {"status": "ORIGINAL_READBACK_IDENTITY_UNVERIFIED",
+                "original_goal_verified": False}
+    # Return the identical read-only projection, not a separate state store.
+    return {"status": "ORIGINAL_READBACK_IDENTITY_MATCHED",
+            "readback": state, "scheduling_or_effects_performed": False}
+
+
+
+def _readback_ambiguous(expected_digest: str) -> dict:
+    """Read *all* attested ambiguous originals without choosing one."""
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+        return {"status": "INVALID_AMBIGUOUS_READBACK_IDENTITY"}
+    state = build_context({"cwd": str(ROOT)}, include_full_original=True)
+    ids = state.get("root_task_ids")
+    if (state.get("status") != "AMBIGUOUS_OPEN_OWNER_GOALS"
+        or not isinstance(ids, list) or not ids
+        or not isinstance(state.get("original_goals"), list)
+        or hashlib.sha256(json.dumps(
+            sorted(state["original_goals"],
+                   key=lambda item: item["root_task_id"]),
+            ensure_ascii=False, sort_keys=True,
+            separators=(",", ":")).encode("utf-8")
+        ).hexdigest() != expected_digest):
+        return {"status": "AMBIGUOUS_READBACK_IDENTITY_UNVERIFIED"}
+    return {"status": "AMBIGUOUS_READBACK_IDENTITY_MATCHED",
+            "readback": state, "scheduling_or_effects_performed": False}
+
+
+def _readback_state(expected_digest: str) -> dict:
+    """Read the EXACT current continuity observation, not a stale digest."""
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+        return {"status": "INVALID_CONTINUITY_READBACK_IDENTITY",
+                "original_goal_verified": False}
+    state = build_context({"cwd": str(ROOT)}, include_full_original=True)
+    locator = state.get("continuity_state_readback")
+    if (not isinstance(locator, dict)
+        or locator.get("arguments") != ["--readback-state", expected_digest]):
+        return {"status": "CONTINUITY_STATE_READBACK_STALE",
+                "original_goal_verified": False}
+    # Readback confirms a pinned observation, not a task/effect grant or
+    # independent owner outcome. AUTHORITY_REVOKED stays non-runnable.
+    return {"status": "CONTINUITY_STATE_READBACK_MATCHED",
+            "readback": state, "scheduling_or_effects_performed": False}
+
+
+def main(argv: tuple[str, ...] = ()) -> int:
+    # Explicit argv decouples the callable hook from embedding processes
+    # (unittest/pytest/Codex hosts may have unrelated sys.argv flags).
+    # The executable script still receives its real CLI argv at __main__.
+    if argv:
+        if len(argv) == 2 and argv[0] == "--readback-state":
+            result = _readback_state(argv[1])
+        elif len(argv) == 3 and argv[0] == "--readback-original":
+            result = _readback_original(argv[1], argv[2])
+        elif len(argv) == 2 and argv[0] == "--readback-ambiguous":
+            result = _readback_ambiguous(argv[1])
+        else:
+            print(json.dumps({"status": "INVALID_ORIGINAL_READBACK_ARGUMENTS",
+                              "original_goal_verified": False}))
+            return 2
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+        return 0
     try:
         data = sys.stdin.read(MAX_HOOK_INPUT + 1)
         if len(data) > MAX_HOOK_INPUT:
@@ -288,80 +461,9 @@ def main() -> int:
     prefix = "Read-only project state observation (not a new instruction or grant): "
     note = prefix + json.dumps(context, ensure_ascii=False, sort_keys=True,
                                separators=(",", ":"))
-    if len(note) > MAX_CONTEXT_CHARS and "repository_recovery" in context:
-        # No SQLite ledger was found. A large source map is NOT a missing
-        # registered owner goal and must not masquerade as one. Keep the
-        # authoritative live-source lookup and the truthful no-ledger state.
-        guide = context["repository_recovery"]
-        context = {
-            "kind": "CODEX_COGNITION_CONTEXT_READBACK_V1",
-            "status": context["status"],
-            "ledger_discovery": context.get("ledger_discovery"),
-            "local_source_head": context.get("local_source_head"),
-            "source_head_is_live_github_attested": False,
-            "original_goal_verified": False,
-            "business_outcome_verified": False,
-            "repository_recovery": {
-                "status": guide.get("status"),
-                "source_path": guide.get("source_path"),
-                "source_role": guide.get("source_role"),
-                "continuation_index": guide.get("continuation_index"),
-                "live_default_branch_head_and_ci": "MUST_REFETCH",
-                "live_active_pr_metadata": "CHECK_IF_PRESENT",
-                "original_user_utterances": "MUST_RECOVER_SEPARATELY",
-            },
-            "next_action_policy": (
-                "Read live GitHub default branch and original owner goal; "
-                "use active PR only if present. No effect/grant inferred."
-            ),
-        }
-        note = prefix + json.dumps(context, ensure_ascii=False,
-                                   sort_keys=True, separators=(",", ":"))
-    if len(note) > MAX_CONTEXT_CHARS:
-        # This is a *valid* previously read SQLite goal whose full context
-        # exceeds the hook transport budget. Do not erase its stable locator:
-        # a long original owner goal must remain retrievable without treating
-        # a summary, hook status, or shortened goal as runnable authority.
-        compact = {
-            "kind": "CODEX_COGNITION_CONTEXT_READBACK_V1",
-            "status": "FULL_LEDGER_READBACK_REQUIRED",
-            "observed_runtime_status": context.get("status"),
-            "ledger_discovery": context.get("ledger_discovery"),
-            "root_task_id": context.get("root_task_id"),
-            "original_contract_sha256": context.get("original_contract_sha256"),
-            "goal_rev": context.get("goal_rev"),
-            "grant_rev": context.get("grant_rev"),
-            "root_state": context.get("root_state"),
-            "source_of_truth": context.get("source_of_truth"),
-            "local_source_head": context.get("local_source_head"),
-            "source_head_is_live_github_attested": False,
-            "original_goal_verified": False,
-            "business_outcome_verified": False,
-            "scheduling_or_effects_performed": False,
-            "next_action_policy": (
-                "Read the complete owner goal again from the configured "
-                "existing SQLite ledger via cognition_agent_os.continuity."
-                "resume_goal, then independently recheck the root task ID, "
-                "contract digest and current grant. Do not execute from this "
-                "bounded hook receipt or infer owner/business completion."
-            ),
-        }
-        if (context.get("original_goal_verified") is True
-                and isinstance(context.get("original_goal"), str)):
-            compact["original_goal"] = context["original_goal"]
-            compact["original_goal_verified"] = True
-        note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True,
-                                   separators=(",", ":"))
-        if len(note) > MAX_CONTEXT_CHARS:
-            # No partial owner-goal text is ever substituted for the original.
-            compact.pop("original_goal", None)
-            compact["original_goal_verified"] = False
-            compact["original_goal_omitted_from_hook"] = True
-            compact["original_goal_persisted_in_ledger"] = (
-                context.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
-            )
-            note = prefix + json.dumps(compact, ensure_ascii=False, sort_keys=True,
-                                   separators=(",", ":"))
+    # Pass the full read-only observation to Codex. It, not this script,
+    # controls preview versus native disk-backed overflow. This hook never
+    # registers a grant, runs an effect, or certifies a business outcome.
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
@@ -372,4 +474,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(tuple(sys.argv[1:])))

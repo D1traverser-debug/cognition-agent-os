@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import sqlite3
 
+from .ledger import open_readonly_snapshot
 from .ledger import create_task,current_guard,event,finalize_observed
 from .source import safe_fixture,SourceUnavailable
 from .runner import store_once,ArtifactConflict
@@ -240,9 +241,7 @@ def audit_gap(db_path:Path,fixtures:Path,workspace:Path,parent_id:str,child_id:s
     if not db_path.is_file() or db_path.is_symlink():
         return {**fail,"reason":"MISSING_LEDGER"}
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        db=sqlite3.connect(uri,uri=True,timeout=5)
-        db.row_factory=sqlite3.Row
+        db=open_readonly_snapshot(db_path)
         try:
             if child_id is None:
                 children=db.execute("SELECT task_id FROM tasks WHERE parent_task=?",

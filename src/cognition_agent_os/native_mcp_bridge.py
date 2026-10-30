@@ -16,7 +16,7 @@ import sqlite3
 
 from .host import _admit_existing_ledger
 from .runner import run_once
-from .ledger import require_initialized_ledger
+from .ledger import require_initialized_ledger, open_readonly_snapshot
 from .native_decision import _sources
 from .source import safe_fixture
 from .native_decision import (
@@ -24,15 +24,13 @@ from .native_decision import (
     record_native_hypothesis, record_native_open_research, register_native_goal,
 )
 from .owner_postcondition import inspect_owner_local_outcome
+from .memory_candidates import record_candidate, inspect_candidates
 
 
 def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
     """A model-visible read must never create or silently revive the ledger."""
     require_initialized_ledger(db_path)
-    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    db = sqlite3.connect(uri, uri=True, timeout=5)
-    db.row_factory = sqlite3.Row
-    return db
+    return open_readonly_snapshot(db_path)
 
 
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
@@ -234,6 +232,52 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                     spec["goal"].encode("utf-8")).hexdigest()
                     == public_source_goal_sha256),
         }
+
+    # Memory is not another controller or an action grant. Even inspection
+    # requires operator opt-in for local source disclosure; writes additionally
+    # require the existing MCP write profile AND the original SQLite grant.
+    if allow_source_read:
+        @mcp.tool()
+        def native_memory_candidates_inspect(
+                root_task_id: str, after_memory_id: str | None = None,
+                limit: int = 50) -> dict:
+            """Read source-version-aware candidate statuses, not trusted facts."""
+            root = inspect_native_goal(
+                db_path, workspace, fixtures, root_task_id)
+            if root.get("status") == "NATIVE_GOAL_UNVERIFIABLE":
+                raise ValueError("NATIVE_ROOT_NOT_ADMITTED")
+            return inspect_candidates(
+                db_path, fixtures, root_task_id=root_task_id,
+                after_memory_id=after_memory_id, limit=limit)
+
+        if allow_goal_writes:
+            @mcp.tool()
+            def native_memory_candidate_record(
+                    root_task_id: str, request_id: str, kind: str,
+                    file_name: str, source_sha256: str,
+                    quote: str, interpretation: str,
+                    parent_ids: list[str] | None = None,
+                    supersedes_id: str | None = None) -> dict:
+                """Record *unverified* evidence under present grant, never execute it."""
+                observed = inspect_native_goal(
+                    db_path, workspace, fixtures, root_task_id)
+                if observed.get("status") not in (
+                        "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                        "NATIVE_AWAITING_WORKER",
+                        "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+                    raise PermissionError("NATIVE_MEMORY_ROOT_NOT_ADMISSIBLE")
+                # No guessed source or owner trust. The local source read
+                # toggle is a separate operator permission from write.
+                current = _sources(fixtures)
+                if current.get(file_name) != source_sha256:
+                    raise ValueError("NATIVE_MEMORY_SOURCE_NOT_PINNED")
+                return record_candidate(
+                    db_path, fixtures, root_task_id=root_task_id,
+                    request_id=request_id, kind=kind, source_rel=file_name,
+                    expected_sha256=source_sha256, quote=quote,
+                    interpretation=interpretation,
+                    parent_ids=tuple(parent_ids or ()),
+                    supersedes_id=supersedes_id)
 
     if allow_source_read:
         @mcp.tool()

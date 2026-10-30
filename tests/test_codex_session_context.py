@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from cognition_agent_os.host import run_tick
+from cognition_agent_os.continuity import register_goal
 from cognition_agent_os.ledger import alter_authority, connect, create_task, initialize
 from cognition_agent_os.native_decision import register_native_goal
 
@@ -228,16 +229,74 @@ class CodexSessionContext(unittest.TestCase):
             self.assertEqual(module.main(), 0)
         packet = json.loads(stdout.getvalue())
         receipt = packet["hookSpecificOutput"]["additionalContext"]
-        self.assertLessEqual(len(receipt), 2000)
+        self.assertGreater(len(receipt), 6000)
         data = json.loads(receipt.partition(": ")[-1])
         self.assertEqual(data["status"], "NO_LOCAL_LEDGER_CONFIGURED")
         self.assertEqual(data["ledger_discovery"], "NO_LOCAL_LEDGER_CONFIGURED")
         self.assertFalse(data["original_goal_verified"])
         self.assertNotIn("original_goal", data)
+        self.assertEqual(data["repository_recovery"]["extra_untrusted_detail"],
+                         "x" * 10000)
         self.assertNotEqual(data["status"], "FULL_LEDGER_READBACK_REQUIRED")
         self.assertEqual(
             data["repository_recovery"]["live_default_branch_head_and_ci"],
             "MUST_REFETCH")
+
+    def test_approximate_token_budget_does_not_drop_bounded_source_map(self):
+        """A >2k-character source map is not a >2k-token Codex violation."""
+        import importlib.util
+        import io
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location("bounded_source_hook", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        guide = dict(module._project_recovery_when_no_ledger())
+        guide["bounded_source_details"] = "source:" * 430
+        stdin = io.StringIO(json.dumps({"cwd": str(ROOT), "source": "startup"}))
+        stdout = io.StringIO()
+        with (patch.object(module, "_existing_database",
+                           return_value=(None, "NO_LOCAL_LEDGER_CONFIGURED")),
+              patch.object(module, "_project_recovery_when_no_ledger",
+                           return_value=guide),
+              patch.object(sys, "stdin", stdin),
+              patch.object(sys, "stdout", stdout)):
+            self.assertEqual(module.main(), 0)
+        receipt = json.loads(stdout.getvalue())["hookSpecificOutput"]["additionalContext"]
+        self.assertGreater(len(receipt), 2000)
+        recovered = json.loads(receipt.partition(": ")[-1])
+        self.assertEqual(recovered["status"], "NO_LOCAL_LEDGER_CONFIGURED")
+        self.assertEqual(recovered["repository_recovery"]["bounded_source_details"],
+                         guide["bounded_source_details"])
+        self.assertFalse(recovered["original_goal_verified"])
+
+    def test_no_ledger_long_source_is_not_silently_discarded(self):
+        """No extra index: let Codex native spill, keeping original repo guidance."""
+        import importlib.util
+        import io
+        from unittest.mock import patch
+
+        spec = importlib.util.spec_from_file_location("source_spill_hook", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        extra = "重要约束:不得合并、不许写子系统; " * 500
+        guide = dict(module._project_recovery_when_no_ledger())
+        guide["additional_constraints"] = extra
+        stdin = io.StringIO(json.dumps({"cwd": str(ROOT), "source": "startup"}))
+        stdout = io.StringIO()
+        with (patch.object(module, "_existing_database",
+                           return_value=(None, "NO_LOCAL_LEDGER_CONFIGURED")),
+              patch.object(module, "_project_recovery_when_no_ledger",
+                           return_value=guide),
+              patch.object(sys, "stdin", stdin),
+              patch.object(sys, "stdout", stdout)):
+            self.assertEqual(module.main(), 0)
+        full = json.loads(stdout.getvalue())["hookSpecificOutput"]["additionalContext"]
+        result = json.loads(full.partition(": ")[-1])
+        self.assertEqual(result["repository_recovery"]["additional_constraints"], extra)
+        self.assertEqual(result["repository_recovery"]["live_default_branch_head_and_ci"],
+                         "MUST_REFETCH")
+        self.assertFalse(result["original_goal_verified"])
 
     def test_missing_source_never_invents_owner_goal(self):
         result = self._run(with_database=False)
@@ -254,6 +313,8 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(project["source_role"],
                          "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
         self.assertIn("opt-in interactive cognition workflow",
+                      project["near_term_priority"])
+        self.assertIn("not hypothetical blanket ChatGPT interception",
                       project["near_term_priority"])
         self.assertEqual(project["original_user_utterances"],
                          "MUST_RECOVER_SEPARATELY")
@@ -282,8 +343,9 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("ChatGPT/Codex",
                       architecture["proposed_first_action"])
         self.assertIn("挑战", architecture["proposed_first_action"])
-        self.assertLessEqual(self.last_context_chars, 2000,
-                             "Codex hook advertised additionalContextLimit=2000")
+        self.assertIn("适应性减轻流程", architecture["proposed_first_action"])
+        self.assertGreater(self.last_context_chars, 100,
+                           "Native client owns the token overflow; hook must remain valid")
         topology = project["live_python_topology"]
         self.assertEqual(topology["kind"],
                          "CURRENT_CHECKOUT_AST_NOT_RUNTIME_PROOF")
@@ -363,14 +425,16 @@ class CodexSessionContext(unittest.TestCase):
         with closing(connect(self.db)) as db:
             create_task(db, {"kind": "open_goal", "goal": owner})
         result = self._run()
-        self.assertEqual(result["original_goal"], owner)
+        self.assertNotIn("original_goal", result)
         self.assertTrue(result["original_goal_verified"])
+        self.assertTrue(result["original_goal_available_via_readback"])
+        self.assertTrue(result["original_goal_omitted_from_hook"])
         self.assertNotIn("repository_recovery", result)
 
-    def test_large_valid_owner_goal_preserves_sqlite_locator_not_partial_text(self):
-        # Native-goal admission permits 8,192 original characters. The
-        # read-only SessionStart hook must not erase its identity simply
-        # because that legitimate original exceeds the model-context budget.
+    def test_large_valid_owner_goal_remains_in_ledger_not_hook_spill(self):
+        # Native-goal admission permits 8,192 original characters. The hook
+        # carries checked identity; only explicit same-ledger readback reveals
+        # original private text (never arbitrary substring truncation).
         goal = ("Check evidence and permissions without skipping any original "
                 "clauses. " + "compare sources and verify results; " * 220)
         self.assertTrue(7500 < len(goal) <= 8192)
@@ -378,16 +442,13 @@ class CodexSessionContext(unittest.TestCase):
         first = self._run()
         second = self._run()
         self.assertEqual(first, second)
-        self.assertEqual(first["status"], "FULL_LEDGER_READBACK_REQUIRED")
         self.assertEqual(first["root_task_id"], root)
         self.assertEqual(first["source_of_truth"], "ORIGINAL_SQLITE_TASK")
         self.assertRegex(first["original_contract_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(first["ledger_discovery"], "CONFIGURED_LEDGER")
-        self.assertTrue(first["original_goal_persisted_in_ledger"])
-        self.assertTrue(first["original_goal_omitted_from_hook"])
-        self.assertFalse(first["original_goal_verified"])
         self.assertNotIn("original_goal", first)
-        self.assertNotIn("next_task_id", first)
+        self.assertTrue(first["original_goal_verified"])
+        self.assertTrue(first["original_goal_available_via_readback"])
         self.assertFalse(first["business_outcome_verified"])
         self.assertFalse(first["scheduling_or_effects_performed"])
         with closing(connect(self.db)) as db:
@@ -404,11 +465,250 @@ class CodexSessionContext(unittest.TestCase):
             alter_authority(db, revoke=True)
         state = self._run()
         self.assertEqual(state["root_task_id"], root)
-        self.assertEqual(state["status"], "FULL_LEDGER_READBACK_REQUIRED")
-        self.assertEqual(state["observed_runtime_status"], "AUTHORITY_REVOKED")
-        self.assertFalse(state["original_goal_verified"])
+        self.assertEqual(state["status"], "AUTHORITY_REVOKED")
+        self.assertNotIn("original_goal", state)
+        self.assertTrue(state["original_goal_verified"])
+        self.assertTrue(state["original_goal_available_via_readback"])
+        self.assertIs(state["authority_current"], False)
         self.assertNotIn("next_task_id", state)
         self.assertFalse(state["business_outcome_verified"])
+
+    def test_multiple_original_owner_goals_survive_cold_start_ambiguity(self):
+        """A hook must not drop distinct user goals or select a recent winner."""
+        first_goal = "Reconcile source A without writing external systems."
+        second_goal = "Investigate source B and preserve contradictory evidence."
+        with closing(connect(self.db)) as db:
+            first_root = create_task(db, {"kind": "open_goal", "goal": first_goal})
+            second_root = create_task(db, {"kind": "open_goal", "goal": second_goal})
+        result = self._run()
+        self.assertEqual(result["status"], "AMBIGUOUS_OPEN_OWNER_GOALS")
+        self.assertEqual(set(result["root_task_ids"]), {first_root, second_root})
+        self.assertEqual(result["ambiguous_goal_count"], 2)
+        self.assertNotIn("original_goals", result)
+        self.assertNotIn(first_goal, json.dumps(result))
+        self.assertNotIn(second_goal, json.dumps(result))
+        self.assertFalse(result["original_goal_verified"])
+        self.assertNotIn("next_task_id", result)
+        self.assertFalse(result["business_outcome_verified"])
+        locator = result["ambiguous_goal_readback"]
+        self.assertEqual(locator["source_role"], "READ_ONLY_EXISTING_SQLITE_GOALS")
+        env = dict(os.environ)
+        env.update({"COGNITION_AGENT_OS_DB": str(self.db),
+                    "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+                    "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures)})
+        def reread(args):
+            proc = subprocess.run([sys.executable, str(HOOK), *args],
+                                  cwd=ROOT, env=env, capture_output=True,
+                                  text=True, timeout=8)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            return json.loads(proc.stdout)
+        actual = reread(locator["arguments"])
+        self.assertEqual(actual["status"], "AMBIGUOUS_READBACK_IDENTITY_MATCHED")
+        self.assertEqual(
+            {entry["original_goal"] for entry in actual["readback"]["original_goals"]},
+            {first_goal, second_goal})
+        self.assertFalse(actual["scheduling_or_effects_performed"])
+        invalid = reread(["--readback-ambiguous", "0" * 64])
+        self.assertEqual(invalid["status"], "AMBIGUOUS_READBACK_IDENTITY_UNVERIFIED")
+        self.assertNotIn("readback", invalid)
+
+    def test_direct_original_readback_rejects_drift_and_is_read_only(self):
+        """Codex can dereference its SAME SQLite root without any hook cache."""
+        goal = "Preserve the full owner goal, including the last prohibition. " * 117
+        root = register_native_goal(self.db, goal)
+        hook = self._run()
+        locator = hook["original_goal_readback"]
+        self.assertNotIn("original_goal", hook)
+        self.assertNotIn(goal, json.dumps(hook))
+        self.assertNotIn("original_goal", hook.get("native_decision_state", {}))
+        self.assertEqual(locator["source_role"], "READ_ONLY_EXISTING_SQLITE_GOAL")
+        self.assertEqual(locator["arguments"][1:], [
+            root, hook["original_contract_sha256"]])
+        env = dict(os.environ)
+        env.update({"COGNITION_AGENT_OS_DB": str(self.db),
+                    "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+                    "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures)})
+        def readback(arguments):
+            proc = subprocess.run(
+                [sys.executable, str(HOOK), *arguments], cwd=ROOT, env=env,
+                capture_output=True, text=True, timeout=8)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            return json.loads(proc.stdout)
+        with closing(connect(self.db)) as db:
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        actual = readback(locator["arguments"])
+        self.assertEqual(actual["status"], "ORIGINAL_READBACK_IDENTITY_MATCHED")
+        self.assertEqual(actual["readback"]["root_task_id"], root)
+        self.assertEqual(actual["readback"]["original_goal"], goal)
+        self.assertFalse(actual["scheduling_or_effects_performed"])
+        self.assertEqual(readback(["--readback-original", root, "0" * 64])["status"],
+                         "ORIGINAL_READBACK_IDENTITY_UNVERIFIED")
+        self.assertEqual(readback(["--readback-original", "bad", "0" * 64])["status"],
+                         "INVALID_ORIGINAL_READBACK_IDENTITY")
+        with closing(connect(self.db)) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM events").fetchone()[0], before)
+            alter_authority(db, revoke=True)
+        revoked = readback(locator["arguments"])
+        self.assertEqual(revoked["status"], "ORIGINAL_READBACK_IDENTITY_MATCHED")
+        self.assertEqual(revoked["readback"]["status"], "AUTHORITY_REVOKED")
+        self.assertIs(revoked["readback"]["authority_current"], False)
+        self.assertNotIn("next_task_id", revoked["readback"])
+        self.assertFalse(revoked["scheduling_or_effects_performed"])
+
+
+    def _readback_state(self, locator):
+        environ = dict(os.environ)
+        environ.update({
+            "COGNITION_AGENT_OS_DB": str(self.db),
+            "COGNITION_AGENT_OS_WORKSPACE": str(self.ws),
+            "COGNITION_AGENT_OS_FIXTURES": str(self.fixtures),
+        })
+        proc = subprocess.run(
+            [sys.executable, str(HOOK), *locator],
+            cwd=ROOT, env=environ, capture_output=True,
+            text=True, timeout=8)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout)
+
+    def _registered_contract(self, task, goal_id="independent-original"):
+        return {
+            "goal_id": goal_id,
+            "objective": "Preserve all expert obligations and direct corrections.",
+            "acceptance": "Independently verify every owner postcondition.",
+            "constraints": ["Do not pay", "Do not merge main", "Never overwrite child state"],
+            "next_task_id": task,
+            "source": None,
+        }
+
+    def test_registered_continuity_recovers_full_original_without_hook_disclosure(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        contract = self._registered_contract(task)
+        register_goal(self.db, contract)
+        hook = self._run()
+        self.assertEqual(hook["status"], "READY_TO_TICK", hook)
+        self.assertNotIn(contract["objective"], json.dumps(hook))
+        self.assertNotIn(contract["acceptance"], json.dumps(hook))
+        locator = hook["continuity_state_readback"]["arguments"]
+        self.assertEqual(locator[0], "--readback-state")
+        recovered = self._readback_state(locator)
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(recovered["readback"]["objective"], contract["objective"])
+        self.assertEqual(recovered["readback"]["acceptance"], contract["acceptance"])
+        self.assertEqual(recovered["readback"]["constraints"], contract["constraints"])
+        self.assertEqual(recovered["readback"]["next_task_id"], task)
+        self.assertFalse(recovered["scheduling_or_effects_performed"])
+        with closing(connect(self.db)) as db:
+            self.assertGreaterEqual(
+                db.execute("SELECT COUNT(*) FROM events").fetchone()[0], before)
+
+    def test_two_registered_contracts_are_recovered_without_latest_goal_selection(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        first = self._registered_contract(task, "original-a")
+        second = self._registered_contract(task, "original-b")
+        second["objective"] = "Separate corrected owner objective B."
+        register_goal(self.db, first)
+        register_goal(self.db, second)
+        hook = self._run()
+        self.assertEqual(hook["status"], "AMBIGUOUS_ACTIVE_GOALS")
+        self.assertNotIn(first["objective"], json.dumps(hook))
+        self.assertNotIn(second["objective"], json.dumps(hook))
+        recovered = self._readback_state(
+            hook["continuity_state_readback"]["arguments"])
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(
+            {x["objective"] for x in recovered["readback"]["registered_goals"]},
+            {first["objective"], second["objective"]})
+        self.assertNotIn("next_task_id", recovered["readback"])
+        self.assertFalse(recovered["scheduling_or_effects_performed"])
+
+    def test_multiple_registered_goals_do_not_hide_third_open_owner_goal(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        register_goal(self.db, self._registered_contract(task, "first-owner"))
+        register_goal(self.db, self._registered_contract(task, "second-owner"))
+        third = "A third standalone owner goal must not disappear on cold entry."
+        with closing(connect(self.db)) as db:
+            other = create_task(db, {"kind": "open_goal", "goal": third})
+        hook = self._run()
+        self.assertEqual(hook["status"], "AMBIGUOUS_ACTIVE_GOALS")
+        self.assertNotIn(third, json.dumps(hook))
+        recovered = self._readback_state(
+            hook["continuity_state_readback"]["arguments"])
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(
+            len(recovered["readback"]["registered_goals"]), 2)
+        self.assertEqual(recovered["readback"]["other_original_goals"], [
+            {"root_task_id": other, "original_goal": third}])
+        self.assertNotIn("next_task_id", recovered["readback"])
+
+    def test_remote_source_unavailable_preserves_full_contract_but_no_action(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        owner = self._registered_contract(task, "remote-pinned-owner")
+        owner["source"] = {
+            "repo": "example/reference",
+            "branch": "main",
+            "head_sha": "a" * 40,
+        }
+        register_goal(self.db, owner)
+        hook = self._run()
+        # The startup hook deliberately has no live GitHub attestation.
+        self.assertEqual(hook["status"], "SOURCE_UNAVAILABLE", hook)
+        self.assertNotIn("observed_head_sha", hook)
+        self.assertNotIn(owner["objective"], json.dumps(hook))
+        self.assertNotIn(owner["acceptance"], json.dumps(hook))
+        self.assertNotIn("next_task_id", hook)
+        recovered = self._readback_state(
+            hook["continuity_state_readback"]["arguments"])
+        self.assertEqual(recovered["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(recovered["readback"]["objective"], owner["objective"])
+        self.assertEqual(recovered["readback"]["acceptance"], owner["acceptance"])
+        self.assertEqual(recovered["readback"]["constraints"], owner["constraints"])
+        self.assertEqual(recovered["readback"]["status"],
+                         "SOURCE_UNAVAILABLE")
+        self.assertNotIn("observed_head_sha", recovered["readback"])
+        self.assertNotIn("next_task_id", recovered["readback"])
+        self.assertFalse(recovered["scheduling_or_effects_performed"])
+
+    def test_mixed_goal_readback_rejects_stale_source_and_preserves_revoke(self):
+        with closing(connect(self.db)) as db:
+            task = create_task(db, {"kind": "fixture", "old": "a", "new": "b"})
+        contract = self._registered_contract(task)
+        register_goal(self.db, contract)
+        old = "Investigate all contradictory evidence; no external writes."
+        with closing(connect(self.db)) as db:
+            root = create_task(db, {"kind": "open_goal", "goal": old})
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        hook = self._run()
+        self.assertEqual(hook["status"], "AMBIGUOUS_DURABLE_GOALS")
+        self.assertNotIn(old, json.dumps(hook))
+        locator = hook["continuity_state_readback"]["arguments"]
+        initial = self._readback_state(locator)
+        self.assertEqual(initial["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertEqual(initial["readback"]["registered_goal"]["objective"],
+                         contract["objective"])
+        self.assertEqual(initial["readback"]["other_original_goals"], [
+            {"root_task_id": root, "original_goal": old}])
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET source_spec=? WHERE task_id=?", (
+                json.dumps({"kind": "open_goal", "goal":
+                            "A different unregistered goal"}, sort_keys=True), root))
+            db.commit()
+        self.assertEqual(self._readback_state(locator)["status"],
+                         "CONTINUITY_STATE_READBACK_STALE")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        after = self._run()
+        self.assertFalse(after["authority_current"])
+        revoked = self._readback_state(after["continuity_state_readback"]["arguments"])
+        self.assertEqual(revoked["status"], "CONTINUITY_STATE_READBACK_MATCHED")
+        self.assertFalse(revoked["readback"]["authority_current"])
+        self.assertNotIn("next_task_id", revoked["readback"])
+        self.assertFalse(revoked["scheduling_or_effects_performed"])
 
     def test_cold_restart_resumes_exact_original_goal_without_new_ledger(self):
         goal = "Compare actual.csv with baseline.csv and report differences."
@@ -420,8 +720,9 @@ class CodexSessionContext(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["status"], "READY_TO_TICK")
         self.assertEqual(first["root_task_id"], root)
-        self.assertEqual(first["original_goal"], goal)
+        self.assertNotIn("original_goal", first)
         self.assertTrue(first["original_goal_verified"])
+        self.assertTrue(first["original_goal_available_via_readback"])
         self.assertFalse(first["business_outcome_verified"])
         self.assertEqual(first["next_task_id"], root)
         with closing(connect(self.db)) as db:
@@ -505,7 +806,8 @@ class CodexSessionContext(unittest.TestCase):
         context = json.loads(
             wire["hookSpecificOutput"]["additionalContext"].partition(": ")[-1])
         self.assertEqual(context["root_task_id"], root, context)
-        self.assertEqual(context["original_goal"], goal)
+        self.assertNotIn("original_goal", context)
+        self.assertTrue(context["original_goal_available_via_readback"])
         self.assertEqual(context["status"], "READY_TO_TICK")
         self.assertFalse(context["scheduling_or_effects_performed"])
 

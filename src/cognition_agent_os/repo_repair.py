@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from .ledger import readonly_snapshot
 from .isolated_filesystem import stage_immutable
 import re
 import sqlite3
@@ -315,9 +316,7 @@ def audit_repo(db_path,workspace,fixtures,tid,*,require_staged=False):
         or workspace.is_symlink()):
         return {**fail,"reason":"UNSAFE_AUTHORITY_OR_TASK_ID"}
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
             if (not task or task["state"] not in ("NEEDS_REVIEW","REPAIR_LAB_VERIFIED")):
                 return {**fail,"reason":"TASK_NOT_REVIEWABLE"}

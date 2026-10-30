@@ -16,7 +16,7 @@ import sqlite3
 from contextlib import closing
 
 from .source import safe_fixture
-from .ledger import lineage_guard
+from .ledger import lineage_guard, readonly_snapshot
 
 TASK_ID = re.compile(r"[a-f0-9]{32}\Z")
 MAX_BYTES = 128 * 1024
@@ -31,9 +31,7 @@ def _reject(reason: str, task_id: str) -> dict:
 def _read_only(db_path: Path, task_id: str):
     if not db_path.is_file() or db_path.is_symlink():
         return None
-    uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-        db.row_factory=sqlite3.Row
+    with readonly_snapshot(db_path) as db:
         task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
         authority=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
         return (dict(task) if task else None, dict(authority) if authority else None,

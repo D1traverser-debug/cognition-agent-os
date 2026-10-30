@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import sqlite3
 
+from .ledger import open_readonly_snapshot
 from .intent_planner import compile_intent, IntentError
 from .ledger import connect, create_task, current_guard, event, finalize_observed
 from .source import safe_fixture, SourceUnavailable
@@ -385,9 +386,7 @@ def audit_knowledge_intent_plan(db_path:Path,fixtures:Path,task_id:str)->dict:
     try:
         # A verifier is read-only and cannot create, upgrade or re-own
         # a DB while the conformance sweep holds its original transaction.
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        db=sqlite3.connect(uri,uri=True,timeout=5)
-        db.row_factory=sqlite3.Row
+        db=open_readonly_snapshot(db_path)
         try:
             root=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             if root is None or root["state"]!="DECOMPOSED":

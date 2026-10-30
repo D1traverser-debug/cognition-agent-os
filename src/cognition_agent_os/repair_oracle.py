@@ -13,6 +13,7 @@ import json
 import operator
 import os
 from pathlib import Path
+from .ledger import readonly_snapshot
 from .isolated_filesystem import stage_immutable
 import re
 import sqlite3
@@ -86,9 +87,7 @@ def audit_patch(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
     if (not db_path.is_file() or db_path.is_symlink() or workspace.is_symlink()):
         return {**fail,"reason":"UNSAFE_LEDGER_OR_WORKSPACE"}
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             if not task or task["state"] not in ("NEEDS_REVIEW","REPAIR_LAB_VERIFIED"):
                 return {**fail,"reason":"TASK_NOT_REVIEWABLE"}

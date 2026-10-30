@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from .ledger import readonly_snapshot
 from .isolated_filesystem import stage_immutable
 import sqlite3
 import time
@@ -48,9 +49,7 @@ def _audit_internal(db_path,workspace,fixtures,tid,*,hidden,staged):
         or len(tid)!=32 or any(x not in "0123456789abcdef" for x in tid)):
         return {**fail,"reason":"UNSAFE_AUTHORITY"}
     try:
-        with closing(sqlite3.connect(
-            db_path.resolve(strict=True).as_uri()+"?mode=ro",uri=True,timeout=5)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             row=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
             if row is None or row["state"] not in ("NEEDS_REVIEW","REPAIR_LAB_VERIFIED"):
                 return {**fail,"reason":"REPAIR_CLAIM_NOT_REVIEWABLE"}

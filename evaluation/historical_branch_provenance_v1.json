@@ -1,0 +1,435 @@
+{
+  "schema": "cognition-historical-branches-frozen-source-inventory-v1",
+  "observed_date": "2026-10-30",
+  "status": "HISTORICAL_EVIDENCE_NOT_CURRENT_GITHUB_OR_OWNER_AUTHORITY",
+  "reference_candidate": {
+    "repository": "D1traverser-debug/cognition-agent-os",
+    "head_sha": "949981334edf934ec78a81ea4977d47da38d0037"
+  },
+  "old_pr_observations": [
+    {
+      "pr": 49,
+      "observed_head_sha": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+      "observed_draft": true
+    },
+    {
+      "pr": 48,
+      "observed_head_sha": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+      "observed_draft": true
+    },
+    {
+      "pr": 47,
+      "observed_head_sha": "6ead8dadca0776b1dbe93af40cc5be4ce0422a66",
+      "observed_draft": true
+    },
+    {
+      "pr": 46,
+      "observed_head_sha": "37b605d4eadf0dbfb074002b9b6affe0e217edb0",
+      "observed_draft": true
+    },
+    {
+      "pr": 45,
+      "observed_head_sha": "e0826ca9e33abe1b513619fe0050130b79138809",
+      "observed_draft": true
+    },
+    {
+      "pr": 43,
+      "observed_head_sha": "d1ea38236f7438dd50594fd3b522278fe53358d4",
+      "observed_draft": true
+    },
+    {
+      "pr": 42,
+      "observed_head_sha": "6a33b7fad1cbabb462b7494e75ea5da677c80a58",
+      "observed_draft": true
+    },
+    {
+      "pr": 41,
+      "observed_head_sha": "ea4f01cdbd9ddd64e342d56be4fc7b1d5555625f",
+      "observed_draft": true
+    },
+    {
+      "pr": 40,
+      "observed_head_sha": "7b0c32863f409395930218e855fe57dce6d2a26c",
+      "observed_draft": true
+    },
+    {
+      "pr": 39,
+      "observed_head_sha": "ed4fc6d41540faa8710bea64f8999437d69cf7b2",
+      "observed_draft": true
+    },
+    {
+      "pr": 38,
+      "observed_head_sha": "c7227050a77ed1a51381a991fe6718930118766c",
+      "observed_draft": true
+    },
+    {
+      "pr": 37,
+      "observed_head_sha": "86e8e34c09868d8c6687f5678548d85132ef2415",
+      "observed_draft": true
+    },
+    {
+      "pr": 36,
+      "observed_head_sha": "659810a7cf9808fa079ee278c4b47fb3b881ab76",
+      "observed_draft": true
+    },
+    {
+      "pr": 35,
+      "observed_head_sha": "8ff6623e9130037c4697e75061eebe07104166dd",
+      "observed_draft": true
+    },
+    {
+      "pr": 34,
+      "observed_head_sha": "66aefce1298b100f4ac5357bb4b7a4fcbb209638",
+      "observed_draft": true
+    },
+    {
+      "pr": 33,
+      "observed_head_sha": "08045133c371ec280be0dabdb95c67edb1013c63",
+      "observed_draft": true
+    },
+    {
+      "pr": 32,
+      "observed_head_sha": "de8b96b69db89de0944d7f4666c5e4bed4918bca",
+      "observed_draft": true
+    },
+    {
+      "pr": 31,
+      "observed_head_sha": "9936303abaa8aa3178a539b71599ad48adeb98a6",
+      "observed_draft": true
+    },
+    {
+      "pr": 30,
+      "observed_head_sha": "dedec93ccefee45de581b4589f421a5b74d286d8",
+      "observed_draft": true
+    },
+    {
+      "pr": 29,
+      "observed_head_sha": "5cac4317ae94bd75b9cc81179ce8484748375ae3",
+      "observed_draft": true
+    },
+    {
+      "pr": 28,
+      "observed_head_sha": "b9315becb016adf9c5b9f3b18225d1b54bc235b9",
+      "observed_draft": true
+    },
+    {
+      "pr": 27,
+      "observed_head_sha": "d6431daaa9352b606f1afa829c6beed44b7433a8",
+      "observed_draft": true
+    },
+    {
+      "pr": 26,
+      "observed_head_sha": "2d5c2b43ba070ee201a595d0ddba5b853b4d4f13",
+      "observed_draft": true
+    },
+    {
+      "pr": 25,
+      "observed_head_sha": "49ae66b45299d94657ab2de1d55fcf400876d3c1",
+      "observed_draft": true
+    },
+    {
+      "pr": 24,
+      "observed_head_sha": "54c6de63caa47ced87f1e0cc534dec175e39dcf6",
+      "observed_draft": true
+    },
+    {
+      "pr": 23,
+      "observed_head_sha": "ecea57dc1bb531c4d95be9e7729606a3cea6efad",
+      "observed_draft": true
+    },
+    {
+      "pr": 22,
+      "observed_head_sha": "bd89418532a6753a83643d9f973c5751a2a2fafc",
+      "observed_draft": true
+    },
+    {
+      "pr": 21,
+      "observed_head_sha": "b3955852b83696ffe635ae04c542f94e2277da5d",
+      "observed_draft": true
+    }
+  ],
+  "archived_byte_identical_from_pr49": {
+    "observed_head_sha": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+    "mappings": [
+      {
+        "original_path": "README-P1.md",
+        "original_git_blob_sha1": "e105b60cbd94e29bb7b4f5e1d5d345e9119cdce8",
+        "preserved_path": "archive/legacy-root/README-P1.md"
+      },
+      {
+        "original_path": "audits/2026-10-24/WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json",
+        "original_git_blob_sha1": "6c55ee668bb20429e3140ebef0066367d75751e7",
+        "preserved_path": "archive/audits/2026-10-24/WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-01.json",
+        "original_git_blob_sha1": "69e1845f3bc6ffe8dc855dc0f754519544014a8c",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-01.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-02.json",
+        "original_git_blob_sha1": "791d36589215e5a4f6056cc59eea0fd8dc20f100",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-02.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-03.json",
+        "original_git_blob_sha1": "aa8b6a0f26e753559b23cd29553d66efa920d3d6",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-03.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-04.json",
+        "original_git_blob_sha1": "56b805b6252a481f5de131667d0f5a0a1ca65f90",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-04.json"
+      },
+      {
+        "original_path": "audits/2026-10-25/whole-source-part-05.json",
+        "original_git_blob_sha1": "30ba4fdd240e0455a5c547406fc94356506fe7df",
+        "preserved_path": "archive/audits/2026-10-25/whole-source-part-05.json"
+      }
+    ]
+  },
+  "isolated_not_promoted_from_pr32": {
+    "observed_head_sha": "de8b96b69db89de0944d7f4666c5e4bed4918bca",
+    "paths": [
+      {
+        "path": "docs/29-EVIDENCE-RELEVANCE-EXPERIMENT.md",
+        "git_blob_sha1": "72df2a6eb9acaef34c28d94416bf3866e1798f02"
+      },
+      {
+        "path": "docs/30-EXTERNAL-BEIR-METHOD-EXPERIMENT.md",
+        "git_blob_sha1": "caa63e99f3a42e422bf117af23231d5701437ff1"
+      },
+      {
+        "path": "docs/31-ORIGINAL-SCIFACT-CLAIM-JUDGMENT.md",
+        "git_blob_sha1": "79a62e71ccfb6020cdc588bf4b35ebb168df5fd7"
+      },
+      {
+        "path": "docs/32-SCIFACT-SCHEMA-ORDER-CAUSAL-STUDY.md",
+        "git_blob_sha1": "c764977be5d183e5cf4596f5442e9712caa18883"
+      },
+      {
+        "path": "evaluation/evidence_roles_holdout_v2.json",
+        "git_blob_sha1": "eef6d08b90c999e75815508100f4d871a6abcfe1"
+      },
+      {
+        "path": "evaluation/evidence_selection_holdout_v1.json",
+        "git_blob_sha1": "af750f8e604fbaad6b0aef503d3ac5584cf16277"
+      },
+      {
+        "path": "scripts/evaluate_evidence_retrieval.py",
+        "git_blob_sha1": "4a39b2efceb680e139d9d2b3849556b890021307"
+      },
+      {
+        "path": "scripts/measure_external_beir_retrieval.py",
+        "git_blob_sha1": "f955ddcb01bfe2fc59aea19891b34068e33639be"
+      },
+      {
+        "path": "scripts/measure_external_scifact_claim_judgment.py",
+        "git_blob_sha1": "1afdab43a22bcfbbf4fd07762f11ab27dfbf2acd"
+      },
+      {
+        "path": "scripts/measure_scifact_enum_order.py",
+        "git_blob_sha1": "09c13be5b47464c1e9c5bd211d2a121532a55eb5"
+      },
+      {
+        "path": "src/cognition_agent_os/evidence_ranker.py",
+        "git_blob_sha1": "530a36a4c183d68fff6a97d9fa658330e2ab6147"
+      },
+      {
+        "path": "tests/test_evidence_ranker.py",
+        "git_blob_sha1": "5e89198680e0f34b3e26469e2a3ffef94650037f"
+      },
+      {
+        "path": "tests/test_external_beir_methods.py",
+        "git_blob_sha1": "713da7fcb20cc00b36a0b12e99782e8e9abc7f94"
+      },
+      {
+        "path": "tests/test_original_scifact_judgment.py",
+        "git_blob_sha1": "e00c0a60ce9f2bb4909cce2741cafbb42af97b4e"
+      },
+      {
+        "path": "tests/test_scifact_enum_order.py",
+        "git_blob_sha1": "d09da13dc7972ab3dbf2f7a7c80b56b3b24ef243"
+      }
+    ]
+  },
+  "prohibitions": [
+    "DO_NOT_AUTOMATICALLY_CLOSE_OR_MERGE_BRANCHES",
+    "DO_NOT_TREAT_HISTORICAL_PR_AS_CURRENT_OWNER_OR_CODE_TRUTH",
+    "DO_NOT_PROMOTE_ISOLATED_RETRIEVAL_RESEARCH_AS_AUTHORITY",
+    "DO_NOT_DELETE_ARCHIVED_SOURCE"
+  ],
+  "evidence_limitations": [
+    "Only exact Git blob identity and missing paths checked; semantic equivalence of modified same-path files remains UNVERIFIED.",
+    "Archived PR49 sources are preserved bytes, NOT current runtime behavior.",
+    "PR32 retrieval experiments are still research artifacts, NOT a production knowledge/memory integration.",
+    "Live PR existence and fresh HEAD require provider reread, not this dated JSON.",
+    "Same-path modified blobs require semantic review before branch closure; byte-only inventory cannot prove complete equivalence."
+  ],
+  "non_pr_branch_observations": [
+    {
+      "branch": "archive/pre-consolidation-cognition-20261025",
+      "observed_head_sha": "a3cc0240c4a37412cf681770ddc5bd3c9341dc7d"
+    },
+    {
+      "branch": "docs/architecture-baseline-20261020",
+      "observed_head_sha": "0c2de90cd2662ce76adde364079221f9fbe120c4"
+    },
+    {
+      "branch": "experiment/assurance-forged-approval-mutant-20261023",
+      "observed_head_sha": "ee88a873490728b3739527a3f30377afb3ec9729"
+    },
+    {
+      "branch": "experiment/assurance-inventory-ci-gate-20261023",
+      "observed_head_sha": "737a2a9c3647404ba1999b8171025f064d7a716b"
+    },
+    {
+      "branch": "experiment/controller-active-intake-integrity-20261023",
+      "observed_head_sha": "2cf3490bc3ebca6652f542b5c626f0280dd09a35"
+    },
+    {
+      "branch": "experiment/durable-same-goal-local-controller-20261023",
+      "observed_head_sha": "b3c002a196e09674ebd4e183ad5f6ea3685e75ce"
+    },
+    {
+      "branch": "experiment/engineering-method-activation-20261023",
+      "observed_head_sha": "faec07003d86a3f7df865605f06b90a5a378b29e"
+    },
+    {
+      "branch": "experiment/goal-feedback-alternative-baseline-20261023",
+      "observed_head_sha": "f6a7a57f4e435fd36c64883a973f7c885f0397f0"
+    },
+    {
+      "branch": "experiment/owner-pinned-outcome-oracle-20261023",
+      "observed_head_sha": "3f0912f63d8fecdae0a8d3bbe18b900014cbebe7"
+    },
+    {
+      "branch": "experiment/pr14-acceptance-mutant-20261023",
+      "observed_head_sha": "6cd7c56b489977d52773d7b02eb0232471173bb0"
+    },
+    {
+      "branch": "experiment/research-model-quality-ab-20261024",
+      "observed_head_sha": "1d3a25799494a1520621bf19355223008518baf8"
+    },
+    {
+      "branch": "feat/free-local-inference-20261020",
+      "observed_head_sha": "1407c007b84a6a8bd3d7581295b12f2700ddf9a9"
+    },
+    {
+      "branch": "feat/local-scheduled-host-20261020",
+      "observed_head_sha": "c507375a8a5627946af8bd33c87d2c85e92b582a"
+    },
+    {
+      "branch": "feat/p0-p1-durable-evidence-20261020",
+      "observed_head_sha": "6c2b72529e8ba0a45b158539336fe4b64ba0273d"
+    },
+    {
+      "branch": "feat/p3-live-source-cursor-20261020",
+      "observed_head_sha": "4bfe725aa96da7929c8ed4fa889bb589d386c4cf"
+    },
+    {
+      "branch": "feat/p4-evidence-oracle-20261020",
+      "observed_head_sha": "3fa5a2ff2c99db093d9247f41edced09488488be"
+    },
+    {
+      "branch": "feat/p5-bounded-goal-loop-20261020",
+      "observed_head_sha": "ba61f70186f7e2f3fe5199db698e8c0e58c3d1b4"
+    },
+    {
+      "branch": "feat/p6-sandbox-outcome-loop-20261020",
+      "observed_head_sha": "c051266adea1b5ccd8c6695588ad9fdfd1b6f628"
+    },
+    {
+      "branch": "feat/p7-diagnosis-fairness-20261020",
+      "observed_head_sha": "e44dd7b130108cf2f22b66f69a6d721ef4ce398f"
+    },
+    {
+      "branch": "feat/p8-evidence-reconciliation-20261020",
+      "observed_head_sha": "0d4a0fa177416b131dfdfcf7a1e727261daf27fc"
+    },
+    {
+      "branch": "feat/p9-intent-contract-20261020",
+      "observed_head_sha": "4569bd95b60ce012fb7cd6ab8f249aaa5c4580d0"
+    },
+    {
+      "branch": "feat/p10-runtime-conformance-20261020",
+      "observed_head_sha": "3c0fc7912124f3760ce1081a056ad46c1d99751b"
+    },
+    {
+      "branch": "feat/p35-research-observation-integration-20261022",
+      "observed_head_sha": "bfe06a2ddfc064cec692fa0bc070e3aa6768cca0"
+    },
+    {
+      "branch": "feature/owner-feedback-continuation-20261025",
+      "observed_head_sha": "7e0eb070afc51fd99330e0b700a5606090977c6d"
+    },
+    {
+      "branch": "feature/owner-postcondition-runtime-20261025",
+      "observed_head_sha": "101921c7e1101e978b5c4ba5b0edb81368849afc"
+    },
+    {
+      "branch": "fix/main-ci-continuity-20261029",
+      "observed_head_sha": "47eed2f843906bbf6f66809bf45778b3666ebc43"
+    },
+    {
+      "branch": "fix/postmerge-codex-bootstrap-20261029",
+      "observed_head_sha": "76e9ad70026d3f5c711c4507ad11cd084a1f54d0"
+    }
+  ],
+  "isolated_unpromoted_non_pr_artifacts": [
+    {
+      "path": ".agents/skills/engineering-solution-assessment/SKILL.md",
+      "git_blob_sha1": "29b8c035040ef00daf6c4c5727d2b5170d270854",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".agents/skills/engineering-solution-assessment/references/failure-classes.md",
+      "git_blob_sha1": "494dd31460ece2cbad2276de0e2ecc2196ba13b3",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".agents/skills/engineering-solution-assessment/references/learning-and-transfer.md",
+      "git_blob_sha1": "44efba1ab0d09955e8d2acb466190a7aa109ebac",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".agents/skills/engineering-solution-assessment/references/method-selection.md",
+      "git_blob_sha1": "a546f75f579d9b8ee65873bd6e4b933473b51eec",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": "evaluation/engineering_method_behavior_cases_v1.json",
+      "git_blob_sha1": "bf5f29fbcac18e991b30786cb87caf4a6f3e1bf5",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": "knowledge/engineering-methods/method_cards_v1.json",
+      "git_blob_sha1": "302f6b6054a7a5fa8e3c4b4f7c39851279e15d3f",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": "tests/test_engineering_skill_package.py",
+      "git_blob_sha1": "0b1bce06fc49a299d4b69bfed971b0eb1678eb53",
+      "source_branch": "experiment/engineering-method-activation-20261023",
+      "kind": "METHOD_SELECTION_SKILL_ISOLATED"
+    },
+    {
+      "path": ".github/workflows/graphify-code-inventory.yml",
+      "git_blob_sha1": "fc894a42a203aa1a74acb43817d8bd9e728a9a07",
+      "source_branch": "experiment/assurance-forged-approval-mutant-20261023",
+      "kind": "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT"
+    },
+    {
+      "path": "evaluation/inspect_unseen_goal_set_v5.json",
+      "git_blob_sha1": "f4949b62ccf10c1c3c0a3e7b7aa4ade1959030ce",
+      "source_branch": "experiment/research-model-quality-ab-20261024",
+      "kind": "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED"
+    }
+  ]
+}

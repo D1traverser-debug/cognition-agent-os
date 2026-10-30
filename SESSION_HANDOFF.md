@@ -4,6 +4,14 @@
 
 Historical pre-compaction text is preserved at `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for evidence only. Private user conversations must remain private.
 
+## Owner-activated continuity — 2026-10-29
+
+Each owner-woken chat (including new chats) resumes the full original goal,
+corrections and lawful unfinished work with real independent readback.
+No always-on Host, SQLite, Codex Goal, Work mode or cron is a current
+prerequisite; the private original owner contract governs. No background
+progress can be inferred from this dated index.
+
 ## Stable owner objective
 
 Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that preserves the COMPLETE owner goal and corrections; decomposes and challenges assumptions; independently searches/learns professional sources and existing tools; compares reuse/adapt/replace/new methods; lawfully executes; independently verifies full owner and child-business outcomes; changes method after failure; retains verified learning; resumes across interruption; transfers to unfamiliar domains; and reduces owner correction work and unnecessary complexity.
@@ -12,16 +20,23 @@ Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that pr
 
 ## Recovery order and responsibility map
 
-1. **Owner truth / permission:** retrieve current and prior direct owner messages or legitimate private Project sources. Distinguish accepted corrections, revoked designs and assistant hypotheses. If original source is unavailable, mark it UNKNOWN; no public summary may self-authorize.
-2. **Live engineering topology:** query the GitHub default branch HEAD **and** live PR metadata. If main already holds the implementation after a completed merge, use main as the authoritative source; a merged PR is historical provenance, not an active integration task. Otherwise identify the current integration candidate and possible competing active work. Resolve its exact HEAD, base/ancestry, task-relevant source and same-HEAD CI. Inspect other PRs in depth **only when identity, ancestry, provenance or an observed conflict requires it**; never bulk-fetch every open Draft's body, patch or commit history as cold-start context. Never select work from a cached SHA, newest search hit or this dated file.
-3. **Active evidence frontier is always required:** recover OPEN owner obligations and the most recent relevant FAILED outcome, rejected method and falsifier from current product gates, live PR evidence and legitimate private task/Host events. This is a necessary cold-start read, NOT a full-history preload. Absence of a conflict does not mean there is no unfinished work.
-4. **Existing-capability survey BEFORE every substantive choice:** inspect current source, connected tools, prior failures and the pinned Agent-Learning-Hub atlas; compare reuse/adapt/remove against new code. RAG retrieves candidate evidence but is not authority or a new database requirement. AOCI/Graphify source research and limitations: `docs/ENGINEERING-COGNITION-TOOLCHAIN.md`. A genuine current-source AOCI Whole-Index may supply formal cognition if connected/attested; otherwise reuse the current `scripts/architecture_probe.py --repo .` to inventory all Python modules, with `--focus MODULE --hops 1` for nearby imports/callers. AST, hash, docstrings and Graphify code edges are not semantic or business proof. With GitHub-only access, fetch current tree/source instead of inventing an installed local tool.
-5. **Current architectural choice and product obligations:** read the applicable latest decision in `docs/01-ARCHITECTURE-DECISIONS.md` (currently §I) and the gates/current opt-in priority in `docs/PRODUCT-READINESS-GATE.md`. Both are challengeable repository proposals, not owner authorization. An old implementation path needs new comparative outcome evidence before being restored.
-6. **Codex engineering behavior:** `AGENTS.md` plus on-demand `.agents/skills/goal-grounded-semantic-review/SKILL.md`. File presence is not proof Codex actually followed them.
-7. **ChatGPT opt-in routing:** `integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md` + `plugin.json`. GitHub source changes do not prove the account-installed Skill version or native triggering.
-8. **Durable local runtime facts:** only a real initialized SQLite/Host in `ledger.py`, `host.py`, `runner.py`, `control_kernel.py` may establish admitted tasks, grants, execution and local result evidence. ChatGPT memory is not runtime state.
-9. **Child-business truth:** inspect each selected child repository's native contracts, permissions and outcome oracle. Parent `domain_contract.py` is not child authority.
-10. **On-demand engineering provenance:** GitHub commit history and Files changed remain the available complete audit trail, **not a mandatory cold-start download**. Begin with the active task's relevant source/tests and current failing evidence; follow selected commit/patch links only when they can resolve a cause, competing hypothesis, missing requirement or regression. Preserve conflicting and original evidence; never discard it solely to save context. Do not preload hundreds of commits, unrelated PRs or every implementation family.
+1. **Owner authority:** read current/previous direct owner corrections or private source; distinguish grants from assistant proposals. Unavailable original clauses remain UNKNOWN.
+2. **Live engineering:** resolve GitHub default branch HEAD, live PR metadata, active task's exact HEAD/base/source/CI and possible competing active work. Inspect other PRs only when identity, ancestry, provenance or observed conflicts demand it. A merged PR is historical provenance, not the live candidate; never trust a cached SHA.
+3. **Active evidence frontier is always required:** recover every OPEN obligation, relevant failed outcome, rejected method and falsifier; no visible conflict does not mean no unfinished work.
+4. **Existing-capability survey BEFORE every substantive choice:** inspect current code, connected tools, prior failures, pinned Agent-Learning-Hub research and `docs/ENGINEERING-COGNITION-TOOLCHAIN.md`. Use `scripts/architecture_probe.py --repo . --focus MODULE --hops 1` when relevant; AST, code graphs and hashes do not prove behavior or business success.
+5. **Architecture/gates:** read applicable `docs/01-ARCHITECTURE-DECISIONS.md` and `docs/PRODUCT-READINESS-GATE.md`, challenge their proposals against owner outcomes.
+6. **Codex:** read `AGENTS.md` and selectively `.agents/skills/goal-grounded-semantic-review/SKILL.md`; file presence does not establish native activation.
+7. **ChatGPT:** compare installed Skill with `integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md`; repository source alone cannot prove client routing.
+8. **Runtime:** only an actually connected initialized Host/SQLite (`ledger.py`, `host.py`, `runner.py`, `control_kernel.py`) attests native grants and effects. Chat memory is not its ledger.
+9. **Children:** inspect their own goal identity, contracts, grants, sources and outcome oracles; parent `domain_contract.py` grants no child authority.
+10. **On-demand engineering provenance:** commit history and Files changed are the audit trail, not a mandatory cold-start download. Follow specific changed paths and commits as evidence requires; Do not preload unrelated PRs, hundreds of commits or every implementation family. Preserve original and contradictory evidence.
+
+Branch cleanup (ON-DEMAND): read dated `evaluation/historical_branch_provenance_v1.json`; LIVE GitHub outranks it.
+For isolated PR #29–#32 experiments, locate **exact-byte preserved research** under `archive/research/prNN/<original_path>` where `NN` is exactly `29`, `30`, `31` or `32` and check the 15 Git blob SHA-1 values against that frozen register; `tests/test_historical_branch_provenance.py` prevents accidental runtime promotion or silent byte loss. An archived method remains NOT_ADOPTED; never equate byte preservation with semantic merge or permission to close a PR.
+
+**Memory source/lineage (ON-DEMAND, Draft only):** `src/cognition_agent_os/memory_candidates.py` records untrusted, SHA-pinned semantic/procedural candidates in the existing ledger; `native_mcp_bridge.py` opt-in read/write tools require separate operator flags. Source, parent and grant changes invalidate; no automatic truth/method promotion, account connection or child writes. Check `tests/test_memory_candidates.py` and `tests/test_memory_mcp_boundary.py` against exact HEAD CI.
+
+**Unpromoted non-PR research (ON-DEMAND):** nine frozen items in `evaluation/historical_branch_provenance_v1.json` are byte-preserved in `archive/research/nonpr-{engineering-method,graphify-old-workflow,model-quality-v5}/`; older audit in `archive/research/nonpr-safe-fixture-audit/`. Use exact blob checks, not automatic method activation or branch cleanup.
 
 ## Work cycle after recovery
 
@@ -31,7 +46,7 @@ For interruptions, context limits or a new `继续/继承`: rerun this recovery 
 
 ## Current unresolved product gates
 
-**NOT_READY.** Before release claims, independently demonstrate at minimum: high-capability ChatGPT/Codex solving an uncurated professional owner goal via autonomous research/comparison/tool use; real full-result verification and method change after failure; low owner correction burden; reliable opt-in Skill activation/version evidence; intended ChatGPT/Codex <-> durable Host continuity; child-native business acceptance without authority takeover; and measured simplification/removal of redundant runtime paths.
+**NOT_READY.** Before release claims, independently demonstrate at minimum: high-capability ChatGPT/Codex solving an uncurated professional owner goal via autonomous research/comparison/tool use; real full-result verification and method change after failure; low owner correction burden; reliable opt-in Skill activation/version evidence; real new ChatGPT-session owner-woken continuity; child-native business acceptance without authority takeover; and measured simplification/removal of redundant runtime paths.
 
 No main merge, production deployment, metered inference, child production mutation or new permission is implied by this file.
 

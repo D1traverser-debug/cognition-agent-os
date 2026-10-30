@@ -16,7 +16,7 @@ import time
 from contextlib import closing
 from pathlib import Path
 
-from .ledger import connect
+from .ledger import connect, readonly_snapshot
 from .source import github_public_branch_head, github_public_branch_head_nested
 
 _ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
@@ -192,9 +192,7 @@ def checkpoint_goal(db_path: Path, goal_id: str, *,
     # shared SQLite write transaction; a stale result can only be submitted
     # through the digest/version compare-and-set below. A subsequent resume
     # performs an independent fresh HEAD observation.
-    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as probe:
-        probe.row_factory = sqlite3.Row
+    with readonly_snapshot(db_path) as probe:
         observed_row = probe.execute(
             "SELECT * FROM goal_continuity WHERE goal_id=?", (goal_id,)).fetchone()
         observed_authority = probe.execute(
@@ -274,22 +272,41 @@ def _no_action(status: str, **extra: object) -> dict:
 
 
 def _all_open_goal_roots(db: sqlite3.Connection) -> list[sqlite3.Row] | None:
-    """Scan the one authoritative ledger, with a bounded fail-closed result."""
-    roots = []
-    for row in db.execute(
-        "SELECT * FROM tasks WHERE parent_task IS NULL "
-        "ORDER BY created_at,task_id"
-    ):
-        try:
-            source = json.loads(row["source_spec"])
-        except (ValueError, TypeError):
-            continue
-        if (isinstance(source, dict)
-            and source.get("kind") in ("open_goal", "native_goal")):
-            roots.append(row)
-            if len(roots) > 256:
-                return None
-    return roots
+    """Recover current owner roots first; older versions are only fallback.
+
+    Historical goal growth must not exhaust the current-version read budget.
+    This read-only selector uses the SAME ledger authority and task rows.
+    A genuinely excessive CURRENT root set still fails closed rather than
+    choosing a recent goal or silently dropping a competing owner original.
+    """
+    authority = db.execute(
+        "SELECT goal_rev FROM authority WHERE singleton=1").fetchone()
+    if authority is None:
+        return None
+    version = authority["goal_rev"]
+
+    def _matching_roots(predicate: str) -> list[sqlite3.Row] | None:
+        roots = []
+        for row in db.execute(
+            "SELECT * FROM tasks WHERE parent_task IS NULL AND "
+            + predicate + " ORDER BY created_at,task_id", (version,)
+        ):
+            try:
+                source = json.loads(row["source_spec"])
+            except (ValueError, TypeError):
+                continue
+            if (isinstance(source, dict)
+                and source.get("kind") in ("open_goal", "native_goal")):
+                roots.append(row)
+                if len(roots) > 256:
+                    return None
+        return roots
+
+    current = _matching_roots("goal_rev=?")
+    if current is None or current:
+        return current
+    # Preserve stale-only diagnostics; do not re-admit old revisions.
+    return _matching_roots("goal_rev<>?")
 
 
 def _attested_owner_root(
@@ -595,9 +612,7 @@ def resume_goal(db_path: Path, *, resolve_head=None,
     if not _db_exists(db_path):
         return _no_action("LEDGER_NOT_INITIALIZED")
     try:
-        uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-            db.row_factory = sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             authority = db.execute(
                 "SELECT * FROM authority WHERE singleton=1").fetchone()
             table = db.execute("""SELECT 1 FROM sqlite_master
@@ -617,12 +632,78 @@ def resume_goal(db_path: Path, *, resolve_head=None,
             active = [r for r in rows
                       if r["goal_rev"] == authority["goal_rev"]]
             if not active:
+                # An expired legacy registration cannot become an implicit
+                # selector over a newer owner goal. Reuse the SAME canonical
+                # task ledger's current-root recovery and authority checks;
+                # historical rows remain intact, never reactivated.
+                current = _resume_existing_open_goal(
+                    db_path, db, authority, workspace=workspace,
+                    fixtures=fixtures)
+                if current["status"] not in (
+                        "NO_DURABLE_GOAL", "STALE_GOAL_REVISION"):
+                    return current
                 return _no_action("STALE_GOAL_REVISION",
                                   goal_ids=[r["goal_id"] for r in rows])
             if len(active) != 1:
+                # Every registered owner contract remains recoverable when
+                # multiple goals compete. Returning only IDs silently drops
+                # objective, acceptance and prohibitions on a cold start.
+                # Validate EACH contract and its pinned task before exposing
+                # those originals; no arbitrary newest-goal selection.
+                registered = []
+                registered_root_ids = set()
+                for candidate in active:
+                    raw_contract = candidate["contract"].encode("utf-8")
+                    if (hashlib.sha256(raw_contract).hexdigest()
+                            != candidate["contract_sha256"]):
+                        return _no_action("INTEGRITY_CONFLICT")
+                    try:
+                        original = _validate(json.loads(raw_contract))
+                    except (ValueError, TypeError, KeyError, OverflowError):
+                        return _no_action("INTEGRITY_CONFLICT")
+                    if original["goal_id"] != candidate["goal_id"]:
+                        return _no_action("INTEGRITY_CONFLICT")
+                    current_task = db.execute(
+                        "SELECT * FROM tasks WHERE task_id=?",
+                        (original["next_task_id"],)).fetchone()
+                    if (current_task is None
+                        or current_task["goal_rev"] != candidate["goal_rev"]
+                        or current_task["grant_rev"] != candidate["grant_rev"]
+                        or _task_fingerprint(current_task)
+                            != candidate["task_spec_sha256"]):
+                        return _no_action("TASK_LINEAGE_UNVERIFIABLE")
+                    ancestor = _lineage_root_id(db, current_task)
+                    if ancestor is None:
+                        return _no_action("TASK_LINEAGE_UNVERIFIABLE")
+                    registered_root_ids.add(ancestor)
+                    registered.append({
+                        "goal_id": original["goal_id"],
+                        "objective": original["objective"],
+                        "acceptance": original["acceptance"],
+                        "constraints": original["constraints"],
+                    })
+                # Competing unregistered roots are still legitimate owner
+                # goals. Do not let the >=2 registered-goal shortcut hide
+                # them, and do not double-count an ancestor already selected
+                # by a registered pointer.
+                roots = _all_open_goal_roots(db)
+                if roots is None:
+                    return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
+                others = [
+                    root for root in roots
+                    if (root["goal_rev"] == authority["goal_rev"]
+                        and root["task_id"] not in registered_root_ids)
+                ]
+                other_originals = [_attested_owner_root(db, root)
+                                   for root in others]
+                if any(item is None for item in other_originals):
+                    return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
                 return _no_action(
                     "AMBIGUOUS_ACTIVE_GOALS",
-                    goal_ids=[r["goal_id"] for r in active])
+                    goal_ids=[r["goal_id"] for r in active],
+                    registered_goals=registered,
+                    other_original_goals=other_originals,
+                    authority_current=bool(authority["write_allowed"]))
             row = active[0]
             raw = row["contract"].encode("utf-8")
             if hashlib.sha256(raw).hexdigest() != row["contract_sha256"]:
@@ -691,19 +772,32 @@ def resume_goal(db_path: Path, *, resolve_head=None,
                     checkpoint_version=row["checkpoint_version"],
                     authority_current=False)
             if spec["source"] is not None:
+                # The *source freshness* and *owner original* are different
+                # invariants. A failed remote HEAD comparison revokes runnable
+                # continuation, not the verified immutable owner wording.
+                blocked_original = {
+                    "goal_id": row["goal_id"],
+                    "objective": spec["objective"],
+                    "acceptance": spec["acceptance"],
+                    "constraints": spec["constraints"],
+                    "contract_sha256": row["contract_sha256"],
+                    "checkpoint_version": row["checkpoint_version"],
+                    "authority_current": True,
+                }
                 src = spec["source"]
                 resolver = resolve_head or _public_branch_head
                 try:
                     observed = resolver(src["repo"], src["branch"])
                     if not isinstance(observed, str) or not _SHA.fullmatch(observed):
                         return _no_action("SOURCE_UNAVAILABLE",
-                                          goal_id=row["goal_id"])
+                                          **blocked_original)
                 except Exception:
                     return _no_action("SOURCE_UNAVAILABLE",
-                                      goal_id=row["goal_id"])
+                                      **blocked_original)
                 if observed != src["head_sha"]:
                     return _no_action(
-                        "SOURCE_REVALIDATION_REQUIRED", goal_id=row["goal_id"],
+                        "SOURCE_REVALIDATION_REQUIRED",
+                        **blocked_original,
                         pinned_head_sha=src["head_sha"],
                         observed_head_sha=observed)
             state = task["state"]

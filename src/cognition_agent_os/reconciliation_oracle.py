@@ -12,6 +12,8 @@ import re
 import sqlite3
 from contextlib import closing
 
+from .ledger import readonly_snapshot
+
 _COL=re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,63}\Z")
 
 
@@ -165,9 +167,7 @@ def audit_stored_report(db_path, workspace, fixture_root, task_id: str) -> dict:
     if not db_path.is_file() or db_path.is_symlink() or workspace.is_symlink():
         return {**fail,"reason":"UNSAFE_OR_MISSING_LEDGER"}
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True)) as db:
-            db.row_factory=sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             row=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
             owner=db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             if not row or not owner or row["state"]!="NEEDS_REVIEW":

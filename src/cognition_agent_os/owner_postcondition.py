@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import sqlite3
 
+from .ledger import readonly_snapshot
 from .intent_planner import compile_intent
 from .source import safe_fixture, SourceUnavailable
 from .reconciliation_oracle import audit_stored_report
@@ -283,11 +284,7 @@ def inspect_owner_local_outcome(db_path: Path, workspace: Path, fixtures: Path,
         or not db_path.is_file() or db_path.is_symlink() or workspace.is_symlink()):
         return failure
     try:
-        with closing(sqlite3.connect(
-            db_path.resolve(strict=True).as_uri() + "?mode=ro",
-            uri=True, timeout=5,
-        )) as db:
-            db.row_factory = sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             owner = db.execute(
                 "SELECT * FROM authority WHERE singleton=1").fetchone()
             root = db.execute(

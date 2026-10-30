@@ -1,6 +1,7 @@
 """Meta-V&V: intentionally corrupt the acceptance inventory and require rejection."""
 import copy
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -87,6 +88,42 @@ class AssuranceRegistryTests(unittest.TestCase):
         self.assertEqual(report['archive_integrity'], 'EXACT_GIT_BLOB')
         self.assertLess(report['active_bytes'], 8192)
 
+    def test_equivalent_route_prose_does_not_force_magic_words(self):
+        """Same recovery obligations survive harmless wording changes.
+
+        Dropping the unfinished-work obligation must still fail closed.
+        Neither branch is evidence of a native ChatGPT invocation.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("README.md", "SESSION_HANDOFF.md"):
+                (root / name).write_bytes((ROOT / name).read_bytes())
+            archive = root / "archive"
+            archive.mkdir()
+            (archive / "SESSION_HANDOFF_20261024_PRE_COMPACTION.md").write_bytes(
+                (ROOT / "archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md").read_bytes())
+            source = (root / "SESSION_HANDOFF.md")
+            body = source.read_text(encoding="utf-8")
+            self.assertIn("possible competing active work", body)
+            rewritten = body.replace(
+                "possible competing active work",
+                "competing changes from other active PRs")
+            source.write_text(rewritten, encoding="utf-8")
+            self.assertEqual(verify_live_handoff(root)["status"], "DATED_HANDOFF_VALID")
+            # Git checkout may materialize CRLF on Windows; this must be
+            # semantically equivalent without changing archived source bytes.
+            source.write_bytes(rewritten.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
+            self.assertEqual(verify_live_handoff(root)["status"], "DATED_HANDOFF_VALID")
+            source.write_text(rewritten, encoding="utf-8")
+            weakened = re.sub(
+                r"(?m)^3\. \*\*[^\n]+$",
+                "3. **Unfinished evidence:** ignore failures and open obligations.",
+                rewritten, count=1)
+            source.write_text(weakened, encoding="utf-8")
+            with self.assertRaisesRegex(
+                    RegistryError, "task-scoped live-authority"):
+                verify_live_handoff(root)
+
     def test_primary_context_is_selective_not_fixed_directory_whitelist(self):
         report = verify_active_context_surface(ROOT)
         self.assertEqual(report['status'], 'ACTIVE_CONTEXT_SURFACE_VALID')
@@ -144,7 +181,7 @@ class AssuranceRegistryTests(unittest.TestCase):
             (dst / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').write_bytes(
                 (ROOT / 'archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md').read_bytes())
             with self.assertRaisesRegex(
-                    RegistryError, 'task-scoped live-authority'):
+                    RegistryError, 'unconditional context-heavy recovery'):
                 verify_live_handoff(dst)
 
     def test_cold_handoff_without_default_branch_resolution_fails(self):

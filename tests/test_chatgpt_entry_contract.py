@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
 SKILL = BASE / "skills/cognition-parent-chatgpt-intake/SKILL.md"
 PROBES = SKILL.parent / "references/scope-probes.md"
+PROTOCOL = SKILL.parent / "references/parent-protocol.md"
 CODEX_SKILL = ROOT / ".agents/skills/goal-grounded-semantic-review/SKILL.md"
 AGENTS = ROOT / "AGENTS.md"
 
@@ -27,6 +28,10 @@ def metadata(source):
         for line in parts[1].splitlines()
         if ":" in line
     }
+
+
+def complete_policy():
+    return SKILL.read_text(encoding='utf-8') + '\n' + PROTOCOL.read_text(encoding='utf-8')
 
 
 class ChatGPTSourceBoundaries(unittest.TestCase):
@@ -51,6 +56,120 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         # Metadata is discoverable; this test does not run ChatGPT.
         self.assertIn("not", content.lower())
 
+    def test_unnamed_in_scope_continuation_is_discoverable_at_metadata_boundary(self):
+        """Only tests metadata/spec coverage; not native client selection."""
+        body = SKILL.read_text(encoding="utf-8")
+        meta = metadata(body)
+        desc = meta["description"]
+        self.assertLess(len(desc), 400)
+        for topic in ("主支分支", "知识库", "跨对话继承", "长上下文",
+                      "记忆架构", "loop/graph/skills/harness/RSI",
+                      "轮询质疑", "增删改查", "合并清理"):
+            self.assertIn(topic, desc)
+        self.assertIn("without its name", desc)
+        self.assertIn("never for unrelated", desc)
+        self.assertIn("Unlabeled but still in-scope follow-ups", body)
+        self.assertIn("do not guess the named repo", body)
+        self.assertIn("X. Named-project-free architecture continuation", 
+                      PROBES.read_text(encoding="utf-8"))
+        self.assertIn("NOT_TESTED", PROBES.read_text(encoding="utf-8"))
+
+    def test_ordinary_chat_is_the_required_parent_entry_surface(self):
+        """Regression for wrong Project-only architecture; static candidate only."""
+        skill = SKILL.read_text(encoding="utf-8")
+        self.assertIn("Ordinary new chats are the required entry surface", skill)
+        self.assertIn("OUTSIDE ChatGPT Projects", skill)
+        self.assertIn("Project instructions are not an account-wide trigger", skill)
+        self.assertIn("account Custom Instructions", skill)
+        self.assertIn("allow_implicit_invocation: true", skill)
+        self.assertIn("No tool here is authorized/capable", skill)
+        self.assertIn("Root-before-leaves dependency gate", skill)
+        self.assertLess(skill.index("Root-before-leaves dependency gate"),
+                        skill.index("## Work on the problem, not the instructions"))
+        self.assertIn("ordinary new ChatGPT chat", PROBES.read_text(encoding="utf-8"))
+
+    def test_material_decisions_have_owner_visible_receipts(self):
+        """Traceable comparison is required; native output cannot be asserted here."""
+        skill = SKILL.read_text(encoding="utf-8")
+        for term in ("Owner-visible decision and execution evidence",
+                     "competing root-cause hypotheses", "counterevidence",
+                     "reuse/adapt/replace/build", "falsifier/rollback",
+                     "NOT_TESTED/UNKNOWN", "private chain-of-thought"):
+            self.assertIn(term, skill)
+        self.assertIn("AB. Ordinary-chat entry versus Project-only false baseline",
+                      PROBES.read_text(encoding="utf-8"))
+
+    def test_progressive_disclosure_preserves_semantic_guardrails(self):
+        core = SKILL.read_text(encoding="utf-8")
+        protocol = PROTOCOL.read_text(encoding="utf-8")
+        self.assertLess(len(core.encode("utf-8")), 9000)
+        self.assertGreater(len(protocol), 16000)
+        self.assertIn("references/parent-protocol.md", core)
+        self.assertIn("The concise `../SKILL.md` is the interactive execution entrance", protocol)
+        for token in ("SOURCE_LIFECYCLE_CONFLICT", "Source lifecycle at the real retrieval/write boundary",
+                      "working memory", "episodic memory", "semantic memory", "procedural memory",
+                      "invalidation", "competing causes"):
+            self.assertIn(token, complete_policy())
+
+    def test_decision_also_challenges_own_prompt_method_and_test(self):
+        core = SKILL.read_text(encoding="utf-8")
+        for token in ("Decision self-critique", "goal, prompt/entry, source",
+                      "SKILL_DEFECT", "EXECUTION_LAPSE", "ENTRY_NOT_SELECTED",
+                      "Bounded critique", "without new evidence", "independent readback"):
+            self.assertIn(token, core)
+        self.assertLess(core.index("Decision self-critique"), core.index("Execute & verify"))
+        self.assertIn("Do not rewrite an existing valid rule", core)
+
+    def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):
+        """Source policy only; cannot prove a fresh ChatGPT launch."""
+        gate = (ROOT / "docs/PRODUCT-READINESS-GATE.md").read_text(encoding="utf-8")
+        handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
+        skill = SKILL.read_text(encoding="utf-8")
+        adr = (ROOT / "docs/01-ARCHITECTURE-DECISIONS.md").read_text(encoding="utf-8")
+        probes = PROBES.read_text(encoding="utf-8")
+        for body in (gate, handoff, skill, adr):
+            self.assertIn("2026-10-29", body)
+            self.assertTrue(("Host" in body or "SQLite" in body))
+        self.assertIn("INTERACTIVE PHASE acceptance", gate)
+        self.assertIn("each owner message can resume work", skill)
+        self.assertIn("U. Owner-woken continuation", probes)
+        self.assertIn("V. Oversized multi-session objective", probes)
+        self.assertIn("NOT_TESTED", probes)
+
+    def test_recurring_source_confusion_reenters_evidence_and_memory_decisions(self):
+        """Contract-only probe; NOT native ChatGPT invocation evidence."""
+        skill = complete_policy()
+        probes = PROBES.read_text(encoding="utf-8")
+        # A named parent-goal decision cannot treat dated handoffs or a
+        # repository-only inventory as proof that private owner memory is
+        # recovered or that all different surfaces were semantically read.
+        for required in (
+                "private Library", "stale index", "source coverage",
+                "working memory", "episodic memory", "semantic memory",
+                "procedural memory", "invalidation", "competing causes"):
+            self.assertIn(required, skill)
+        # A real negative control is still necessary to verify behavior.
+        self.assertIn("T. Stale-index first-mile retrieval", probes)
+        self.assertIn("NOT_TESTED", probes)
+
+    def test_historical_source_supersession_is_not_naive_deletion(self):
+        """Static candidate policy; new-chat behavior still needs live traces."""
+        skill = complete_policy()
+        codex = AGENTS.read_text(encoding="utf-8")
+        adr = (ROOT / "docs/01-ARCHITECTURE-DECISIONS.md").read_text(encoding="utf-8")
+        probes = PROBES.read_text(encoding="utf-8")
+        for token in ("SOURCE_LIFECYCLE_CONFLICT", "supersedes its claim",
+                      "independently reread", "privacy deletion"):
+            self.assertIn(token, codex)
+        for token in ("Source lifecycle at the real retrieval/write boundary",
+                      "UNKNOWN", "dated history", "semantic search"):
+            self.assertIn(token, skill)
+        self.assertIn("失效不是删除", adr)
+        self.assertIn("HISTORICAL_PR26_BUILD_STATE_20261023.json", adr)
+        self.assertIn("W. Historical snapshot lifecycle", probes)
+        self.assertIn("current state UNKNOWN", probes)
+        self.assertIn("NOT_TESTED", probes)
+
     def test_current_parent_and_child_permission_boundary(self):
         chatgpt = SKILL.read_text(encoding="utf-8")
         codex = AGENTS.read_text(encoding="utf-8")
@@ -64,29 +183,22 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertTrue(CODEX_SKILL.is_file())
 
     def test_bootstrap_is_a_locator_not_a_bulk_history_download(self):
-        """Reject recurring context amplification, not certify native obedience."""
+        """Static structural checks; not a claim that ChatGPT obeys them."""
         handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
-        self.assertIn("On-demand engineering provenance", handoff)
-        self.assertIn("possible competing active work", handoff)
-        self.assertIn("default branch HEAD", handoff)
-        self.assertIn("merged PR is historical provenance", handoff)
-        self.assertIn("live default-branch HEAD", AGENTS.read_text(encoding="utf-8"))
-        self.assertIn("live default-branch HEAD", SKILL.read_text(encoding="utf-8"))
+        recovery = handoff.split("## Recovery order and responsibility map", 1)[1].split(
+            "## Work cycle after recovery", 1)[0]
+        steps = re.findall(r"(?m)^(\d+)\.\s+\*\*([^*\n]+):\*\*", recovery)
+        self.assertEqual([int(n) for n, _ in steps], list(range(1, 11)))
+        self.assertLess(len(handoff.encode("utf-8")), 8192)
+        self.assertNotIn("ALL open Draft PRs", recovery)
+        self.assertIn("Agent-Learning-Hub", recovery)
+        self.assertIn("architecture_probe.py --repo .", recovery)
+        self.assertIn("LIVE_GIT_PROVENANCE_ON_DEMAND",
+                      (ROOT / "scripts/codex_session_context.py").read_text(encoding="utf-8"))
         self.assertIn("default-branch HEAD and active-PR topology",
                       (ROOT / "README.md").read_text(encoding="utf-8"))
-        self.assertIn("Active evidence frontier is always required", handoff)
-        self.assertIn("Existing-capability survey BEFORE every substantive choice", handoff)
-        self.assertIn("architecture_probe.py --repo .", handoff)
-        self.assertIn("Agent-Learning-Hub", handoff)
-        self.assertIn("existing-capability and prior-learning survey", AGENTS.read_text(encoding="utf-8"))
+        self.assertIn("live default-branch HEAD", AGENTS.read_text(encoding="utf-8"))
         self.assertIn("First recover unfinished work", SKILL.read_text(encoding="utf-8"))
-        self.assertIn("only when identity, ancestry", handoff)
-        self.assertNotIn("ALL open Draft PRs", handoff)
-        self.assertNotIn("fetch the active integration PR\u0027s **commit history**", handoff)
-        hook = (ROOT / "scripts" / "codex_session_context.py").read_text(encoding="utf-8")
-        self.assertIn("LIVE_GIT_PROVENANCE_ON_DEMAND", hook)
-        self.assertIn("task-relevant", hook)
-        self.assertIn("specific conflict", hook)
 
     def test_recovery_roadmap_steps_are_monotonic_without_missing_entries(self):
         """Route order remains deterministic when new preflight phases are added."""
@@ -158,6 +270,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
             "agents/openai.yaml",
             "skills/cognition-parent-chatgpt-intake/SKILL.md",
             "skills/cognition-parent-chatgpt-intake/references/scope-probes.md",
+            "skills/cognition-parent-chatgpt-intake/references/parent-protocol.md",
         )
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -212,7 +325,9 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(
             encoding="utf-8")
         self.assertIn("chatgpt_plugin_release_bundle:", workflow)
-        self.assertIn("[bundle-chatgpt-plugin]", workflow)
+        self.assertIn("chatgpt_plugin_release_bundle:", workflow)
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", workflow)
+        self.assertNotIn("contains(github.event.pull_request.body, '[bundle-chatgpt-plugin]')", workflow)
         self.assertIn("manifest['version']", workflow)
         self.assertNotIn("manifest['version'] == '0.1.3'", workflow)
         self.assertIn("No installation or owner account mutation occurs in CI",

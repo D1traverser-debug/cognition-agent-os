@@ -18,7 +18,7 @@ import re
 import sqlite3
 
 from .intent_planner import compile_intent, IntentError
-from .ledger import connect, create_task, event, require_initialized_ledger
+from .ledger import connect, create_task, event, require_initialized_ledger, readonly_snapshot
 from .source import (safe_fixture, SourceUnavailable, github_public_snapshot)
 
 _ID = re.compile(r"[a-f0-9]{32}\Z")
@@ -1028,9 +1028,7 @@ def inspect_native_goal(db_path: Path, workspace: Path, fixtures: Path,
         or not db_path.is_file() or db_path.is_symlink()):
         return {"root_task_id": root_id, "status": "NATIVE_GOAL_UNVERIFIABLE",
                 "owner_outcome_verified": False}
-    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-        db.row_factory = sqlite3.Row
+    with readonly_snapshot(db_path) as db:
         return _audit(
             db, db_path, workspace, fixtures, root_id,
             research_before_event_id=research_before_event_id)

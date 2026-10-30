@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from .ledger import readonly_snapshot
 from .ledger import current_guard, finalize_observed, renew_claim
 from .runner import ArtifactConflict, store_once
 
@@ -209,10 +210,7 @@ def audit_public_discovery(db_path: Path, workspace: Path,
     """Independent local artifact readback, not a provider trust or fit oracle."""
     unknown = {"status": "UNVERIFIABLE", "business_outcome_verified": False}
     try:
-        with closing(sqlite3.connect(
-            db_path.resolve(strict=True).as_uri() + "?mode=ro", uri=True
-        )) as db:
-            db.row_factory = sqlite3.Row
+        with readonly_snapshot(db_path) as db:
             row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
             if row is None or row["state"] != "NEEDS_REVIEW":
                 return {**unknown, "reason":"TASK_NOT_REVIEWABLE"}

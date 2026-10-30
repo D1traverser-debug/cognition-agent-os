@@ -20,7 +20,7 @@ from .goal_audit import audit_goal, _constraints
 from .reconciliation_oracle import audit_stored_report
 from .intent_runtime import audit_intent_plan
 from .runner import verify_artifact
-from .ledger import event, connect
+from .ledger import event, connect, readonly_snapshot, open_readonly_snapshot
 
 TASK_ID=re.compile(r"[0-9a-f]{32}\Z")
 EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED","CONTROL_CANDIDATE_MATCHED","CONTROL_ACTIVE",
@@ -52,8 +52,7 @@ def capability_disabled(db_path: Path, kind: str=SANDBOX_CAPABILITY) -> bool:
     if not db_path.is_file() or db_path.is_symlink():
         return True
     try:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        with closing(sqlite3.connect(uri,uri=True,timeout=5)) as db:
+        with readonly_snapshot(db_path) as db:
             exists=db.execute("""SELECT 1 FROM sqlite_master
                 WHERE type='table' AND name='conformance_capability_guard'""").fetchone()
             if not exists:
@@ -181,6 +180,39 @@ def _verify_consistent(row: sqlite3.Row, fixtures: Path) -> str:
         return "NO_INDEPENDENT_OUTCOME_RECHECK"
     except (OSError,ValueError,TypeError,KeyError,sqlite3.Error):
         return "SUCCESS_EVIDENCE_UNAVAILABLE"
+
+
+def _check_released_dependency(db: sqlite3.Connection, row: sqlite3.Row,
+                               db_path: Path, workspace: Path,
+                               fixtures: Path) -> str | None:
+    """A released ordered source is a continuing result dependency.
+
+    Task parentage and evidence predecessor edges are different graphs. The
+    original worker validates before action; conformance must reattest both.
+    """
+    has_table=db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' "
+        "AND name='task_dependencies'").fetchone()
+    if has_table is None:
+        return None  # Backward compatible with a legacy initialized ledger.
+    edge=db.execute(
+        "SELECT predecessor_task,evidence_kind,released_at "
+        "FROM task_dependencies WHERE task_id=?", (row["task_id"],)).fetchone()
+    if edge is None:
+        return None
+    predecessor=db.execute(
+        "SELECT state,goal_rev,grant_rev FROM tasks WHERE task_id=?",
+        (edge["predecessor_task"],)).fetchone()
+    if (edge["released_at"] is None or predecessor is None
+        or predecessor["goal_rev"]!=row["goal_rev"]
+        or predecessor["grant_rev"]!=row["grant_rev"]
+        or predecessor["state"] not in ("NEEDS_REVIEW","VERIFIED")):
+        return "DEPENDENCY_PREDECESSOR_INVALIDATED"
+    from .dependency_gate import _independent_proof
+    if not _independent_proof(db_path,workspace,fixtures,
+                              edge["predecessor_task"],edge["evidence_kind"]):
+        return "DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE"
+    return None
 
 
 def _check_one(db, row: sqlite3.Row, db_path: Path,
@@ -326,9 +358,18 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             proof="UNSUPPORTED_EVIDENCE_STATE"
     except (ValueError,TypeError,KeyError,OSError,sqlite3.Error):
         proof="EVIDENCE_RECHECK_UNAVAILABLE"
+    if proof=="MECHANICALLY_VALID":
+        try:
+            dependency=_check_released_dependency(
+                db,row,db_path,workspace,fixtures)
+        except (sqlite3.Error,ValueError,TypeError,KeyError,OSError):
+            dependency="DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE"
+        if dependency is not None:
+            proof=dependency
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
               "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
+              "DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE",
               "SOURCE_CHANGED_SINCE_PROPOSAL","SOURCE_HAS_CHANGED",
               "RESEARCH_CONTRAST_UNRESOLVED"}
     # Holdout drift is inconclusive for an unreviewed proposal but is a
@@ -475,9 +516,7 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
     if enforce:
         db=connect(db_path)
     else:
-        uri=db_path.resolve(strict=True).as_uri()+"?mode=ro"
-        db=sqlite3.connect(uri,uri=True,timeout=5)
-        db.row_factory=sqlite3.Row
+        db=open_readonly_snapshot(db_path)
     try:
         if enforce:
             db.execute("BEGIN IMMEDIATE")

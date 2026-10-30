@@ -1,3 +1,5 @@
 # Keep immutable archived context byte-identical on Windows and POSIX.
+# Git must never translate archived evidence line endings or clean-filter bytes.
+/archive/** -text
 /archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md text eol=lf
 /SESSION_HANDOFF.md text eol=lf

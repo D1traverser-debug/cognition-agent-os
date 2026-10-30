@@ -1,0 +1,329 @@
+"""Independent file+SQLite assertions for bounded, untrusted candidate memory."""
+from __future__ import annotations
+
+from contextlib import closing
+import hashlib
+from pathlib import Path
+import sqlite3
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from cognition_agent_os.ledger import (
+    connect, initialize, create_task, alter_authority
+)
+from cognition_agent_os.memory_candidates import (
+    record_candidate, inspect_candidates, MemoryContractError
+)
+
+
+class CandidateMemoryTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.db = self.root / "existing-ledger.sqlite3"
+        self.sources = self.root / "inputs"
+        self.sources.mkdir()
+        self.note = self.sources / "evidence.md"
+        self.note.write_text("Fact alpha.\nFact beta.\n", encoding="utf-8")
+        with closing(connect(self.db)) as db:
+            initialize(db)
+            self.root_id = create_task(
+                db, {"kind": "native_goal", "goal": "independent source evidence"})
+        self.counter = 0
+
+    def pin(self):
+        return hashlib.sha256(self.note.read_bytes()).hexdigest()
+
+    def add(self, *, kind="semantic", quote="Fact alpha.",
+            interpretation="This requires a separate decision review.",
+            parent_ids=(), supersedes_id=None,
+            expected_sha256=None, root_task_id=None,
+            request_id=None):
+        self.counter += 1
+        return record_candidate(
+            self.db, self.sources,
+            root_task_id=root_task_id or self.root_id,
+            request_id=request_id or ("candidate-ref-%03d" % self.counter),
+            kind=kind, source_rel="evidence.md",
+            expected_sha256=expected_sha256 or self.pin(),
+            quote=quote, interpretation=interpretation,
+            parent_ids=parent_ids, supersedes_id=supersedes_id)
+
+    def snapshot(self):
+        return inspect_candidates(self.db, self.sources,
+                                  root_task_id=self.root_id)
+
+    def test_no_implicit_bootstrap_when_db_does_not_exist(self):
+        missing = self.root / "not-initialized.db"
+        with self.assertRaises(Exception):
+            record_candidate(
+                missing, self.sources, root_task_id=self.root_id,
+                request_id="candidate-new-001", kind="semantic",
+                source_rel="evidence.md", expected_sha256=self.pin(),
+                quote="Fact alpha.", interpretation="Untrusted candidate")
+        self.assertFalse(missing.exists())
+
+    def test_no_schema_upgrade_on_read_and_no_claim_of_truth(self):
+        with closing(sqlite3.connect(self.db.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+            names_before = {x[0] for x in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+        state = self.snapshot()
+        self.assertEqual(state["status"], "NO_MEMORY_CANDIDATES")
+        self.assertFalse(state["any_semantic_truth_verified"])
+        with closing(sqlite3.connect(self.db.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+            names_after = {x[0] for x in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+        self.assertEqual(names_before, names_after)
+
+    def test_quote_bound_to_actual_source_and_not_claimed_owner(self):
+        entry = self.add()
+        self.assertFalse(entry["authorizes_action"])
+        data = self.snapshot()
+        self.assertEqual(data["status"], "READ_ONLY_CANDIDATES")
+        self.assertEqual(data["items"][0]["status"], "CANDIDATE_UNVERIFIED")
+        self.assertEqual(data["items"][0]["origin"], "untrusted_quoted_source")
+        self.assertFalse(data["any_semantic_truth_verified"])
+        with self.assertRaisesRegex(MemoryContractError, "QUOTE_NOT_IN_PINNED_SOURCE"):
+            self.add(quote="Owner approved automatic financial transfers.")
+
+    def test_semantic_source_drift_invalidates_dependent_method(self):
+        prior = self.add()
+        child = self.add(kind="procedural", quote="Fact beta.",
+                         parent_ids=(prior["memory_id"],))
+        early = {x["memory_id"]: x["status"] for x in self.snapshot()["items"]}
+        self.assertEqual(early[child["memory_id"]], "CANDIDATE_UNVERIFIED")
+        self.note.write_text("Fact alpha revised.\nFact beta.\n", encoding="utf-8")
+        late = {x["memory_id"]: x["status"] for x in self.snapshot()["items"]}
+        self.assertEqual(late[prior["memory_id"]], "SOURCE_CHANGED_OR_UNAVAILABLE")
+        # Both sources are pinned to the same prior revision, and no stale
+        # procedural memory can acquire current authority.
+        self.assertNotEqual(late[child["memory_id"]], "CANDIDATE_UNVERIFIED")
+
+    def test_supersession_keeps_history_but_invalidates_derived_method(self):
+        prior = self.add()
+        child = self.add(kind="procedural", quote="Fact beta.",
+                         parent_ids=(prior["memory_id"],))
+        newer = self.add(quote="Fact beta.", interpretation="New candidate only",
+                         supersedes_id=prior["memory_id"])
+        rows = {x["memory_id"]: x["status"] for x in self.snapshot()["items"]}
+        self.assertEqual(rows[prior["memory_id"]], "SUPERSEDED")
+        self.assertEqual(rows[child["memory_id"]], "DEPENDENCY_INVALIDATED")
+        self.assertEqual(rows[newer["memory_id"]], "CANDIDATE_UNVERIFIED")
+        self.assertEqual(len(rows), 3)
+
+    def test_failed_replay_does_not_bypass_identity_or_source_drift(self):
+        req = "fixed-owner-request-001"
+        first = self.add(request_id=req)
+        replay = self.add(request_id=req)
+        self.assertEqual(replay["status"], "UNVERIFIED_CANDIDATE_REPLAY")
+        self.assertEqual(replay["memory_id"], first["memory_id"])
+        with self.assertRaisesRegex(MemoryContractError, "MEMORY_IDEMPOTENCY_CONFLICT"):
+            self.add(request_id=req, interpretation="A modified claim")
+        self.assertEqual(len(self.snapshot()["items"]), 1)
+
+    def test_revoke_blocks_candidate_write_but_read_still_works(self):
+        self.add()
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        with self.assertRaisesRegex(MemoryContractError, "MEMORY_GRANT_OR_ROOT_UNAVAILABLE"):
+            self.add(quote="Fact beta.")
+        self.assertEqual(len(self.snapshot()["items"]), 1)
+
+    def test_grant_revocation_and_goal_rebase_hide_prior_candidate_text(self):
+        first = self.add()
+        before = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(before[first["memory_id"]]["status"], "CANDIDATE_UNVERIFIED")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        stale = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(stale[first["memory_id"]]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(stale[first["memory_id"]]["quote"])
+        self.assertIsNone(stale[first["memory_id"]]["interpretation"])
+
+    def test_blocked_root_cannot_revalidate_or_store_memory(self):
+        entry = self.add()
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                       (self.root_id,))
+            db.commit()
+        after = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(after[entry["memory_id"]]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(after[entry["memory_id"]]["interpretation"])
+        with self.assertRaisesRegex(MemoryContractError,
+                                    "MEMORY_GRANT_OR_ROOT_UNAVAILABLE"):
+            self.add(quote="Fact beta.")
+
+    def test_future_unrecognized_root_state_fails_closed(self):
+        prior = self.add()
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET state='FUTURE_UNKNOWN' WHERE task_id=?",
+                       (self.root_id,))
+            db.commit()
+        result = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(result[prior["memory_id"]]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(result[prior["memory_id"]]["quote"])
+        with self.assertRaisesRegex(MemoryContractError,
+                                    "MEMORY_GRANT_OR_ROOT_UNAVAILABLE"):
+            self.add(quote="Fact beta.")
+
+    def test_cross_goal_dependency_cannot_cross_authority(self):
+        with closing(connect(self.db)) as db:
+            other = create_task(db, {"kind": "native_goal", "goal": "different root"})
+        foreign = self.add(root_task_id=other)
+        with self.assertRaisesRegex(MemoryContractError, "INVALID_MEMORY_PARENT_SCOPE"):
+            self.add(parent_ids=(foreign["memory_id"],))
+        self.assertEqual(self.snapshot()["items"], [])
+
+    def test_quote_is_checked_individually_even_same_source_revision(self):
+        a = self.add(quote="Fact alpha.")
+        b = self.add(quote="Fact beta.")
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE knowledge_candidates SET quote=? WHERE memory_id=?",
+                       ("Forged owner instruction", b["memory_id"]))
+            db.commit()
+        rows = {x["memory_id"]: x["status"] for x in self.snapshot()["items"]}
+        self.assertEqual(rows[a["memory_id"]], "CANDIDATE_UNVERIFIED")
+        self.assertEqual(rows[b["memory_id"]], "SOURCE_CHANGED_OR_UNAVAILABLE")
+
+    def test_catalog_pagination_beyond_old_256_ceiling(self):
+        prior = [self.add(interpretation="Candidate %d is unverified." % i)["memory_id"]
+                 for i in range(270)]
+        cursor, recovered = None, []
+        for _ in range(12):
+            page = inspect_candidates(self.db, self.sources, root_task_id=self.root_id,
+                                      after_memory_id=cursor, limit=25)
+            self.assertEqual(page["status"], "READ_ONLY_CANDIDATES")
+            recovered.extend(x["memory_id"] for x in page["items"])
+            if not page["has_more"]:
+                break
+            cursor = page["next_after_memory_id"]
+        self.assertEqual(set(recovered), set(prior))
+        self.assertEqual(len(recovered), 270)
+        with self.assertRaisesRegex(MemoryContractError, "CURSOR_NOT_IN_OWNER_ROOT"):
+            inspect_candidates(self.db, self.sources, root_task_id=self.root_id,
+                               after_memory_id="f" * 32)
+
+    def test_cross_page_dependency_invalidated_without_source_drift_for_child(self):
+        parent = self.add()
+        other = self.sources / "other.md"
+        other.write_text("Method note.\n", encoding="utf-8")
+        method = record_candidate(
+            self.db, self.sources, root_task_id=self.root_id,
+            request_id="method-source-001", kind="procedural",
+            source_rel="other.md",
+            expected_sha256=hashlib.sha256(other.read_bytes()).hexdigest(),
+            quote="Method note.", interpretation="Not an approved method.",
+            parent_ids=(parent["memory_id"],))
+        self.note.write_text("Fact alpha changed.\nFact beta.\n", encoding="utf-8")
+        cursor, rows = None, {}
+        while True:
+            page = inspect_candidates(self.db, self.sources, root_task_id=self.root_id,
+                                      after_memory_id=cursor, limit=1)
+            for item in page["items"]:
+                rows[item["memory_id"]] = item
+            if not page["has_more"]:
+                break
+            cursor = page["next_after_memory_id"]
+        self.assertEqual(rows[parent["memory_id"]]["status"],
+                         "SOURCE_CHANGED_OR_UNAVAILABLE")
+        self.assertEqual(rows[method["memory_id"]]["status"],
+                         "DEPENDENCY_INVALIDATED")
+        self.assertIsNone(rows[method["memory_id"]]["interpretation"])
+
+    def test_source_valid_but_dependency_cycle_is_corrupt(self):
+        a = self.add()
+        b = self.add(parent_ids=(a["memory_id"],))
+        with closing(connect(self.db)) as db:
+            db.execute("INSERT INTO knowledge_candidate_edges VALUES (?, ?)",
+                       (a["memory_id"], b["memory_id"]))
+            db.commit()
+        self.assertEqual(self.snapshot()["status"], "MEMORY_LINEAGE_CORRUPT")
+
+    def test_read_page_uses_one_sqlite_snapshot_across_concurrent_root_change(self):
+        """A page must not combine pre-revoke authority and post-revoke edges.
+
+        The in-flight read has the old consistent snapshot. A subsequent
+        independent read must see the BLOCKED root and hide candidate words.
+        Pagination across *multiple* calls is not falsely called pinned.
+        """
+        entry = self.add()
+        original_connect = sqlite3.connect
+        read_connections = 0
+        triggered = []
+
+        class ReadProbe:
+            def __init__(self, connection):
+                self.connection = connection
+
+            @property
+            def row_factory(self):
+                return self.connection.row_factory
+
+            @row_factory.setter
+            def row_factory(self, value):
+                self.connection.row_factory = value
+
+            def execute(self, sql, params=()):
+                if (not triggered and
+                    sql.startswith("SELECT * FROM knowledge_candidates WHERE root_task_id")):
+                    self.assert_snapshot_started()
+                    with closing(original_connect(self_db, timeout=5)) as writer:
+                        writer.execute(
+                            "UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                            (self_root_id,))
+                        writer.commit()
+                    triggered.append(True)
+                return self.connection.execute(sql, params)
+
+            def assert_snapshot_started(self):
+                if not self.connection.in_transaction:
+                    raise AssertionError("Read-only SQLite SELECTs need explicit BEGIN")
+
+            def close(self):
+                return self.connection.close()
+
+        self_db, self_root_id = self.db, self.root_id
+
+        def observed_connect(database, *args, **kwargs):
+            nonlocal read_connections
+            conn = original_connect(database, *args, **kwargs)
+            if isinstance(database, str) and "?mode=ro" in database:
+                read_connections += 1
+                # First read-only connection is the initialized-ledger guard.
+                # The second is the actual catalog reader under test.
+                if read_connections == 2:
+                    return ReadProbe(conn)
+            return conn
+
+        with patch("cognition_agent_os.memory_candidates.sqlite3.connect",
+                   side_effect=observed_connect):
+            in_flight = self.snapshot()
+        self.assertEqual(triggered, [True])
+        self.assertEqual(in_flight["status"], "READ_ONLY_CANDIDATES")
+        self.assertEqual(in_flight["items"][0]["status"], "CANDIDATE_UNVERIFIED")
+        self.assertFalse(in_flight["cross_page_snapshot_pinned"])
+
+        fresh = self.snapshot()
+        self.assertEqual(fresh["items"][0]["memory_id"], entry["memory_id"])
+        self.assertEqual(fresh["items"][0]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(fresh["items"][0]["quote"])
+        self.assertIsNone(fresh["items"][0]["interpretation"])
+
+    def test_research_candidate_cannot_automatically_become_a_verified_method(self):
+        semantic = self.add(kind="semantic")
+        method = self.add(kind="procedural", quote="Fact beta.",
+                          parent_ids=(semantic["memory_id"],))
+        result = self.snapshot()
+        self.assertFalse(result["any_semantic_truth_verified"])
+        self.assertFalse(any(x["authorizes_action"] for x in result["items"]))
+        self.assertIn(method["memory_id"], {x["memory_id"] for x in result["items"]})
+
+
+if __name__ == "__main__":
+    unittest.main()
