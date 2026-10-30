@@ -320,6 +320,18 @@ class PublicRevisionTests(unittest.TestCase):
                 AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",
                 (self.parent,)).fetchone()[0],0)
 
+        # A subsequent direct CLI invocation must run conformance before
+        # returning another early audit failure; otherwise this corrupted
+        # NEEDS_REVIEW parent remains indefinitely eligible.
+        second=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                  model="installed:7b")
+        self.assertEqual(second["status"],"PARENT_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(self.task(self.parent)["state"],"UNKNOWN")
+        self.assertEqual(self.task(self.parent)["error_code"],
+                         "CONFORMANCE_PROPOSAL_HASH_CHANGED")
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
+
     def test_original_public_working_refuses_to_refine(self):
         def passed(base,changes,entrypoint,cases,*,include_observed=False):
             return {"passes":len(cases),"total":len(cases),
