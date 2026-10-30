@@ -52,6 +52,23 @@ class HistoricalBranchProvenanceTests(unittest.TestCase):
             self.assertRegex(row["git_blob_sha1"],SHA)
             self.assertFalse((ROOT/row["path"]).exists(),
                              "research candidate accidentally entered active tree")
+        # Preserve the exact historical bytes under a quarantine prefix, not
+        # merely an old branch reference or an unchecked documentation claim.
+        # The frozen source register is the independent expected SHA oracle.
+        archive = ROOT/"archive"/"research"
+        self.assertTrue(archive.is_dir())
+        for row in entries:
+            matches = [
+                p for p in archive.rglob(Path(row["path"]).name)
+                if p.is_file() and not p.is_symlink()
+                and p.relative_to(archive).parts[1:]
+                   == tuple(Path(row["path"]).parts)
+            ]
+            self.assertEqual(len(matches), 1,
+                             "missing or ambiguous isolated source: " + row["path"])
+            self.assertEqual(git_blob_sha1(matches[0].read_bytes()),
+                             row["git_blob_sha1"],
+                             "preserved source bytes changed: " + row["path"])
         self.assertIn("DO_NOT_PROMOTE_ISOLATED_RETRIEVAL_RESEARCH_AS_AUTHORITY",
                       self.data["prohibitions"])
 
