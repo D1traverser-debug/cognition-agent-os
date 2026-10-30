@@ -117,7 +117,32 @@ def assess(db_path: Path, workspace: Path, fixtures: Path, spec: dict, assessmen
         routes = set(orig["routes"])
         if not 2 <= len(routes) <= 8:
             raise ValueError("BAD_ROUTES")
-        (a, refs_a), (b, refs_b) = (_evidence(fixtures, src, orig["goal_key"], routes) for src in sources)
+        # The source adapter can perform remote GitHub I/O. Do not pin a WAL
+        # reader while waiting for it; the eventual decision is read-only and
+        # must be invalidated if this original admission snapshot changes.
+        observed = (tuple(assessment), tuple(child), tuple(parent),
+                    tuple(x[0] for x in receipts), siblings)
+        check.execute("ROLLBACK")
+        (a, refs_a), (b, refs_b) = (
+            _evidence(fixtures, src, orig["goal_key"], routes)
+            for src in sources)
+        check.execute("BEGIN")
+        fresh_assessment = check.execute(
+            "SELECT * FROM tasks WHERE task_id=?", (assessment_id,)).fetchone()
+        fresh_child = check.execute(
+            "SELECT * FROM tasks WHERE task_id=?", (tid,)).fetchone()
+        fresh_parent = check.execute(
+            "SELECT * FROM tasks WHERE task_id=?", (child["parent_task"],)).fetchone()
+        fresh_receipts = check.execute(
+            "SELECT details FROM events WHERE task_id=? AND kind='RESEARCH_REVIEW_ENQUEUED'",
+            (tid,)).fetchall()
+        fresh_siblings = check.execute(
+            "SELECT COUNT(*) FROM tasks WHERE parent_task=?", (tid,)).fetchone()[0]
+        if (not fresh_assessment or not fresh_child or not fresh_parent
+            or (tuple(fresh_assessment), tuple(fresh_child),
+                tuple(fresh_parent), tuple(x[0] for x in fresh_receipts),
+                fresh_siblings) != observed):
+            raise ValueError("ASSESSMENT_CHANGED_DURING_SOURCE_READ")
         if (sources[0].get("kind") == "github" and sources[1].get("kind") == "github"
             and sources[0]["repo"].lower() == sources[1]["repo"].lower()):
             reason, candidate = "SAME_REPOSITORY_NOT_INDEPENDENT", None
@@ -204,8 +229,17 @@ def audit_assessment(db_path: Path, workspace: Path, fixtures: Path, task_id: st
             from .runner import verify_artifact
             if not verify_artifact(workspace, dict(row)):
                 return bad
+            original_row = tuple(row)
+            db.execute("ROLLBACK")
+            # assess() can refetch public evidence; never keep the outer
+            # auditor's read snapshot open while a source adapter waits.
             expected = (json.dumps(assess(db_path, workspace, fixtures, spec, task_id),
                                    ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+            db.execute("BEGIN")
+            current_row = db.execute(
+                "SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
+            if not current_row or tuple(current_row) != original_row:
+                return bad
             path = workspace / "artifacts" / (task_id + ".json")
             if path.is_symlink() or path.read_bytes() != expected:
                 return bad
