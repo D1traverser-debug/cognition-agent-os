@@ -405,14 +405,20 @@ def review_repo(db_path,workspace,fixtures,tid):
     initial=audit_repo(db_path,workspace,fixtures,tid)
     if initial["status"]!="REPO_BYTES_MECHANICALLY_VALID":
         return {"task_id":tid,"status":"NOT_ADMITTED","reason":initial.get("reason")}
+    try:
+        raw=read_audited_artifact(
+            workspace,tid,initial,max_bytes=65536)
+        doc=json.loads(raw)
+    except ArtifactConflict:
+        return {"task_id":tid,"status":"NOT_ADMITTED",
+                "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
+    except (OSError,ValueError,KeyError,TypeError):
+        return {"task_id":tid,"status":"EXECUTION_EVIDENCE_UNAVAILABLE"}
     preflight=effect_preflight(db_path,workspace,fixtures)
     if not preflight["admitted"]:
         return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
     # A container runtime is a PRECONDITION, never a host-execution fallback.
     try:
-        raw=read_audited_artifact(
-            workspace,tid,initial,max_bytes=65536)
-        doc=json.loads(raw)
         spec=validate_task_spec(doc["source_spec"])
         base=_sources(spec,fixtures)
         changes={p:s.encode() for p,s in doc["changes"].items()}

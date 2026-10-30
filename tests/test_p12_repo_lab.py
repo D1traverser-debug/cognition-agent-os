@@ -144,7 +144,7 @@ class RepoLabTest(unittest.TestCase):
             calls+=1
             if calls==1:
                 self.assertEqual(result["status"],"REPO_BYTES_MECHANICALLY_VALID")
-                artifact.write_bytes(original+b"\\n")
+                artifact.write_bytes(original+b"\n")
             return result
         with patch.object(repo_repair,"audit_repo",side_effect=mutate_after_initial_audit):
             with patch.object(repo_repair,"run_suite",

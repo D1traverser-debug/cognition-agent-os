@@ -361,7 +361,7 @@ class PureRepairTests(unittest.TestCase):
             calls+=1
             if calls==2:
                 self.assertEqual(result["status"],"HOLDOUT_ACCEPTED")
-                artifact.write_bytes(original+b"\\n")
+                artifact.write_bytes(original+b"\n")
             return result
         with patch.object(oracle,"audit_patch",side_effect=mutate_after_final_audit):
             result=review_patch(self.db,self.ws,self.fx,tid)
