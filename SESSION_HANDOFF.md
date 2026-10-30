@@ -34,6 +34,10 @@ Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that pr
 Branch cleanup (ON-DEMAND): read dated `evaluation/historical_branch_provenance_v1.json`; LIVE GitHub outranks it.
 For isolated PR #29–#32 experiments, locate **exact-byte preserved research** under `archive/research/prNN/<original_path>` where `NN` is exactly `29`, `30`, `31` or `32` and check the 15 Git blob SHA-1 values against that frozen register; `tests/test_historical_branch_provenance.py` prevents accidental runtime promotion or silent byte loss. An archived method remains NOT_ADOPTED; never equate byte preservation with semantic merge or permission to close a PR.
 
+**Memory source/lineage (ON-DEMAND, Draft only):** `src/cognition_agent_os/memory_candidates.py` records untrusted, SHA-pinned semantic/procedural candidates in the existing ledger; `native_mcp_bridge.py` opt-in read/write tools require separate operator flags. Source, parent and grant changes invalidate; no automatic truth/method promotion, account connection or child writes. Check `tests/test_memory_candidates.py` and `tests/test_memory_mcp_boundary.py` against exact HEAD CI.
+
+**Unpromoted non-PR research (ON-DEMAND):** nine frozen items in `evaluation/historical_branch_provenance_v1.json` are byte-preserved in `archive/research/nonpr-{engineering-method,graphify-old-workflow,model-quality-v5}/`; older audit in `archive/research/nonpr-safe-fixture-audit/`. Use exact blob checks, not automatic method activation or branch cleanup.
+
 ## Work cycle after recovery
 
 Preserve the full owner outcome -> identify the highest-value observable gap -> inspect actual behavior/failure -> research materially different proven alternatives -> compare fit, reliability, compatibility, cost and reversibility -> choose the least-complex complete authorized path -> execute -> independently reread the real result -> if rejected, revisit cause and switch method -> update the responsible source and concise PR checkpoint. Prefer deletion/reuse over another controller when evidence supports it. A plan, document, green CI, model self-score or local sandbox success never closes a broader owner goal.
