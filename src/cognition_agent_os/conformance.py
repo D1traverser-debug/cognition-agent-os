@@ -559,6 +559,46 @@ def _prepare_conformance_readback(db_path: Path, workspace: Path,
         raise
 
 
+
+def _local_conformance_reattestable(db: sqlite3.Connection,
+                                    row: sqlite3.Row) -> bool:
+    """Only run BOUNDED file/ledger audits while holding SQLite's writer.
+
+    A source-backed audit may do network, model or container work and cannot
+    safely be rerun under BEGIN IMMEDIATE. An unknown family must not silently
+    become 'safe to recheck' by default when new capabilities are registered.
+    """
+    state = row["state"]
+    if state in ("SANDBOX_VERIFIED", "VERIFIED"):
+        eligible = True
+    else:
+        try:
+            spec = json.loads(row["source_spec"])
+            kind = spec.get("kind") if isinstance(spec, dict) else None
+        except (TypeError, ValueError):
+            return False
+        eligible = (
+            (state == "NEEDS_REVIEW" and kind in {
+                "goal_case", "record_reconciliation", "investigate_goal",
+                "public_tool_discovery", "fixture", "github", "research_gap"})
+            or (state == "DECOMPOSED" and kind in {
+                "goal_intent", "knowledge_intent", "open_goal"})
+            or (state == "RESEARCH_NEEDED" and kind == "knowledge_intent")
+        )
+    if not eligible:
+        return False
+    # A local task may depend on a different, remotely audited evidence
+    # family. Without proof that its predecessor audit is also local, never
+    # call that nested audit under the writer lock.
+    exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "AND name='task_dependencies'").fetchone()
+    if exists and db.execute("SELECT 1 FROM task_dependencies "
+                             "WHERE task_id=? LIMIT 1",
+                             (row["task_id"],)).fetchone():
+        return False
+    return True
+
+
 def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
                         *, enforce: bool=False, max_cases: int=64) -> dict:
     """No DB creation on read-only path, no external writes on enforce.
@@ -641,6 +681,22 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             # the version-fenced result, not a second network call.
             finding=(preview[5][row["task_id"]] if enforce else
                      _check_one(db,row,db_path,workspace,fixtures))
+            if enforce and _local_conformance_reattestable(db, row):
+                # PRAGMA data_version fences SQLite changes, NOT external
+                # workspace and fixture files. Re-observe bounded local
+                # evidence as close as possible to this enforcement action.
+                latest_finding = _check_one(
+                    db, row, db_path, workspace, fixtures)
+                if (latest_finding["proof"], latest_finding["disposition"]) != (
+                    finding["proof"], finding["disposition"]):
+                    db.rollback()
+                    return _blocked(
+                        "CONFORMANCE_EVIDENCE_CHANGED_AFTER_PREVIEW",
+                        checked=0, findings=[], quarantined=[],
+                        mechanically_valid=0, eligible=total, exhaustive=False,
+                        evidence_task_id=row["task_id"],
+                        previous_proof=finding["proof"],
+                        current_proof=latest_finding["proof"])
             findings.append(finding)
             if enforce and finding["disposition"]=="CONFIRMED_INCONSISTENCY":
                 try:
