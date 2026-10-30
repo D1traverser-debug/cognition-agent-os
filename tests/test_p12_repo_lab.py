@@ -131,6 +131,21 @@ class RepoLabTest(unittest.TestCase):
         self.assertEqual(inspect_conformance(
             self.dbpath,self.ws,self.fx)["mechanically_valid"],1)
 
+    def test_repository_review_is_safe_on_legacy_ledger_without_guard_table(self):
+        tid=self.plan()
+        with (
+            patch("cognition_agent_os.conformance.effect_preflight",
+                  return_value={"admitted":True}),
+            patch("cognition_agent_os.repo_repair.run_suite",
+                  side_effect=self._fake_suite),
+        ):
+            result=review_repo(self.dbpath,self.ws,self.fx,tid)
+        self.assertEqual(result["status"],"REPAIR_LAB_VERIFIED",result)
+        with closing(connect(self.dbpath)) as db:
+            self.assertIsNone(db.execute("""SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='conformance_capability_guard'""").fetchone())
+        self.assertFalse(result["production_write_authorized"])
+
     def test_artifact_changed_during_preflight_reattestation_blocks_before_docker(self):
         from cognition_agent_os import repo_repair
         tid=self.plan()
