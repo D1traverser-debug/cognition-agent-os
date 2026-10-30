@@ -188,6 +188,8 @@ def _verified_prior_results(db_path: Path, workspace: Path,
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     readback = []
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # Pin each scan to a single WAL snapshot; retain legacy tuple rows.
+        db.execute("BEGIN")
         db.row_factory = sqlite3.Row
         for observation in eligible:
             task_id = observation["task_id"]
@@ -253,6 +255,8 @@ def _recovered_research_reads(db_path: Path, fixtures: Path,
     """
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # Pin each scan to a single WAL snapshot; retain legacy tuple rows.
+        db.execute("BEGIN")
         # Query by exact durable research identity BEFORE any pagination or
         # context bound. The previous newest-first LIMIT 128 across all
         # models/observations could make earlier valid AND forged receipts
@@ -414,6 +418,8 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         raise ValueError("NATIVE_PLAN_NOT_ADMISSIBLE:" + current["status"])
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # Pin each scan to a single WAL snapshot; retain legacy tuple rows.
+        db.execute("BEGIN")
         db.row_factory = sqlite3.Row
         row = db.execute(
             "SELECT source_spec FROM tasks WHERE task_id=? AND parent_task IS NULL",
@@ -766,6 +772,8 @@ def _previous_no_progress(db_path: Path, root_id: str,
     """Bounded feedback for at most two different reasoning attempts."""
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # Pin each scan to a single WAL snapshot; retain legacy tuple rows.
+        db.execute("BEGIN")
         # Refusal is scoped to the same ORIGINAL root, exact evidence
         # snapshot and exact model. The old newest-first LIMIT 64 ran before
         # these filters, so unrelated model attempts could silently erase
@@ -1006,6 +1014,8 @@ def _iter_native_goal_roots(db_path: Path):
     """
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        # Pin each scan to a single WAL snapshot; retain legacy tuple rows.
+        db.execute("BEGIN")
         cursor = None
         while True:
             query = (
