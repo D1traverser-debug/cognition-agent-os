@@ -99,7 +99,8 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
         or type(max_attempts) is not int
         or not 1<=max_attempts<=MAX_ATTEMPTS_PER_LINEAGE):
         return _deny("INVALID_PUBLIC_REFINEMENT_REQUEST")
-    from .conformance import effect_preflight,capability_disabled,REPAIR_LAB_CAPABILITY
+    from .conformance import (effect_preflight,capability_disabled,
+        REPAIR_LAB_CAPABILITY)
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return _deny("CAPABILITY_DISABLED")
     # Run shared governance before a task-specific audit can return early.
@@ -107,7 +108,12 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
     # indefinitely NEEDS_REVIEW behind the same local-audit failure.
     admit=effect_preflight(db_path,workspace,fixtures)
     if not admit["admitted"]:
-        return _deny("PREFLIGHT_BLOCKED")
+        return _deny("PREFLIGHT_BLOCKED",
+                     reason=admit["reason"],
+                     preflight_status=admit["status"],
+                     checked=admit["checked"],eligible=admit["eligible"],
+                     quarantined=admit["quarantined"],
+                     emergency_stops=admit["emergency_stops"])
     # Verify exact immutable original proposal, task, and public source
     # identities before any candidate is executed or passed to a model.
     audit=audit_repo(db_path,workspace,fixtures,tid)
@@ -292,6 +298,12 @@ def _freeze_revision(db_path,workspace,fixtures,tid,parent,spec,base,visible,cha
         if not allowed:
             db.commit()
             return _deny("REVISION_AUTHORITY_CHANGED_BEFORE_FREEZE",reason=reason)
+        from .conformance import (
+            capability_disabled_in_transaction,REPAIR_LAB_CAPABILITY)
+        if capability_disabled_in_transaction(
+                db,"goal_sandbox_stage",REPAIR_LAB_CAPABILITY):
+            db.commit()
+            return _deny("CAPABILITY_DISABLED")
         if ({p:sha(safe_fixture(fixtures,p)) for p in spec["files"]}!=immutable["source_sha256"]
             or sha(safe_fixture(fixtures,spec["visible"]))!=immutable["public_sha256"]):
             db.commit()
