@@ -73,6 +73,13 @@ class HistoricalBranchProvenanceTests(unittest.TestCase):
                           "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT",
                           "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED"})
 
+    def test_historical_provenance_is_discoverable_from_existing_entry(self):
+        handoff=(ROOT/"SESSION_HANDOFF.md").read_text(encoding="utf-8")
+        self.assertIn("evaluation/historical_branch_provenance_v1.json",handoff)
+        self.assertIn("ON-DEMAND provenance task",handoff)
+        self.assertIn("independently requery the LIVE",handoff)
+        self.assertIn("does **not** prove semantic equivalence",handoff)
+
     def test_history_is_versioned_not_an_instruction_to_close_pr(self):
         d=self.data
         self.assertEqual(d["schema"],
