@@ -149,6 +149,36 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(result["mechanically_valid"], 0)
         self.assertEqual(self.task(task_id)["state"], "SANDBOX_VERIFIED")
 
+    def test_precommit_candidate_change_rechecks_other_evidence_family(self):
+        # The same source-of-truth boundary applies to a pending candidate,
+        # not only a staged sandbox success.
+        from cognition_agent_os import conformance
+        (self.fx / "config.json").write_text("{}", encoding="utf-8")
+        task_id = self.seed()
+        self.assertEqual(run_once(self.dbpath, self.ws, self.fx)["status"],
+                         "NEEDS_REVIEW")
+        receipt = self.ws / "artifacts" / (task_id + ".json")
+        real_prepare = conformance._prepare_conformance_readback
+
+        def modify_after_preview(*args, **kwargs):
+            candidate = real_prepare(*args, **kwargs)
+            self.assertEqual(candidate[5][task_id]["disposition"], "PASS")
+            receipt.write_bytes(b"tampered receipt")
+            return candidate
+
+        with patch.object(conformance, "_prepare_conformance_readback",
+                          side_effect=modify_after_preview):
+            result = self.check(enforce=True)
+        self.assertEqual(result["status"],
+                         "CONFORMANCE_EVIDENCE_CHANGED_AFTER_PREVIEW", result)
+        self.assertEqual(self.task(task_id)["state"], "NEEDS_REVIEW")
+        self.assertEqual(result["quarantined"], [])
+        # A second independent observation (no in-flight change) may now
+        # enforce the real lasting corruption; the first aborted scan cannot.
+        observed = self.check(enforce=True)
+        self.assertEqual(observed["status"], "CONFORMANCE_VIOLATIONS", observed)
+        self.assertEqual(self.task(task_id)["state"], "UNKNOWN")
+
     def test_forged_staged_success_without_effect_quarantined(self):
         self.fx.joinpath("config.json").write_text("{}")
         tid=self.seed()
