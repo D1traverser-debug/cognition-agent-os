@@ -113,6 +113,7 @@ def record_candidate(db_path: Path, source_root: Path, *,
                 "WHERE task_id=?", (root_task_id,)).fetchone()
             if (grant is None or grant["write_allowed"] != 1 or root is None
                 or root["parent_task"] is not None
+                or root["state"] in ("BLOCKED", "REJECTED", "CANCELLED", "DELETED")
                 or (root["goal_rev"], root["grant_rev"]) !=
                    (grant["goal_rev"], grant["grant_rev"])):
                 raise MemoryContractError("MEMORY_GRANT_OR_ROOT_UNAVAILABLE")
@@ -207,12 +208,14 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
             "SELECT goal_rev,grant_rev,write_allowed FROM authority "
             "WHERE singleton=1").fetchone()
         root = db.execute(
-            "SELECT goal_rev,grant_rev FROM tasks "
+            "SELECT goal_rev,grant_rev,state FROM tasks "
             "WHERE task_id=? AND parent_task IS NULL", (root_task_id,)).fetchone()
         if authority is None or root is None:
             return {"status": "MEMORY_ROOT_UNVERIFIABLE", "items": [],
                     "any_semantic_truth_verified": False}
         scope_current = (authority["write_allowed"] == 1
+                         and root["state"] not in
+                             ("BLOCKED", "REJECTED", "CANCELLED", "DELETED")
                          and (authority["goal_rev"], authority["grant_rev"])
                              == (root["goal_rev"], root["grant_rev"]))
         if after_memory_id is not None and db.execute(

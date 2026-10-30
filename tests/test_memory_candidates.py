@@ -142,6 +142,20 @@ class CandidateMemoryTests(unittest.TestCase):
         self.assertIsNone(stale[first["memory_id"]]["quote"])
         self.assertIsNone(stale[first["memory_id"]]["interpretation"])
 
+    def test_blocked_root_cannot_revalidate_or_store_memory(self):
+        entry = self.add()
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                       (self.root_id,))
+            db.commit()
+        after = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(after[entry["memory_id"]]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(after[entry["memory_id"]]["interpretation"])
+        with self.assertRaisesRegex(MemoryContractError,
+                                    "MEMORY_GRANT_OR_ROOT_UNAVAILABLE"):
+            self.add(quote="Fact beta.")
+
     def test_cross_goal_dependency_cannot_cross_authority(self):
         with closing(connect(self.db)) as db:
             other = create_task(db, {"kind": "native_goal", "goal": "different root"})
