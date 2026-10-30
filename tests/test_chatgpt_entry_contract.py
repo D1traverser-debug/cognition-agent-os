@@ -132,29 +132,22 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertTrue(CODEX_SKILL.is_file())
 
     def test_bootstrap_is_a_locator_not_a_bulk_history_download(self):
-        """Reject recurring context amplification, not certify native obedience."""
+        """Static structural checks; not a claim that ChatGPT obeys them."""
         handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
-        self.assertIn("On-demand engineering provenance", handoff)
-        self.assertIn("possible competing active work", handoff)
-        self.assertIn("default branch HEAD", handoff)
-        self.assertIn("merged PR is historical provenance", handoff)
-        self.assertIn("live default-branch HEAD", AGENTS.read_text(encoding="utf-8"))
-        self.assertIn("live default-branch HEAD", SKILL.read_text(encoding="utf-8"))
+        recovery = handoff.split("## Recovery order and responsibility map", 1)[1].split(
+            "## Work cycle after recovery", 1)[0]
+        steps = re.findall(r"(?m)^(\d+)\.\s+\*\*([^*\n]+)\*\*:", recovery)
+        self.assertEqual([int(n) for n, _ in steps], list(range(1, 11)))
+        self.assertLess(len(handoff.encode("utf-8")), 8192)
+        self.assertNotIn("ALL open Draft PRs", recovery)
+        self.assertIn("Agent-Learning-Hub", recovery)
+        self.assertIn("architecture_probe.py --repo .", recovery)
+        self.assertIn("LIVE_GIT_PROVENANCE_ON_DEMAND",
+                      (ROOT / "scripts/codex_session_context.py").read_text(encoding="utf-8"))
         self.assertIn("default-branch HEAD and active-PR topology",
                       (ROOT / "README.md").read_text(encoding="utf-8"))
-        self.assertIn("Active evidence frontier is always required", handoff)
-        self.assertIn("Existing-capability survey BEFORE every substantive choice", handoff)
-        self.assertIn("architecture_probe.py --repo .", handoff)
-        self.assertIn("Agent-Learning-Hub", handoff)
-        self.assertIn("existing-capability and prior-learning survey", AGENTS.read_text(encoding="utf-8"))
+        self.assertIn("live default-branch HEAD", AGENTS.read_text(encoding="utf-8"))
         self.assertIn("First recover unfinished work", SKILL.read_text(encoding="utf-8"))
-        self.assertIn("only when identity, ancestry", handoff)
-        self.assertNotIn("ALL open Draft PRs", handoff)
-        self.assertNotIn("fetch the active integration PR\u0027s **commit history**", handoff)
-        hook = (ROOT / "scripts" / "codex_session_context.py").read_text(encoding="utf-8")
-        self.assertIn("LIVE_GIT_PROVENANCE_ON_DEMAND", hook)
-        self.assertIn("task-relevant", hook)
-        self.assertIn("specific conflict", hook)
 
     def test_recovery_roadmap_steps_are_monotonic_without_missing_entries(self):
         """Route order remains deterministic when new preflight phases are added."""

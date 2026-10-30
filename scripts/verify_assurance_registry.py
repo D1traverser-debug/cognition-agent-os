@@ -236,23 +236,42 @@ def verify_live_handoff(root):
     require(re.fullmatch(
         r'# cognition-agent-os — dated continuation pointer \(\d{4}-\d{2}-\d{2}\)',
         first) is not None, 'handoff must be a date-scoped non-authoritative pointer')
-    # Check the *new* recovery contract: fresh candidate identity via metadata,
-    # but expensive competing PR bodies and complete history only on demand.
-    # The former literal requirement to fetch ALL Draft PRs amplified context.
-    require('GitHub default branch' in live and 'exact HEAD' in live
-            and 'live PR metadata' in live
-            and 'only when identity, ancestry' in live,
+    # This is a static routing contract, NOT an LLM semantic/activation test.
+    # Inspect each named responsibility in its own step instead of requiring
+    # incidental phrases. A harmless rewrite must not force context bloat.
+    try:
+        recovery = live.split("## Recovery order and responsibility map\n", 1)[1].split(
+            "\n## Work cycle after recovery", 1)[0]
+    except IndexError as exc:
+        raise RegistryError("missing recovery route") from exc
+    steps = re.findall(r"(?m)^(\d+)\.\s+\*\*([^*\n]+)\*\*:\s*(.+)$", recovery)
+    require(len(steps) == 10 and
+            [int(number) for number, _, _ in steps] == list(range(1, 11)),
+            'handoff requires ten ordered recovery responsibilities')
+    roles = [(title + " " + body).lower() for _, title, body in steps]
+    requirements = [
+        (r"\bowner\b", r"private|original", r"unknown"),
+        (r"github", r"default[\s-]+branch", r"\bpr\b", r"\bhead\b",
+         r"\bci\b", r"conflict|competing", r"merged"),
+        (r"\bopen\b", r"fail", r"falsifier"),
+        (r"existing", r"agent-learning-hub", r"architecture_probe\.py"),
+        (r"architecture-decisions\.md", r"product-readiness-gate\.md"),
+        (r"\bcodex\b", r"agents\.md", r"goal-grounded-semantic-review"),
+        (r"chatgpt", r"installed", r"skill\.md"),
+        (r"host|sqlite", r"ledger\.py", r"grant"),
+        (r"child", r"grant", r"oracle"),
+        (r"on-demand", r"commit history", r"files changed", r"do not preload"),
+    ]
+    require(all(all(re.search(term, role) for term in required)
+                for role, required in zip(roles, requirements)),
             'handoff lacks task-scoped live-authority resolution requirement')
     require('BOOTSTRAP INDEX ONLY' in live
             and 'not a complete work log' in live
             and 'progressive disclosure' in live,
             'handoff must remain a bootstrap index, not a project database')
-    require('commit history' in live and 'Files changed' in live
-            and 'On-demand engineering provenance' in live
-            and 'not a mandatory cold-start download' in live
-            and 'Do not preload' in live,
-            'handoff must use on-demand Git provenance, not full history preload')
-    require('ALL open Draft PRs' not in live
+    # Explicitly reject the former cold-start bulk crawl, while preserving
+    # full PR/commit provenance on demand for real conflicts and audits.
+    require(not re.search(r"(?i)ALL open Draft PRs", recovery)
             and "fetch the active integration PR's **commit history**" not in live,
             'handoff regressed to unconditional context-heavy recovery')
     # Validate the risky behavior (promoting a dated PR to present authority),
