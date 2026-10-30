@@ -149,6 +149,60 @@ class CandidateMemoryTests(unittest.TestCase):
         self.assertEqual(rows[a["memory_id"]], "CANDIDATE_UNVERIFIED")
         self.assertEqual(rows[b["memory_id"]], "SOURCE_CHANGED_OR_UNAVAILABLE")
 
+    def test_catalog_pagination_beyond_old_256_ceiling(self):
+        prior = [self.add(interpretation="Candidate %d is unverified." % i)["memory_id"]
+                 for i in range(270)]
+        cursor, recovered = None, []
+        for _ in range(12):
+            page = inspect_candidates(self.db, self.sources, root_task_id=self.root_id,
+                                      after_memory_id=cursor, limit=25)
+            self.assertEqual(page["status"], "READ_ONLY_CANDIDATES")
+            recovered.extend(x["memory_id"] for x in page["items"])
+            if not page["has_more"]:
+                break
+            cursor = page["next_after_memory_id"]
+        self.assertEqual(set(recovered), set(prior))
+        self.assertEqual(len(recovered), 270)
+        with self.assertRaisesRegex(MemoryContractError, "CURSOR_NOT_IN_OWNER_ROOT"):
+            inspect_candidates(self.db, self.sources, root_task_id=self.root_id,
+                               after_memory_id="f" * 32)
+
+    def test_cross_page_dependency_invalidated_without_source_drift_for_child(self):
+        parent = self.add()
+        other = self.sources / "other.md"
+        other.write_text("Method note.\n", encoding="utf-8")
+        method = record_candidate(
+            self.db, self.sources, root_task_id=self.root_id,
+            request_id="method-source-001", kind="procedural",
+            source_rel="other.md",
+            expected_sha256=hashlib.sha256(other.read_bytes()).hexdigest(),
+            quote="Method note.", interpretation="Not an approved method.",
+            parent_ids=(parent["memory_id"],))
+        self.note.write_text("Fact alpha changed.\nFact beta.\n", encoding="utf-8")
+        cursor, rows = None, {}
+        while True:
+            page = inspect_candidates(self.db, self.sources, root_task_id=self.root_id,
+                                      after_memory_id=cursor, limit=1)
+            for item in page["items"]:
+                rows[item["memory_id"]] = item
+            if not page["has_more"]:
+                break
+            cursor = page["next_after_memory_id"]
+        self.assertEqual(rows[parent["memory_id"]]["status"],
+                         "SOURCE_CHANGED_OR_UNAVAILABLE")
+        self.assertEqual(rows[method["memory_id"]]["status"],
+                         "DEPENDENCY_INVALIDATED")
+        self.assertIsNone(rows[method["memory_id"]]["interpretation"])
+
+    def test_source_valid_but_dependency_cycle_is_corrupt(self):
+        a = self.add()
+        b = self.add(parent_ids=(a["memory_id"],))
+        with closing(connect(self.db)) as db:
+            db.execute("INSERT INTO knowledge_candidate_edges VALUES (?, ?)",
+                       (a["memory_id"], b["memory_id"]))
+            db.commit()
+        self.assertEqual(self.snapshot()["status"], "MEMORY_LINEAGE_CORRUPT")
+
     def test_research_candidate_cannot_automatically_become_a_verified_method(self):
         semantic = self.add(kind="semantic")
         method = self.add(kind="procedural", quote="Fact beta.",
