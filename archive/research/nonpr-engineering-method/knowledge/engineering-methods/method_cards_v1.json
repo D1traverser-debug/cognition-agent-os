@@ -1,0 +1,137 @@
+{
+  "schema": "engineering-method-cards-v1",
+  "authority": "NON_AUTHORITATIVE_RESEARCH_CANDIDATES",
+  "claim": "Not exhaustive, not measured as effective in this agent; original methods evaluated only as possible routes",
+  "cards": [
+    {
+      "id": "spec-kit",
+      "problem_domains": [
+        "requirements",
+        "feature"
+      ],
+      "choose_when": "Use when outcomes/acceptance are ambiguous across affected consumers",
+      "avoid_when": "Avoid presuming formal phases prove the requirement source",
+      "independent_probe": "Compare final user behavior to agreed examples and old API compatibility",
+      "primary_source": "https://github.com/github/spec-kit/blob/main/docs/reference/agentic-sdd.md",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "systematic-debugging",
+      "problem_domains": [
+        "recurring bug",
+        "causal"
+      ],
+      "choose_when": "Use when multiple causes or unknown reproduction exist",
+      "avoid_when": "Avoid blindly patching the stack-frame that emits the symptom",
+      "independent_probe": "Run counterexample on suspected upstream cause and real runtime path",
+      "primary_source": "https://github.com/obra/superpowers",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "ddd-context",
+      "problem_domains": [
+        "domain",
+        "architecture"
+      ],
+      "choose_when": "Use for domain ownership, conflicting vocabulary and leaky boundaries",
+      "avoid_when": "Avoid applying microservice decomposition to small local refactors",
+      "independent_probe": "Map contexts/aggregates and exercise a changed business rule through dependent callers",
+      "primary_source": "https://learn.microsoft.com/en-us/azure/architecture/microservices/model/domain-analysis",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "adr",
+      "problem_domains": [
+        "architecture",
+        "irreversibility"
+      ],
+      "choose_when": "Use for impactful decisions where rejected alternatives and migration matter",
+      "avoid_when": "Avoid ADRs for trivial single-line fixes",
+      "independent_probe": "Compare no-change, compatible extension and redesign using new requirement walkthrough",
+      "primary_source": "https://learn.microsoft.com/en-us/azure/well-architected/architect-role/architecture-decision-record",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "architecture-fitness",
+      "problem_domains": [
+        "regression",
+        "architecture"
+      ],
+      "choose_when": "Use when dependency and quality constraints admit mechanical invariant checks",
+      "avoid_when": "Avoid treating passing structural fitness checks as final user success",
+      "independent_probe": "Break an invariant deliberately and verify fitness function actually detects it",
+      "primary_source": "https://www.thoughtworks.com/content/dam/thoughtworks/documents/books/bk_building_evolutionary_architectures_second_edition_free_chapter.pdf",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "strangler",
+      "problem_domains": [
+        "compatibility",
+        "migration"
+      ],
+      "choose_when": "Use for risky legacy replacement with coexisting callers and rollback",
+      "avoid_when": "Avoid creating two permanent active controllers for one state",
+      "independent_probe": "Execute old/new calls, staged migration, rollback and retirement",
+      "primary_source": "https://martinfowler.com/bliki/OriginalStranglerFigApplication.html",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "stateful-testing",
+      "problem_domains": [
+        "state",
+        "recovery"
+      ],
+      "choose_when": "Use for action sequences, interruptions, retries and durable state transitions",
+      "avoid_when": "Avoid assuming random stateful tests prove real-world outcome",
+      "independent_probe": "Replay failing transition sequence against independent reference model",
+      "primary_source": "https://hypothesis.readthedocs.io/en/latest/stateful.html",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "agent-instructions",
+      "problem_domains": [
+        "agent",
+        "activation"
+      ],
+      "choose_when": "Use AGENTS.md to convey concise repo-bound behavior in compatible Codex hosts",
+      "avoid_when": "Avoid assuming repo AGENTS changes native ChatGPT custom instructions",
+      "independent_probe": "Inspect actual Codex instruction sources and task execution traces",
+      "primary_source": "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "focused-skill",
+      "problem_domains": [
+        "agent",
+        "workflow"
+      ],
+      "choose_when": "Use scoped Skill trigger metadata and references for recurring work",
+      "avoid_when": "Avoid overloaded catchall descriptions, contradictory skill copies and policy bloat",
+      "independent_probe": "Measure trigger/nontrigger precision and output on held-out actual agent tasks",
+      "primary_source": "https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    },
+    {
+      "id": "agent-evaluation",
+      "problem_domains": [
+        "verification",
+        "product"
+      ],
+      "choose_when": "Use trace and independent outcome measures for multi-tool agent workflows",
+      "avoid_when": "Avoid accepting model/self-authored tests as independent business approval",
+      "independent_probe": "Grade full actual task trajectories on unseen scenarios and outside observer outcomes",
+      "primary_source": "https://github.com/microsoft/eval-guide",
+      "source_reviewed": "2026-10-23",
+      "evidence_status": "CANDIDATE_NOT_VALIDATED_IN_THIS_REPOSITORY"
+    }
+  ]
+}
