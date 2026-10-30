@@ -131,7 +131,7 @@ class RepoLabTest(unittest.TestCase):
         self.assertEqual(inspect_conformance(
             self.dbpath,self.ws,self.fx)["mechanically_valid"],1)
 
-    def test_artifact_changed_after_initial_audit_is_not_staged(self):
+    def test_artifact_changed_during_preflight_reattestation_blocks_before_docker(self):
         from cognition_agent_os import repo_repair
         tid=self.plan()
         artifact=self.ws/"artifacts"/(tid+".json")
@@ -150,10 +150,13 @@ class RepoLabTest(unittest.TestCase):
             with patch.object(repo_repair,"run_suite",
                               side_effect=AssertionError("changed artifact must not reach Docker")) as run:
                 result=review_repo(self.dbpath,self.ws,self.fx,tid)
-        self.assertEqual(result["status"],"NOT_ADMITTED",result)
-        self.assertEqual(result["reason"],"ARTIFACT_CHANGED_AFTER_AUDIT")
+        self.assertEqual(result["status"],"PREFLIGHT_BLOCKED",result)
+        self.assertEqual(result["preflight_status"],
+                         "CONFORMANCE_EVIDENCE_CHANGED_AFTER_PREVIEW")
         self.assertFalse(run.called)
         self.assertFalse((self.ws/"repo_lab"/tid).exists())
+        # The sweep refused to act on a mixed preview/readback view; it did
+        # not quarantine from a stale observation or stage a candidate.
         self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
 
     def test_direct_repo_review_quarantines_tampered_artifact_on_retry(self):
