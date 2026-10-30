@@ -386,7 +386,7 @@ class PureRepairTests(unittest.TestCase):
         self.assertEqual(preflight_calls,2)
         self.assertEqual(self.row(tid)["state"],"UNKNOWN")
         self.assertEqual(self.row(tid)["error_code"],
-                         "CONFORMANCE_PROPOSAL_HASH_CHANGED")
+                         "CONFORMANCE_" + "ARTIFACT_HASH_MISMATCH")
 
     def test_artifact_changed_after_final_holdout_audit_is_not_staged(self):
         tid,_=self.example_compare()
