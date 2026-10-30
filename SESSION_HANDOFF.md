@@ -32,6 +32,7 @@ Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that pr
 10. **On-demand engineering provenance:** commit history and Files changed are the audit trail, not a mandatory cold-start download. Follow specific changed paths and commits as evidence requires; Do not preload unrelated PRs, hundreds of commits or every implementation family. Preserve original and contradictory evidence.
 
 Branch cleanup (ON-DEMAND): read dated `evaluation/historical_branch_provenance_v1.json`; LIVE GitHub outranks it.
+For isolated PR #29–#32 experiments, locate **exact-byte preserved research** under `archive/research/pr29..pr32/{original_path}` and check the 15 Git blob SHA-1 values against that frozen register; `tests/test_historical_branch_provenance.py` prevents accidental runtime promotion or silent byte loss. An archived method remains NOT_ADOPTED; never equate byte preservation with semantic merge or permission to close a PR.
 
 ## Work cycle after recovery
 
