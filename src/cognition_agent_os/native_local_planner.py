@@ -1005,45 +1005,41 @@ def advance_native_adaptive_once(db_path: Path, workspace: Path,
 
 
 def _iter_native_goal_roots(db_path: Path):
-    """Keyset-page ALL live native roots; never truncate the authority queue.
+    """Keyset-page all registered native roots without an unbounded WAL reader.
 
-    This is a read-only projection of existing SQLite, not another scheduler.
-    Scan the entire committed population lazily so unresolved or stale older
-    entries cannot indefinitely hide a later authorized owner goal. A fixed
-    LIMIT protects each fetch's memory use, not the number of owner goals.
+    Each page gets one coherent SQLite snapshot and is materialized before
+    yielding to the caller. The caller may perform slow model I/O or authorize
+    an unrelated write; never keep a database read transaction open across a
+    generator yield. Subsequent pages revalidate current ledger state and
+    downstream admission still checks fresh grants and original intent.
     """
     uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-        # Pin each scan to a single WAL snapshot; retain legacy tuple rows.
-        db.execute("BEGIN")
-        cursor = None
-        while True:
-            query = (
-                "SELECT task_id,source_spec,created_at FROM tasks "
-                "WHERE parent_task IS NULL AND state='DECOMPOSED' "
-                "AND (CASE WHEN json_valid(source_spec) "
-                "THEN json_extract(source_spec,'$.kind') ELSE NULL END)="
-                "'native_goal' "
-                # Only an immutable native registration can become an
-                # executable root. Filtering the registered task-id set
-                # BEFORE calling the expensive source/lineage auditor keeps
-                # stale/forged DECOMPOSED rows from monopolizing each tick.
-                # The independent _audit still checks the complete original
-                # receipt and CAS; existence alone is never authorization.
-                "AND task_id IN (SELECT task_id FROM events "
-                "WHERE kind='NATIVE_GOAL_REGISTERED') "
-            )
-            args = []
-            if cursor is not None:
-                query += "AND (created_at,task_id) > (?,?) "
-                args.extend(cursor)
-            query += "ORDER BY created_at ASC,task_id ASC LIMIT 128"
+    cursor = None
+    while True:
+        query = (
+            "SELECT task_id,source_spec,created_at FROM tasks "
+            "WHERE parent_task IS NULL AND state='DECOMPOSED' "
+            "AND (CASE WHEN json_valid(source_spec) "
+            "THEN json_extract(source_spec,'$.kind') ELSE NULL END)="
+            "'native_goal' "
+            # Registration is provenance, not authorization. A separate
+            # live audit and effect CAS must still admit each root.
+            "AND task_id IN (SELECT task_id FROM events "
+            "WHERE kind='NATIVE_GOAL_REGISTERED') "
+        )
+        args = []
+        if cursor is not None:
+            query += "AND (created_at,task_id) > (?,?) "
+            args.extend(cursor)
+        query += "ORDER BY created_at ASC,task_id ASC LIMIT 128"
+        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+            db.execute("BEGIN")
             rows = db.execute(query, args).fetchall()
-            if not rows:
-                return
-            for task_id, raw, _created in rows:
-                yield task_id, raw
-            cursor = (rows[-1][2], rows[-1][0])
+        if not rows:
+            return
+        cursor = (rows[-1][2], rows[-1][0])
+        for task_id, raw, _created in rows:
+            yield task_id, raw
 
 
 def advance_native_local_goals(db_path: Path, workspace: Path, fixtures: Path,
