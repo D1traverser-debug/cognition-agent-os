@@ -447,7 +447,7 @@ def _quarantine(db, row: sqlite3.Row, reason: str,
         # converting a review failure into an undifferentiated UNKNOWN.
         from .diagnostics import AUDIT_FAILURES, record_audit_failure
         if reason in AUDIT_FAILURES:
-            record_audit_failure(db,row,reason)
+            record_audit_failure(db,row,reason,error_prefix="CONFORMANCE")
         else:
             db.execute("""UPDATE tasks SET state='UNKNOWN',error_code=?,
                 lease_until=NULL,claim_token=NULL,state_version=state_version+1
