@@ -139,8 +139,10 @@ class CoupledRepairTest(unittest.TestCase):
                 return {"admitted":True}
             return real_preflight(*args,**kwargs)
 
-        with patch.object(oracle,"audit_pipeline",side_effect=mutate_after_final_audit),\\
-             patch.object(conformance,"effect_preflight",side_effect=preflight):
+        with (
+            patch.object(oracle,"audit_pipeline",side_effect=mutate_after_final_audit),
+            patch.object(conformance,"effect_preflight",side_effect=preflight),
+        ):
             first=review_pipeline(self.dbpath,self.ws,self.fx,tid)
             self.assertEqual(first.get("reason"),"ARTIFACT_CHANGED_AFTER_AUDIT",first)
             self.assertEqual(self.state(tid)["state"],"NEEDS_REVIEW")
