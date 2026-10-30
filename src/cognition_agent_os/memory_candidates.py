@@ -14,7 +14,7 @@ import re
 import sqlite3
 import uuid
 
-from .ledger import connect, require_initialized_ledger
+from .ledger import connect, require_initialized_ledger, readonly_snapshot
 from .source import safe_fixture
 
 _ID = re.compile(r"[0-9a-f]{32}\Z")
@@ -202,13 +202,7 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
         or type(limit) is not int or not 1 <= limit <= 50):
         raise MemoryContractError("INVALID_MEMORY_CURSOR_OR_LIMIT")
     require_initialized_ledger(db_path)
-    uri = db_path.resolve(strict=True).as_uri() + "?mode=ro"
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-        db.row_factory = sqlite3.Row
-        # A read-only connection does not imply a multi-SELECT transaction in
-        # Python sqlite3 legacy mode. Pin the authority/root/candidate/lineage
-        # reads to one SQLite snapshot; other pages intentionally revalidate.
-        db.execute("BEGIN")
+    with readonly_snapshot(db_path) as db:
         exists = db.execute(
             "SELECT 1 FROM sqlite_master WHERE name='knowledge_candidates' "
             "AND type='table'").fetchone()
