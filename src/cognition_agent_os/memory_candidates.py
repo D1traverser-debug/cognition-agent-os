@@ -21,6 +21,13 @@ _ID = re.compile(r"[0-9a-f]{32}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _REQUEST = re.compile(r"[a-z0-9][a-z0-9._:-]{7,95}\Z")
 _KINDS = frozenset({"semantic", "procedural"})
+# Unknown/future root states must NOT implicitly gain knowledge authority.
+_MEMORY_ELIGIBLE_ROOT_STATES = frozenset({
+    "PENDING", "RUNNING", "DECOMPOSED", "NEEDS_REVIEW",
+    "RESEARCH_NEEDED", "VERIFIED", "STAGED",
+    "CONTROL_ACTIVE", "CONTROL_CANDIDATE_MATCHED",
+    "FEEDBACK_ACTIVE", "FEEDBACK_EVIDENCE_READY",
+})
 _MAX_NODES = 256
 _MAX_EDGES = 16
 _MAX_QUOTE = 1024
@@ -113,7 +120,7 @@ def record_candidate(db_path: Path, source_root: Path, *,
                 "WHERE task_id=?", (root_task_id,)).fetchone()
             if (grant is None or grant["write_allowed"] != 1 or root is None
                 or root["parent_task"] is not None
-                or root["state"] in ("BLOCKED", "REJECTED", "CANCELLED", "DELETED")
+                or root["state"] not in _MEMORY_ELIGIBLE_ROOT_STATES
                 or (root["goal_rev"], root["grant_rev"]) !=
                    (grant["goal_rev"], grant["grant_rev"])):
                 raise MemoryContractError("MEMORY_GRANT_OR_ROOT_UNAVAILABLE")
@@ -214,8 +221,7 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
             return {"status": "MEMORY_ROOT_UNVERIFIABLE", "items": [],
                     "any_semantic_truth_verified": False}
         scope_current = (authority["write_allowed"] == 1
-                         and root["state"] not in
-                             ("BLOCKED", "REJECTED", "CANCELLED", "DELETED")
+                         and root["state"] in _MEMORY_ELIGIBLE_ROOT_STATES
                          and (authority["goal_rev"], authority["grant_rev"])
                              == (root["goal_rev"], root["grant_rev"]))
         if after_memory_id is not None and db.execute(
