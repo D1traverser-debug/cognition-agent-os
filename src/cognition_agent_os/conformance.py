@@ -64,6 +64,27 @@ def capability_disabled(db_path: Path, kind: str=SANDBOX_CAPABILITY) -> bool:
         return True
 
 
+def capability_disabled_in_transaction(db: sqlite3.Connection,
+                                      *kinds: str) -> bool:
+    """Check persistent capability circuits on an already-open ledger.
+
+    Older initialized ledgers may not have the lazily introduced guard table.
+    Absence means no recorded circuit; it must never trigger an implicit schema
+    write from an operational path. The caller owns the transaction/lock.
+    """
+    if not kinds:
+        return False
+    exists=db.execute("""SELECT 1 FROM sqlite_master
+        WHERE type='table' AND name='conformance_capability_guard'""").fetchone()
+    if not exists:
+        return False
+    placeholders=",".join("?" for _ in kinds)
+    return db.execute(
+        f"SELECT 1 FROM conformance_capability_guard "
+        f"WHERE disabled=1 AND kind IN ({placeholders}) LIMIT 1",
+        tuple(kinds)).fetchone() is not None
+
+
 def _trip_critical_guard(db, task_id: str, reason: str,
                          *, kind: str=SANDBOX_CAPABILITY) -> bool:
     """Independently confirmed integrity breaches disable only own effect family."""
@@ -420,10 +441,31 @@ def _quarantine(db, row: sqlite3.Row, reason: str,
                          state_version=state_version+1 WHERE task_id=?""",
                        (state,"UPSTREAM_CONFORMANCE_VIOLATION",dependent_id))
             event(db,dependent_id,"CONFORMANCE_DEPENDENCY_BLOCKED",{"root":tid,"cause":reason})
-    db.execute("""UPDATE tasks SET state='UNKNOWN',error_code=?,
-                 lease_until=NULL,claim_token=NULL,state_version=state_version+1
-                 WHERE task_id=? AND state=?""",
-               ("CONFORMANCE_"+reason,tid,row["state"]))
+    if row["state"]=="NEEDS_REVIEW":
+        # The shared sweep is the first observer on some execution paths.
+        # Preserve the task-level diagnosis contract instead of silently
+        # converting a review failure into an undifferentiated UNKNOWN.
+        from .diagnostics import AUDIT_FAILURES, record_audit_failure
+        if reason in AUDIT_FAILURES:
+            record_audit_failure(db,row,reason)
+        else:
+            db.execute("""UPDATE tasks SET state='UNKNOWN',error_code=?,
+                lease_until=NULL,claim_token=NULL,state_version=state_version+1
+                WHERE task_id=? AND state=?""",
+                ("CONFORMANCE_"+reason,tid,row["state"]))
+            event(db,tid,"DIAGNOSIS_RECORDED",{
+                "observation":reason,
+                "candidate_explanations":[
+                    "Recorded proposal or source evidence may have changed",
+                    "The evidence family may require a dedicated independent auditor"],
+                "evidence_class":"CONFORMANCE_EVIDENCE_UNVERIFIABLE",
+                "next_action":"RESEARCH_AND_REGISTER_A_DEDICATED_AUDITOR",
+                "causal_root_proven":False})
+    else:
+        db.execute("""UPDATE tasks SET state='UNKNOWN',error_code=?,
+                     lease_until=NULL,claim_token=NULL,state_version=state_version+1
+                     WHERE task_id=? AND state=?""",
+                   ("CONFORMANCE_"+reason,tid,row["state"]))
     if row["state"]=="SANDBOX_VERIFIED":
         _trip_critical_guard(db,tid,reason)
     elif row["state"]=="REPAIR_LAB_VERIFIED":
