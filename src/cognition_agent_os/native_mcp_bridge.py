@@ -241,14 +241,17 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     # require the existing MCP write profile AND the original SQLite grant.
     if allow_source_read:
         @mcp.tool()
-        def native_memory_candidates_inspect(root_task_id: str) -> dict:
+        def native_memory_candidates_inspect(
+                root_task_id: str, after_memory_id: str | None = None,
+                limit: int = 50) -> dict:
             """Read source-version-aware candidate statuses, not trusted facts."""
             root = inspect_native_goal(
                 db_path, workspace, fixtures, root_task_id)
             if root.get("status") == "NATIVE_GOAL_UNVERIFIABLE":
                 raise ValueError("NATIVE_ROOT_NOT_ADMITTED")
             return inspect_candidates(
-                db_path, fixtures, root_task_id=root_task_id)
+                db_path, fixtures, root_task_id=root_task_id,
+                after_memory_id=after_memory_id, limit=limit)
 
         if allow_goal_writes:
             @mcp.tool()
