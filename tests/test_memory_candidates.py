@@ -130,6 +130,18 @@ class CandidateMemoryTests(unittest.TestCase):
             self.add(quote="Fact beta.")
         self.assertEqual(len(self.snapshot()["items"]), 1)
 
+    def test_grant_revocation_and_goal_rebase_hide_prior_candidate_text(self):
+        first = self.add()
+        before = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(before[first["memory_id"]]["status"], "CANDIDATE_UNVERIFIED")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        stale = {x["memory_id"]: x for x in self.snapshot()["items"]}
+        self.assertEqual(stale[first["memory_id"]]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(stale[first["memory_id"]]["quote"])
+        self.assertIsNone(stale[first["memory_id"]]["interpretation"])
+
     def test_cross_goal_dependency_cannot_cross_authority(self):
         with closing(connect(self.db)) as db:
             other = create_task(db, {"kind": "native_goal", "goal": "different root"})

@@ -203,6 +203,18 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
         if not exists:
             return {"status": "NO_MEMORY_CANDIDATES", "items": [],
                     "any_semantic_truth_verified": False}
+        authority = db.execute(
+            "SELECT goal_rev,grant_rev,write_allowed FROM authority "
+            "WHERE singleton=1").fetchone()
+        root = db.execute(
+            "SELECT goal_rev,grant_rev FROM tasks "
+            "WHERE task_id=? AND parent_task IS NULL", (root_task_id,)).fetchone()
+        if authority is None or root is None:
+            return {"status": "MEMORY_ROOT_UNVERIFIABLE", "items": [],
+                    "any_semantic_truth_verified": False}
+        scope_current = (authority["write_allowed"] == 1
+                         and (authority["goal_rev"], authority["grant_rev"])
+                             == (root["goal_rev"], root["grant_rev"]))
         if after_memory_id is not None and db.execute(
             "SELECT 1 FROM knowledge_candidates WHERE root_task_id=? "
             "AND memory_id=?", (root_task_id, after_memory_id)
@@ -297,6 +309,10 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
                 "SUPERSEDED" if key in superseded else
                 "SOURCE_CHANGED_OR_UNAVAILABLE"
                 if source is None or row["quote"] not in source else
+                "GRANT_OR_GOAL_REVISION_STALE"
+                if not scope_current or
+                   (row["goal_rev"], row["grant_rev"]) !=
+                       (root["goal_rev"], root["grant_rev"]) else
                 "CANDIDATE_UNVERIFIED")
         # Kahn evaluation: a cycle (including forged cross-edge) must not
         # become a false clean candidate simply because every source exists.
