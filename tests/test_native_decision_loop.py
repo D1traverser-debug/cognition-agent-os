@@ -1418,6 +1418,32 @@ class NativeDecisionLoop(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, root,
                 self.candidate(verified, self.structure(), self.reconcile()))
 
+    def test_broken_independent_verifier_is_not_labelled_worker_corruption(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        healthy = self.view(root)
+        self.assertEqual(healthy["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        with patch("cognition_agent_os.reconciliation_oracle.audit_stored_report",
+                   return_value={"status": "UNVERIFIABLE",
+                                 "reason": "EVIDENCE_RECHECK_UNAVAILABLE"}):
+            outage = self.view(root)
+        self.assertEqual(outage["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(outage["causal_reentry"]["observed_cause"],
+                         "INDEPENDENT_VERIFIER_UNAVAILABLE")
+        self.assertEqual(outage["causal_reentry"]["evidence_failure_reason"],
+                         "EVIDENCE_RECHECK_UNAVAILABLE")
+        self.assertFalse(outage["causal_reentry"]["root_cause_semantically_verified"])
+        self.assertFalse(outage["causal_reentry"]["authorizes_action"])
+        self.assertNotIn("observation_sha256", outage)
+        # The oracle outage did not mutate the persisted Worker artifact.
+        # After it is repaired, the fresh external checker must pass again.
+        restored = self.view(root)
+        self.assertEqual(restored["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        self.assertNotIn("causal_reentry", restored)
+
     def test_two_independent_faults_reopen_separate_layers_until_real_repair(self):
         root = self.root_id()
         admitted = admit_native_decision(
