@@ -33,4 +33,6 @@ The ten entries are **locations of authority and evidence**, NOT ordered thinkin
 
 **Current audit:** Source inventory includes 56 Python modules, memory/feedback/goal code and their call relationships, but structural coverage is not semantic proof. Further cleanup should remove only *demonstrably* redundant source or stale hot context. The private Library navigation was compacted from 16,261 to 4,480 bytes; full private original remains intact. Earlier full handoff evidence: `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md`. No speculative deletion or unnecessary reimplementation.
 
-**Product status: NOT_READY.** Interactive fresh-session Skill selection, unfamiliar-task root-cause quality, true reusable method transfer and fewer user corrections have not been independently demonstrated. No unapproved main merge, paid inference, deployment, destructive cleanup or child production write.
+**Product status: NOT_READY.** Interactive fresh-session Skill selection, unfamiliar-task root-cause quality, true reusable method transfer and fewer user corrections have not been independently demonstrated.
+
+**Owner clarification (2026-11-01):** Engineering merge-readiness is delegated to the assistant; it may merge `main` without per-merge approval only after independent full-goal, review, exact-head CI, blocking-finding, rollback and acceptance checks. This does not authorize deployment, paid inference, destructive cleanup, private transcript publication or child production writes.
