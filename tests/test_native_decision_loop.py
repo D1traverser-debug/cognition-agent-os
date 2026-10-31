@@ -1466,6 +1466,41 @@ class NativeDecisionLoop(unittest.TestCase):
                 (root,)).fetchone()[0], 0)
         self.assertNotIn("observation_sha256", self.view(root))
 
+    def test_goal_case_verdicts_are_classified_by_actual_failure_layer(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.structure(), self.reconcile()))
+        tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(tick["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
+
+        cases = (
+            ("SOURCE_CHANGED_SINCE_PROPOSAL", "SOURCE_PIN_DRIFT"),
+            ("ARTIFACT_UNAVAILABLE", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("INVALID_PROPOSAL", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("CANDIDATE_HASH_MISMATCH", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("CANDIDATE_CONSTRAINTS_FAILED", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("AUDIT_UNVERIFIABLE", "INDEPENDENT_VERIFIER_UNAVAILABLE"),
+        )
+        for status, expected_cause in cases:
+            with self.subTest(status=status):
+                digest = hashlib.sha256(status.encode("ascii")).hexdigest()
+                with patch(
+                    "cognition_agent_os.goal_audit.audit_goal",
+                    return_value={
+                        "status": status,
+                        "observed_artifact_sha256": digest,
+                    },
+                ):
+                    state = self.view(root)
+                self.assertEqual(state["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+                self.assertEqual(
+                    state["causal_reentry"]["evidence_failure_reason"], status)
+                self.assertEqual(
+                    state["causal_reentry"]["observed_cause"], expected_cause)
+                self.assertFalse(state["authorizes_action"])
+
     def test_goal_case_corrupt_bytes_bind_research_cas_and_verdict(self):
         """Goal-case audit failures must expose exact corrupt bytes to native re-entry."""
         root = self.root_id()
