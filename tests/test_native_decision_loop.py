@@ -1466,6 +1466,57 @@ class NativeDecisionLoop(unittest.TestCase):
                 (root,)).fetchone()[0], 0)
         self.assertNotIn("observation_sha256", self.view(root))
 
+    def test_goal_case_corrupt_bytes_bind_research_cas_and_verdict(self):
+        """Goal-case audit failures must expose exact corrupt bytes to native re-entry."""
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.structure(), self.reconcile()))
+        tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(tick["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
+
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        original = artifact.read_bytes()
+        first_bytes = original + b" first corrupt goal-case revision"
+        artifact.write_bytes(first_bytes)
+        first = self.view(root)
+        self.assertEqual(first["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        self.assertEqual(
+            first["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(first_bytes).hexdigest())
+
+        second_bytes = original + b" a different corrupt goal-case revision"
+        artifact.write_bytes(second_bytes)
+        second = self.view(root)
+        self.assertEqual(second["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(second["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(
+            second["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(second_bytes).hexdigest())
+        self.assertNotEqual(first["research_reentry_sha256"],
+                            second["research_reentry_sha256"])
+
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent",
+                idea="The first corrupt goal-case revision may be incomplete",
+                observation_sha256=first["research_reentry_sha256"])
+        accepted = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent",
+            idea="The second corrupt goal-case revision needs a new diagnosis",
+            observation_sha256=second["research_reentry_sha256"])
+        self.assertEqual(accepted["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(accepted["authorizes_action"])
+
     def test_artifact_changes_without_verdict_change_invalidate_research_cas(self):
         root = self.root_id()
         task = admit_native_decision(
