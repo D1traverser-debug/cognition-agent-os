@@ -55,6 +55,45 @@ class DeltaAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(AuditInputError,"DUPLICATE"):
             plan(previous(),data,repository=R)
 
+    def test_git_head_move_mid_audit_never_mixes_two_commits(self):
+        # Counterexample: HEAD changes after the initial identity read.
+        # A valid source receipt must bind the tree/listing to that SAME SHA.
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as d:
+            commands=(
+                ["git","init","-q",d],
+                ["git","-C",d,"config","user.name","CI"],
+                ["git","-C",d,"config","user.email","ci@example.invalid"],
+            )
+            for cmd in commands:
+                subprocess.run(cmd,check=True,capture_output=True)
+            Path(d,"before.py").write_text("v1\n",encoding="utf-8")
+            subprocess.run(["git","-C",d,"add","."],check=True,capture_output=True)
+            subprocess.run(["git","-C",d,"commit","-qm","old"],check=True,capture_output=True)
+            old=subprocess.run(["git","-C",d,"rev-parse","HEAD"],capture_output=True,check=True).stdout.decode().strip()
+            Path(d,"after.py").write_text("v2\n",encoding="utf-8")
+            subprocess.run(["git","-C",d,"add","."],check=True,capture_output=True)
+            subprocess.run(["git","-C",d,"commit","-qm","new"],check=True,capture_output=True)
+            new=subprocess.run(["git","-C",d,"rev-parse","HEAD"],capture_output=True,check=True).stdout.decode().strip()
+            subprocess.run(["git","-C",d,"reset","--hard",old],check=True,capture_output=True)
+            real_run=subprocess.run
+            moved=[]
+            def moving_run(args, *pos, **kw):
+                result=real_run(args,*pos,**kw)
+                if args[-2:]==["rev-parse","HEAD"] and not moved:
+                    real_run(["git","-C",d,"reset","--hard",new],
+                             check=True,capture_output=True)
+                    moved.append(True)
+                return result
+            with patch("plan_incremental_audit.subprocess.run",side_effect=moving_run):
+                scanned=_git_tree(Path(d))
+            self.assertTrue(moved)
+            self.assertEqual(scanned["commit"],old)
+            self.assertEqual({x["path"] for x in scanned["tree"]},{"before.py"})
+            expected=real_run(["git","-C",d,"rev-parse",old+"^{tree}"],
+                              capture_output=True,check=True).stdout.decode().strip()
+            self.assertEqual(scanned["sha"],expected)
+
     def test_real_git_checkout_is_read_without_remote_network(self):
         with tempfile.TemporaryDirectory() as d:
             for cmd in (["git","init","-q",d],["git","-C",d,"config","user.name","CI"],
