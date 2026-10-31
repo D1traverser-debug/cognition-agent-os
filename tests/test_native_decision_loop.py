@@ -950,6 +950,17 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(inspect_native_goal(
             self.db, self.workspace, self.fixtures, root)["causal_reentry"],
                          reentry)
+        # The source is genuinely changed, but one later model/ledger
+        # receipt has been corrupted: do not emit a plausible-looking
+        # graph or promote this malformed lineage to trusted reentry.
+        with closing(connect(self.db)) as db:
+            db.execute(
+                "UPDATE events SET details=json_set(details,'$.ordinal',99) "
+                "WHERE event_id=?", (event_ids[1],))
+            db.commit()
+        untrusted = self.view(root)
+        self.assertEqual(untrusted["status"], "NATIVE_GOAL_UNVERIFIABLE")
+        self.assertNotIn("causal_reentry", untrusted)
 
     def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
         root = self.root_id()
