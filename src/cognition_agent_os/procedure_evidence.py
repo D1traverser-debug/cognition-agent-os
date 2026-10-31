@@ -223,6 +223,24 @@ def inspect_cross_root_procedure_trials(
         except (OSError, ValueError, TypeError, KeyError, IndexError):
             continue
 
+    with readonly_snapshot(db_path) as db:
+        authority = db.execute(
+            "SELECT goal_rev,grant_rev,write_allowed FROM authority "
+            "WHERE singleton=1").fetchone()
+        root = db.execute(
+            "SELECT goal_rev,grant_rev,state,parent_task FROM tasks "
+            "WHERE task_id=?", (root_task_id,)).fetchone()
+        final_authority = (
+            (authority["goal_rev"], authority["grant_rev"],
+             authority["write_allowed"]) if authority else None)
+        final_root = (
+            (root["goal_rev"], root["grant_rev"], root["state"])
+            if root and root["parent_task"] is None else None)
+    if (final_authority != starting_authority
+        or final_root != starting_root):
+        return {"status": "PROCEDURE_TRIAL_SNAPSHOT_CHANGED", "items": [],
+                "authorizes_action": False}
+
     return {
         "status": ("CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE" if fresh_items
                    else "NO_VERIFIED_CROSS_ROOT_PROCEDURE_TRIALS"),
