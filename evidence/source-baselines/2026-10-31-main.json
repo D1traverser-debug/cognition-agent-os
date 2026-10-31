@@ -2,9 +2,9 @@
   "schema": "caos-blob-audit-baseline-v1",
   "repository": "D1traverser-debug/cognition-agent-os",
   "ref": "35a64d7caa948f632fad884edccb52eb516d4c60",
-  "git_tree_sha": "35a64d7caa948f632fad884edccb52eb516d4c60",
+  "git_tree_sha": "ebef228dc5bd980f3e468bf1379286a8f9af743b",
   "observed_utc": "2026-10-31",
-  "provenance": "2026-10-31 full source audit: 295 fetched blobs; structural review; not proof of semantics or native behavior",
+  "provenance": "2026-10-31 full source audit: 295 fetched blobs; structural review; not proof of semantics or native behavior; tree SHA from commit.tree rather than symbolic-ref request",
   "files": [
     {
       "path": ".agents/skills/goal-grounded-semantic-review/SKILL.md",
