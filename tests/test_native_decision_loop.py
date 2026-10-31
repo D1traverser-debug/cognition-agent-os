@@ -1378,6 +1378,16 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertFalse(damaged["causal_reentry"]["authorizes_action"])
         self.assertFalse(damaged["causal_reentry"]["owner_outcome_verified"])
         self.assertNotIn("observation_sha256", damaged)
+        from cognition_agent_os.host import _goal_progress
+        observed_host = _goal_progress(self.db, self.workspace, self.fixtures)
+        displayed = next(x for x in observed_host["goals"]
+                         if x["root_task_id"] == root)
+        self.assertEqual(displayed["next_control_action"],
+                         "REOPEN_NATIVE_EVIDENCE_VERIFIER_REVIEW")
+        self.assertEqual(displayed["reopen_decision_event_id"],
+                         damaged["reopen_decision_event_id"])
+        self.assertEqual(displayed["reopen_evidence_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
         self.assertEqual(original_sources, {
             x.name: hashlib.sha256(x.read_bytes()).hexdigest()
             for x in self.fixtures.iterdir()})
