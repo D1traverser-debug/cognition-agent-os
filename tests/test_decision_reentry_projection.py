@@ -72,3 +72,34 @@ class ReentryProjectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceCoverageTests(unittest.TestCase):
+    def test_missed_274_lines_prohibits_full_coverage_claim(self):
+        from cognition_agent_os.decision_reentry_projection import ReadWindow, project_read_coverage
+        result = project_read_coverage(expected_version="private-goal@v17", total_units=364,
+                                       windows=(ReadWindow("private-goal@v17", 1, 90),))
+        self.assertEqual(result.missing_ranges, ((91, 364),))
+        self.assertFalse(result.all_source_units_read)
+        self.assertFalse(result.semantic_understanding_verified)
+
+    def test_multiple_verified_windows_cover_entire_source_but_not_semantics(self):
+        from cognition_agent_os.decision_reentry_projection import ReadWindow, project_read_coverage
+        result = project_read_coverage(expected_version="v1", total_units=364,
+                                       windows=(ReadWindow("v1", 91, 364), ReadWindow("v1", 1, 90)))
+        self.assertTrue(result.all_source_units_read)
+        self.assertEqual(result.missing_ranges, ())
+        self.assertFalse(result.semantic_understanding_verified)
+
+    def test_stale_version_must_not_fill_read_gap(self):
+        from cognition_agent_os.decision_reentry_projection import ReadWindow, project_read_coverage
+        with self.assertRaisesRegex(ValueError, "SOURCE_READ_WINDOW_UNVERIFIABLE"):
+            project_read_coverage(expected_version="v2", total_units=364,
+                                  windows=(ReadWindow("v2", 1, 90), ReadWindow("v1", 91, 364)))
+
+    def test_invalid_range_fails_closed(self):
+        from cognition_agent_os.decision_reentry_projection import ReadWindow, project_read_coverage
+        for window in (ReadWindow("v1", 0, 5), ReadWindow("v1", 4, 3), ReadWindow("v1", 1, 365)):
+            with self.assertRaisesRegex(ValueError, "SOURCE_READ_WINDOW_UNVERIFIABLE"):
+                project_read_coverage(expected_version="v1", total_units=364,
+                                      windows=(window,))
