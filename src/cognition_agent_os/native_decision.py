@@ -922,7 +922,6 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             d["event_id"] for d in decisions[index:]],
                         "invalidated_source_paths": invalidated_paths,
                         "new_investigation_source_paths": added_investigation_paths,
-                        "observation_sha256": None,
                         "authorizes_action": False}
             _ground_decision(
                 receipt["proposal"], parsed, receipt["source_sha256"], previous_id)
