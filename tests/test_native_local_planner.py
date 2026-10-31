@@ -912,7 +912,8 @@ class NativeLocalModelLoop(unittest.TestCase):
         trials = inspect_cross_root_procedure_trials(
             self.db, self.workspace, self.fixtures, target_root,
             eligible_objectives=("compare_records", "ensure_structure"))
-        self.assertEqual(trials["status"], "NO_APPLICABLE_PROCEDURE_TRIALS")
+        self.assertEqual(
+            trials["status"], "NO_VERIFIED_CROSS_ROOT_PROCEDURE_TRIALS")
         self.assertEqual(trials["items"], [])
         self.assertFalse(trials["authorizes_action"])
 
