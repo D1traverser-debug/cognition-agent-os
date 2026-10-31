@@ -1050,6 +1050,14 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertTrue(drift["affected_decision_event_ids"])
         self.assertNotIn("observation_sha256", drift)
         self.assertFalse(drift["owner_outcome_verified"])
+        from cognition_agent_os.host import _goal_progress
+        host_view = _goal_progress(self.db, self.workspace, self.fixtures)
+        reported = next(x for x in host_view["goals"]
+                        if x["root_task_id"] == root)
+        self.assertEqual(reported["next_control_action"],
+                         "REOPEN_NATIVE_CAUSAL_SOURCE_REVIEW")
+        self.assertEqual(reported["reopen_source_paths"], ["observed.csv"])
+        self.assertEqual(reported["reopen_decision_ordinal"], 0)
         with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
             admit_native_decision(self.db, self.workspace, self.fixtures, root,
                 self.candidate(old, self.structure(), self.reconcile()))
