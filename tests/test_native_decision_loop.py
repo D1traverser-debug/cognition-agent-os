@@ -271,31 +271,11 @@ class NativeDecisionLoop(unittest.TestCase):
                 "Locate independent calibration standards and matched test conditions."),
             "uncertainty": "Neither method has been executed nor externally validated.",
         }
-        # Exercise the actual native MCP tool body, not only the library
-        # function. Only the MCP SDK registration is a test double.
-        from cognition_agent_os.native_mcp_bridge import build_mcp_server
-        class _McpShim:
-            def __init__(self, name):
-                self.tools = {}
-            def tool(self):
-                def register(func):
-                    self.tools[func.__name__] = func
-                    return func
-                return register
-        fake = types.ModuleType("mcp")
-        fake_server = types.ModuleType("mcp.server")
-        fake_server.MCPServer = _McpShim
-        with patch.dict(sys.modules, {"mcp": fake, "mcp.server": fake_server}):
-            service = build_mcp_server(
-                self.db, self.workspace, self.fixtures,
-                allow_goal_writes=True)
-        reader = service.tools["native_goal_inspect"](root)
-        self.assertEqual(reader["research_reentry_sha256"],
-                         blocked["research_reentry_sha256"])
-        recorded = service.tools["native_open_research_record"](root, proposal)
+        recorded = record_native_open_research(
+            self.db, self.workspace, self.fixtures, root, proposal)
         self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
         self.assertFalse(recorded["authorizes_action"])
-        resumed = service.tools["native_goal_inspect"](root)  # fresh readonly DB connection = cold state readback
+        resumed = self.view(root)  # fresh readonly DB connection = cold state readback
         self.assertEqual(resumed["original_goal"], goal)
         self.assertEqual(resumed["decision_count"], 0)
         self.assertEqual(len(resumed["open_research"]), 1)
@@ -1001,11 +981,31 @@ class NativeDecisionLoop(unittest.TestCase):
             "next_research_step": "Inspect the primary supplier version history.",
             "uncertainty": "Neither research route has independent outcome evidence.",
         }
-        recorded = record_native_open_research(
-            self.db, self.workspace, self.fixtures, root, proposal)
+        # Real MCP tool body over the single SQLite authority; only
+        # the MCP SDK registration layer is simulated.
+        from cognition_agent_os.native_mcp_bridge import build_mcp_server
+        class _McpShim:
+            def __init__(self, name):
+                self.tools = {}
+            def tool(self):
+                def register(func):
+                    self.tools[func.__name__] = func
+                    return func
+                return register
+        fake = types.ModuleType("mcp")
+        fake_server = types.ModuleType("mcp.server")
+        fake_server.MCPServer = _McpShim
+        with patch.dict(sys.modules, {"mcp": fake, "mcp.server": fake_server}):
+            service = build_mcp_server(
+                self.db, self.workspace, self.fixtures,
+                allow_goal_writes=True)
+        observed = service.tools["native_goal_inspect"](root)
+        self.assertEqual(observed["research_reentry_sha256"],
+                         blocked["research_reentry_sha256"])
+        recorded = service.tools["native_open_research_record"](root, proposal)
         self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
         self.assertFalse(recorded["authorizes_action"])
-        resumed = self.view(root)
+        resumed = service.tools["native_goal_inspect"](root)
         self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
         self.assertEqual(resumed["open_research_count"], 1)
         self.assertEqual(len(resumed["open_research"]), 1)
