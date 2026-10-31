@@ -89,6 +89,34 @@ class NativeSameMethodCorrection(unittest.TestCase):
         self.assertEqual(state["decisions"][-1]["error_code"], "NO_SAFE_GOAL_PLAN")
         return first
 
+    def test_worker_failure_reopens_method_from_real_ledger_and_cold_resume(self):
+        original = self.failed_initial_method()
+        with closing(connect(self.db)) as db:
+            row = db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED'", (self.root,)).fetchone()
+        state = self.view()
+        reentry = state["causal_reentry"]
+        self.assertEqual(reentry["observed_cause"], "WORKER_REPORTED_FAILURE")
+        self.assertEqual(reentry["reopened_decision_event_ids"],
+                         [row["event_id"]])
+        self.assertEqual(reentry["affected_child_task_ids"],
+                         [original["child_task_id"]])
+        self.assertFalse(reentry["root_cause_semantically_verified"])
+        self.assertFalse(reentry["owner_outcome_verified"])
+        self.assertFalse(reentry["authorizes_action"])
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.sources, self.root)["causal_reentry"],
+                         reentry)
+        # An approved *changed* plan can still repair the real failure;
+        # completing it clears only the active re-entry signal.
+        admit_native_decision(
+            self.db, self.workspace, self.sources, self.root,
+            self.choice(self.structure("audit", "confirmed")))
+        run_tick(self.db, self.workspace, self.sources, max_jobs=1)
+        self.assertNotIn("causal_reentry", self.view())
+        self.assertFalse(self.view()["owner_outcome_verified"])
+
     def test_failed_method_may_be_corrected_without_invented_new_source(self):
         first = self.failed_initial_method()
         correction = admit_native_decision(
