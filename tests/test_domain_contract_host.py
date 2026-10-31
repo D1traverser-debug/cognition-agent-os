@@ -102,9 +102,13 @@ class DomainContractHostIntegration(unittest.TestCase):
         caps = json.loads(docs[FILES[2]])
         # These are actual classes of normative fields in the Financial child
         # main manifest/adapter/capabilities, not a keyword-only fake claim.
+        manifest["status"] = "UAOS_CONTROL_PLANE_ACTIVE"
+        adapter["status"] = "UAOS_CONTROL_PLANE_ACTIVE"
         adapter["parent_continuity_authority"] = "UAOS"
         adapter["global_requirement_authority"] = "UAOS"
         caps["common_capabilities_inheritance"] = "UAOS_HOSTED"
+        caps["capabilities"][0]["required"] = [
+            "UAOS:domain_internal_work_orchestration"]
         caps["hosted_cognition_semantics"] = {
             "source": "CURRENT_UAOS_DELIBERATION_POLICY"}
         docs[FILES[0]] = json.dumps(manifest).encode()
@@ -126,16 +130,23 @@ class DomainContractHostIntegration(unittest.TestCase):
             "adapter.global_requirement_authority",
             "capabilities.common_capabilities_inheritance",
             "capabilities.hosted_cognition_semantics.source",
+            "capabilities.capabilities[0].required[0]",
+            "manifest.status", "adapter.status",
         ):
             self.assertIn(name, observed["legacy_parent_binding_refs"])
 
         # Negative control: a genuine semantic cutover may retain a
         # historical UAOS_SKILL.md filename; filenames do not grant authority.
+        manifest["status"] = "COGNITION_CONTROL_PLANE_ACTIVE"
+        adapter["status"] = "COGNITION_CONTROL_PLANE_ACTIVE"
         adapter["parent_continuity_authority"] = "COGNITION_PARENT"
         adapter["global_requirement_authority"] = "COGNITION_PARENT"
         caps["common_capabilities_inheritance"] = "COGNITION_PARENT"
+        caps["capabilities"][0]["required"] = [
+            "COGNITION_PARENT:domain_internal_work_orchestration"]
         caps["hosted_cognition_semantics"]["source"] = (
             "CURRENT_COGNITION_PARENT_POLICY")
+        docs[FILES[0]] = json.dumps(manifest).encode()
         docs[FILES[1]] = json.dumps(adapter).encode()
         docs[FILES[2]] = json.dumps(caps).encode()
         clean = _native_contract(docs, {
