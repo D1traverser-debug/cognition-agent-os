@@ -1026,7 +1026,12 @@ class NativeDecisionLoop(unittest.TestCase):
         (self.fixtures / "new_review.md").write_text("Extra research", encoding="utf-8")
         (self.fixtures / "observed.csv").write_text(
             "supplier,received\nDelta,999\n", encoding="utf-8")
-        self.assertEqual(self.view(root)["status"], "NATIVE_SOURCE_CHANGED")
+        observation = self.view(root)
+        self.assertEqual(observation["status"], "NATIVE_SOURCE_CHANGED")
+        # A new unrelated research note cannot conceal the modified primary fact.
+        self.assertEqual(observation["invalidated_source_paths"], ["observed.csv"])
+        self.assertEqual(observation["reopen_decision_ordinal"], 0)
+        self.assertFalse(observation["owner_outcome_verified"])
 
     def test_source_drift_and_revocation_block_new_model_choice(self):
         root = self.root_id()
@@ -1039,6 +1044,12 @@ class NativeDecisionLoop(unittest.TestCase):
             "supplier,received\nDelta,1\n", encoding="utf-8")
         drift = self.view(root)
         self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED", drift)
+        self.assertEqual(drift["invalidated_source_paths"], ["observed.csv"])
+        self.assertEqual(drift["reopen_decision_ordinal"], 0)
+        self.assertEqual(drift["reopen_scope"], "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION")
+        self.assertTrue(drift["affected_decision_event_ids"])
+        self.assertNotIn("observation_sha256", drift)
+        self.assertFalse(drift["owner_outcome_verified"])
         with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
             admit_native_decision(self.db, self.workspace, self.fixtures, root,
                 self.candidate(old, self.structure(), self.reconcile()))
