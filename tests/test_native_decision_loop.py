@@ -1466,6 +1466,39 @@ class NativeDecisionLoop(unittest.TestCase):
                 (root,)).fetchone()[0], 0)
         self.assertNotIn("observation_sha256", self.view(root))
 
+    def test_artifact_changes_without_verdict_change_invalidate_research_cas(self):
+        root = self.root_id()
+        task = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        artifact = self.workspace / "artifacts" / (task["child_task_id"] + ".json")
+        original = artifact.read_bytes()
+        artifact.write_bytes(original + b" first forged bytes")
+        first = self.view(root)
+        self.assertEqual(first["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        artifact.write_bytes(original + b" different forged bytes")
+        second = self.view(root)
+        self.assertEqual(second["status"], first["status"])
+        self.assertEqual(second["causal_reentry"]["evidence_failure_reason"],
+                         first["causal_reentry"]["evidence_failure_reason"])
+        self.assertNotEqual(first["research_reentry_sha256"],
+                            second["research_reentry_sha256"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="The result may have been tampered again",
+                observation_sha256=first["research_reentry_sha256"])
+        self.assertEqual(record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent", idea="A new artifact version may change our diagnosis",
+            observation_sha256=second["research_reentry_sha256"])["status"],
+                         "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertEqual(self.view(root)["status"],
+                         "NATIVE_EVIDENCE_UNVERIFIABLE")
+
     def test_evidence_failure_reenters_research_only_without_authorizing_effect(self):
         root = self.root_id()
         admitted = admit_native_decision(
