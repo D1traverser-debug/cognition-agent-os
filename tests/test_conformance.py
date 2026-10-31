@@ -71,6 +71,33 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(stage_one(self.dbpath,self.ws,self.fx,tid)["status"],"SANDBOX_VERIFIED")
         return tid
 
+    def test_transactional_capability_guard_is_legacy_schema_safe(self):
+        from cognition_agent_os.conformance import capability_disabled_in_transaction
+
+        db=connect(self.dbpath)
+        try:
+            # A database initialized before the optional conformance guard
+            # table existed remains a valid ledger and is never migrated by
+            # this operational read path.
+            self.assertIsNone(db.execute("""SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='conformance_capability_guard'""").fetchone())
+            self.assertFalse(capability_disabled_in_transaction(
+                db,"goal_sandbox_stage","pure_code_repair_lab"))
+            self.assertIsNone(db.execute("""SELECT 1 FROM sqlite_master
+                WHERE type='table' AND name='conformance_capability_guard'""").fetchone())
+
+            db.execute("""CREATE TABLE conformance_capability_guard(
+                kind TEXT PRIMARY KEY, disabled INTEGER NOT NULL,
+                reason TEXT NOT NULL, trigger_task TEXT NOT NULL)""")
+            db.execute("""INSERT INTO conformance_capability_guard
+                VALUES('pure_code_repair_lab',1,'TEST_BREACH','test-task')""")
+            self.assertTrue(capability_disabled_in_transaction(
+                db,"goal_sandbox_stage","pure_code_repair_lab"))
+            self.assertFalse(capability_disabled_in_transaction(
+                db,"unrelated_capability"))
+        finally:
+            db.close()
+
     def test_empty_initialized_runtime_cannot_claim_operational_success(self):
         r=self.check()
         self.assertEqual(r["status"],"NO_RUNTIME_EVIDENCE")
@@ -148,6 +175,48 @@ class ConformanceTests(unittest.TestCase):
         self.assertNotEqual(result["status"], "MECHANICAL_EVIDENCE_OBSERVED")
         self.assertEqual(result["mechanically_valid"], 0)
         self.assertEqual(self.task(task_id)["state"], "SANDBOX_VERIFIED")
+
+    def test_local_repair_auditors_are_reattested_before_enforcement(self):
+        # These audit families read bounded local artifacts and sealed fixtures;
+        # they do not invoke Docker, a model, or network I/O. Re-attestation
+        # must therefore cover both pending and already accepted repair claims.
+        from cognition_agent_os.conformance import inspect_conformance
+        from cognition_agent_os.ledger import create_task, initialize
+        kinds=("repo_container_repair","pipeline_code_repair","pure_code_repair")
+        states=("NEEDS_REVIEW","REPAIR_LAB_VERIFIED")
+        for index,(state,kind) in enumerate(
+                (state,kind) for state in states for kind in kinds):
+            with self.subTest(state=state,kind=kind):
+                dbpath=self.root/f"reattest-{index}.sqlite"
+                db=connect(dbpath)
+                initialize(db)
+                tid=create_task(db,{"kind":kind})
+                db.execute("UPDATE tasks SET state=? WHERE task_id=?",(state,tid))
+                db.commit()
+                db.close()
+                clean={"task_id":tid,"state_at_observation":state,
+                       "proof":"MECHANICALLY_VALID",
+                       "mechanical_conformance":True,"disposition":"PASS"}
+                changed={"task_id":tid,"state_at_observation":state,
+                         "proof":"PROPOSAL_HASH_CHANGED",
+                         "mechanical_conformance":False,
+                         "disposition":"CONFIRMED_INCONSISTENCY"}
+                with patch("cognition_agent_os.conformance._check_one",
+                           side_effect=[clean,changed]):
+                    result=inspect_conformance(
+                        dbpath,self.ws,self.fx,enforce=True,max_cases=64)
+                self.assertEqual(
+                    result["status"],
+                    "CONFORMANCE_EVIDENCE_CHANGED_AFTER_PREVIEW",result)
+                self.assertEqual(result["checked"],0)
+                self.assertEqual(result["quarantined"],[])
+                db=connect(dbpath)
+                try:
+                    self.assertEqual(db.execute(
+                        "SELECT state FROM tasks WHERE task_id=?",(tid,)
+                    ).fetchone()[0],state)
+                finally:
+                    db.close()
 
     def test_precommit_candidate_change_rechecks_other_evidence_family(self):
         # The same source-of-truth boundary applies to a pending candidate,

@@ -1,0 +1,677 @@
+{
+  "schema": "caos-recovery-source-map-v1",
+  "observed_utc": "2026-10-31",
+  "state": "DATED_LOCATOR_NOT_AUTHORITY",
+  "repository": "D1traverser-debug/cognition-agent-os",
+  "preferred_current_entrypoints": {
+    "public_read_receipt": "evidence/source-baselines/2026-10-31-main.json",
+    "incremental_diff": "scripts/plan_incremental_audit.py",
+    "delta_test": "tests/test_plan_incremental_audit.py",
+    "learning_frontier": "docs/research/agent-learning-hub-source-register-20261029.json",
+    "learning_decisions": "docs/research/agent-learning-hub-method-cards-20261029.md",
+    "existing_branch_provenance": "evaluation/historical_branch_provenance_v1.json",
+    "current_system_contract": "docs/PRODUCT-READINESS-GATE.md",
+    "current_owner_goals": "PRIVATE_OWNER_ORIGINAL_CONTRACT; NOT_AVAILABLE_IN_PUBLIC_REPO",
+    "prior_full_audit": "PRIVATE_LIBRARY_AUDIT_RECEIPT; DO_NOT_PUBLICLY_COPY"
+  },
+  "active_main_sha": "35a64d7caa948f632fad884edccb52eb516d4c60",
+  "old_uaos": {
+    "repository": "D1traverser-debug/universal-agent-os",
+    "main_sha": "ebc1cc05197d8d2c525e75700975992eb608ce0f",
+    "roles": "LEGACY_CONTROLLER_AND_MIGRATION_SOURCE_NOT_NEW_PARENT",
+    "authoritative_files": [
+      "CURRENT_SYSTEM.json",
+      "config/SYSTEM_MAP.json",
+      "config/RETRIEVAL_POLICY.json",
+      "config/BINDING_POLICY.json"
+    ],
+    "migration_rule": "Read old authority and preserve business state; do not rebind any child until current child native outcome and explicit authorization pass."
+  },
+  "children": [
+    {
+      "repo": "video-growth-agent",
+      "main_sha": "4632634e5133961b3280dcfc5bc211712c3a1c83",
+      "controller_binding": "D1traverser-debug/universal-agent-os",
+      "verification": "READ_ONLY_MANIFEST_ADAPTER_CAPABILITIES_SKILL"
+    },
+    {
+      "repo": "financial-writing-agent",
+      "main_sha": "e580cd4dfda8db47674803451c9adfff9e3cf975",
+      "controller_binding": "D1traverser-debug/universal-agent-os",
+      "verification": "READ_ONLY_MANIFEST_ADAPTER_CAPABILITIES_SKILL"
+    },
+    {
+      "repo": "novel-writing-agent",
+      "main_sha": "f8bc5cacb9125b0cc7ebac658140fda77e6cd75f",
+      "controller_binding": "D1traverser-debug/universal-agent-os",
+      "verification": "READ_ONLY_MANIFEST_ADAPTER_CAPABILITIES_SKILL"
+    },
+    {
+      "repo": "a-share-event-driven-agent",
+      "main_sha": "3182b36027f9f82bd0d4bb6483aeadb0d8f23dce",
+      "controller_binding": "D1traverser-debug/universal-agent-os",
+      "verification": "READ_ONLY_MANIFEST_ADAPTER_CAPABILITIES_SKILL"
+    }
+  ],
+  "branches": [
+    {
+      "ref": "archive/pre-consolidation-cognition-20261025",
+      "sha": "a3cc0240c4a37412cf681770ddc5bd3c9341dc7d",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "audit/ancestor-state-failclosed-20261024",
+      "sha": "c7227050a77ed1a51381a991fe6718930118766c",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "audit/full-source-semantics-20261025",
+      "sha": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "audit/late-counterevidence-20261024",
+      "sha": "86e8e34c09868d8c6687f5678548d85132ef2415",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "audit/runner-explicit-authorization-20261023",
+      "sha": "d6431daaa9352b606f1afa829c6beed44b7433a8",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "audit/safe-fixture-atomic-boundary-20261024",
+      "sha": "66aefce1298b100f4ac5357bb4b7a4fcbb209638",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "audit/staging-sibling-atomic-dirfd-20261024",
+      "sha": "8ff6623e9130037c4697e75061eebe07104166dd",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "docs/architecture-baseline-20261020",
+      "sha": "0c2de90cd2662ce76adde364079221f9fbe120c4",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/aoci-graphify-cognition-gate-20261023",
+      "sha": "b3955852b83696ffe635ae04c542f94e2277da5d",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/assurance-forged-approval-mutant-20261023",
+      "sha": "ee88a873490728b3739527a3f30377afb3ec9729",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/assurance-inventory-ci-gate-20261023",
+      "sha": "737a2a9c3647404ba1999b8171025f064d7a716b",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/beir-external-retrieval-20261023",
+      "sha": "dedec93ccefee45de581b4589f421a5b74d286d8",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/controller-active-intake-integrity-20261023",
+      "sha": "2cf3490bc3ebca6652f542b5c626f0280dd09a35",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/durable-same-goal-local-controller-20261023",
+      "sha": "b3c002a196e09674ebd4e183ad5f6ea3685e75ce",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/engineering-method-activation-20261023",
+      "sha": "faec07003d86a3f7df865605f06b90a5a378b29e",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/evidence-selection-comparative-20261023",
+      "sha": "5cac4317ae94bd75b9cc81179ce8484748375ae3",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/goal-feedback-alternative-baseline-20261023",
+      "sha": "f6a7a57f4e435fd36c64883a973f7c885f0397f0",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/original-scifact-evidence-judgment-20261023",
+      "sha": "9936303abaa8aa3178a539b71599ad48adeb98a6",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/owner-pinned-outcome-oracle-20261023",
+      "sha": "3f0912f63d8fecdae0a8d3bbe18b900014cbebe7",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/pr14-acceptance-mutant-20261023",
+      "sha": "6cd7c56b489977d52773d7b02eb0232471173bb0",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/recursive-causal-reentry-projection-20261031",
+      "sha": "d2d92e6e842cd8c56c3fc7604d536915814b21d7",
+      "status": "HOLD_CANDIDATE_PR59"
+    },
+    {
+      "ref": "experiment/research-model-quality-ab-20261024",
+      "sha": "1d3a25799494a1520621bf19355223008518baf8",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/scifact-label-order-causal-20261023",
+      "sha": "de8b96b69db89de0944d7f4666c5e4bed4918bca",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "experiment/shared-postcondition-goal-feedback-20261023",
+      "sha": "08045133c371ec280be0dabdb95c67edb1013c63",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/free-local-inference-20261020",
+      "sha": "1407c007b84a6a8bd3d7581295b12f2700ddf9a9",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/goal-continuity-ot06-20261023",
+      "sha": "ecea57dc1bb531c4d95be9e7729606a3cea6efad",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/independent-outcome-feedback-20261023",
+      "sha": "54c6de63caa47ced87f1e0cc534dec175e39dcf6",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/local-scheduled-host-20261020",
+      "sha": "c507375a8a5627946af8bd33c87d2c85e92b582a",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/open-goal-local-investigation-20261023",
+      "sha": "b9315becb016adf9c5b9f3b18225d1b54bc235b9",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p0-p1-durable-evidence-20261020",
+      "sha": "6c2b72529e8ba0a45b158539336fe4b64ba0273d",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p3-live-source-cursor-20261020",
+      "sha": "4bfe725aa96da7929c8ed4fa889bb589d386c4cf",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p4-evidence-oracle-20261020",
+      "sha": "3fa5a2ff2c99db093d9247f41edced09488488be",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p5-bounded-goal-loop-20261020",
+      "sha": "ba61f70186f7e2f3fe5199db698e8c0e58c3d1b4",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p6-sandbox-outcome-loop-20261020",
+      "sha": "c051266adea1b5ccd8c6695588ad9fdfd1b6f628",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p7-diagnosis-fairness-20261020",
+      "sha": "e44dd7b130108cf2f22b66f69a6d721ef4ce398f",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p8-evidence-reconciliation-20261020",
+      "sha": "0d4a0fa177416b131dfdfcf7a1e727261daf27fc",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p9-intent-contract-20261020",
+      "sha": "4569bd95b60ce012fb7cd6ab8f249aaa5c4580d0",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p10-runtime-conformance-20261020",
+      "sha": "3c0fc7912124f3760ce1081a056ad46c1d99751b",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feat/p35-research-observation-integration-20261022",
+      "sha": "bfe06a2ddfc064cec692fa0bc070e3aa6768cca0",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/durable-owner-goal-drift-signals-20261024",
+      "sha": "6ead8dadca0776b1dbe93af40cc5be4ce0422a66",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/model-optional-owner-goals-20261024",
+      "sha": "6a33b7fad1cbabb462b7494e75ea5da677c80a58",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/open-goal-evidence-investigation-20261024",
+      "sha": "d1ea38236f7438dd50594fd3b522278fe53358d4",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/open-goal-evidence-to-capability-20261024",
+      "sha": "ed4fc6d41540faa8710bea64f8999437d69cf7b2",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/optin-public-tool-discovery-20261024",
+      "sha": "37b605d4eadf0dbfb074002b9b6affe0e217edb0",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/owner-discovery-drift-integrated-20261024",
+      "sha": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/owner-feedback-continuation-20261025",
+      "sha": "7e0eb070afc51fd99330e0b700a5606090977c6d",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/owner-goal-drift-watch-20261024",
+      "sha": "e0826ca9e33abe1b513619fe0050130b79138809",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/owner-postcondition-runtime-20261025",
+      "sha": "101921c7e1101e978b5c4ba5b0edb81368849afc",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/shared-goal-posteffect-readback-20261024",
+      "sha": "659810a7cf9808fa079ee278c4b47fb3b881ab76",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "feature/whole-owner-constraints-20261024",
+      "sha": "ea4f01cdbd9ddd64e342d56be4fc7b1d5555625f",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/codex-hook-token-char-budget-20261029",
+      "sha": "2dbf0c5e8b87710b0dfe659865c7b3248494d602",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/conformance-evidence-revalidation-20261030",
+      "sha": "d5654855664c4f04f3b588f41516c030a4b27667",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/continuity-remote-io-outside-snapshot-20261030",
+      "sha": "0728cfd7a0d096c660e9c236735f4d084cf86254",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/controller-attempt-lineage-20261023",
+      "sha": "bd89418532a6753a83643d9f973c5751a2a2fafc",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/main-ci-continuity-20261029",
+      "sha": "47eed2f843906bbf6f66809bf45778b3666ebc43",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/postmerge-codex-bootstrap-20261029",
+      "sha": "76e9ad70026d3f5c711c4507ad11cd084a1f54d0",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/sandbox-artifact-identity-recheck-20261030",
+      "sha": "cf81efc260a2fed736967fced3c3e4acc2e303df",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "fix/systemic-preflight-diagnostics-20261030",
+      "sha": "1da277152135ad9161e8c77b67498e48132c48a7",
+      "status": "ACTIVE_DRAFT_PR57"
+    },
+    {
+      "ref": "fix/windows-handle-relative-staging-20261031",
+      "sha": "0345c216997eb8851b1dc590d4edc1f32f359782",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "integration/cognition-agent-os-single-candidate-20261023",
+      "sha": "2d5c2b43ba070ee201a595d0ddba5b853b4d4f13",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "main",
+      "sha": "35a64d7caa948f632fad884edccb52eb516d4c60",
+      "status": "CURRENT_MAIN"
+    },
+    {
+      "ref": "refactor/single-controller-kernel-20261023",
+      "sha": "49ae66b45299d94657ab2de1d55fcf400876d3c1",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    },
+    {
+      "ref": "research/inspect-independent-goal-eval-20261024",
+      "sha": "7b0c32863f409395930218e855fe57dce6d2a26c",
+      "status": "HISTORICAL_OR_UNPROMOTED_REVIEW_REQUIRED"
+    }
+  ],
+  "open_prs": [
+    {
+      "number": 59,
+      "head_sha": "d2d92e6e842cd8c56c3fc7604d536915814b21d7",
+      "base": "main",
+      "draft": true,
+      "status": "ACTIVE_OR_HELD_CANDIDATE_REVIEW_REQUIRED"
+    },
+    {
+      "number": 57,
+      "head_sha": "1da277152135ad9161e8c77b67498e48132c48a7",
+      "base": "main",
+      "draft": true,
+      "status": "ACTIVE_OR_HELD_CANDIDATE_REVIEW_REQUIRED"
+    },
+    {
+      "number": 56,
+      "head_sha": "cf81efc260a2fed736967fced3c3e4acc2e303df",
+      "base": "main",
+      "draft": true,
+      "status": "ACTIVE_OR_HELD_CANDIDATE_REVIEW_REQUIRED"
+    },
+    {
+      "number": 49,
+      "head_sha": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+      "base": "feature/owner-discovery-drift-integrated-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 48,
+      "head_sha": "b0f799b3478cace354877cfc8b4ab93d35212e2b",
+      "base": "feature/optin-public-tool-discovery-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 47,
+      "head_sha": "6ead8dadca0776b1dbe93af40cc5be4ce0422a66",
+      "base": "feature/owner-goal-drift-watch-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 46,
+      "head_sha": "37b605d4eadf0dbfb074002b9b6affe0e217edb0",
+      "base": "feature/owner-goal-drift-watch-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 45,
+      "head_sha": "e0826ca9e33abe1b513619fe0050130b79138809",
+      "base": "feature/open-goal-evidence-investigation-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 43,
+      "head_sha": "d1ea38236f7438dd50594fd3b522278fe53358d4",
+      "base": "feature/model-optional-owner-goals-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 42,
+      "head_sha": "6a33b7fad1cbabb462b7494e75ea5da677c80a58",
+      "base": "feature/whole-owner-constraints-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 41,
+      "head_sha": "ea4f01cdbd9ddd64e342d56be4fc7b1d5555625f",
+      "base": "research/inspect-independent-goal-eval-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 40,
+      "head_sha": "7b0c32863f409395930218e855fe57dce6d2a26c",
+      "base": "feature/open-goal-evidence-to-capability-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 39,
+      "head_sha": "ed4fc6d41540faa8710bea64f8999437d69cf7b2",
+      "base": "audit/ancestor-state-failclosed-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 38,
+      "head_sha": "c7227050a77ed1a51381a991fe6718930118766c",
+      "base": "audit/late-counterevidence-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 37,
+      "head_sha": "86e8e34c09868d8c6687f5678548d85132ef2415",
+      "base": "feature/shared-goal-posteffect-readback-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 36,
+      "head_sha": "659810a7cf9808fa079ee278c4b47fb3b881ab76",
+      "base": "audit/staging-sibling-atomic-dirfd-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 35,
+      "head_sha": "8ff6623e9130037c4697e75061eebe07104166dd",
+      "base": "audit/safe-fixture-atomic-boundary-20261024",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 34,
+      "head_sha": "66aefce1298b100f4ac5357bb4b7a4fcbb209638",
+      "base": "experiment/shared-postcondition-goal-feedback-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 33,
+      "head_sha": "08045133c371ec280be0dabdb95c67edb1013c63",
+      "base": "feat/open-goal-local-investigation-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 32,
+      "head_sha": "de8b96b69db89de0944d7f4666c5e4bed4918bca",
+      "base": "experiment/original-scifact-evidence-judgment-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 31,
+      "head_sha": "9936303abaa8aa3178a539b71599ad48adeb98a6",
+      "base": "experiment/beir-external-retrieval-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 30,
+      "head_sha": "dedec93ccefee45de581b4589f421a5b74d286d8",
+      "base": "experiment/evidence-selection-comparative-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 29,
+      "head_sha": "5cac4317ae94bd75b9cc81179ce8484748375ae3",
+      "base": "feat/open-goal-local-investigation-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 28,
+      "head_sha": "b9315becb016adf9c5b9f3b18225d1b54bc235b9",
+      "base": "audit/runner-explicit-authorization-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 27,
+      "head_sha": "d6431daaa9352b606f1afa829c6beed44b7433a8",
+      "base": "integration/cognition-agent-os-single-candidate-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 26,
+      "head_sha": "2d5c2b43ba070ee201a595d0ddba5b853b4d4f13",
+      "base": "main",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 25,
+      "head_sha": "49ae66b45299d94657ab2de1d55fcf400876d3c1",
+      "base": "feat/independent-outcome-feedback-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 24,
+      "head_sha": "54c6de63caa47ced87f1e0cc534dec175e39dcf6",
+      "base": "feat/goal-continuity-ot06-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 23,
+      "head_sha": "ecea57dc1bb531c4d95be9e7729606a3cea6efad",
+      "base": "fix/controller-attempt-lineage-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 22,
+      "head_sha": "bd89418532a6753a83643d9f973c5751a2a2fafc",
+      "base": "experiment/aoci-graphify-cognition-gate-20261023",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    },
+    {
+      "number": 21,
+      "head_sha": "b3955852b83696ffe635ae04c542f94e2277da5d",
+      "base": "main",
+      "draft": true,
+      "status": "HISTORICAL_NOT_CLOSED_WITHOUT_EQUIVALENCE"
+    }
+  ],
+  "limits": [
+    "snapshots are dated: revalidate refs by latest provider metadata before writing",
+    "legacy child authority not replaced; do not erase original UAOS state",
+    "closing PR is not deleting a branch and not evidence of semantic equivalence",
+    "public inventory excludes private full documents and inaccessible old archives",
+    "no automatic merge, deployment, paid API, subtree rewrite or production data overwrite"
+  ],
+  "reviewed_comparisons": {
+    "comparison_base": "35a64d7caa948f632fad884edccb52eb516d4c60",
+    "ancestry": [
+      {
+        "pr": 21,
+        "head": "b3955852b83696ffe635ae04c542f94e2277da5d",
+        "ahead": 700,
+        "behind": 650,
+        "status": "diverged"
+      },
+      {
+        "pr": 26,
+        "head": "2d5c2b43ba070ee201a595d0ddba5b853b4d4f13",
+        "ahead": 759,
+        "behind": 650,
+        "status": "diverged"
+      },
+      {
+        "pr": 49,
+        "head": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+        "ahead": 985,
+        "behind": 650,
+        "status": "diverged"
+      },
+      {
+        "pr": 56,
+        "head": "cf81efc260a2fed736967fced3c3e4acc2e303df",
+        "ahead": 23,
+        "behind": 0,
+        "status": "ahead"
+      },
+      {
+        "pr": 59,
+        "head": "d2d92e6e842cd8c56c3fc7604d536915814b21d7",
+        "ahead": 5,
+        "behind": 0,
+        "status": "ahead"
+      }
+    ],
+    "exact_file_comparison": {
+      "left_pr": 56,
+      "right_pr": 57,
+      "left_head": "cf81efc260a2fed736967fced3c3e4acc2e303df",
+      "right_head": "9c07ed186fc7b71c565163d027cc7fbb5c79efc9",
+      "changed_paths_in_left": 13,
+      "byte_equal": 5,
+      "byte_different": 8,
+      "disposition": "DO_NOT_CLOSE_OR_DELETE_BY_FILENAME_OVERLAP"
+    },
+    "limitations": "Commit ancestry and file SHA can reject automatic deletion, but do not prove semantic equivalence or owner approval to close PRs"
+  },
+  "installed_chatgpt_plugin": {
+    "plugin_id": "plugins_6ade22c4245081918d6899c73d1319dd",
+    "scope": "USER",
+    "discoverability": "PRIVATE",
+    "version": "0.1.18",
+    "release_id": "pluginrel_6ae56151ad448191918a5dd70d0d119f",
+    "released_from_git_blob": "dcdf81291999431ce03659b1488601bb4de65da5",
+    "source_path": "integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md",
+    "source_branch": "fix/systemic-preflight-diagnostics-20261030",
+    "source_commit": "3c6606541a1a914730d100014cec27d25b486cda",
+    "ci_artifact_name": "cognition-chatgpt-plugin-overlay-head",
+    "ci_artifact_id": 13029040032,
+    "readback": "GET_PLUGIN_FILES_VERSION_AND_SKILL_ASSERTIONS_CONFIRMED",
+    "selection_in_ordinary_fresh_chat": "NOT_TESTED",
+    "live_native_sqlite_host_link": "NOT_CONNECTED",
+    "next_resume_rule": "Read this once, compare current plugin release ID + source Git blob; do not rebuild/redeploy identical ZIP. Never claim account Skill auto-selected from source equality.",
+    "current_session_skill_reader": {
+      "status": "STALE_SNAPSHOT_AFTER_SUCCESSFUL_PLUGIN_RELEASE",
+      "read_via": "skills__read skill.md (current chat session)",
+      "returned_contains_new_post_study_rechallenge": false,
+      "current_release_contains_new_post_study_rechallenge": true,
+      "same_bytes": false,
+      "explanation": "The currently active chat may retain an older pre-update skill snapshot. This does not prove the next new chat will use the old one or select the plugin automatically.",
+      "next_verification": "Actual independent fresh ordinary ChatGPT session: record native Skill-selection trace and read returned skill version/content; do not ask the owner to repeat original requirements.",
+      "owner_effect_verified": false
+    }
+  }
+}

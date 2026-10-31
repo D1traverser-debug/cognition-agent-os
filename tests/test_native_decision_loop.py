@@ -8,10 +8,12 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -909,6 +911,240 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertNotEqual(first["child_task_id"], second["child_task_id"])
 
+    def test_trusted_source_drift_reopens_actual_decision_and_downstream(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        # An independent new primary source supports a second *different*
+        # plan without invalidating the completed comparison.
+        (self.fixtures / "independent.md").write_text(
+            "The handoff requires separately signed records.", encoding="utf-8")
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.structure(), self.reconcile()))
+        with closing(connect(self.db)) as db:
+            decisions = db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
+                (root,)).fetchall()
+        event_ids = [item["event_id"] for item in decisions]
+        # The original first-plan source was changed *after* the second
+        # plan entered the same authoritative SQLite lineage.
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\\nDelta,9\\n", encoding="utf-8")
+        state = self.view(root)
+        self.assertEqual(state["status"], "NATIVE_SOURCE_CHANGED")
+        reentry = state["causal_reentry"]
+        self.assertEqual(reentry["observed_cause"], "SOURCE_PIN_DRIFT")
+        self.assertEqual(reentry["reopened_decision_event_ids"], [event_ids[0]])
+        # A temporal predecessor is NOT proof of semantic causation.
+        # The later plan cites the same old corpus, so its actual source
+        # pin is stale; that is a DIFFERENT, independently observed reason
+        # to review it, not a child of the earlier plan.
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
+        self.assertEqual(reentry["source_pin_stale_decision_event_ids"],
+                         [event_ids[1]])
+        self.assertEqual(reentry["affected_child_task_ids"],
+                         [first["child_task_id"]])
+        self.assertEqual(reentry["source_pin_stale_child_task_ids"],
+                         [second["child_task_id"]])
+        self.assertFalse(reentry["prior_result_order_proves_causality"])
+        self.assertEqual(reentry["chronological_later_decisions_to_review"],
+                         [event_ids[1]])
+        self.assertFalse(reentry["authorizes_action"])
+        self.assertFalse(reentry["owner_outcome_verified"])
+        self.assertFalse(reentry["root_cause_semantically_verified"])
+        self.assertNotIn("observation_sha256", state)
+        # Independent cold inspection must derive the same causal frontier
+        # from real source bytes and ledger, not a caller's reopen_ids.
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["causal_reentry"],
+                         reentry)
+        # The source is genuinely changed, but one later model/ledger
+        # receipt has been corrupted: do not emit a plausible-looking
+        # graph or promote this malformed lineage to trusted reentry.
+        with closing(connect(self.db)) as db:
+            db.execute(
+                "UPDATE events SET details=json_set(details,'$.ordinal',99) "
+                "WHERE event_id=?", (event_ids[1],))
+            db.commit()
+        untrusted = self.view(root)
+        self.assertEqual(untrusted["status"], "NATIVE_GOAL_UNVERIFIABLE")
+        self.assertNotIn("causal_reentry", untrusted)
+
+    def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,4\n", encoding="utf-8")
+        drift = self.view(root)
+        self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED")
+        recorded = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent", idea="Maybe the supplier changed its stock version",
+            observation_sha256=drift["research_reentry_sha256"])
+        self.assertEqual(recorded["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        self.assertFalse(recorded["origin_authenticated"])
+        resumed = self.view(root)
+        self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertNotEqual(resumed["research_reentry_sha256"],
+                            drift["research_reentry_sha256"])
+        self.assertEqual(len(resumed["hypotheses"]), 1)
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Maybe another timestamp is wrong",
+                observation_sha256=drift["research_reentry_sha256"])
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        with self.assertRaises(PermissionError):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Maybe a third unrelated source is wrong",
+                observation_sha256=self.view(root)["research_reentry_sha256"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+
+    def test_source_drift_allows_only_research_with_fresh_cas(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,1\n", encoding="utf-8")
+        note = self.fixtures / "followup.md"
+        note.write_text("Conflicting supplier revisions need independent tracing.",
+                        encoding="utf-8")
+        blocked = self.view(root)
+        self.assertEqual(blocked["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertNotIn("observation_sha256", blocked)
+        self.assertFalse(blocked["authorizes_action"])
+        self.assertRegex(blocked["research_reentry_sha256"], r"^[a-f0-9]{64}$")
+        proposal = {
+            "observation_sha256": blocked["research_reentry_sha256"],
+            "owner_clause": "Reconcile a supplier stock shortfall",
+            "unresolved_question": "Which supplier revision caused the conflict?",
+            "competing_methods": [
+                {"name": "original_recheck",
+                 "applicability": "Crosscheck immutable supplier originals.",
+                 "failure_mode": "Archived originals may also be incomplete.",
+                 "falsifier": "Signed supplier update contradicts originals."},
+                {"name": "external_audit",
+                 "applicability": "Seek separately verified vendor records.",
+                 "failure_mode": "The external source may not be independent.",
+                 "falsifier": "Third party audit contradicts external data."}],
+            "source_refs": [{"path": note.name,
+                             "sha256": hashlib.sha256(note.read_bytes()).hexdigest()}],
+            "next_research_step": "Inspect the primary supplier version history.",
+            "uncertainty": "Neither research route has independent outcome evidence.",
+        }
+        # Real MCP tool body over the single SQLite authority; only
+        # the MCP SDK registration layer is simulated.
+        from cognition_agent_os.native_mcp_bridge import build_mcp_server
+        class _McpShim:
+            def __init__(self, name):
+                self.tools = {}
+            def tool(self):
+                def register(func):
+                    self.tools[func.__name__] = func
+                    return func
+                return register
+        fake = types.ModuleType("mcp")
+        fake_server = types.ModuleType("mcp.server")
+        fake_server.MCPServer = _McpShim
+        with patch.dict(sys.modules, {"mcp": fake, "mcp.server": fake_server}):
+            service = build_mcp_server(
+                self.db, self.workspace, self.fixtures,
+                allow_goal_writes=True)
+        observed = service.tools["native_goal_inspect"](root)
+        self.assertEqual(observed["research_reentry_sha256"],
+                         blocked["research_reentry_sha256"])
+        recorded = service.tools["native_open_research_record"](root, proposal)
+        self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        resumed = service.tools["native_goal_inspect"](root)
+        self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertEqual(resumed["open_research_count"], 1)
+        self.assertEqual(len(resumed["open_research"]), 1)
+        self.assertEqual(resumed["open_research"][0]["source_status"],
+                         "SOURCE_PIN_CURRENT_UNVERIFIED_SEMANTICS")
+        self.assertFalse(resumed["open_research"][0]["authorizes_action"])
+        self.assertNotIn("observation_sha256", resumed)
+        self.assertNotEqual(resumed["research_reentry_sha256"],
+                            blocked["research_reentry_sha256"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                {"observation_sha256": "f" * 64})
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+        self.assertEqual(admitted["selected_objective"], "compare_records")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        newer = dict(proposal)
+        newer["observation_sha256"] = self.view(root)["research_reentry_sha256"]
+        with self.assertRaises(PermissionError):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, newer)
+
+    def test_source_drift_research_page_recovers_all_history(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,7\n", encoding="utf-8")
+        for index in range(18):
+            state = self.view(root)
+            self.assertEqual(state["status"], "NATIVE_SOURCE_CHANGED")
+            proposal = {
+                "observation_sha256": state["research_reentry_sha256"],
+                "owner_clause": "Reconcile a supplier stock shortfall",
+                "unresolved_question": "Which source revision is trustworthy?",
+                "competing_methods": [
+                    {"name": "ledger_check",
+                     "applicability": "Inspect immutable original records.",
+                     "failure_mode": "Original file may already be incomplete.",
+                     "falsifier": "Independent vendor signed record disagrees."},
+                    {"name": "vendor_probe",
+                     "applicability": "Compare independent vendor source reports.",
+                     "failure_mode": "Vendor report may share the same input.",
+                     "falsifier": "Independent third party audit disagrees."}],
+                "source_refs": [],
+                "next_research_step": (
+                    f"Check external revision and negative control {index}."),
+                "uncertainty": "External effect has not yet been independently tested.",
+            }
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        first = self.view(root)
+        self.assertEqual(first["open_research_count"], 18)
+        self.assertEqual(len(first["open_research"]), 16)
+        self.assertIsNotNone(first["open_research_next_before_event_id"])
+        second = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root,
+            research_before_event_id=first["open_research_next_before_event_id"])
+        self.assertEqual(len(second["open_research"]), 2)
+        self.assertIsNone(second["open_research_next_before_event_id"])
+        all_ids = [x["event_id"] for x in first["open_research"]]
+        all_ids += [x["event_id"] for x in second["open_research"]]
+        self.assertEqual(all_ids, sorted(all_ids, reverse=True))
+        self.assertEqual(len(set(all_ids)), 18)
+        self.assertNotIn("observation_sha256", first)
+        self.assertNotIn("observation_sha256", second)
+
     def test_new_research_document_before_investigation_execution_fences_old_scope(self):
         (self.fixtures / "initial.md").write_text(
             "Only the initial research evidence is approved.", encoding="utf-8")
@@ -1026,7 +1262,12 @@ class NativeDecisionLoop(unittest.TestCase):
         (self.fixtures / "new_review.md").write_text("Extra research", encoding="utf-8")
         (self.fixtures / "observed.csv").write_text(
             "supplier,received\nDelta,999\n", encoding="utf-8")
-        self.assertEqual(self.view(root)["status"], "NATIVE_SOURCE_CHANGED")
+        observation = self.view(root)
+        self.assertEqual(observation["status"], "NATIVE_SOURCE_CHANGED")
+        # A new unrelated research note cannot conceal the modified primary fact.
+        self.assertEqual(observation["invalidated_source_paths"], ["observed.csv"])
+        self.assertEqual(observation["reopen_decision_ordinal"], 0)
+        self.assertFalse(observation["owner_outcome_verified"])
 
     def test_source_drift_and_revocation_block_new_model_choice(self):
         root = self.root_id()
@@ -1039,6 +1280,20 @@ class NativeDecisionLoop(unittest.TestCase):
             "supplier,received\nDelta,1\n", encoding="utf-8")
         drift = self.view(root)
         self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED", drift)
+        self.assertEqual(drift["invalidated_source_paths"], ["observed.csv"])
+        self.assertEqual(drift["reopen_decision_ordinal"], 0)
+        self.assertEqual(drift["reopen_scope"], "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION")
+        self.assertTrue(drift["affected_decision_event_ids"])
+        self.assertNotIn("observation_sha256", drift)
+        self.assertFalse(drift["owner_outcome_verified"])
+        from cognition_agent_os.host import _goal_progress
+        host_view = _goal_progress(self.db, self.workspace, self.fixtures)
+        reported = next(x for x in host_view["goals"]
+                        if x["root_task_id"] == root)
+        self.assertEqual(reported["next_control_action"],
+                         "REOPEN_NATIVE_CAUSAL_SOURCE_REVIEW")
+        self.assertEqual(reported["reopen_source_paths"], ["observed.csv"])
+        self.assertEqual(reported["reopen_decision_ordinal"], 0)
         with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
             admit_native_decision(self.db, self.workspace, self.fixtures, root,
                 self.candidate(old, self.structure(), self.reconcile()))
@@ -1092,6 +1347,307 @@ class NativeDecisionLoop(unittest.TestCase):
                 "SELECT COUNT(*) FROM events WHERE task_id=? "
                 "AND kind='OWNER_GOAL_LOCAL_RESULT_OBSERVED'",(root,)
             ).fetchone()[0],0)
+
+    def test_worker_artifact_corruption_reopens_evidence_not_source_decision(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        verified = self.view(root)
+        self.assertEqual(verified["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        original_sources = {
+            x.name: hashlib.sha256(x.read_bytes()).hexdigest()
+            for x in self.fixtures.iterdir()}
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" adversarial mutation")
+        damaged = self.view(root)
+        self.assertEqual(damaged["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(damaged["original_goal"], self.goal)
+        self.assertEqual(damaged["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(damaged["causal_reentry"]["reopened_decision_event_ids"],
+                         [damaged["reopen_decision_event_id"]])
+        self.assertEqual(damaged["causal_reentry"]["affected_child_task_ids"],
+                         [admitted["child_task_id"]])
+        self.assertEqual(damaged["causal_reentry"]["evidence_verdict"],
+                         "UNVERIFIABLE")
+        self.assertEqual(damaged["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        self.assertFalse(damaged["causal_reentry"]["authorizes_action"])
+        self.assertFalse(damaged["causal_reentry"]["owner_outcome_verified"])
+        self.assertNotIn("observation_sha256", damaged)
+        from cognition_agent_os.host import _goal_progress
+        observed_host = _goal_progress(self.db, self.workspace, self.fixtures)
+        displayed = next(x for x in observed_host["goals"]
+                         if x["root_task_id"] == root)
+        self.assertEqual(displayed["next_control_action"],
+                         "REOPEN_NATIVE_EVIDENCE_VERIFIER_REVIEW")
+        self.assertEqual(displayed["reopen_decision_event_id"],
+                         damaged["reopen_decision_event_id"])
+        self.assertEqual(displayed["reopen_evidence_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        self.assertEqual(original_sources, {
+            x.name: hashlib.sha256(x.read_bytes()).hexdigest()
+            for x in self.fixtures.iterdir()})
+        self.assertEqual(
+            self.view(root)["causal_reentry"], damaged["causal_reentry"])
+        # An actual NEW Python process, not a second object in this process,
+        # reconstructs the same current reentry from SQLite + source bytes.
+        script = (
+            "import json,sys;"
+            "from pathlib import Path;"
+            "from cognition_agent_os.native_decision import inspect_native_goal;"
+            "r=inspect_native_goal(Path(sys.argv[1]),Path(sys.argv[2]),"
+            "Path(sys.argv[3]),sys.argv[4]);"
+            "print(json.dumps(r,ensure_ascii=True))")
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+        cold = subprocess.run(
+            [sys.executable, "-c", script,
+             str(self.db), str(self.workspace), str(self.fixtures), root],
+            capture_output=True, text=True, env=env, timeout=35, check=True)
+        readback = json.loads(cold.stdout)
+        self.assertEqual(readback["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(readback["causal_reentry"], damaged["causal_reentry"])
+        self.assertNotIn("observation_sha256", readback)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                self.candidate(verified, self.structure(), self.reconcile()))
+
+    def test_reentry_public_research_checks_grant_before_network_even_if_artifact_failed(self):
+        root = register_native_goal(
+            self.db, self.goal, allow_public_source_read=True)
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" unauthorized")
+        damaged = self.view(root)
+        self.assertEqual(damaged["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        proposal = {
+            "observation_sha256": damaged["research_reentry_sha256"],
+            "owner_clause": "Reconcile a supplier stock shortfall",
+            "unresolved_question": "Could an external source validate this evidence?",
+            "competing_methods": [
+                {"name": "safe_recheck",
+                 "applicability": "Use immutable local event and artifact hashes.",
+                 "failure_mode": "The previous hash snapshot might be incomplete.",
+                 "falsifier": "Independent disk replay contradicts the current hash."},
+                {"name": "remote_primary",
+                 "applicability": "Read a precisely versioned public primary source.",
+                 "failure_mode": "A public source may be irrelevant to private records.",
+                 "falsifier": "Its primary implementation lacks the required method."}],
+            "source_refs": [{
+                "kind": "github", "repo": "langchain-ai/langgraph",
+                "path": "README.md", "ref": "a" * 40, "sha256": "b" * 64}],
+            "next_research_step": "Compare authentic upstream code after owner reauthorization.",
+            "uncertainty": "Public facts alone cannot restore the original private grant.",
+        }
+        with patch(
+                "cognition_agent_os.native_decision.github_public_snapshot"
+                ) as remote_fetch:
+            with self.assertRaisesRegex(
+                    PermissionError, "CURRENT_NATIVE_GRANT_REVOKED"):
+                record_native_open_research(
+                    self.db, self.workspace, self.fixtures, root, proposal)
+            remote_fetch.assert_not_called()
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_OPEN_RESEARCH_RECORDED'",
+                (root,)).fetchone()[0], 0)
+        self.assertNotIn("observation_sha256", self.view(root))
+
+    def test_artifact_changes_without_verdict_change_invalidate_research_cas(self):
+        root = self.root_id()
+        task = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        artifact = self.workspace / "artifacts" / (task["child_task_id"] + ".json")
+        original = artifact.read_bytes()
+        artifact.write_bytes(original + b" first forged bytes")
+        first = self.view(root)
+        self.assertEqual(first["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        artifact.write_bytes(original + b" different forged bytes")
+        second = self.view(root)
+        self.assertEqual(second["status"], first["status"])
+        self.assertEqual(second["causal_reentry"]["evidence_failure_reason"],
+                         first["causal_reentry"]["evidence_failure_reason"])
+        self.assertNotEqual(first["research_reentry_sha256"],
+                            second["research_reentry_sha256"])
+        self.assertEqual(
+            first["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(original + b" first forged bytes").hexdigest())
+        self.assertEqual(
+            second["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(original + b" different forged bytes").hexdigest())
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="The result may have been tampered again",
+                observation_sha256=first["research_reentry_sha256"])
+        self.assertEqual(record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent", idea="A new artifact version may change our diagnosis",
+            observation_sha256=second["research_reentry_sha256"])["status"],
+                         "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertEqual(self.view(root)["status"],
+                         "NATIVE_EVIDENCE_UNVERIFIABLE")
+
+    def test_evidence_failure_reenters_research_only_without_authorizing_effect(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        good = self.view(root)
+        file = self.workspace / "artifacts" / (admitted["child_task_id"] + ".json")
+        file.write_bytes(file.read_bytes() + b" tampered")
+        damaged = self.view(root)
+        self.assertEqual(damaged["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertRegex(damaged["research_reentry_sha256"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("observation_sha256", damaged)
+        first = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent",
+            idea="The independent artifact readback may be corrupt or incomplete",
+            observation_sha256=damaged["research_reentry_sha256"])
+        self.assertEqual(first["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(first["authorizes_action"])
+        after_hypothesis = self.view(root)
+        self.assertEqual(after_hypothesis["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertNotEqual(after_hypothesis["research_reentry_sha256"],
+                            damaged["research_reentry_sha256"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Another hypothesis with stale readout",
+                observation_sha256=damaged["research_reentry_sha256"])
+        proposal = {
+            "observation_sha256": after_hypothesis["research_reentry_sha256"],
+            "owner_clause": "Reconcile a supplier stock shortfall",
+            "unresolved_question": "Why does independent report replay now fail?",
+            "competing_methods": [
+                {"name": "artifact_hash_replay",
+                 "applicability": "Compare stored immutable worker hashes and new readback.",
+                 "failure_mode": "A false earlier trust anchor can survive a re-read.",
+                 "falsifier": "A new independent pinned artifact contradicts the hash."},
+                {"name": "verifier_health_probe",
+                 "applicability": "Test the independent evaluator on a known good artifact.",
+                 "failure_mode": "The evaluator can share the same broken source.",
+                 "falsifier": "An independently verified test fixture passes this evaluator."}],
+            "source_refs": [],
+            "next_research_step": "Run an isolated oracle health check without touching production.",
+            "uncertainty": "Neither path currently proves which bytes are authoritative.",
+        }
+        recorded = record_native_open_research(
+            self.db, self.workspace, self.fixtures, root, proposal)
+        self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        cold = self.view(root)
+        self.assertEqual(cold["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(cold["open_research_count"], 1)
+        self.assertEqual(len(cold["hypotheses"]), 1)
+        self.assertNotEqual(cold["research_reentry_sha256"],
+                            after_hypothesis["research_reentry_sha256"])
+        self.assertFalse(cold["owner_outcome_verified"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                self.candidate(good, self.structure(), self.reconcile()))
+
+    def test_broken_independent_verifier_is_not_labelled_worker_corruption(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        healthy = self.view(root)
+        self.assertEqual(healthy["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        with patch("cognition_agent_os.reconciliation_oracle.audit_stored_report",
+                   return_value={"status": "UNVERIFIABLE",
+                                 "reason": "EVIDENCE_RECHECK_UNAVAILABLE"}):
+            outage = self.view(root)
+            from cognition_agent_os.host import _goal_progress
+            host_state = _goal_progress(self.db, self.workspace, self.fixtures)
+            public = next(x for x in host_state["goals"]
+                          if x["root_task_id"] == root)
+            self.assertEqual(public["next_control_action"],
+                             "REOPEN_NATIVE_VERIFIER_HEALTH_REVIEW")
+            self.assertEqual(public["reopen_evidence_reason"],
+                             "EVIDENCE_RECHECK_UNAVAILABLE")
+        self.assertEqual(outage["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(outage["causal_reentry"]["observed_cause"],
+                         "INDEPENDENT_VERIFIER_UNAVAILABLE")
+        self.assertEqual(outage["causal_reentry"]["evidence_failure_reason"],
+                         "EVIDENCE_RECHECK_UNAVAILABLE")
+        self.assertFalse(outage["causal_reentry"]["root_cause_semantically_verified"])
+        self.assertFalse(outage["causal_reentry"]["authorizes_action"])
+        self.assertNotIn("observation_sha256", outage)
+        # The oracle outage did not mutate the persisted Worker artifact.
+        # After it is repaired, the fresh external checker must pass again.
+        restored = self.view(root)
+        self.assertEqual(restored["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        self.assertNotIn("causal_reentry", restored)
+
+    def test_two_independent_faults_reopen_separate_layers_until_real_repair(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        good = self.view(root)
+        self.assertEqual(good["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        pristine_artifact = artifact.read_bytes()
+        observed = self.fixtures / "observed.csv"
+        pristine_source = observed.read_bytes()
+        # Fault 1 is an ACTUAL Worker result corruption, not source drift.
+        artifact.write_bytes(pristine_artifact + b" tampered")
+        first = self.view(root)
+        self.assertEqual(first["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        # Fault 2 independently invalidates source pins. The first diagnosis
+        # is not silently "fixed" by switching the reported layer.
+        observed.write_text("supplier,received\\nDelta,999\\n", encoding="utf-8")
+        second = self.view(root)
+        self.assertEqual(second["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertEqual(second["causal_reentry"]["observed_cause"],
+                         "SOURCE_PIN_DRIFT")
+        self.assertEqual(second["invalidated_source_paths"], ["observed.csv"])
+        self.assertNotIn("observation_sha256", second)
+        # Repairing the source alone MUST expose the still-damaged artifact.
+        observed.write_bytes(pristine_source)
+        third = self.view(root)
+        self.assertEqual(third["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(third["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        # Only independent byte-for-byte restoration of the second fault
+        # may return to normal admission. Neither repairs owner acceptance.
+        artifact.write_bytes(pristine_artifact)
+        restored = self.view(root)
+        self.assertEqual(restored["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        self.assertEqual(restored["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        self.assertNotIn("causal_reentry", restored)
+        self.assertFalse(restored["owner_outcome_verified"])
 
     def test_native_accepted_artifact_tamper_sets_objective_drift(self):
         root=self.root_id()

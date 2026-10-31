@@ -83,6 +83,126 @@ class DomainContractHostIntegration(unittest.TestCase):
             return dict(db.execute(
                 "SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone())
 
+    def test_semantic_parent_authority_survives_rewritten_controller_urls(self):
+        """Real Worker must not falsely report a child parent cutover as clean.
+
+        A realistic URL-only migration leaves operative UAOS cognitive,
+        continuity and common-capability authority fields unchanged.  The
+        scanner must distinguish them from inert legacy Skill filenames.
+        """
+        from cognition_agent_os.domain_contract import _native_contract
+
+        repo = "D1traverser-debug/financial-writing-agent"
+        tid, _ = self.seed(domain="financial_writing", repo=repo)
+        docs = make_native(
+            "financial_writing", repo,
+            controller="D1traverser-debug/cognition-agent-os@main")
+        manifest = json.loads(docs[FILES[0]])
+        adapter = json.loads(docs[FILES[1]])
+        caps = json.loads(docs[FILES[2]])
+        # These are actual classes of normative fields in the Financial child
+        # main manifest/adapter/capabilities, not a keyword-only fake claim.
+        manifest["status"] = "UAOS_CONTROL_PLANE_ACTIVE"
+        adapter["status"] = "UAOS_CONTROL_PLANE_ACTIVE"
+        adapter["parent_continuity_authority"] = "UAOS"
+        adapter["global_requirement_authority"] = "UAOS"
+        caps["common_capabilities_inheritance"] = "UAOS_HOSTED"
+        caps["capabilities"][0]["required"] = [
+            "UAOS:domain_internal_work_orchestration"]
+        caps["hosted_cognition_semantics"] = {
+            "source": "CURRENT_UAOS_DELIBERATION_POLICY"}
+        docs[FILES[0]] = json.dumps(manifest).encode()
+        docs[FILES[1]] = json.dumps(adapter).encode()
+        docs[FILES[2]] = json.dumps(caps).encode()
+        with self.mock(docs):
+            run = self.tick()
+            audited = audit_domain_contract(self.db, self.workspace, tid)
+        self.assertEqual(run["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertEqual(
+            audited["status"], "CHILD_CONTRACT_INDEPENDENTLY_REOBSERVED")
+        self.assertTrue(audited["legacy_parent_bound"], audited)
+        observed = _native_contract(docs, {
+            "kind": "domain_contract", "domain_id": "financial_writing",
+            "repo": repo, "ref": SHA})
+        self.assertTrue(observed["legacy_parent_bound"])
+        for name in (
+            "adapter.parent_continuity_authority",
+            "adapter.global_requirement_authority",
+            "capabilities.common_capabilities_inheritance",
+            "capabilities.hosted_cognition_semantics.source",
+            "capabilities.capabilities[0].required[0]",
+            "manifest.status", "adapter.status",
+        ):
+            self.assertIn(name, observed["legacy_parent_binding_refs"])
+
+        # Negative control: a genuine semantic cutover may retain a
+        # historical UAOS_SKILL.md filename; filenames do not grant authority.
+        manifest["status"] = "COGNITION_CONTROL_PLANE_ACTIVE"
+        adapter["status"] = "COGNITION_CONTROL_PLANE_ACTIVE"
+        adapter["parent_continuity_authority"] = "COGNITION_PARENT"
+        adapter["global_requirement_authority"] = "COGNITION_PARENT"
+        caps["common_capabilities_inheritance"] = "COGNITION_PARENT"
+        caps["capabilities"][0]["required"] = [
+            "COGNITION_PARENT:domain_internal_work_orchestration"]
+        caps["hosted_cognition_semantics"]["source"] = (
+            "CURRENT_COGNITION_PARENT_POLICY")
+        docs[FILES[0]] = json.dumps(manifest).encode()
+        docs[FILES[1]] = json.dumps(adapter).encode()
+        docs[FILES[2]] = json.dumps(caps).encode()
+        clean = _native_contract(docs, {
+            "kind": "domain_contract", "domain_id": "financial_writing",
+            "repo": repo, "ref": SHA})
+        self.assertFalse(clean["legacy_parent_bound"], clean)
+        self.assertEqual(clean["legacy_parent_binding_refs"], [])
+        self.assertEqual(clean["declared_skill_entrypoint"], "UAOS_SKILL.md")
+        self.assertFalse(clean["parent_replacement_admitted"])
+
+    def test_four_child_semantic_authority_shapes_block_false_clean_cutover(self):
+        """Four live child schemas have different old-parent semantic bindings.
+
+        The URLs alone are not sufficient: test the adapter's typed owner,
+        current inherited method and cognitive-policy origin.  No child is
+        written, and this audit still never authorizes cutover.
+        """
+        from cognition_agent_os.domain_contract import _native_contract
+
+        cases = (
+            ("video", "video-growth-agent",
+             "cross_chat_parent_continuity_authority",
+             "UAOS_FOR_PARENT_OR_SELECTOR_CONTEXT", "UAOS_HOSTED"),
+            ("financial_writing", "financial-writing-agent",
+             "parent_continuity_authority", "UAOS", "UAOS_HOSTED"),
+            ("novel", "novel-writing-agent",
+             "cross_chat_continuity_authority", "UAOS", "UAOS_HOSTED"),
+            ("ashare", "a-share-event-driven-agent",
+             "parent_router_identity_authority", "UAOS",
+             "UAOS_HOSTED_METHOD__DOMAIN_OWNS_BUSINESS_STATE_AND_TASK_GRAPH"),
+        )
+        for domain, name, auth_name, auth_value, inherited in cases:
+            with self.subTest(domain=domain):
+                repo = "D1traverser-debug/" + name
+                docs = make_native(domain, repo,
+                    controller="D1traverser-debug/cognition-agent-os@main")
+                adapter = json.loads(docs[FILES[1]])
+                caps = json.loads(docs[FILES[2]])
+                adapter[auth_name] = auth_value
+                caps["common_capabilities_inheritance"] = inherited
+                caps["hosted_cognition_semantics"] = {
+                    "source": "CURRENT_UAOS_DELIBERATION_POLICY"}
+                docs[FILES[1]] = json.dumps(adapter).encode()
+                docs[FILES[2]] = json.dumps(caps).encode()
+                found = _native_contract(docs, {
+                    "kind": "domain_contract", "domain_id": domain,
+                    "repo": repo, "ref": SHA})
+                self.assertTrue(found["legacy_parent_bound"], found)
+                self.assertIn(
+                    "adapter." + auth_name, found["legacy_parent_binding_refs"])
+                self.assertIn("capabilities.common_capabilities_inheritance",
+                              found["legacy_parent_binding_refs"])
+                self.assertIn("capabilities.hosted_cognition_semantics.source",
+                              found["legacy_parent_binding_refs"])
+                self.assertFalse(found["parent_replacement_admitted"])
+
     def test_four_native_domains_and_a_future_unregistered_domain(self):
         domains = (
             ("video", "video-growth-agent"),
@@ -356,6 +476,27 @@ class DomainContractHostIntegration(unittest.TestCase):
             "capabilities.uaos_common_capabilities_ref",
             "manifest.binding.common_capabilities_ref",
         ])
+
+    def test_top_level_legacy_parent_field_cannot_hide_after_controller_rename(self):
+        # A real A-share manifest has a normative parent_control_plane field.
+        # It must remain visible even when both controller declarations switch.
+        repo = "D1traverser-debug/a-share-event-driven-agent"
+        tid, spec = self.seed(domain="ashare", repo=repo)
+        new_parent = "D1traverser-debug/cognition-agent-os@main"
+        docs = make_native("ashare", repo, controller=new_parent)
+        manifest = json.loads(docs[FILES[0]])
+        manifest["parent_control_plane"] = "D1traverser-debug/universal-agent-os@main"
+        docs[FILES[0]] = json.dumps(manifest).encode()
+        with self.mock(docs):
+            observed = self.tick()["tasks"][0]
+            audit = audit_domain_contract(self.db, self.workspace, tid)
+        self.assertEqual(observed["status"], "NEEDS_REVIEW", observed)
+        self.assertTrue(audit["legacy_parent_bound"])
+        self.assertFalse(audit["parent_replacement_admitted"])
+        receipt = json.loads(
+            (self.workspace / "artifacts" / (tid + ".json")).read_text())
+        self.assertEqual(receipt["observation"]["legacy_parent_binding_refs"],
+                         ["manifest.parent_control_plane"])
 
     def test_legacy_skill_filename_alone_is_not_false_parent_binding(self):
         repo = "D1traverser-debug/video-growth-agent"

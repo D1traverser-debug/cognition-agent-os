@@ -19,7 +19,7 @@ import sqlite3
 from .container_lab import (
     validate_task_spec,candidate_changes,cases_from_bytes,run_suite,
     ContainerUnavailable)
-from .runner import store_once,ArtifactConflict
+from .runner import store_once,ArtifactConflict,read_audited_artifact
 from .source import safe_fixture
 from .ledger import connect,finalize_observed,event,current_guard
 
@@ -330,6 +330,7 @@ def audit_repo(db_path,workspace,fixtures,tid,*,require_staged=False):
             raw=path.read_bytes()
             if sha(raw)!=task["artifact_hash"]:
                 return {**fail,"reason":"PROPOSAL_HASH_CHANGED"}
+            fail["artifact_sha256"]=sha(raw)
             doc=json.loads(raw)
             if (doc["task_id"]!=tid or doc["goal_rev"]!=task["goal_rev"]
                 or doc["source_spec"]!=spec
@@ -398,19 +399,36 @@ def _stage(workspace, tid, changes):
 
 
 def review_repo(db_path,workspace,fixtures,tid):
-    from .conformance import effect_preflight,capability_disabled,REPAIR_LAB_CAPABILITY
+    from .conformance import (effect_preflight,capability_disabled,
+        capability_disabled_in_transaction,REPAIR_LAB_CAPABILITY)
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
+    # Governance must run before task-specific early returns. Otherwise a
+    # tampered artifact can fail its local audit forever without being
+    # observed and quarantined by the shared conformance entrypoint.
+    preflight=effect_preflight(db_path,workspace,fixtures)
+    if not preflight["admitted"]:
+        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED",
+                "reason":preflight["reason"],
+                "preflight_status":preflight["status"],
+                "checked":preflight["checked"],
+                "eligible":preflight["eligible"],
+                "quarantined":preflight["quarantined"],
+                "emergency_stops":preflight["emergency_stops"]}
     initial=audit_repo(db_path,workspace,fixtures,tid)
     if initial["status"]!="REPO_BYTES_MECHANICALLY_VALID":
         return {"task_id":tid,"status":"NOT_ADMITTED","reason":initial.get("reason")}
-    preflight=effect_preflight(db_path,workspace,fixtures)
-    if not preflight["admitted"]:
-        return {"task_id":tid,"status":"PREFLIGHT_BLOCKED"}
+    try:
+        raw=read_audited_artifact(
+            workspace,tid,initial,max_bytes=65536)
+        doc=json.loads(raw)
+    except ArtifactConflict:
+        return {"task_id":tid,"status":"NOT_ADMITTED",
+                "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
+    except (OSError,ValueError,KeyError,TypeError):
+        return {"task_id":tid,"status":"EXECUTION_EVIDENCE_UNAVAILABLE"}
     # A container runtime is a PRECONDITION, never a host-execution fallback.
     try:
-        raw=(workspace/"artifacts"/(tid+".json")).read_bytes()
-        doc=json.loads(raw)
         spec=validate_task_spec(doc["source_spec"])
         base=_sources(spec,fixtures)
         changes={p:s.encode() for p,s in doc["changes"].items()}
@@ -446,16 +464,18 @@ def review_repo(db_path,workspace,fixtures,tid):
 
         if not row or row["state"]!="NEEDS_REVIEW":
             db.commit();return {"task_id":tid,"status":"NOT_PENDING_REVIEW"}
+        if row["artifact_hash"] != initial.get("artifact_sha256"):
+            db.commit()
+            return {"task_id":tid,"status":"EVIDENCE_CHANGED_BEFORE_ACCEPTANCE"}
         allowed,reason=current_guard(db,dict(row),needs_write=True)
         if not allowed:
             db.commit();return {"task_id":tid,"status":"AUTHORITY_BLOCKED","reason":reason}
-        circuit=db.execute("""SELECT 1 FROM conformance_capability_guard
-               WHERE disabled=1 AND kind IN ('goal_sandbox_stage','pure_code_repair_lab')
-               LIMIT 1""").fetchone()
-        if circuit:
+        if capability_disabled_in_transaction(
+                db,"goal_sandbox_stage",REPAIR_LAB_CAPABILITY):
             db.commit();return {"task_id":tid,"status":"CAPABILITY_DISABLED"}
         fresh=audit_repo(db_path,workspace,fixtures,tid)
         if (fresh["status"]!="REPO_BYTES_MECHANICALLY_VALID" or
+            fresh.get("artifact_sha256")!=initial.get("artifact_sha256") or
             fresh["changes"]!=initial["changes"]):
             db.commit();return {"task_id":tid,"status":"EVIDENCE_CHANGED_BEFORE_ACCEPTANCE"}
         # The Docker result was calculated from hidden OUTSIDE this DB
@@ -493,6 +513,7 @@ def review_repo(db_path,workspace,fixtures,tid):
         except (OSError,ValueError):
             holdout_still_pinned=False
         if (post["status"]!="REPO_BYTES_MECHANICALLY_VALID"
+            or post.get("artifact_sha256")!=initial.get("artifact_sha256")
             or post["changes"]!=initial["changes"]
             or not holdout_still_pinned
             or any((workspace/"repo_lab"/tid/p).read_bytes()!=content
