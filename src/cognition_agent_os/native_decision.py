@@ -929,6 +929,15 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             d["event_id"] for d in decisions[index:]],
                         "invalidated_source_paths": invalidated_paths,
                         "new_investigation_source_paths": added_investigation_paths,
+                        # Expose verified historical research without
+                        # declaring it valid for the changed source version.
+                        "open_research": list(reversed([
+                            e for e in open_research
+                            if research_before_event_id is None
+                            or e["event_id"] < research_before_event_id
+                        ]))[:_MAX_OPEN_RESEARCH_PREVIEW],
+                        "open_research_count": len(open_research),
+                        "hypotheses": hypotheses,
                         "research_reentry_sha256": _digest({
                             "root_id": root_id, "contract": contract,
                             "goal_rev": root["goal_rev"],
