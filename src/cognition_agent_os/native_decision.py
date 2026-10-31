@@ -899,9 +899,31 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     receipt["source_sha256"], current_sources,
                     selected["child_source_spec"]["kind"],
                     finished=child["state"] in ("NEEDS_REVIEW", "VERIFIED")):
+                # Fail closed, but expose the actual replay evidence that
+                # invalidated this decision instead of a generic failure.
+                # The returned paths are pinned provider-observed facts,
+                # NOT a model-authored root cause, permission or new plan.
+                pinned = receipt["source_sha256"]
+                invalidated_paths = sorted(
+                    name for name, digest in pinned.items()
+                    if current_sources.get(name) != digest)
+                added_investigation_paths = (
+                    sorted(name for name in current_sources.keys() - pinned.keys()
+                           if Path(name).suffix.lower() in (".md", ".txt"))
+                    if selected["child_source_spec"]["kind"] == "investigate_goal"
+                    and child["state"] not in ("NEEDS_REVIEW", "VERIFIED")
+                    else [])
                 return {**fail, "status": "NATIVE_SOURCE_CHANGED",
                         "original_goal": contract["goal"],
-                        "reason": "SOURCE_PIN_DRIFT"}
+                        "reason": "SOURCE_PIN_DRIFT",
+                        "reopen_scope": "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION",
+                        "reopen_decision_ordinal": index,
+                        "affected_decision_event_ids": [
+                            d["event_id"] for d in decisions[index:]],
+                        "invalidated_source_paths": invalidated_paths,
+                        "new_investigation_source_paths": added_investigation_paths,
+                        "observation_sha256": None,
+                        "authorizes_action": False}
             _ground_decision(
                 receipt["proposal"], parsed, receipt["source_sha256"], previous_id)
             previous_id = child["task_id"]
