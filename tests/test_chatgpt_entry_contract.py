@@ -136,7 +136,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
                       "SKILL_DEFECT", "EXECUTION_LAPSE", "ENTRY_NOT_SELECTED",
                       "Bounded critique", "without new evidence", "independent readback"):
             self.assertIn(token, core)
-        self.assertLess(core.index("Decision self-critique"), core.index("Execute & verify"))
+        self.assertLess(core.index("Rechallenge BEFORE decision"), core.index("Execute / independent check / recursive reopen"))
         self.assertIn("Do not rewrite an existing valid rule", core)
 
     def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):
