@@ -103,3 +103,46 @@ def project_reentry(decisions: tuple[Decision, ...], contradiction: Contradictio
         unaffected=tuple(sorted(unaffected)),
         evidence_ref=contradiction.evidence_ref,
     )
+
+
+@dataclass(frozen=True)
+class ReadWindow:
+    """Provider-returned inclusive source range; not model-asserted coverage."""
+    version: str
+    first: int
+    last: int
+
+
+@dataclass(frozen=True)
+class CoverageProjection:
+    missing_ranges: tuple[tuple[int, int], ...]
+    all_source_units_read: bool
+    semantic_understanding_verified: bool = False
+
+
+def project_read_coverage(*, expected_version: str, total_units: int,
+                          windows: tuple[ReadWindow, ...]) -> CoverageProjection:
+    """Report byte/line coverage only; never claim meaning or business outcome.
+
+    A read receipt from another version cannot fill a gap. The caller still
+    must authenticate provider window receipts and expected source length.
+    """
+    if not expected_version or total_units <= 0:
+        raise ValueError("SOURCE_IDENTITY_UNVERIFIABLE")
+    covered = bytearray(total_units)
+    for window in windows:
+        if (window.version != expected_version or window.first < 1
+            or window.last > total_units or window.last < window.first):
+            raise ValueError("SOURCE_READ_WINDOW_UNVERIFIABLE")
+        covered[window.first - 1:window.last] = b"\x01" * (window.last - window.first + 1)
+    missing: list[tuple[int, int]] = []
+    start = None
+    for pos, bit in enumerate(covered, start=1):
+        if not bit and start is None:
+            start = pos
+        if bit and start is not None:
+            missing.append((start, pos - 1))
+            start = None
+    if start is not None:
+        missing.append((start, total_units))
+    return CoverageProjection(tuple(missing), not missing)
