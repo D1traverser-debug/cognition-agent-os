@@ -14,7 +14,7 @@ import re
 
 from .ledger import readonly_snapshot
 
-_ID = re.compile(r"[0-9a-f]{32}\\Z")
+_ID = re.compile(r"[0-9a-f]{32}\Z")
 _MAX_ROOT_SCAN = 64
 _MAX_TRIALS = 8
 _MAX_PER_OBJECTIVE = 3
