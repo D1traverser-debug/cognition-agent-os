@@ -244,6 +244,15 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                         item["native_goal_result"]=result
                         if result.get("status") == "NATIVE_NEXT_DECISION_ADMISSIBLE":
                             item["next_control_action"]="NATIVE_PLAN_NEXT_WITH_CURRENT_EVIDENCE"
+                        elif result.get("status") == "NATIVE_SOURCE_CHANGED":
+                            # Source drift does not authorize a new method.
+                            # Keep the exact invalidation evidence visible to
+                            # clients so they can re-investigate the cause.
+                            item["next_control_action"]="REOPEN_NATIVE_CAUSAL_SOURCE_REVIEW"
+                            item["reopen_source_paths"]=result.get(
+                                "invalidated_source_paths", [])
+                            item["reopen_decision_ordinal"]=result.get(
+                                "reopen_decision_ordinal")
                     if (isinstance(root_spec, dict)
                         and root_spec.get("kind") in ("native_goal", "open_goal")):
                         from .owner_postcondition import inspect_owner_local_outcome
