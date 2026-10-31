@@ -389,11 +389,26 @@ def record_native_hypothesis(db_path: Path, workspace: Path, fixtures: Path,
         db.execute("BEGIN IMMEDIATE")
         try:
             observed = _audit(db, db_path, workspace, fixtures, root_id)
-            if observed["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+            if observed["status"] not in (
+                    "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                    "NATIVE_SOURCE_CHANGED"):
                 raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE:" +
                                  observed["status"])
-            if observed["observation_sha256"] != observation_sha256:
+            key = ("research_reentry_sha256"
+                   if observed["status"] == "NATIVE_SOURCE_CHANGED"
+                   else "observation_sha256")
+            if observed[key] != observation_sha256:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
+            root = db.execute(
+                "SELECT goal_rev,grant_rev FROM tasks WHERE task_id=?",
+                (root_id,)).fetchone()
+            auth = db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed "
+                "FROM authority WHERE singleton=1").fetchone()
+            if (root is None or auth is None or auth["write_allowed"] != 1
+                or (auth["goal_rev"], auth["grant_rev"]) !=
+                   (root["goal_rev"], root["grant_rev"])):
+                raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             if len(observed["hypotheses"]) >= _MAX_HYPOTHESES:
                 raise ValueError("NATIVE_HYPOTHESIS_BOUND_EXCEEDED")
             digest = _digest(idea)
