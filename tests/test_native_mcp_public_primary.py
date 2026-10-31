@@ -66,9 +66,9 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
     def _native_root_with_failure(self, failure):
         """Build a real native decision, then introduce one independent fault."""
         for name, data in {
-            "expected.csv": b"supplier,received\\nDelta,8\\n",
-            "observed.csv": b"supplier,received\\nDelta,6\\n",
-            "handoff.json": b'{"retain":"immutable"}\\n',
+            "expected.csv": b"supplier,received\nDelta,8\n",
+            "observed.csv": b"supplier,received\nDelta,6\n",
+            "handoff.json": b'{"retain":"immutable"}\n',
         }.items():
             path = self.fx / name
             if not path.exists():
@@ -111,7 +111,7 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
         self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
         if failure == "source":
             (self.fx / "observed.csv").write_text(
-                "supplier,received\\nDelta,999\\n", encoding="utf-8")
+                "supplier,received\nDelta,999\n", encoding="utf-8")
             expected_status = "NATIVE_SOURCE_CHANGED"
         elif failure == "evidence":
             artifact = self.ws / "artifacts" / (
