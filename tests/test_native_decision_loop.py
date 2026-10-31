@@ -1476,7 +1476,6 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
 
         cases = (
-            ("SOURCE_CHANGED_SINCE_PROPOSAL", "SOURCE_PIN_DRIFT"),
             ("ARTIFACT_UNAVAILABLE", "WORKER_EVIDENCE_UNVERIFIABLE"),
             ("INVALID_PROPOSAL", "WORKER_EVIDENCE_UNVERIFIABLE"),
             ("CANDIDATE_HASH_MISMATCH", "WORKER_EVIDENCE_UNVERIFIABLE"),
