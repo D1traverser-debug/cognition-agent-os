@@ -834,6 +834,35 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(after["items"], [])
         self.assertFalse(after["authorizes_action"])
 
+    def test_cross_root_procedure_trial_is_invalidated_by_artifact_drift(self):
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        source_root = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source_root, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        target_root = register_native_goal(self.db, self.goal)
+        before = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(len(before["items"]), 1, before)
+
+        artifact = self.workspace / "artifacts" / (
+            first["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" changed after verification")
+        after = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(after["status"],
+                         "NO_VERIFIED_CROSS_ROOT_PROCEDURE_TRIALS", after)
+        self.assertEqual(after["items"], [])
+        self.assertFalse(after["authorizes_action"])
+
     def test_cross_root_procedure_trial_is_invalidated_by_grant_change(self):
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
         from cognition_agent_os.procedure_evidence import (
