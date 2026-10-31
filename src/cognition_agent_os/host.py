@@ -258,7 +258,14 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                             # original inputs. Stop action and ask the same
                             # owner-ledger causal inspector to reopen the
                             # evidence/verifier layer, never a generic retry.
-                            item["next_control_action"]="REOPEN_NATIVE_EVIDENCE_VERIFIER_REVIEW"
+                            observed_cause=result.get(
+                                "causal_reentry",{}).get("observed_cause")
+                            item["next_control_action"]=(
+                                "REOPEN_NATIVE_VERIFIER_HEALTH_REVIEW"
+                                if observed_cause=="INDEPENDENT_VERIFIER_UNAVAILABLE"
+                                else "REOPEN_NATIVE_EVIDENCE_VERIFIER_REVIEW"
+                                if observed_cause=="WORKER_EVIDENCE_UNVERIFIABLE"
+                                else "REOPEN_NATIVE_EVIDENCE_AND_VERIFIER_REVIEW")
                             item["reopen_decision_event_id"]=result.get(
                                 "reopen_decision_event_id")
                             item["reopen_evidence_reason"]=result.get(
