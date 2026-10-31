@@ -22,10 +22,12 @@ TASK_ID = re.compile(r"[a-f0-9]{32}\Z")
 MAX_BYTES = 128 * 1024
 
 
-def _reject(reason: str, task_id: str) -> dict:
+def _reject(reason: str, task_id: str,
+            observed_artifact_sha256: str | None = None) -> dict:
     return {"task_id":task_id, "status":reason,
             "mechanical_audit":False, "semantic_goal_achieved":False,
-            "authorizes_source_mutation":False}
+            "authorizes_source_mutation":False,
+            "observed_artifact_sha256":observed_artifact_sha256}
 
 
 def _read_only(db_path: Path, task_id: str):
