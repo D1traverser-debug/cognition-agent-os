@@ -865,6 +865,7 @@ class NativeLocalModelLoop(unittest.TestCase):
     def test_cross_root_procedure_evidence_changed_during_inference_blocks_admission(self):
         """A prior success invalidated after prompt construction cannot ground a decision."""
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
 
         source_root = register_native_goal(
             self.db,
