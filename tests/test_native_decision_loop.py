@@ -1372,7 +1372,9 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(damaged["causal_reentry"]["affected_child_task_ids"],
                          [admitted["child_task_id"]])
         self.assertEqual(damaged["causal_reentry"]["evidence_verdict"],
-                         "REPORT_ARTIFACT_UNVERIFIABLE")
+                         "UNVERIFIABLE")
+        self.assertEqual(damaged["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
         self.assertFalse(damaged["causal_reentry"]["authorizes_action"])
         self.assertFalse(damaged["causal_reentry"]["owner_outcome_verified"])
         self.assertNotIn("observation_sha256", damaged)
