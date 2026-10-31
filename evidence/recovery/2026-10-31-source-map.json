@@ -595,5 +595,56 @@
     "closing PR is not deleting a branch and not evidence of semantic equivalence",
     "public inventory excludes private full documents and inaccessible old archives",
     "no automatic merge, deployment, paid API, subtree rewrite or production data overwrite"
-  ]
+  ],
+  "reviewed_comparisons": {
+    "comparison_base": "35a64d7caa948f632fad884edccb52eb516d4c60",
+    "ancestry": [
+      {
+        "pr": 21,
+        "head": "b3955852b83696ffe635ae04c542f94e2277da5d",
+        "ahead": 700,
+        "behind": 650,
+        "status": "diverged"
+      },
+      {
+        "pr": 26,
+        "head": "2d5c2b43ba070ee201a595d0ddba5b853b4d4f13",
+        "ahead": 759,
+        "behind": 650,
+        "status": "diverged"
+      },
+      {
+        "pr": 49,
+        "head": "bc62cedfb3a7b0ef65b717680b786cd121696707",
+        "ahead": 985,
+        "behind": 650,
+        "status": "diverged"
+      },
+      {
+        "pr": 56,
+        "head": "cf81efc260a2fed736967fced3c3e4acc2e303df",
+        "ahead": 23,
+        "behind": 0,
+        "status": "ahead"
+      },
+      {
+        "pr": 59,
+        "head": "d2d92e6e842cd8c56c3fc7604d536915814b21d7",
+        "ahead": 5,
+        "behind": 0,
+        "status": "ahead"
+      }
+    ],
+    "exact_file_comparison": {
+      "left_pr": 56,
+      "right_pr": 57,
+      "left_head": "cf81efc260a2fed736967fced3c3e4acc2e303df",
+      "right_head": "9c07ed186fc7b71c565163d027cc7fbb5c79efc9",
+      "changed_paths_in_left": 13,
+      "byte_equal": 5,
+      "byte_different": 8,
+      "disposition": "DO_NOT_CLOSE_OR_DELETE_BY_FILENAME_OVERLAP"
+    },
+    "limitations": "Commit ancestry and file SHA can reject automatic deletion, but do not prove semantic equivalence or owner approval to close PRs"
+  }
 }
