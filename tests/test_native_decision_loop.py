@@ -948,7 +948,11 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertFalse(recorded["authorizes_action"])
         resumed = self.view(root)
         self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
-        self.assertEqual(len(resumed.get("decisions", [])), 0)
+        self.assertEqual(resumed["open_research_count"], 1)
+        self.assertEqual(len(resumed["open_research"]), 1)
+        self.assertEqual(resumed["open_research"][0]["source_status"],
+                         "SOURCE_PIN_CURRENT_UNVERIFIED_SEMANTICS")
+        self.assertFalse(resumed["open_research"][0]["authorizes_action"])
         self.assertNotIn("observation_sha256", resumed)
         self.assertNotEqual(resumed["research_reentry_sha256"],
                             blocked["research_reentry_sha256"])
