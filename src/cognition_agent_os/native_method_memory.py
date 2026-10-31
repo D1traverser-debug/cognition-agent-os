@@ -127,6 +127,15 @@ def inspect_replicated_local_methods(
 
     # Local imports keep the projection read-only and avoid import cycles.
     from .native_decision import inspect_native_goal
+    current_audit = inspect_native_goal(
+        db_path, workspace, fixtures, root_id
+    )
+    if current_audit.get("status") not in (
+        "NATIVE_NEXT_DECISION_ADMISSIBLE",
+        "NATIVE_AWAITING_WORKER",
+        "NATIVE_DECISION_BUDGET_EXHAUSTED",
+    ):
+        return _unavailable("CURRENT_NATIVE_ROOT_NOT_ADMISSIBLE")
     from .owner_postcondition import (
         _explicit_owner_local_contract,
         inspect_owner_local_outcome,
