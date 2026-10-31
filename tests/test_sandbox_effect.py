@@ -51,6 +51,40 @@ class SandboxEffectTests(unittest.TestCase):
             return [dict(r) for r in db.execute("SELECT * FROM events WHERE task_id=?",(tid,))]
         finally:db.close()
 
+    def test_66387_byte_valid_goal_artifact_is_audited_and_staged_exactly(self):
+        """Auditor and effect adapter share the 128 KiB artifact identity bound."""
+        from cognition_agent_os.goal_audit import audit_goal
+
+        tid, name, before = self.make()
+        artifact = self.out / "artifacts" / (tid + ".json")
+        original = artifact.read_bytes()
+        target_size = 66_387
+        self.assertLess(len(original), target_size)
+        # JSON permits trailing whitespace. Re-pin this exact valid byte
+        # revision in the isolated test ledger to exercise a large legitimate
+        # artifact without changing the candidate or its meaning.
+        audited_bytes = original + b" " * (target_size - len(original))
+        self.assertEqual(len(audited_bytes), target_size)
+        artifact.write_bytes(audited_bytes)
+        artifact_sha256 = hashlib.sha256(audited_bytes).hexdigest()
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET artifact_hash=? WHERE task_id=?",
+                       (artifact_sha256, tid))
+            db.commit()
+
+        audit = audit_goal(self.db, self.out, self.fx, tid)
+        self.assertEqual(audit["status"], "CANDIDATE_MECHANICALLY_VALID", audit)
+        self.assertEqual(audit["artifact_sha256"], artifact_sha256)
+        self.assertEqual(audit["observed_artifact_sha256"], artifact_sha256)
+
+        result = stage_one(self.db, self.out, self.fx, tid)
+        self.assertEqual(result["status"], "SANDBOX_VERIFIED", result)
+        expected_candidate = json.loads(audited_bytes)["candidate_text"].encode("utf-8")
+        staged = (self.out / "sandbox" / (tid + ".candidate")).read_bytes()
+        self.assertEqual(staged, expected_candidate)
+        self.assertEqual((self.fx / name).read_bytes(), before)
+        self.assertEqual(self.task(tid)["state"], "SANDBOX_VERIFIED")
+
     def test_json_sandbox_actual_effect_readback_and_source_unchanged(self):
         tid,name,before=self.make()
         first=stage_one(self.db,self.out,self.fx,tid)
