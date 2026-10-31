@@ -267,7 +267,7 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
                     expected)
                 result = reader(root, "handoff.json")
                 self.assertEqual(result["status"], "NATIVE_SOURCE_EXCERPT")
-                self.assertEqual(result["excerpt"], '{"retain":"immutable"}' + "\\n")
+                self.assertEqual(result["excerpt"], '{"retain":"immutable"}' + chr(10))
                 self.assertFalse(result["new_tool_execution_authorized"])
                 self.assertFalse(result["owner_outcome_verified"])
 
