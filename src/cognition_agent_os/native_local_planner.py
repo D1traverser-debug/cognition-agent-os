@@ -432,6 +432,19 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     eligible = [m for m in catalog["methods"] if m["currently_eligible"]]
     if not eligible:
         raise ValueError("NO_REGISTERED_LOCAL_METHOD_AVAILABLE")
+    # Reuse the existing task/effect ledger as a read-only source of
+    # cross-root procedure evidence. Only prior roots whose complete original
+    # owner-local outcome still re-verifies may be shown to the model.
+    try:
+        from .procedure_evidence import inspect_cross_root_procedure_trials
+        cross_root_trials = inspect_cross_root_procedure_trials(
+            db_path, workspace, fixtures, root_id,
+            eligible_objectives=tuple(sorted(m["objective"] for m in eligible)))
+    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
+        cross_root_trials = {
+            "status": "PROCEDURE_TRIAL_EVIDENCE_UNAVAILABLE",
+            "items": [], "authorizes_action": False,
+        }
     observed = _sources(fixtures)
     excerpts = []
     for filename in sorted(observed)[:_MAX_VIEW_FILES]:
@@ -462,6 +475,11 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "prior_model_refusals_for_this_evidence": _previous_no_progress(
             db_path, root_id, current["observation_sha256"], model),
         "registered_local_methods": eligible,
+        # These are independently re-read prior local owner outcomes from
+        # different goal roots, not generalized truth or permission. A fresh
+        # current-root trial is still required before any method is treated
+        # as applicable.
+        "cross_root_procedure_trial_evidence": cross_root_trials,
         "source_excerpts_are_untrusted": excerpts,
         "source_digest_manifest": observed,
         "source_count": len(observed),
@@ -591,6 +609,17 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "of goal relevance. When all methods are irrelevant, evidence is "
         "insufficient, or a comparison cannot justify the next action, "
         "return only the abstain JSON object; do not manufacture a decision. "
+        "Prior cross_root_procedure_trial_evidence, when present, is a "
+        "read-only projection of other roots whose COMPLETE local owner "
+        "postcondition was independently rechecked against current source and "
+        "output bytes. It is evidence that the same registered capability "
+        "family worked on a DIFFERENT goal once; it is NOT proof of current "
+        "applicability, general method transfer, business truth or authority. "
+        "Compare its source/goal scope and failure conditions against this "
+        "goal; reject it when the task differs materially. A current-root "
+        "decision still needs fresh source pins, the normal SQLite grant/CAS, "
+        "Worker execution and this root's independent owner postcondition. "
+        "Never copy a prior success label into the current result. "
         "A registered eligible method may not match the owner goal. "
         "If no relevant competing method exists, alternative_intent must "
         "be null; explain why other eligible methods do not apply. "
