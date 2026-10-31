@@ -53,6 +53,13 @@ drift, grant revocation, missing artifacts, ambiguous owner language, or
 failed audits remove the affected example from the current result. There is no
 mutable promotion flag to trust.
 
+The read-only local MCP bridge also exposes
+native_method_experience_inspect only when the operator enables
+allow_source_read. The ChatGPT Skill's on-demand parent protocol tells the
+interactive parent to call it when available. This is source-code packaging
+and a tested tool boundary, not proof that the user's ChatGPT account has
+loaded or invoked that Skill; actual client-selection traces remain required.
+
 ## Explicit non-claims
 
 - This does not establish semantic truth for arbitrary goals.
