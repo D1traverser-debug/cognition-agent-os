@@ -189,8 +189,10 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         """Read verified goal/CAS state and a bounded research history page.
 
         Follow open_research_next_before_event_id to recover older source
-        records. Pagination never changes the underlying decision CAS, grants,
-        or independent history validation. None means the newest page.
+        records. On NATIVE_SOURCE_CHANGED, research_reentry_sha256 is a
+        separate, non-authorizing CAS for hypothesis/research records ONLY;
+        observation_sha256 is absent and native_decision_admit remains blocked.
+        Pagination never grants execution. None means the newest page.
         """
         return inspect_native_goal(
             db_path, workspace, fixtures, root_task_id,
@@ -391,7 +393,11 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     @write_tool()
     def native_hypothesis_record(root_task_id: str, origin: str, idea: str,
                                  observation_sha256: str) -> dict:
-        """Record a user/agent method idea as an untrusted, non-authorizing hypothesis."""
+        """Record a falsifiable method idea, even after source invalidation.
+
+        Use research_reentry_sha256 from native_goal_inspect for a drifted
+        root. This is not permission to resume a stale decision or its Worker.
+        """
         return record_native_hypothesis(
             db_path, workspace, fixtures, root_task_id,
             origin=origin, idea=idea,
@@ -404,8 +410,10 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         This is research, not tool installation, a shell/HTTP executor,
         semantic truth, external provider authority, or a business outcome.
         The original SQLite grant, immutable goal, source pins and live
-        observation CAS still guard the checkpoint. Only a separately
-        registered adapter can later admit real work.
+        observation CAS still guard the checkpoint. After source drift,
+        use research_reentry_sha256; research remains explicitly UNVERIFIED,
+        and native_decision_admit still refuses the invalidated old lineage.
+        Only a separately registered adapter can later admit real work.
         """
         return record_native_open_research(
             db_path, workspace, fixtures, root_task_id, proposal)
