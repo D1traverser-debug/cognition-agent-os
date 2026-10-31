@@ -920,6 +920,12 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     if selected["child_source_spec"]["kind"] == "investigate_goal"
                     and child["state"] not in ("NEEDS_REVIEW", "VERIFIED")
                     else [])
+                research_window = list(reversed([
+                    e for e in open_research
+                    if research_before_event_id is None
+                    or e["event_id"] < research_before_event_id
+                ]))
+                research_page = research_window[:_MAX_OPEN_RESEARCH_PREVIEW]
                 return {**fail, "status": "NATIVE_SOURCE_CHANGED",
                         "original_goal": contract["goal"],
                         "reason": "SOURCE_PIN_DRIFT",
@@ -931,12 +937,11 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                         "new_investigation_source_paths": added_investigation_paths,
                         # Expose verified historical research without
                         # declaring it valid for the changed source version.
-                        "open_research": list(reversed([
-                            e for e in open_research
-                            if research_before_event_id is None
-                            or e["event_id"] < research_before_event_id
-                        ]))[:_MAX_OPEN_RESEARCH_PREVIEW],
+                        "open_research": research_page,
                         "open_research_count": len(open_research),
+                        "open_research_next_before_event_id": (
+                            research_page[-1]["event_id"]
+                            if len(research_window) > len(research_page) else None),
                         "hypotheses": hypotheses,
                         "research_reentry_sha256": _digest({
                             "root_id": root_id, "contract": contract,
