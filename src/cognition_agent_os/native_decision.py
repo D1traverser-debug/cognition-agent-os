@@ -759,7 +759,8 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
     """
     from .decision_reentry_projection import (
         Contradiction, Decision, project_reentry)
-    if (cause not in ("SOURCE_PIN_DRIFT", "WORKER_REPORTED_FAILURE")
+    if (cause not in ("SOURCE_PIN_DRIFT", "WORKER_REPORTED_FAILURE",
+                      "WORKER_EVIDENCE_UNVERIFIABLE")
         or not 0 <= target_index < len(decisions)
         or not isinstance(evidence_sha256, str)
         or not re.fullmatch(r"[a-f0-9]{64}", evidence_sha256)):
@@ -1105,9 +1106,34 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 else:
                     accepted = False
                 if not accepted:
+                    # This result is independently reread from the real
+                    # original Worker artifact/effect, not inferred from the
+                    # model's last proposal. Its failed postcondition is
+                    # an EVIDENCE-layer contradiction. Unlike source drift
+                    # it does not falsely claim an input revision changed.
+                    check_reason = (result.get("reason")
+                                    if kind in ("goal_case", "record_reconciliation",
+                                                "investigate_goal", "public_tool_discovery")
+                                    else "UNREGISTERED_NATIVE_KIND")
+                    graph = _trusted_native_causal_reentry(
+                        decisions, by_id, contract, root, index,
+                        cause="WORKER_EVIDENCE_UNVERIFIABLE",
+                        evidence_sha256=_digest({
+                            "root_id": root_id, "decision_event_id": item["event_id"],
+                            "child_id": child["task_id"], "child_state": child["state"],
+                            "child_artifact_sha256": child["artifact_hash"],
+                            "verdict": verdict, "failure_reason": check_reason,
+                            "current_sources": current_sources}))
                     return {**fail, "status": "NATIVE_EVIDENCE_UNVERIFIABLE",
                             "original_goal": contract["goal"],
-                            "reason": verdict}
+                            "reason": verdict,
+                            "reopen_decision_event_id": item["event_id"],
+                            "reopen_decision_ordinal": index,
+                            "reopen_scope": "EVIDENCE_AND_VERIFIER_CAUSAL_REEXAMINATION",
+                            "causal_reentry": {
+                                **graph, "evidence_verdict": verdict,
+                                "evidence_failure_reason": check_reason,
+                            }, "authorizes_action": False}
             observations.append({
                 "task_id": child["task_id"], "task_state": child["state"],
                 "selected_objective": selected["objective"],
