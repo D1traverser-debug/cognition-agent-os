@@ -103,3 +103,21 @@ class SourceCoverageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "SOURCE_READ_WINDOW_UNVERIFIABLE"):
                 project_read_coverage(expected_version="v1", total_units=364,
                                       windows=(window,))
+
+
+class AdversarialTrustBoundaryTests(unittest.TestCase):
+    def test_spoofed_full_windows_exposes_untrusted_receipt_limitation(self):
+        # This is a deliberate falsifier, not proof of provider authentication:
+        # a caller can lie that a window was read and the pure projector
+        # cannot independently discover the lie.
+        from cognition_agent_os.decision_reentry_projection import ReadWindow, project_read_coverage
+        forged = project_read_coverage(expected_version="v1", total_units=364,
+                                       windows=(ReadWindow("v1", 1, 364),))
+        self.assertTrue(forged.all_source_units_read)
+        self.assertFalse(forged.semantic_understanding_verified)
+
+    def test_spoofed_evidence_ref_never_certifies_business_or_authority(self):
+        r = project_reentry((Decision("source"),),
+                            Contradiction("model-self-report:I-am-certain", ("source",)))
+        self.assertFalse(r.outcome_verified)
+        self.assertFalse(r.authorizes_action)
