@@ -749,12 +749,13 @@ def _registered_native_contract_matches(
 
 def _trusted_native_causal_reentry(decisions: list, by_id: dict,
         contract: dict, root, target_index: int, *, cause: str,
-        evidence_sha256: str) -> dict:
-    """Project a real ledger failure onto its verified prior-result ancestry.
+        evidence_sha256: str, current_sources: dict | None = None) -> dict:
+    """Separate verified source/effect dependencies from temporal ordering.
 
-    Only _audit may select a reentry target: neither a model's source window
-    nor caller-supplied reopen IDs are trusted. This is non-authorizing and
-    does not pretend to establish the true semantic root cause.
+    A previous_result_task_id proves that earlier feedback was available,
+    NOT that every later decision semantically depends on it. Never invent
+    edges from the order of decisions. A changed source pin may separately
+    invalidate later receipts. Only _audit determines reentry targets.
     """
     from .decision_reentry_projection import (
         Contradiction, Decision, project_reentry)
@@ -763,7 +764,11 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
         or not isinstance(evidence_sha256, str)
         or not re.fullmatch(r"[a-f0-9]{64}", evidence_sha256)):
         raise ValueError("NATIVE_REENTRY_EVIDENCE_INVALID")
+    if cause == "SOURCE_PIN_DRIFT" and not isinstance(current_sources, dict):
+        raise ValueError("NATIVE_REENTRY_SOURCE_SNAPSHOT_MISSING")
     nodes = [Decision("original_goal", layer="authority")]
+    stale_source_decisions = []
+    stale_source_children = []
     required = {"child_task_id", "ordinal", "proposal",
                 "selected_plan_sha256", "source_sha256",
                 "prior_child_task_id", "owner_outcome_verified"}
@@ -790,11 +795,19 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
                          receipt["source_sha256"], old_child)
         decision_id = f"decision:{row['event_id']}"
         effect_id = f"effect:{child_id}"
-        parent = ("original_goal" if old_child is None
-                  else f"effect:{old_child}")
-        nodes.append(Decision(decision_id, (parent,), layer="method"))
+        # Every decision is scoped to the immutable owner goal. The
+        # previous result is chronological/context evidence, not a causal
+        # parent edge; only decision -> admitted child is guaranteed here.
+        nodes.append(Decision(decision_id, ("original_goal",), layer="method"))
         nodes.append(Decision(effect_id, (decision_id,), layer="execution"))
         lineage.append((row["event_id"], child_id))
+        if cause == "SOURCE_PIN_DRIFT" and index > target_index:
+            if not _sources_compatible(
+                    receipt["source_sha256"], current_sources,
+                    parsed["selected"]["child_source_spec"]["kind"],
+                    finished=child["state"] in ("NEEDS_REVIEW", "VERIFIED")):
+                stale_source_decisions.append(row["event_id"])
+                stale_source_children.append(child_id)
         old_child = child_id
     graph = project_reentry(tuple(nodes), Contradiction(
         evidence_sha256, (f"decision:{lineage[target_index][0]}",)))
@@ -809,6 +822,13 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
         "affected_child_task_ids": [
             child_id for _, child_id in lineage
             if f"effect:{child_id}" in graph.descendants_invalidated],
+        # These were independently invalidated by changed provider hashes,
+        # NOT deduced as semantic children of an earlier decision.
+        "source_pin_stale_decision_event_ids": stale_source_decisions,
+        "source_pin_stale_child_task_ids": stale_source_children,
+        "chronological_later_decisions_to_review": [
+            event_id for event_id, _ in lineage[target_index + 1:]],
+        "prior_result_order_proves_causality": False,
         "ancestor_decision_event_ids_to_challenge": [
             event_id for event_id, _ in lineage
             if f"decision:{event_id}" in graph.ancestors_to_challenge],
@@ -1025,7 +1045,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                                 "root_id": root_id,
                                 "ordinal": index,
                                 "pinned": receipt["source_sha256"],
-                                "current": current_sources})),
+                                "current": current_sources}),
+                            current_sources=current_sources),
                         "reopen_scope": "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION",
                         "reopen_decision_ordinal": index,
                         "affected_decision_event_ids": [
