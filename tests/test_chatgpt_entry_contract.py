@@ -98,10 +98,23 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
             self.assertIn(term, skill)
         # Verify the comparison obligation, not one frozen slogan that
         # rejects legitimate additions such as retire/remove.
-        study = skill.split("3. **Study/compare:**", 1)[1].split("\n4. ", 1)[0]
+        study = skill.split("3. **Study deeply / traverse original projects:**", 1)[1].split("\n4. ", 1)[0]
         for method in ("reuse", "adapt", "replace", "remove", "build"):
             self.assertRegex(study, rf"\b{method}\b")
         self.assertIn("For EVERY cognition-system decision", skill)
+        # Source-contract regression only: any one-way stage representation
+        # must fail source checks, but a runtime Client trace is still needed.
+        self.assertLess(skill.index("recursive root cause"),
+                        skill.index("Study deeply / traverse original projects"))
+        self.assertLess(skill.index("Study deeply / traverse original projects"),
+                        skill.index("Rechallenge BEFORE decision"))
+        self.assertIn("LOOP BACK into root-cause investigation", skill)
+        self.assertIn("architecture, real implementation and call paths", skill)
+        self.assertIn("tests/negative cases", skill)
+        self.assertIn("issues and compatibility limits", skill)
+        self.assertIn("challenge the preferred solution and the completeness of the research again", skill)
+        self.assertIn("Failed or contradictory evidence can invalidate upstream causal assumptions", skill)
+
         self.assertIn("AB. Ordinary-chat entry versus Project-only false baseline",
                       PROBES.read_text(encoding="utf-8"))
 
