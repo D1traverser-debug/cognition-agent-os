@@ -930,6 +930,44 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertNotEqual(first["child_task_id"], second["child_task_id"])
 
+    def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,4\n", encoding="utf-8")
+        drift = self.view(root)
+        self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED")
+        recorded = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent", idea="Maybe the supplier changed its stock version",
+            observation_sha256=drift["research_reentry_sha256"])
+        self.assertEqual(recorded["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        self.assertFalse(recorded["origin_authenticated"])
+        resumed = self.view(root)
+        self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertNotEqual(resumed["research_reentry_sha256"],
+                            drift["research_reentry_sha256"])
+        self.assertEqual(len(resumed["hypotheses"]), 1)
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Maybe another timestamp is wrong",
+                observation_sha256=drift["research_reentry_sha256"])
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        with self.assertRaises(PermissionError):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Maybe a third unrelated source is wrong",
+                observation_sha256=self.view(root)["research_reentry_sha256"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+
     def test_source_drift_allows_only_research_with_fresh_cas(self):
         root = self.root_id()
         admitted = admit_native_decision(
