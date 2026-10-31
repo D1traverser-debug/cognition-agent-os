@@ -728,15 +728,15 @@ class NativeLocalModelLoop(unittest.TestCase):
                          {p.name:p.read_bytes() for p in self.fixtures.iterdir()})
 
     def test_cross_root_verified_procedure_trial_is_challenged_not_promoted(self):
-        """A prior exact local outcome may inform a new root, never authorize it."""
+        """A verified prior procedure is trialled on a distinct goal, not promoted."""
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
         from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
         from cognition_agent_os.procedure_evidence import (
             inspect_cross_root_procedure_trials)
 
-        source_goal = (
+        source_root = register_native_goal(
+            self.db,
             "Compare reference.csv with observed.csv and report the differences.")
-        source_root = register_native_goal(self.db, source_goal)
         first = advance_native_adaptive_once(
             self.db, self.workspace, self.fixtures, source_root, model=None)
         self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
@@ -744,11 +744,19 @@ class NativeLocalModelLoop(unittest.TestCase):
             self.db, self.workspace, self.fixtures, max_jobs=1)
         self.assertEqual(worker["tasks"][0]["task_id"], first["child_task_id"])
         self.assertEqual(worker["tasks"][0]["status"], "NEEDS_REVIEW", worker)
-        outcome = inspect_owner_local_outcome(
-            self.db, self.workspace, self.fixtures, source_root)
-        self.assertEqual(outcome["status"], "LOCAL_OWNER_RESULT_VERIFIED")
+        self.assertEqual(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, source_root)["status"],
+            "LOCAL_OWNER_RESULT_VERIFIED")
 
-        target_root = register_native_goal(self.db, self.goal)
+        # New file bindings and a different owner goal force a genuine
+        # cross-root trial rather than replaying the first root's task.
+        (self.fixtures / "reference_b.csv").write_text(
+            "item,expected\nB,11\n", encoding="utf-8")
+        (self.fixtures / "observed_b.csv").write_text(
+            "item,expected\nB,9\n", encoding="utf-8")
+        target_goal = (
+            "Compare reference_b.csv with observed_b.csv and report the differences.")
+        target_root = register_native_goal(self.db, target_goal)
         trials = inspect_cross_root_procedure_trials(
             self.db, self.workspace, self.fixtures, target_root,
             eligible_objectives=("compare_records", "ensure_structure"))
@@ -784,11 +792,20 @@ class NativeLocalModelLoop(unittest.TestCase):
             self.assertIn("NOT proof of current", payload["prompt"])
             calls.append(evidence["items"][0]["procedure_fingerprint"])
             answer = {
-                "selected_intent": self.compare(),
-                "alternative_intent": self.ensure(),
-                "decision_reason": "Compare the current records using the same registered procedure family.",
-                "alternative_reason": "The JSON handoff does not answer the current discrepancy question.",
-                "expected_evidence": "A fresh independently audited report for this owner root.",
+                "selected_intent": {
+                    "kind": "goal_intent", "objective": "compare_records",
+                    "resources": [
+                        {"role": "reference", "path": "reference_b.csv"},
+                        {"role": "observed", "path": "observed_b.csv"}]},
+                "alternative_intent": None,
+                "decision_reason": (
+                    "The prior cross-root trial makes this registered comparison "
+                    "family worth testing on the distinct owner inputs."),
+                "alternative_reason": (
+                    "No other registered local capability directly compares "
+                    "these exact CSV source roles."),
+                "expected_evidence": (
+                    "A fresh independent SQL report readback for this owner root."),
                 "observation_sha256": history["observation_sha256"],
                 "decision_basis": self.basis_from_evidence(history),
             }
@@ -805,6 +822,38 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertFalse(inspect_owner_local_outcome(
             self.db, self.workspace, self.fixtures, target_root)[
                 "local_owner_outcome_verified"])
+
+        second_worker = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(
+            second_worker["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(second_worker["tasks"][0]["status"], "NEEDS_REVIEW")
+        target_outcome = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, target_root)
+        self.assertEqual(target_outcome["status"], "LOCAL_OWNER_RESULT_VERIFIED")
+        self.assertTrue(target_outcome["local_owner_outcome_verified"])
+        self.assertFalse(target_outcome["business_outcome_verified"])
+
+        # A third, different goal sees two independently verified trials of
+        # the same registered procedure family, not a promoted generic method.
+        (self.fixtures / "reference_c.csv").write_text(
+            "item,expected\nC,13\n", encoding="utf-8")
+        (self.fixtures / "observed_c.csv").write_text(
+            "item,expected\nC,12\n", encoding="utf-8")
+        third_root = register_native_goal(
+            self.db,
+            "Compare reference_c.csv with observed_c.csv and report the differences.")
+        third_trials = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, third_root,
+            eligible_objectives=("compare_records",))
+        self.assertEqual(len(third_trials["items"]), 2, third_trials)
+        self.assertEqual(
+            {x["source_root_id"] for x in third_trials["items"]},
+            {source_root, target_root})
+        self.assertEqual(
+            len({x["procedure_fingerprint"] for x in third_trials["items"]}), 1)
+        self.assertFalse(third_trials["any_general_method_transfer_verified"])
+        self.assertFalse(third_trials["authorizes_action"])
 
     def test_cross_root_procedure_trial_is_invalidated_by_source_drift(self):
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
