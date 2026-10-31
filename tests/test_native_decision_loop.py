@@ -1418,6 +1418,72 @@ class NativeDecisionLoop(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, root,
                 self.candidate(verified, self.structure(), self.reconcile()))
 
+    def test_evidence_failure_reenters_research_only_without_authorizing_effect(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        good = self.view(root)
+        file = self.workspace / "artifacts" / (admitted["child_task_id"] + ".json")
+        file.write_bytes(file.read_bytes() + b" tampered")
+        damaged = self.view(root)
+        self.assertEqual(damaged["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertRegex(damaged["research_reentry_sha256"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("observation_sha256", damaged)
+        first = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent",
+            idea="The independent artifact readback may be corrupt or incomplete",
+            observation_sha256=damaged["research_reentry_sha256"])
+        self.assertEqual(first["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(first["authorizes_action"])
+        after_hypothesis = self.view(root)
+        self.assertEqual(after_hypothesis["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertNotEqual(after_hypothesis["research_reentry_sha256"],
+                            damaged["research_reentry_sha256"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Another hypothesis with stale readout",
+                observation_sha256=damaged["research_reentry_sha256"])
+        proposal = {
+            "observation_sha256": after_hypothesis["research_reentry_sha256"],
+            "owner_clause": "Reconcile a supplier stock shortfall",
+            "unresolved_question": "Why does independent report replay now fail?",
+            "competing_methods": [
+                {"name": "artifact_hash_replay",
+                 "applicability": "Compare stored immutable worker hashes and new readback.",
+                 "failure_mode": "A false earlier trust anchor can survive a re-read.",
+                 "falsifier": "A new independent pinned artifact contradicts the hash."},
+                {"name": "verifier_health_probe",
+                 "applicability": "Test the independent evaluator on a known good artifact.",
+                 "failure_mode": "The evaluator can share the same broken source.",
+                 "falsifier": "An independently verified test fixture passes this evaluator."}],
+            "source_refs": [],
+            "next_research_step": "Run an isolated oracle health check without touching production.",
+            "uncertainty": "Neither path currently proves which bytes are authoritative.",
+        }
+        recorded = record_native_open_research(
+            self.db, self.workspace, self.fixtures, root, proposal)
+        self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        cold = self.view(root)
+        self.assertEqual(cold["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(cold["open_research_count"], 1)
+        self.assertEqual(len(cold["hypotheses"]), 1)
+        self.assertNotEqual(cold["research_reentry_sha256"],
+                            after_hypothesis["research_reentry_sha256"])
+        self.assertFalse(cold["owner_outcome_verified"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                self.candidate(good, self.structure(), self.reconcile()))
+
     def test_broken_independent_verifier_is_not_labelled_worker_corruption(self):
         root = self.root_id()
         admit_native_decision(
