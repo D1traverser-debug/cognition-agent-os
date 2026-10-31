@@ -19,7 +19,7 @@ description: Use for cognition-agent-os or established cognition parent/child wo
 
 **Unlabeled but still in-scope follow-ups:** If user context selects cognition/child work, resume without requesting repeated specialist lists. For a genuinely ambiguous new `继承`, consult personal context and accessible private goal records, **do not guess the named repo**, latest timestamp or project. Ask one necessary choice only if distinct active goals remain. No interception of unrelated programming, food or ordinary chats.
 
-**Root-before-leaves dependency gate:** selected goal -> original private requirement/version/grants -> live source and stale-claim checks -> relevant bounded evidence -> challenged decision -> admitted action -> independently verified effect -> continuity. CI green, documentation and self-rating do not prove upstream stages; multiple root causes can coexist.
+**Root-before-leaves dependency gate (NOT a linear pipeline):** Scope the original goal, grants and live sources, then **RECURSIVELY** challenge competing root causes and the diagnostic method; trace relevant original implementations, tests and counterexamples; compare real alternatives; **RECHALLENGE the selected method and research coverage BEFORE action**. New contradictory evidence can reopen earlier source, method, authority or architecture assumptions, even after execution. Only grant-valid actions enter the execution loop; independently observed owner outcomes can send the system BACK into investigation. Neither a checklist nor green CI nor model self-rating proves these cognition decisions happened. Keep independent lawful read-only research progressing without treating untested hypotheses as proven.
 
 ## Work on the problem, not the instructions
 
