@@ -976,6 +976,52 @@ class NativeDecisionLoop(unittest.TestCase):
             record_native_open_research(
                 self.db, self.workspace, self.fixtures, root, newer)
 
+    def test_source_drift_research_page_recovers_all_history(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,7\n", encoding="utf-8")
+        for index in range(18):
+            state = self.view(root)
+            self.assertEqual(state["status"], "NATIVE_SOURCE_CHANGED")
+            proposal = {
+                "observation_sha256": state["research_reentry_sha256"],
+                "owner_clause": "Reconcile a supplier stock shortfall",
+                "unresolved_question": "Which source revision is trustworthy?",
+                "competing_methods": [
+                    {"name": "ledger_check",
+                     "applicability": "Inspect immutable original records.",
+                     "failure_mode": "Original file may already be incomplete.",
+                     "falsifier": "Independent vendor signed record disagrees."},
+                    {"name": "vendor_probe",
+                     "applicability": "Compare independent vendor source reports.",
+                     "failure_mode": "Vendor report may share the same input.",
+                     "falsifier": "Independent third party audit disagrees."}],
+                "source_refs": [],
+                "next_research_step": (
+                    f"Check external revision and negative control {index}."),
+                "uncertainty": "External effect has not yet been independently tested.",
+            }
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        first = self.view(root)
+        self.assertEqual(first["open_research_count"], 18)
+        self.assertEqual(len(first["open_research"]), 16)
+        self.assertIsNotNone(first["open_research_next_before_event_id"])
+        second = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root,
+            research_before_event_id=first["open_research_next_before_event_id"])
+        self.assertEqual(len(second["open_research"]), 2)
+        self.assertIsNone(second["open_research_next_before_event_id"])
+        all_ids = [x["event_id"] for x in first["open_research"]]
+        all_ids += [x["event_id"] for x in second["open_research"]]
+        self.assertEqual(all_ids, sorted(all_ids, reverse=True))
+        self.assertEqual(len(set(all_ids)), 18)
+        self.assertNotIn("observation_sha256", first)
+        self.assertNotIn("observation_sha256", second)
+
     def test_new_research_document_before_investigation_execution_fences_old_scope(self):
         (self.fixtures / "initial.md").write_text(
             "Only the initial research evidence is approved.", encoding="utf-8")
