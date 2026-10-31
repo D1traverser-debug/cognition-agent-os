@@ -662,6 +662,16 @@
     "readback": "GET_PLUGIN_FILES_VERSION_AND_SKILL_ASSERTIONS_CONFIRMED",
     "selection_in_ordinary_fresh_chat": "NOT_TESTED",
     "live_native_sqlite_host_link": "NOT_CONNECTED",
-    "next_resume_rule": "Read this once, compare current plugin release ID + source Git blob; do not rebuild/redeploy identical ZIP. Never claim account Skill auto-selected from source equality."
+    "next_resume_rule": "Read this once, compare current plugin release ID + source Git blob; do not rebuild/redeploy identical ZIP. Never claim account Skill auto-selected from source equality.",
+    "current_session_skill_reader": {
+      "status": "STALE_SNAPSHOT_AFTER_SUCCESSFUL_PLUGIN_RELEASE",
+      "read_via": "skills__read skill.md (current chat session)",
+      "returned_contains_new_post_study_rechallenge": false,
+      "current_release_contains_new_post_study_rechallenge": true,
+      "same_bytes": false,
+      "explanation": "The currently active chat may retain an older pre-update skill snapshot. This does not prove the next new chat will use the old one or select the plugin automatically.",
+      "next_verification": "Actual independent fresh ordinary ChatGPT session: record native Skill-selection trace and read returned skill version/content; do not ask the owner to repeat original requirements.",
+      "owner_effect_verified": false
+    }
   }
 }
