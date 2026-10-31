@@ -4,7 +4,7 @@
 
 Historical pre-compaction text is preserved at `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for evidence only. Private user conversations must remain private.
 
-For repeat audits, first consult `evidence/recovery/2026-10-31-source-map.json` and `evidence/source-baselines/2026-10-31-main.json`; use `scripts/plan_incremental_audit.py` to reopen changed blobs. These are dated public source receipts, never owner or semantic proof.
+Audit reuse: `evidence/recovery/2026-10-31-source-map.json` → `scripts/plan_incremental_audit.py`. Reopen changed blobs; old receipts never certify semantics.
 
 ## Owner-activated continuity — 2026-10-29
 
@@ -18,7 +18,7 @@ progress can be inferred from this dated index.
 
 Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that preserves the COMPLETE owner goal and corrections; decomposes and challenges assumptions; independently searches/learns professional sources and existing tools; compares reuse/adapt/replace/new methods; lawfully executes; independently verifies full owner and child-business outcomes; changes method after failure; retains verified learning; resumes across interruption; transfers to unfamiliar domains; and reduces owner correction work and unnecessary complexity.
 
-2026-10-26 owner correction remains controlling unless newer direct owner text supersedes it: prioritize real ChatGPT/Codex research -> comparison -> connected-tool action -> independent result -> correction now. Ordinary ChatGPT chats do not require the parent workflow. Persistent Host/cloud bridge, paid APIs and deployment are later authorization phases. Child systems retain their own IDs, grants, state and business-result oracles. UAOS is not the new target parent; it remains the ACTIVE child-declared controller for four domains until verified migration. Reuse its original authority maps and tested methods; do not sever, rebind or delete it by renaming.
+2026-10-26 owner correction remains controlling unless newer direct owner text supersedes it: prioritize real ChatGPT/Codex research -> comparison -> connected-tool action -> independent result -> correction now. Ordinary ChatGPT chats do not require the parent workflow. Persistent Host/cloud bridge, paid APIs and deployment are later authorization phases. Child systems retain their own IDs, grants, state and business-result oracles. UAOS remains the ACTIVE controller for four child domains until verified migration; it is a migration source, not the target new parent. Do not sever or rebind.
 
 ## Recovery order and responsibility map
 
