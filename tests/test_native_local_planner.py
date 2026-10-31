@@ -855,6 +855,79 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertFalse(third_trials["any_general_method_transfer_verified"])
         self.assertFalse(third_trials["authorizes_action"])
 
+
+    def test_cross_root_procedure_evidence_changed_during_inference_blocks_admission(self):
+        """A prior success invalidated after prompt construction cannot ground a decision."""
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+
+        source_root = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source_root, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        worker = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(worker["tasks"][0]["task_id"], first["child_task_id"])
+        self.assertEqual(worker["tasks"][0]["status"], "NEEDS_REVIEW", worker)
+
+        (self.fixtures / "reference_b.csv").write_text(
+            "item,expected\nB,11\n", encoding="utf-8")
+        (self.fixtures / "observed_b.csv").write_text(
+            "item,expected\nB,9\n", encoding="utf-8")
+        target_root = register_native_goal(
+            self.db,
+            "Compare reference_b.csv with observed_b.csv and report the differences.")
+
+        def model(method, endpoint, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            self.assertEqual(method, "POST")
+            history = json.loads(payload["prompt"].rsplit("\n\n", 1)[1])
+            evidence = history["cross_root_procedure_trial_evidence"]
+            self.assertEqual(
+                evidence["status"], "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE")
+            prior_artifact = (
+                self.workspace / "artifacts" /
+                (evidence["items"][0]["evidence_task_id"] + ".json"))
+            # Simulate an independent artifact change after the planner read
+            # and presented the previously verified result, but before
+            # decision admission. The current root's own inputs do not change.
+            prior_artifact.write_text('{"tampered":true}\n', encoding="utf-8")
+            answer = {
+                "selected_intent": {
+                    "kind": "goal_intent", "objective": "compare_records",
+                    "resources": [
+                        {"role": "reference", "path": "reference_b.csv"},
+                        {"role": "observed", "path": "observed_b.csv"}]},
+                "alternative_intent": None,
+                "decision_reason": (
+                    "The prior cross-root trial makes this registered comparison "
+                    "family worth testing on the distinct owner inputs."),
+                "alternative_reason": (
+                    "No other registered local capability directly compares "
+                    "these exact CSV source roles."),
+                "expected_evidence": (
+                    "A fresh independent SQL report readback for this owner root."),
+                "observation_sha256": history["observation_sha256"],
+                "decision_basis": self.basis_from_evidence(history),
+            }
+            return {"done": True, "response": json.dumps(answer)}
+
+        with patch("cognition_agent_os.local_model._request", side_effect=model):
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, target_root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_LOCAL_PLAN_REFUSED", result)
+        self.assertIn(
+            "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE", result["reason"])
+        state = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, target_root)
+        self.assertEqual(state["decision_count"], 0, state)
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, target_root)[
+                "local_owner_outcome_verified"])
+
     def test_cross_root_procedure_trial_is_invalidated_by_source_drift(self):
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
         from cognition_agent_os.procedure_evidence import (
