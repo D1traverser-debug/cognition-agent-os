@@ -17,7 +17,7 @@ A selected ordinary ChatGPT conversation must resume unfinished cognition work. 
 The ten entries are **locations of authority and evidence**, NOT ordered thinking stages. Load only the relevant originals. New evidence can reopen any earlier assumption.
 
 1. **Owner authority:** Current owner request, PRIVATE original contract and latest corrections; unavailable clauses remain UNKNOWN, not guessed from historical summaries.
-2. **Live source:** GitHub default-branch HEAD, active PR and Draft ancestry, matching-head CI and competing/conflicting work; a merged PR is history, never the live branch.
+2. **Live source:** GitHub default branch HEAD, active PR and Draft ancestry, matching-head CI and competing/conflicting work; a merged PR is history, never the live branch.
 3. **Open outcome:** Every unfinished original obligation, observed failure, rejected method, falsifier and independently checkable acceptance result; an OPEN goal does not become done after a local fix.
 4. **Existing capability:** Compare existing source and tools with Agent-Learning-Hub primary mechanisms; `scripts/architecture_probe.py --repo .` locates AST dependencies, not proof of an owner outcome.
 5. **Architecture:** `docs/01-ARCHITECTURE-DECISIONS.md` and `docs/PRODUCT-READINESS-GATE.md` are revisable candidates, not preapproved answers.
