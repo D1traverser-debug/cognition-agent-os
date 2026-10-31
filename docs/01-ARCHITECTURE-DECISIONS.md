@@ -201,7 +201,9 @@ Codex Goal/Work、独立 SQLite Host、定时任务和 API 桥接现在均为
 
 
 
-## J. 2026-10-31 决策重开：认知工作流每次生效；旧 UAOS 按能力淘汰（Draft）
+## J. 2026-10-31 历史 Draft：UAOS 父级绑定迁移候选（2026-11-01 起不再是当前工作流）
+
+**状态更正（2026-11-01）：** 本节保留的是一次历史迁移审计与候选方案，不再定义当前 owner-selected workstream，也不授权迁移四个子系统。当前目标是先证明 **cognition-agent-os 自身的认知/演化闭环**：完整目标恢复、竞争根因诊断、第一手研究、方案反证、授权执行、独立 owner outcome、程序性学习与跨任务迁移。UAOS 子域迁移仍是独立目标，只有 owner 重新明确选择时才启动。此更正优先于本节中“当前优先候选”的历史表述，并与 `AGENTS.md`、`docs/PRODUCT-READINESS-GATE.md` 一致。
 
 **新用户目标（不是对方案正确性的证明）：** 在 cognition-agent-os 内，每次工程决策都必须执行恢复原目标与失败经验、定位问题与竞争根因、阅读适用的一手源码/测试、比较 reuse/adapt/replace/delete/build、提出可推翻选型的反例、合法执行、真实结果独立读回、沉淀有效方法与失效条件。简单已知事项可以缩小研究成本，但不能跳过目标、反证和验收。不得仅靠这段规则声称 ChatGPT 新会话已自动执行。
 
@@ -222,4 +224,22 @@ Codex Goal/Work、独立 SQLite Host、定时任务和 API 桥接现在均为
 
 **最强反证：** 如果某子域新架构无法实现合法旧任务、不能独立观测效果、对最新资料的记忆继承失败或有旧 UAOS 隐含权限依赖，则不应以“新代码更少”宣告迁移成功。反之若某旧功能完全无调用者或被独立替代且可回退，应优先删除它，而非以“历史兼容”无限延期。
 
-**实施与验收边界：** Draft 已修复一处实际旧引用漏检，不意味着整域接管。后续先对一个业务场景进行旧路径与新候选的真实同任务对照，测量全目标完成、用户纠错次数、成本、原业务状态/权限、失败恢复与负迁移；无当前 owner 许可不合并 main、不部署、不写子系统生产正典、不删除旧 UAOS。任何结论必须写回当前 ADR 和已有来源证据，不再分裂成新任务权威。
+**实施与验收边界（历史决策）：** Draft 曾修复一处实际旧引用漏检，不意味着整域接管。后续若 owner 重新选择该迁移目标，仍须对一个业务场景进行旧路径与新候选的真实同任务对照，测量全目标完成、用户纠错次数、成本、原业务状态/权限、失败恢复与负迁移。
+
+**工程合并权限更正（2026-11-01）：** owner 已将工程合并就绪判断委托给 assistant；assistant 可在独立检查完整 owner goal、相关独立 review、exact-head CI、未解决 P0/P1/P2、rollback 与 acceptance evidence 后自行决定合并 main，无需逐次申请合并批准。这是判断权限，不是必须合并，也不放宽产品验收。部署、付费 API、子系统生产正典写入、私有 transcript 发布及插件账号发布仍需各自明确授权。
+
+
+## K. 2026-11-01 当前工作顺序：先证明认知/演化闭环，不以局部工程量替代
+
+**当前 owner-selected objective：** 完成 cognition-agent-os 自身的 cognition/evolution loop，而不是 UAOS child migration、静态文档审计、额外 graph/controller 或 CI 数量。完整闭环是：恢复原始目标与纠正 → 定位竞争根因 → 研究一手来源 → 比较并反证方法/工具 → 在当前 grant 内执行 → 独立读回 owner-meaningful outcome → 形成带适用条件/失败条件/反例的 procedure → 在不同任务中重新验证、迁移或失效回滚。
+
+**已修复的窄范围 P2（Draft PR #62，NOT product acceptance）：**
+- auditor 与 sandbox effect 统一使用 128 KiB artifact bound；66,387-byte 有效 goal-case artifact 回归验证 exact audited bytes 被 stage。
+- goal-case audit failure 绑定 exact observed artifact digest 到 research-reentry CAS；不同 corrupt byte revisions 不得复用旧 CAS；audit verdict 使用真实 status 分类。
+- source/evidence failure 时只允许当前注册 root、当前 SQLite goal/grant/write authority 下的 scoped read-only investigation；披露后重查 grant、original goal 与 exact source digest；决策/动作 admission 仍关闭。
+
+**下一项真正的产品缺口不是再加固定 grammar：** 当前 `intent_planner.py` 仍只注册有限 objective；`public_tool_discovery.py` 能发现 metadata，但不等于把新工具安装为可执行 Worker capability；`owner_postcondition.py` 只独立验证少数明确的本地结果。必须用一个真实、此前未为系统硬编码的 owner goal，观察 native model/tool 选择、实际合法执行和独立 owner outcome，再与 incumbent 在同等授权/输入/时间预算下 A/B。若没有真实 client/Host trace，标记 NOT_TESTED。
+
+**程序性学习边界：** `knowledge_candidates` 当前是 root-scoped、source-pinned、unverified candidate；`signed_outcome_feedback` 是受签名/holdout 约束的窄领域反馈，不是通用跨任务 method library。不得仅凭模型总结、一次机械 PASS 或同一 root 内多次尝试提升为通用方法。下一版若要建立可迁移 procedure，必须记录方法 fingerprint、适用条件、失败条件/反例、独立 owner outcome trial、跨 root 的真实再执行、non-fit、source/grant invalidation 与 rollback；仍使用原 SQLite authority，且在真实 trial 前不得授予行动权限。
+
+**当前状态：NOT_READY。** Draft PR、绿色测试、模型文字或方法卡均不能代替 first-turn fresh ChatGPT session activation、陌生 owner task 的独立结果与纠错负担测量。当前唯一活跃集成面为 PR #62；产品/交互验收仍 OPEN。
