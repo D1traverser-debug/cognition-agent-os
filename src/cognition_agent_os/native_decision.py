@@ -1159,6 +1159,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             "root_id": root_id, "decision_event_id": item["event_id"],
                             "child_id": child["task_id"], "child_state": child["state"],
                             "child_artifact_sha256": child["artifact_hash"],
+                            "observed_artifact_sha256":
+                                result.get("observed_artifact_sha256"),
                             "verdict": verdict, "failure_reason": check_reason,
                             "current_sources": current_sources}))
                     # Read-only discovery/research can proceed when an
@@ -1181,6 +1183,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             "causal_reentry": {
                                 **graph, "evidence_verdict": verdict,
                                 "evidence_failure_reason": check_reason,
+                                "observed_artifact_sha256":
+                                    result.get("observed_artifact_sha256"),
                             },
                             "hypotheses": hypotheses,
                             "open_research": research_page,
@@ -1200,7 +1204,9 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                                 "research": [dict(rr) for rr in research_rows],
                                 "failed_event_id": item["event_id"],
                                 "failed_verdict": verdict,
-                                "failed_reason": check_reason}),
+                                "failed_reason": check_reason,
+                                "observed_artifact_sha256":
+                                    result.get("observed_artifact_sha256")}),
                             "authorizes_action": False}
             observations.append({
                 "task_id": child["task_id"], "task_state": child["state"],
