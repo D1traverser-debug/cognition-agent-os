@@ -727,6 +727,136 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(files_before,
                          {p.name:p.read_bytes() for p in self.fixtures.iterdir()})
 
+    def test_cross_root_verified_procedure_trial_is_challenged_not_promoted(self):
+        """A prior exact local outcome may inform a new root, never authorize it."""
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        source_goal = (
+            "Compare reference.csv with observed.csv and report the differences.")
+        source_root = register_native_goal(self.db, source_goal)
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source_root, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        worker = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(worker["tasks"][0]["task_id"], first["child_task_id"])
+        self.assertEqual(worker["tasks"][0]["status"], "NEEDS_REVIEW", worker)
+        outcome = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, source_root)
+        self.assertEqual(outcome["status"], "LOCAL_OWNER_RESULT_VERIFIED")
+
+        target_root = register_native_goal(self.db, self.goal)
+        trials = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(
+            trials["status"], "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE", trials)
+        self.assertEqual(len(trials["items"]), 1, trials)
+        trial = trials["items"][0]
+        self.assertEqual(trial["source_root_id"], source_root)
+        self.assertEqual(trial["objective"], "compare_records")
+        self.assertEqual(trial["capability"], "csv_evidence_reconciliation_v1")
+        self.assertRegex(trial["procedure_fingerprint"], r"^[a-f0-9]{64}$")
+        self.assertNotEqual(
+            trial["source_goal_sha256"],
+            trials["current_root_goal_sha256"])
+        self.assertEqual(
+            trial["trial_status"], "PRIOR_ROOT_LOCAL_OWNER_OUTCOME_VERIFIED")
+        self.assertEqual(
+            trial["applicability_to_current_goal"], "NOT_YET_TESTED")
+        self.assertFalse(trial["authorizes_action"])
+        self.assertFalse(trials["any_general_method_transfer_verified"])
+
+        calls = []
+        def model(method, endpoint, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            self.assertEqual(method, "POST")
+            history = json.loads(payload["prompt"].rsplit("\n\n", 1)[1])
+            evidence = history["cross_root_procedure_trial_evidence"]
+            self.assertEqual(evidence["status"],
+                             "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE")
+            self.assertEqual(evidence["items"][0]["source_root_id"], source_root)
+            self.assertFalse(evidence["items"][0]["authorizes_action"])
+            self.assertIn("NOT proof of current", payload["prompt"])
+            calls.append(evidence["items"][0]["procedure_fingerprint"])
+            answer = {
+                "selected_intent": self.compare(),
+                "alternative_intent": self.ensure(),
+                "decision_reason": "Compare the current records using the same registered procedure family.",
+                "alternative_reason": "The JSON handoff does not answer the current discrepancy question.",
+                "expected_evidence": "A fresh independently audited report for this owner root.",
+                "observation_sha256": history["observation_sha256"],
+                "decision_basis": self.basis_from_evidence(history),
+            }
+            return {"done": True, "response": json.dumps(answer)}
+
+        from cognition_agent_os.native_local_planner import advance_native_local_once
+        with patch("cognition_agent_os.local_model._request", side_effect=model):
+            admitted = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, target_root,
+                model="installed:test")
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED", admitted)
+        self.assertEqual(calls, [trial["procedure_fingerprint"]])
+        self.assertFalse(admitted["owner_outcome_verified"])
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, target_root)[
+                "local_owner_outcome_verified"])
+
+    def test_cross_root_procedure_trial_is_invalidated_by_source_drift(self):
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        source_root = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source_root, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        target_root = register_native_goal(self.db, self.goal)
+        before = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(len(before["items"]), 1, before)
+
+        (self.fixtures / "observed.csv").write_text(
+            "item,expected\nA,999\n", encoding="utf-8")
+        after = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(after["status"],
+                         "NO_VERIFIED_CROSS_ROOT_PROCEDURE_TRIALS", after)
+        self.assertEqual(after["items"], [])
+        self.assertFalse(after["authorizes_action"])
+
+    def test_cross_root_procedure_trial_does_not_cross_objective_fit(self):
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        source_root = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source_root, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+
+        target_root = register_native_goal(
+            self.db,
+            "Ensure a sandbox draft of handoff.json has audited equals to yes.")
+        trials = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(trials["status"], "NO_APPLICABLE_PROCEDURE_TRIALS")
+        self.assertEqual(trials["items"], [])
+        self.assertFalse(trials["authorizes_action"])
+
     def test_one_tick_two_model_methods_are_feedback_driven(self):
         """One explicit opt-in Host run must replan after actual first feedback.
 
