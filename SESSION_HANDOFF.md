@@ -17,7 +17,7 @@ A selected ordinary ChatGPT conversation must resume unfinished cognition work. 
 The ten entries are **locations of authority and evidence**, NOT ordered thinking stages. Load only the relevant originals. New evidence can reopen any earlier assumption.
 
 1. **Owner authority:** Current owner request, PRIVATE original contract and latest corrections; unavailable clauses remain UNKNOWN, not guessed from historical summaries.
-2. **Live source:** GitHub default branch HEAD, active PR and Draft ancestry, matching-head CI and competing/conflicting work; a merged PR is history, never the live branch.
+2. **Live source:** GitHub default branch HEAD, live PR metadata, active PR and Draft ancestry, matching-head CI and possible competing active work; a merged PR is history, never the live branch.
 3. **Open outcome:** Every unfinished original obligation, observed failure, rejected method, falsifier and independently checkable acceptance result; an OPEN goal does not become done after a local fix.
 4. **Existing capability:** Compare existing source and tools with Agent-Learning-Hub primary mechanisms; `scripts/architecture_probe.py --repo .` locates AST dependencies, not proof of an owner outcome.
 5. **Architecture:** `docs/01-ARCHITECTURE-DECISIONS.md` and `docs/PRODUCT-READINESS-GATE.md` are revisable candidates, not preapproved answers.
@@ -25,7 +25,7 @@ The ten entries are **locations of authority and evidence**, NOT ordered thinkin
 7. **ChatGPT surface:** Installed account Skill versus `integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md`; fresh ChatGPT selection requires client traces.
 8. **Local Host:** SQLite `ledger.py` and `host.py` govern their own runtime task/grant/effect boundary, not native ChatGPT; `native_decision.py`, `native_local_planner.py`, `memory_candidates.py` have narrower roles.
 9. **Child and outcome evidence:** Each child owns its own grant, state and business outcome oracle; independently reread provider effects and whole owner results, with unseen tests and correction costs.
-10. **Historical reuse:** ON-DEMAND commit history and Files changed only when relevant; do not preload old PRs. `evidence/recovery/2026-10-31-source-map.json` and `scripts/plan_incremental_audit.py` identify unchanged blobs, never grant authority.
+10. **Historical reuse:** ON-DEMAND commit history and Files changed only when relevant; do not preload old PRs. `evaluation/historical_branch_provenance_v1.json` is a frozen pointer only; LIVE GitHub outranks it. `evidence/recovery/2026-10-31-source-map.json` and `scripts/plan_incremental_audit.py` identify unchanged blobs, never grant authority.
 
 ## Work cycle after recovery
 
