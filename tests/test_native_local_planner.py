@@ -834,6 +834,36 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(after["items"], [])
         self.assertFalse(after["authorizes_action"])
 
+    def test_cross_root_procedure_trial_is_invalidated_by_grant_change(self):
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        source_root = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source_root, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        target_root = register_native_goal(self.db, self.goal)
+        before = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(len(before["items"]), 1, before)
+
+        with closing(connect(self.db)) as db:
+            db.execute(
+                "UPDATE authority SET grant_rev=grant_rev+1 WHERE singleton=1")
+            db.commit()
+        after = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records", "ensure_structure"))
+        self.assertEqual(
+            after["status"], "PROCEDURE_TRIAL_CURRENT_ROOT_NOT_ADMISSIBLE")
+        self.assertEqual(after["items"], [])
+        self.assertFalse(after["authorizes_action"])
+
     def test_cross_root_procedure_trial_does_not_cross_objective_fit(self):
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
         from cognition_agent_os.procedure_evidence import (
