@@ -840,7 +840,7 @@
       "label": "SkillOpt",
       "section": "Skills, Protocols, And Tooling",
       "atlas_line": 264,
-      "status": "SOURCE_AND_METHOD_READ",
+      "status": "SOURCE_AND_TEST_READ",
       "evidence": [
         {
           "repo": "microsoft/SkillOpt",
@@ -853,6 +853,30 @@
           "path": "plugins/codex/skills/skillopt-sleep/SKILL.md",
           "blob_sha": "ac4a2bccfc0c9fb4fafd8f524b677f680a43b94b",
           "kind": "method"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/cycle.py",
+          "blob_sha": "42a663628192e7998d61a73c51b4d348416b3712",
+          "kind": "implementation"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/replay.py",
+          "blob_sha": "6eba0b8612d06f64c8860af3cbd5cbdcbe44cf13",
+          "kind": "evaluation_replay"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/gate.py",
+          "blob_sha": "7eca3b430011ad20cf3cd01b5a4a0dc2f3040547",
+          "kind": "acceptance_gate"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "tests/test_gate.py",
+          "blob_sha": "7a542347ac80f7bb56578e45dcc97cffc1c34d8c",
+          "kind": "unit_tests"
         }
       ],
       "nested_leads": [
@@ -1513,6 +1537,104 @@
         }
       ],
       "nested_leads": []
+    },
+    {
+      "url": "https://github.com/dbos-inc/dbos-transact-py/blob/main/dbos/_recovery.py",
+      "label": "DBOS durable recovery requeue vs cognition reentry; no verified Host integration",
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "dbos-inc/dbos-transact-py",
+          "path": "dbos/_recovery.py",
+          "blob_sha": "ca4a0ca6c4ff402c1a119e920534253c3e5ddea4",
+          "kind": "recovery_implementation"
+        },
+        {
+          "repo": "dbos-inc/dbos-transact-py",
+          "path": "dbos/_dbos.py",
+          "blob_sha": "c27f07a2ce207721883d96b8f54e3fb548b6a004",
+          "kind": "durable_runtime"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/sentient-agi/EvoSkill/blob/main/src/loop/runner.py",
+      "label": "EvoSkill failure→proposal/frontier/evaluation; transfer and independent owner oracle untested",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "sentient-agi/EvoSkill",
+          "path": "src/loop/runner.py",
+          "blob_sha": "6174d8813c9d05fcf238ca97caff396f61c859c7",
+          "kind": "implementation"
+        },
+        {
+          "repo": "sentient-agi/EvoSkill",
+          "path": "tests/test_loop.py",
+          "blob_sha": "0c3319280baaea988af91818ca4c5a4eed8baba2",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/microsoft/SkillOpt/blob/main/skillopt_sleep/cycle.py",
+      "label": "SkillOpt-Sleep harvest/mine/replay/gate/stage; cannot promote methods from self-score",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/cycle.py",
+          "blob_sha": "42a663628192e7998d61a73c51b4d348416b3712",
+          "kind": "implementation"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/replay.py",
+          "blob_sha": "6eba0b8612d06f64c8860af3cbd5cbdcbe44cf13",
+          "kind": "evaluation_replay"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/gate.py",
+          "blob_sha": "7eca3b430011ad20cf3cd01b5a4a0dc2f3040547",
+          "kind": "acceptance_gate"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "tests/test_gate.py",
+          "blob_sha": "7a542347ac80f7bb56578e45dcc97cffc1c34d8c",
+          "kind": "unit_tests"
+        }
+      ],
+      "nested_leads": []
+    },
+    {
+      "url": "https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/graph/state.py",
+      "label": "LangGraph explicit control edges and Pregel checkpoint; not semantic causality",
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/langgraph/langgraph/graph/state.py",
+          "blob_sha": "9a87f16fa91a794b2e9be09352c1cb03ae89a90d",
+          "kind": "graph_api"
+        },
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/langgraph/langgraph/pregel/_loop.py",
+          "blob_sha": "579b8ae09d074e7aaabf6e643cc5fe554a1cdbc6",
+          "kind": "checkpoint_loop"
+        },
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/langgraph/tests/test_pregel.py",
+          "blob_sha": "0079b2a577be9bb6c8734c9a20472d9f2ef97eba",
+          "kind": "tests"
+        }
+      ],
+      "nested_leads": []
     }
   ],
   "recursive_studies": [
@@ -1626,6 +1748,52 @@
         "persistent browser profiles require separate privacy and effect controls"
       ],
       "next_falsifier": "same task A-B against existing Opera browser connector, CLI+Skill and MCP on a compatible host"
+    },
+    {
+      "topic": "recursive_reentry_and_fault_layer_separation_20261031",
+      "canonical_repo": "D1traverser-debug/cognition-agent-os (existing SQLite/Host) vs LangGraph, DBOS, OpenHands, Letta, SkillOpt, EvoSkill",
+      "status": "PRIMARY_IMPLEMENTATION_AND_TESTS_READ; BOUNDED_HOST_FAULT_TRANSFER_UNDER_CI; NATIVE_CHATGPT_SESSION_AND_HELDOUT_METHOD_TRANSFER_NOT_TESTED",
+      "evidence": [
+        {
+          "repo": "langchain-ai/langgraph",
+          "path": "libs/langgraph/langgraph/graph/state.py",
+          "blob_sha": "9a87f16fa91a794b2e9be09352c1cb03ae89a90d",
+          "kind": "explicit_graph_edges"
+        },
+        {
+          "repo": "OpenHands/software-agent-sdk",
+          "path": "openhands-sdk/openhands/sdk/conversation/stuck_detector.py",
+          "blob_sha": "6026df34919787bca047ae84f1ecce95be66e9e3",
+          "kind": "stuck_pattern_detection"
+        },
+        {
+          "repo": "microsoft/SkillOpt",
+          "path": "skillopt_sleep/gate.py",
+          "blob_sha": "7eca3b430011ad20cf3cd01b5a4a0dc2f3040547",
+          "kind": "evaluation_gate"
+        },
+        {
+          "repo": "letta-ai/letta-code",
+          "path": "src/skills/builtin/context-doctor/references/investigating-behavior.md",
+          "blob_sha": "8521ca06d3f3b42245efb5e9986cee929b29037a",
+          "kind": "behavioral_causal_evidence"
+        },
+        {
+          "repo": "sentient-agi/EvoSkill",
+          "path": "tests/test_loop.py",
+          "blob_sha": "0c3319280baaea988af91818ca4c5a4eed8baba2",
+          "kind": "evolution_negative_tests"
+        }
+      ],
+      "counterexamples": [
+        "temporal previous_result_task_id does not prove semantic parent causality",
+        "artifact corruption and independent verifier outage are different observed failure layers",
+        "one corrected artifact does not prove all simultaneous failures are cleared",
+        "checkpoint/loop completion is not original owner business-outcome verification",
+        "model-graded skill improvement cannot be promoted without independent transfer tests",
+        "source pin and read coverage cannot prove full semantic comprehension"
+      ],
+      "next_falsifier": "Real ChatGPT new-session first-turn Skill selection positive/negative traces; explicit-causal-ancestor research state recovery; independent held-out transfer on unrelated business domains; precise latest PR #60 CI and actual Host cold-process fault replay"
     }
   ]
 }
