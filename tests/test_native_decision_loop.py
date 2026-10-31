@@ -1418,6 +1418,54 @@ class NativeDecisionLoop(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, root,
                 self.candidate(verified, self.structure(), self.reconcile()))
 
+    def test_reentry_public_research_checks_grant_before_network_even_if_artifact_failed(self):
+        root = register_native_goal(
+            self.db, self.goal, allow_public_source_read=True)
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" unauthorized")
+        damaged = self.view(root)
+        self.assertEqual(damaged["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        proposal = {
+            "observation_sha256": damaged["research_reentry_sha256"],
+            "owner_clause": "Reconcile a supplier stock shortfall",
+            "unresolved_question": "Could an external source validate this evidence?",
+            "competing_methods": [
+                {"name": "safe_recheck",
+                 "applicability": "Use immutable local event and artifact hashes.",
+                 "failure_mode": "The previous hash snapshot might be incomplete.",
+                 "falsifier": "Independent disk replay contradicts the current hash."},
+                {"name": "remote_primary",
+                 "applicability": "Read a precisely versioned public primary source.",
+                 "failure_mode": "A public source may be irrelevant to private records.",
+                 "falsifier": "Its primary implementation lacks the required method."}],
+            "source_refs": [{
+                "kind": "github", "repo": "langchain-ai/langgraph",
+                "path": "README.md", "ref": "a" * 40, "sha256": "b" * 64}],
+            "next_research_step": "Compare authentic upstream code after owner reauthorization.",
+            "uncertainty": "Public facts alone cannot restore the original private grant.",
+        }
+        with patch(
+                "cognition_agent_os.native_decision.github_public_snapshot"
+                ) as remote_fetch:
+            with self.assertRaisesRegex(
+                    PermissionError, "CURRENT_NATIVE_GRANT_REVOKED"):
+                record_native_open_research(
+                    self.db, self.workspace, self.fixtures, root, proposal)
+            remote_fetch.assert_not_called()
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_OPEN_RESEARCH_RECORDED'",
+                (root,)).fetchone()[0], 0)
+        self.assertNotIn("observation_sha256", self.view(root))
+
     def test_evidence_failure_reenters_research_only_without_authorizing_effect(self):
         root = self.root_id()
         admitted = admit_native_decision(
