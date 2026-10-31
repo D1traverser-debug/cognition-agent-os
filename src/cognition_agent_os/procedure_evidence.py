@@ -154,6 +154,8 @@ def inspect_cross_root_procedure_trials(
             if len(events) != len(prior["decisions"]):
                 continue
             receipt = json.loads(events[-1]["details"])
+            if not isinstance(receipt, dict):
+                continue
             proposal = receipt.get("proposal")
             if (not isinstance(proposal, dict)
                 or receipt.get("child_task_id") != outcome["evidence_task_id"]
@@ -213,9 +215,14 @@ def inspect_cross_root_procedure_trials(
     fresh_items = []
     for item in items:
         try:
+            fresh_state = inspect_native_goal(
+                db_path, workspace, fixtures, item["source_root_id"])
             fresh = inspect_owner_local_outcome(
                 db_path, workspace, fixtures, item["source_root_id"])
-            if (fresh.get("status") == "LOCAL_OWNER_RESULT_VERIFIED"
+            if (fresh_state.get("status") == "NATIVE_NEXT_DECISION_ADMISSIBLE"
+                and isinstance(fresh_state.get("original_goal"), str)
+                and _sha(fresh_state["original_goal"]) == item["source_goal_sha256"]
+                and fresh.get("status") == "LOCAL_OWNER_RESULT_VERIFIED"
                 and fresh.get("local_owner_outcome_verified") is True
                 and fresh.get("evidence_task_id") == item["evidence_task_id"]
                 and fresh.get("evidence_sha256") == item["evidence_sha256"]):
@@ -236,8 +243,13 @@ def inspect_cross_root_procedure_trials(
         final_root = (
             (root["goal_rev"], root["grant_rev"], root["state"])
             if root and root["parent_task"] is None else None)
+    current_after = inspect_native_goal(
+        db_path, workspace, fixtures, root_task_id)
     if (final_authority != starting_authority
-        or final_root != starting_root):
+        or final_root != starting_root
+        or current_after.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE"
+        or not isinstance(current_after.get("original_goal"), str)
+        or _sha(current_after["original_goal"]) != current_goal_sha256):
         return {"status": "PROCEDURE_TRIAL_SNAPSHOT_CHANGED", "items": [],
                 "authorizes_action": False}
 
