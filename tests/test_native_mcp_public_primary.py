@@ -271,16 +271,37 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
                 self.assertFalse(result["new_tool_execution_authorized"])
                 self.assertFalse(result["owner_outcome_verified"])
 
-    def test_local_source_read_during_failure_refuses_revoked_grant_before_read(self):
-        root, _ = self._native_root_with_failure("evidence")
-        with closing(connect(self.db)) as db:
-            db.execute("UPDATE authority SET grant_rev=grant_rev+1 "
-                       "WHERE singleton=1")
-            db.commit()
-        reader = self.server(allow_source_read=True).tools["native_source_read"]
-        with self.assertRaisesRegex(
-                PermissionError, "LOCAL_SOURCE_READ_NOT_ADMISSIBLE"):
-            reader(root, "handoff.json")
+    def test_local_source_read_during_failure_rechecks_every_root_grant_field(self):
+        from cognition_agent_os import native_mcp_bridge as bridge
+
+        mutations = (
+            ("grant revision", "UPDATE authority SET grant_rev=grant_rev+1 "
+                               "WHERE singleton=1"),
+            ("goal revision", "UPDATE authority SET goal_rev=goal_rev+1 "
+                              "WHERE singleton=1"),
+            ("write permission", "UPDATE authority SET write_allowed=0 "
+                                 "WHERE singleton=1"),
+        )
+        for label, sql in mutations:
+            with self.subTest(field=label):
+                root, _ = self._native_root_with_failure("evidence")
+                with closing(connect(self.db)) as db:
+                    db.execute(sql)
+                    db.commit()
+                reader = self.server(
+                    allow_source_read=True).tools["native_source_read"]
+                # Hold the observed state at an otherwise investigable failure
+                # so this assertion specifically exercises the SQLite grant fence.
+                with patch.object(
+                    bridge, "inspect_native_goal",
+                    return_value={
+                        "status": "NATIVE_EVIDENCE_UNVERIFIABLE",
+                        "original_goal": "Reconcile the supplier records.",
+                    },
+                ):
+                    with self.assertRaisesRegex(
+                            PermissionError, "LOCAL_SOURCE_READ_NOT_ADMISSIBLE"):
+                        reader(root, "handoff.json")
 
     def test_local_source_read_during_failure_refuses_revocation_during_read(self):
         root, _ = self._native_root_with_failure("evidence")
