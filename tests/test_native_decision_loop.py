@@ -958,7 +958,7 @@ class NativeDecisionLoop(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
             admit_native_decision(
                 self.db, self.workspace, self.fixtures, root,
-                self.candidate(self.view(root), self.structure(), self.reconcile()))
+                {"observation_sha256": "f" * 64})
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute(
                 "SELECT count(*) FROM tasks WHERE parent_task=?",
