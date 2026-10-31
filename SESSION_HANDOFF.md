@@ -4,6 +4,8 @@
 
 Historical pre-compaction text is preserved at `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for evidence only. Private user conversations must remain private.
 
+For repeat audits, first consult `evidence/recovery/2026-10-31-source-map.json` and `evidence/source-baselines/2026-10-31-main.json`; use `scripts/plan_incremental_audit.py` to reopen changed blobs. These are dated public source receipts, never owner or semantic proof.
+
 ## Owner-activated continuity — 2026-10-29
 
 Each owner-woken chat (including new chats) resumes the full original goal,
