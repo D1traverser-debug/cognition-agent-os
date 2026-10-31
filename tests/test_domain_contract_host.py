@@ -357,6 +357,27 @@ class DomainContractHostIntegration(unittest.TestCase):
             "manifest.binding.common_capabilities_ref",
         ])
 
+    def test_top_level_legacy_parent_field_cannot_hide_after_controller_rename(self):
+        # A real A-share manifest has a normative parent_control_plane field.
+        # It must remain visible even when both controller declarations switch.
+        repo = "D1traverser-debug/a-share-event-driven-agent"
+        tid, spec = self.seed(domain="ashare", repo=repo)
+        new_parent = "D1traverser-debug/cognition-agent-os@main"
+        docs = make_native("ashare", repo, controller=new_parent)
+        manifest = json.loads(docs[FILES[0]])
+        manifest["parent_control_plane"] = "D1traverser-debug/universal-agent-os@main"
+        docs[FILES[0]] = json.dumps(manifest).encode()
+        with self.mock(docs):
+            observed = self.tick()["tasks"][0]
+            audit = audit_domain_contract(self.db, self.workspace, tid)
+        self.assertEqual(observed["status"], "NEEDS_REVIEW", observed)
+        self.assertTrue(audit["legacy_parent_bound"])
+        self.assertFalse(audit["parent_replacement_admitted"])
+        receipt = json.loads(
+            (self.workspace / "artifacts" / (tid + ".json")).read_text())
+        self.assertEqual(receipt["observation"]["legacy_parent_binding_refs"],
+                         ["manifest.parent_control_plane"])
+
     def test_legacy_skill_filename_alone_is_not_false_parent_binding(self):
         repo = "D1traverser-debug/video-growth-agent"
         tid, spec = self.seed(domain="video", repo=repo)
