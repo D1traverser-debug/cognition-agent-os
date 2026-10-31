@@ -94,9 +94,9 @@ def _git_tree(root: Path) -> dict:
     try:
         head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
                               capture_output=True, check=True).stdout.decode().strip()
-        tree_sha = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD^{tree}"],
+        tree_sha = subprocess.run(["git", "-C", str(root), "rev-parse", head + "^{tree}"],
                                   capture_output=True, check=True).stdout.decode().strip()
-        output = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", "HEAD"],
+        output = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", head],
                                 capture_output=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError) as e:
         raise AuditInputError("CURRENT_CHECKOUT_UNAVAILABLE") from e
