@@ -760,7 +760,9 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
     from .decision_reentry_projection import (
         Contradiction, Decision, project_reentry)
     if (cause not in ("SOURCE_PIN_DRIFT", "WORKER_REPORTED_FAILURE",
-                      "WORKER_EVIDENCE_UNVERIFIABLE")
+                      "WORKER_EVIDENCE_UNVERIFIABLE",
+                      "INDEPENDENT_VERIFIER_UNAVAILABLE",
+                      "INDEPENDENT_EVALUATION_INCONCLUSIVE")
         or not 0 <= target_index < len(decisions)
         or not isinstance(evidence_sha256, str)
         or not re.fullmatch(r"[a-f0-9]{64}", evidence_sha256)):
@@ -1115,9 +1117,27 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                                     if kind in ("goal_case", "record_reconciliation",
                                                 "investigate_goal", "public_tool_discovery")
                                     else "UNREGISTERED_NATIVE_KIND")
+                    # A verifier returning UNKNOWN/unavailable is NOT
+                    # proof that the Worker produced corrupt bytes. Only
+                    # explicit artifact/result contradictions may be
+                    # attributed to the Worker evidence layer. Unknown
+                    # reasons remain a separate inconclusive hypothesis.
+                    if check_reason in (
+                            "EVIDENCE_RECHECK_UNAVAILABLE",
+                            "UNSAFE_OR_MISSING_LEDGER",
+                            "INDEPENDENT_CHECK_UNAVAILABLE"):
+                        failure_cause = "INDEPENDENT_VERIFIER_UNAVAILABLE"
+                    elif check_reason in (
+                            "ARTIFACT_HASH_MISMATCH",
+                            "ARTIFACT_IDENTITY_MISMATCH",
+                            "CANDIDATE_ARTIFACT_CHANGED",
+                            "INDEPENDENT_SQL_REJECTION"):
+                        failure_cause = "WORKER_EVIDENCE_UNVERIFIABLE"
+                    else:
+                        failure_cause = "INDEPENDENT_EVALUATION_INCONCLUSIVE"
                     graph = _trusted_native_causal_reentry(
                         decisions, by_id, contract, root, index,
-                        cause="WORKER_EVIDENCE_UNVERIFIABLE",
+                        cause=failure_cause,
                         evidence_sha256=_digest({
                             "root_id": root_id, "decision_event_id": item["event_id"],
                             "child_id": child["task_id"], "child_state": child["state"],
