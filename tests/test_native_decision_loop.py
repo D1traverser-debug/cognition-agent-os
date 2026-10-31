@@ -1398,6 +1398,50 @@ class NativeDecisionLoop(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, root,
                 self.candidate(verified, self.structure(), self.reconcile()))
 
+    def test_two_independent_faults_reopen_separate_layers_until_real_repair(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        good = self.view(root)
+        self.assertEqual(good["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        pristine_artifact = artifact.read_bytes()
+        observed = self.fixtures / "observed.csv"
+        pristine_source = observed.read_bytes()
+        # Fault 1 is an ACTUAL Worker result corruption, not source drift.
+        artifact.write_bytes(pristine_artifact + b" tampered")
+        first = self.view(root)
+        self.assertEqual(first["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        # Fault 2 independently invalidates source pins. The first diagnosis
+        # is not silently "fixed" by switching the reported layer.
+        observed.write_text("supplier,received\\nDelta,999\\n", encoding="utf-8")
+        second = self.view(root)
+        self.assertEqual(second["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertEqual(second["causal_reentry"]["observed_cause"],
+                         "SOURCE_PIN_DRIFT")
+        self.assertEqual(second["invalidated_source_paths"], ["observed.csv"])
+        self.assertNotIn("observation_sha256", second)
+        # Repairing the source alone MUST expose the still-damaged artifact.
+        observed.write_bytes(pristine_source)
+        third = self.view(root)
+        self.assertEqual(third["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(third["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        # Only independent byte-for-byte restoration of the second fault
+        # may return to normal admission. Neither repairs owner acceptance.
+        artifact.write_bytes(pristine_artifact)
+        restored = self.view(root)
+        self.assertEqual(restored["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+        self.assertEqual(restored["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        self.assertNotIn("causal_reentry", restored)
+        self.assertFalse(restored["owner_outcome_verified"])
+
     def test_native_accepted_artifact_tamper_sets_objective_drift(self):
         root=self.root_id()
         start=self.view(root)
