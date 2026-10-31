@@ -207,6 +207,8 @@ Codex Goal/Work、独立 SQLite Host、定时任务和 API 桥接现在均为
 
 **观察（源代码与正式业务状态）：** 2026-10-31 四个子域的 manifest+adapter+capability 仍指向旧 UAOS，原审计仅扫描 `manifest.binding`，遗漏 `manifest.parent_control_plane` 顶层规范性引用（A 股子系统实际存在该字段）。本 Draft 修改 `domain_contract.py` 复用同一个只读合同审计入口，增加顶层扫描，并补反例：将 controller 字段改为新认知父级，但保留顶层旧 parent 字段时必须报告旧依赖且不能授予迁移权限。保留未知域与合法原路径，不写子系统数据。
 
+**更强的反例（子域实际测试）：** `video-growth-agent/tests/test_uaos_current.py`、`financial-writing-agent/tests/test_uaos_cognition_evolution_inheritance.py`、`novel-writing-agent/tests/test_authority_behavior_contract.py`、`a-share-event-driven-agent/tests/test_common_behavior_binding.py` 都包含硬性旧父级假设。因此迁移时不仅需改变 JSON 引用，还必须以原业务验收替代这些旧架构字符串断言；否则新接口正确也会被旧测试拒绝。不能把调整测试为绿色当作业务验证。
+
 **竞争方案与再质疑：**
 
 | 候选 | 价值 | 反例及成本 | 处置 |
