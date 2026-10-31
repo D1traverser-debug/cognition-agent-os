@@ -938,9 +938,20 @@ class NativeDecisionLoop(unittest.TestCase):
         reentry = state["causal_reentry"]
         self.assertEqual(reentry["observed_cause"], "SOURCE_PIN_DRIFT")
         self.assertEqual(reentry["reopened_decision_event_ids"], [event_ids[0]])
-        self.assertEqual(reentry["invalidated_decision_event_ids"], [event_ids[1]])
-        self.assertEqual(set(reentry["affected_child_task_ids"]),
-                         {first["child_task_id"], second["child_task_id"]})
+        # A temporal predecessor is NOT proof of semantic causation.
+        # The later plan cites the same old corpus, so its actual source
+        # pin is stale; that is a DIFFERENT, independently observed reason
+        # to review it, not a child of the earlier plan.
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
+        self.assertEqual(reentry["source_pin_stale_decision_event_ids"],
+                         [event_ids[1]])
+        self.assertEqual(reentry["affected_child_task_ids"],
+                         [first["child_task_id"]])
+        self.assertEqual(reentry["source_pin_stale_child_task_ids"],
+                         [second["child_task_id"]])
+        self.assertFalse(reentry["prior_result_order_proves_causality"])
+        self.assertEqual(reentry["chronological_later_decisions_to_review"],
+                         [event_ids[1]])
         self.assertFalse(reentry["authorizes_action"])
         self.assertFalse(reentry["owner_outcome_verified"])
         self.assertFalse(reentry["root_cause_semantically_verified"])
