@@ -182,7 +182,7 @@ Primary sources: [Playwright CLI README](https://github.com/microsoft/playwright
 **Status:** source-level study completed for these scoped implementations; selectively applied to PR #57's test/repair approach and this session's existing-tool-first, bounded-output workflow. No Context Mode or Playwright package installed. UB companion metrics not run. Cross-chat cognition improvement remains OPEN.
 
 
-## Method card N — Version-pinned source reuse vs RAG and checkpoints (2026-10-31)
+## Method card Q — Version-pinned source reuse vs RAG and checkpoints (2026-10-31)
 
 **Primary sources actually read; upstream tests not executed:**
 - [Onyx indexing adapter](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/indexing/adapters/document_indexing_adapter.py) blob 7752e81aafe407864487f1c8d57fa94fad05c0b0, [pipeline](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/indexing/indexing_pipeline.py) blob cf792770f6875fc73e2d3975c612b01029ec4d41. Orchestration and effects are separate; failed downstream writes must not become false unchanged-input success.
