@@ -185,8 +185,21 @@
       "label": "Onyx",
       "section": "Stage 2: Learn Tool Use, RAG, And Memory",
       "atlas_line": 84,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "onyx-dot-app/onyx",
+          "path": "backend/onyx/indexing/adapters/document_indexing_adapter.py",
+          "blob_sha": "7752e81aafe407864487f1c8d57fa94fad05c0b0",
+          "kind": "implementation"
+        },
+        {
+          "repo": "onyx-dot-app/onyx",
+          "path": "backend/onyx/indexing/indexing_pipeline.py",
+          "blob_sha": "cf792770f6875fc73e2d3975c612b01029ec4d41",
+          "kind": "implementation"
+        }
+      ],
       "nested_leads": []
     },
     {
@@ -727,8 +740,27 @@
       "label": "DeerFlow",
       "section": "Project Map",
       "atlas_line": 251,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "bytedance/deer-flow",
+          "path": "backend/packages/harness/deerflow/runtime/checkpoint_state.py",
+          "blob_sha": "920bfd18b5cae035e834cd540ee4966897d562ae",
+          "kind": "implementation"
+        },
+        {
+          "repo": "bytedance/deer-flow",
+          "path": "backend/packages/harness/deerflow/runtime/checkpoint_mode.py",
+          "blob_sha": "321bcb474165f584a4d57ae7313cdb63b3a291d8",
+          "kind": "implementation"
+        },
+        {
+          "repo": "bytedance/deer-flow",
+          "path": "backend/tests/test_checkpoint_mode.py",
+          "blob_sha": "a3ee0d17cedf3f80caf50098b904149476017968",
+          "kind": "tests"
+        }
+      ],
       "nested_leads": []
     },
     {
