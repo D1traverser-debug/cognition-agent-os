@@ -37,23 +37,15 @@ applicable cross-domain methods, routes advice/work through the child's
 admitted interface, coordinates dependencies and reads independent
 business outcomes without overwriting child state.
 
-**UAOS retirement and child redesign (owner update 2026-10-31):**
-`universal-agent-os` is a DEPRECATED MIGRATION DEPENDENCY, **not a design
-baseline to preserve or imitate**. All four children still point at it through
-native contracts, and that observed operational binding must not be falsely
-reported as a new cognition-parent cutover. The target is prompt retirement of
-unneeded legacy controls, policies and duplicate capabilities, plus **permission
-to redesign weak child architecture** when measured business outcomes justify
-it—not one-to-one cloning of UAOS behavior or indefinite compatibility.
-Use per-capability contract discovery, a candidate new path, independent
-child-native regression, original identity/state/grant and negative-neighbor
-checks, then retire the corresponding old dependency. A deleted/replaced
-capability need not preserve bad implementation details or redundant fields.
-A simple controller rename is insufficient; check top-level and nested normative
-references. Silent edits to child production/business state, root/main merge,
-irreversible UAOS retirement, deployments and cutover still require their own
-explicit authorization and real outcome verification. Compatible interim
-behavior is a **temporary fallback**, not a permanent dual-controller goal.
+**Separate legacy child-control migration (not the default cognition task):**
+Four child manifests may still describe historical UAOS binding. That is
+migration evidence, not an instruction to switch the current owner-selected
+goal from cognition/evolution to child wiring. Only investigate or change these
+bindings when a child-control or child-business task actually requires it.
+For a selected migration, independently verify child-native identity, grants,
+business state, acceptance and negative neighbors before any cutover; do not
+silently rewrite child production or merge/release/deploy. Redesign remains
+conditional on measured owner outcomes rather than legacy-code cloning.
 
 **One cognition parent, two presently distinct technical surfaces.**
 This ChatGPT/tool session participates as the actual parent's interactive
