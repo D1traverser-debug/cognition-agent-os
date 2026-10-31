@@ -1146,9 +1146,15 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             "INDEPENDENT_CHECK_UNAVAILABLE",
                             "AUDIT_UNVERIFIABLE"):
                         failure_cause = "INDEPENDENT_VERIFIER_UNAVAILABLE"
+                    elif check_reason == "SOURCE_CHANGED_SINCE_PROPOSAL":
+                        failure_cause = "SOURCE_PIN_DRIFT"
                     elif check_reason in (
+                            "ARTIFACT_UNAVAILABLE",
                             "ARTIFACT_HASH_MISMATCH",
                             "ARTIFACT_IDENTITY_MISMATCH",
+                            "INVALID_PROPOSAL",
+                            "CANDIDATE_HASH_MISMATCH",
+                            "CANDIDATE_CONSTRAINTS_FAILED",
                             "CANDIDATE_ARTIFACT_CHANGED",
                             "INDEPENDENT_SQL_REJECTION"):
                         failure_cause = "WORKER_EVIDENCE_UNVERIFIABLE"
