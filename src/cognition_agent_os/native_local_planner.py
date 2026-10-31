@@ -819,6 +819,14 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     if candidate == {"abstain": True}:
         return {"status": "NATIVE_LOCAL_MODEL_ABSTAINED",
                 "root_task_id": root_id, "owner_outcome_verified": False}
+    # A local planner that was shown cross-root trials must echo their exact
+    # digest. Do not let an unstructured model silently drop this dependency.
+    if (cross_root_procedure_evidence_sha256 is not None
+        and (not isinstance(candidate.get("decision_basis"), dict)
+             or candidate["decision_basis"].get(
+                 "cross_root_procedure_evidence_sha256")
+                != cross_root_procedure_evidence_sha256)):
+        raise ValueError("NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_NOT_BOUND")
     # The model cannot mint a fresh fingerprint; CAS rejects a stale response.
     return candidate
 

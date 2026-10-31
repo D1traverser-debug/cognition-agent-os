@@ -1391,16 +1391,18 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             )
             supplied_cross_root_digest = candidate["decision_basis"].get(
                 "cross_root_procedure_evidence_sha256")
-            if cross_root_trials.get("items"):
-                if supplied_cross_root_digest is None:
+            # Direct MCP clients do not receive this private local-planner
+            # projection. Only a candidate that declares it used the
+            # projection must bind it; the local planner separately enforces
+            # that it cannot omit a digest after seeing non-empty evidence.
+            if supplied_cross_root_digest is not None:
+                if not cross_root_trials.get("items"):
                     raise ValueError(
-                        "NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_NOT_BOUND")
+                        "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
                 if supplied_cross_root_digest != procedure_evidence_sha256(
                         cross_root_trials):
                     raise ValueError(
                         "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
-            elif supplied_cross_root_digest is not None:
-                raise ValueError("NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
             _ground_decision(
                 candidate, parsed, source_hashes,
                 observed["decisions"][-1]["task_id"] if observed["decisions"] else None)
