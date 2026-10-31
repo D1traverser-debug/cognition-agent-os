@@ -42,7 +42,7 @@ For isolated PR #29–#32 experiments, locate **exact-byte preserved research** 
 
 ## Work cycle after recovery
 
-Preserve the full owner outcome -> identify the highest-value observable gap -> inspect actual behavior/failure -> research materially different proven alternatives -> compare fit, reliability, compatibility, cost and reversibility -> choose the least-complex complete authorized path -> execute -> independently reread the real result -> if rejected, revisit cause and switch method -> update the responsible source and concise PR checkpoint. Prefer deletion/reuse over another controller when evidence supports it. A plan, document, green CI, model self-score or local sandbox success never closes a broader owner goal.
+**This is a recursive decision controller, NOT a six-step sequence.** Before action, challenge competing root causes and the diagnosis itself; deep-read relevant source implementations, tests and failures; compare applicable reuse/adapt/replace/remove/build choices, then **challenge the preferred method and research coverage AGAIN**. Contradictions reopen upstream assumptions, sources and architecture. Only authorized actions execute; independent whole-owner outcome failures go BACK into root-cause research. Persist evidence and falsifiers in existing stores; CI, self-score and local sandbox success never prove the entire user goal.
 
 For interruptions, context limits or a new `继续/继承`: rerun this recovery order and continue the same evidence-backed objective. Do not ask the owner to restate tool lists, system architecture or already recoverable requirements.
 
