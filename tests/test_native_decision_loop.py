@@ -1486,6 +1486,12 @@ class NativeDecisionLoop(unittest.TestCase):
                          first["causal_reentry"]["evidence_failure_reason"])
         self.assertNotEqual(first["research_reentry_sha256"],
                             second["research_reentry_sha256"])
+        self.assertEqual(
+            first["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(original + b" first forged bytes").hexdigest())
+        self.assertEqual(
+            second["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(original + b" different forged bytes").hexdigest())
         with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
             record_native_hypothesis(
                 self.db, self.workspace, self.fixtures, root,
