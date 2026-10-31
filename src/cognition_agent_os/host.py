@@ -253,6 +253,17 @@ def _goal_progress(path: Path, workspace: Path | None = None,
                                 "invalidated_source_paths", [])
                             item["reopen_decision_ordinal"]=result.get(
                                 "reopen_decision_ordinal")
+                        elif result.get("status") == "NATIVE_EVIDENCE_UNVERIFIABLE":
+                            # A corrupted RESULT is not a revision of its
+                            # original inputs. Stop action and ask the same
+                            # owner-ledger causal inspector to reopen the
+                            # evidence/verifier layer, never a generic retry.
+                            item["next_control_action"]="REOPEN_NATIVE_EVIDENCE_VERIFIER_REVIEW"
+                            item["reopen_decision_event_id"]=result.get(
+                                "reopen_decision_event_id")
+                            item["reopen_evidence_reason"]=result.get(
+                                "causal_reentry",{}).get(
+                                    "evidence_failure_reason")
                     if (isinstance(root_spec, dict)
                         and root_spec.get("kind") in ("native_goal", "open_goal")):
                         from .owner_postcondition import inspect_owner_local_outcome
