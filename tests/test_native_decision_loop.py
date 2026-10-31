@@ -1430,6 +1430,14 @@ class NativeDecisionLoop(unittest.TestCase):
                    return_value={"status": "UNVERIFIABLE",
                                  "reason": "EVIDENCE_RECHECK_UNAVAILABLE"}):
             outage = self.view(root)
+            from cognition_agent_os.host import _goal_progress
+            host_state = _goal_progress(self.db, self.workspace, self.fixtures)
+            public = next(x for x in host_state["goals"]
+                          if x["root_task_id"] == root)
+            self.assertEqual(public["next_control_action"],
+                             "REOPEN_NATIVE_VERIFIER_HEALTH_REVIEW")
+            self.assertEqual(public["reopen_evidence_reason"],
+                             "EVIDENCE_RECHECK_UNAVAILABLE")
         self.assertEqual(outage["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
         self.assertEqual(outage["causal_reentry"]["observed_cause"],
                          "INDEPENDENT_VERIFIER_UNAVAILABLE")
