@@ -83,8 +83,8 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("account Custom Instructions", skill)
         self.assertIn("allow_implicit_invocation: true", skill)
         self.assertIn("No tool here is authorized/capable", skill)
-        self.assertIn("Root-before-leaves dependency gate", skill)
-        self.assertLess(skill.index("Root-before-leaves dependency gate"),
+        self.assertIn("Recursive dependency graph", skill)
+        self.assertLess(skill.index("Recursive dependency graph"),
                         skill.index("## Work on the problem, not the instructions"))
         self.assertIn("ordinary new ChatGPT chat", PROBES.read_text(encoding="utf-8"))
 
@@ -95,9 +95,9 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         contradicted by a one-way six-step headline and then overlooked.
         """
         skill = SKILL.read_text(encoding="utf-8")
-        intro = skill.split("**Root-before-leaves dependency gate", 1)[1].split(
+        intro = skill.split("**Recursive dependency graph", 1)[1].split(
             "\n", 1)[0]
-        self.assertIn("NOT a linear pipeline", intro)
+        self.assertIn("NOT a fixed pipeline", intro)
         self.assertIn("RECURSIVELY", intro)
         self.assertIn("RECHALLENGE", intro)
         self.assertIn("BEFORE action", intro)
@@ -115,16 +115,16 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
             self.assertIn(term, skill)
         # Verify the comparison obligation, not one frozen slogan that
         # rejects legitimate additions such as retire/remove.
-        study = skill.split("3. **Study deeply / traverse original projects:**", 1)[1].split("\n4. ", 1)[0]
+        study = skill.split("- **Study deeply / traverse original projects:**", 1)[1].split("\n- **Rechallenge BEFORE decision", 1)[0]
         for method in ("reuse", "adapt", "replace", "remove", "build"):
             self.assertRegex(study, rf"\b{method}\b")
         self.assertIn("For EVERY cognition-system decision", skill)
-        # Source-contract regression only: any one-way stage representation
-        # must fail source checks, but a runtime Client trace is still needed.
-        self.assertLess(skill.index("recursive root cause"),
-                        skill.index("Study deeply / traverse original projects"))
-        self.assertLess(skill.index("Study deeply / traverse original projects"),
-                        skill.index("Rechallenge BEFORE decision"))
+        # These are graph responsibilities, not a numbered pipeline.
+        self.assertIn("not an ordered sequence", skill)
+        self.assertIn("new evidence can reopen any node", skill)
+        workflow = skill.split("## Work on the problem, not the instructions", 1)[1].split(
+            "## Owner-visible decision and execution evidence", 1)[0]
+        self.assertNotRegex(workflow, r"(?m)^\d+\. \*\*")
         self.assertIn("LOOP BACK into root-cause investigation", skill)
         self.assertIn("architecture, real implementation and call paths", skill)
         self.assertIn("tests/negative cases", skill)
@@ -236,18 +236,23 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("live default-branch HEAD", AGENTS.read_text(encoding="utf-8"))
         self.assertIn("First recover unfinished work", SKILL.read_text(encoding="utf-8"))
 
-    def test_recovery_roadmap_steps_are_monotonic_without_missing_entries(self):
-        """Route order remains deterministic when new preflight phases are added."""
+    def test_recovery_map_is_separate_from_recursive_cognition_graph(self):
+        """Numbering locates handoff sources; it must not linearize cognition."""
         handoff = (ROOT / "SESSION_HANDOFF.md").read_text(encoding="utf-8")
         recovery = handoff.split("## Recovery order and responsibility map", 1)[1].split(
             "## Work cycle after recovery", 1)[0]
+        ordinals = re.findall(r"(?m)^(\d+)\. \*\*", recovery)
+        self.assertEqual(ordinals, [str(i) for i in range(1, 11)])
         skill = SKILL.read_text(encoding="utf-8")
         workflow = skill.split("## Work on the problem, not the instructions", 1)[1].split(
-            "**Continuation/stop check", 1)[0]
-        for body in (recovery, workflow):
-            ordinals = re.findall(r"(?m)^(\d+)\. \*\*", body)
-            self.assertGreaterEqual(len(ordinals), 6)
-            self.assertEqual(ordinals, [str(i) for i in range(1, len(ordinals) + 1)])
+            "## Owner-visible decision and execution evidence", 1)[0]
+        self.assertIn("not an ordered sequence", workflow)
+        self.assertNotRegex(workflow, r"(?m)^\d+\. \*\*")
+        protocol = PROTOCOL.read_text(encoding="utf-8")
+        work = protocol.split("## Work on the problem, not the instructions", 1)[1].split(
+            "\nPermission:", 1)[0]
+        self.assertIn("responsibilities, not ordered stages", work)
+        self.assertNotRegex(work, r"(?m)^\d+\. \*\*")
 
     def test_each_surface_is_a_distinct_loading_boundary(self):
         chatgpt = SKILL.read_text(encoding="utf-8").lower()
@@ -289,6 +294,24 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("false-negative trigger", probes)
         self.assertIn("real ChatGPT conversation", probes)
         self.assertIn("Load", SKILL.read_text(encoding="utf-8"))
+
+    def test_tool_and_plugin_inspection_is_change_driven(self):
+        skill = SKILL.read_text(encoding="utf-8")
+        protocol = PROTOCOL.read_text(encoding="utf-8")
+        for token in ("tool and plugin lifecycle methods",
+                      "load only for an unknown, recurring, architectural, or concrete tool/plugin issue"):
+            self.assertIn(token.lower(), skill.lower())
+        for token in ("no arbitrary call quota", "reuse loaded instructions",
+                      "do not repeat", "get_plugin_metadata", "get_plugin_files",
+                      "exact read_paths", "read-only inspection needs no backup",
+                      "get_owned_plugin_archive", "current_release_id",
+                      "update_plugin", "expected_release_id",
+                      "omitted files remain intact", "explicit owner approval"):
+            self.assertIn(token.lower(), protocol.lower())
+        self.assertLess(protocol.index("get_owned_plugin_archive"),
+                        protocol.index("update_plugin"))
+        self.assertIn("AE. Tool and plugin inspection proportionality",
+                      PROBES.read_text(encoding="utf-8"))
 
     def test_native_plugin_candidate_matches_installed_package_contract(self):
         root = json.loads((BASE / "plugin.json").read_text(encoding="utf-8"))
