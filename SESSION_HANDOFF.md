@@ -1,55 +1,36 @@
-# cognition-agent-os — dated continuation pointer (2026-10-27)
+# cognition-agent-os — owner-woken cognition continuation (2026-10-31)
 
-**BOOTSTRAP INDEX ONLY — not a complete work log, task authority, or product state database.** Its job is to get a new ChatGPT/Codex session to the correct live sources with minimal stale context. Use **progressive disclosure**: recover only the stable goal/routing facts here, then fetch the specific current code, evidence and history needed for the active task. Never keep compressing the complete project history into this file.
+**BOOTSTRAP LOCATOR ONLY.** This is not the original owner contract, actual ChatGPT execution hook, completed cognitive method, or runtime source of truth. The selected product is **cognition-agent-os itself**, not legacy UAOS migration. Retrieve the PRIVATE original owner requirements and latest correction; don't make the owner repeat accessible requirements.
 
-Historical pre-compaction text is preserved at `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for evidence only. Private user conversations must remain private.
+## Owner-activated continuity — 2026-10-29, revised 2026-10-31
 
-Audit reuse: `evidence/recovery/2026-10-31-source-map.json` → `scripts/plan_incremental_audit.py`. Reopen changed blobs; old receipts never certify semantics.
+A selected ordinary ChatGPT conversation must resume unfinished cognition work. General unrelated chats must not trigger this project. No permanent Host, background process, SQLite connection, Codex Goal, Work mode or paid model is required for the current interactive phase. Inability to control an external Host is not grounds to abandon the actual permitted ChatGPT/tool work.
 
-## Owner-activated continuity — 2026-10-29
+**Original outcome:** independently investigate unfamiliar failures; recursively challenge the proposed root cause and the diagnosis itself; deeply read actual professional implementations and negative cases; compare reuse/adapt/replace/remove/build; RECHALLENGE the selected approach before execution; take lawfully permitted action; independently verify the COMPLETE owner result; revise earlier judgments on failure; learn and transfer proven methods across different tasks. Reduce owner corrections and complexity. This is NOT a sequential checklist.
 
-Each owner-woken chat (including new chats) resumes the full original goal,
-corrections and lawful unfinished work with real independent readback.
-No always-on Host, SQLite, Codex Goal, Work mode or cron is a current
-prerequisite; the private original owner contract governs. No background
-progress can be inferred from this dated index.
+**Current product gap:** the actual ChatGPT/Codex cognitive loop has not proven reliable cross-task method promotion, applicability, independent transfer validation, and invalidation. Existing `memory_candidates.py` stores *unverified per-root* semantic/procedural candidates; `signed_feedback.py` only constrains a narrow rejected code-repair operator; `knowledge_routing.py` selects seeded registered methods; `native_local_planner.py` is an optional bounded local planner. None independently proves general autonomous RSI. A same-goal CSV/JSON precedent prompt injection was tested and **reverted**: deterministic owner-exact handling already existed, with no measured owner benefit. Do not repeat this tempting local patch.
 
-## Stable owner objective
-
-Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that preserves the COMPLETE owner goal and corrections; decomposes and challenges assumptions; independently searches/learns professional sources and existing tools; compares reuse/adapt/replace/new methods; lawfully executes; independently verifies full owner and child-business outcomes; changes method after failure; retains verified learning; resumes across interruption; transfers to unfamiliar domains; and reduces owner correction work and unnecessary complexity.
-
-2026-10-26 owner correction remains controlling unless newer direct owner text supersedes it: prioritize real ChatGPT/Codex research -> comparison -> connected-tool action -> independent result -> correction now. Ordinary ChatGPT chats do not require the parent workflow. Persistent Host/cloud bridge, paid APIs and deployment are later authorization phases. Child systems retain their own IDs, grants, state and business-result oracles. UAOS remains four children's current controller but is DEPRECATED; replace and retire old capabilities quickly after independent child-native verification, not by copying UAOS or silently rewriting business state.
+**Separate historical topic:** former `universal-agent-os` child parent-binding migration is not the active cognition/learning objective. If a real child's work is explicitly requested, preserve its native state and permissions, but do not substitute UAOS code cleanup for cognition-agent-os success. The user did not select migration in this task.
 
 ## Recovery order and responsibility map
 
-1. **Owner authority:** read current/previous direct owner corrections or private source; distinguish grants from assistant proposals. Unavailable original clauses remain UNKNOWN.
-2. **Live engineering:** resolve GitHub default branch HEAD, live PR metadata, active task's exact HEAD/base/source/CI and possible competing active work. Inspect other PRs only when identity, ancestry, provenance or observed conflicts demand it. A merged PR is historical provenance, not the live candidate; never trust a cached SHA.
-3. **Active evidence frontier is always required:** recover every OPEN obligation, relevant failed outcome, rejected method and falsifier; no visible conflict does not mean no unfinished work.
-4. **Existing-capability survey BEFORE every substantive choice:** inspect current code, connected tools, prior failures, pinned Agent-Learning-Hub research and `docs/ENGINEERING-COGNITION-TOOLCHAIN.md`. Use `scripts/architecture_probe.py --repo . --focus MODULE --hops 1` when relevant; AST, code graphs and hashes do not prove behavior or business success.
-5. **Architecture/gates:** read applicable `docs/01-ARCHITECTURE-DECISIONS.md` and `docs/PRODUCT-READINESS-GATE.md`, challenge their proposals against owner outcomes.
-6. **Codex:** read `AGENTS.md` and selectively `.agents/skills/goal-grounded-semantic-review/SKILL.md`; file presence does not establish native activation.
-7. **ChatGPT:** compare installed Skill with `integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md`; repository source alone cannot prove client routing.
-8. **Runtime:** only an actually connected initialized Host/SQLite (`ledger.py`, `host.py`, `runner.py`, `control_kernel.py`) attests native grants and effects. Chat memory is not its ledger.
-9. **Children:** inspect their own goal identity, contracts, grants, sources and outcome oracles; parent `domain_contract.py` grants no child authority.
-10. **On-demand engineering provenance:** commit history and Files changed are the audit trail, not a mandatory cold-start download. Follow specific changed paths and commits as evidence requires; Do not preload unrelated PRs, hundreds of commits or every implementation family. Preserve original and contradictory evidence.
+The ten entries are **locations of authority and evidence**, NOT ordered thinking stages. Load only the relevant originals. New evidence can reopen any earlier assumption.
 
-Branch cleanup (ON-DEMAND): read dated `evaluation/historical_branch_provenance_v1.json`; LIVE GitHub outranks it.
-For isolated PR #29–#32 experiments, locate **exact-byte preserved research** under `archive/research/prNN/<original_path>` where `NN` is exactly `29`, `30`, `31` or `32` and check the 15 Git blob SHA-1 values against that frozen register; `tests/test_historical_branch_provenance.py` prevents accidental runtime promotion or silent byte loss. An archived method remains NOT_ADOPTED; never equate byte preservation with semantic merge or permission to close a PR.
-
-**Memory source/lineage (ON-DEMAND, Draft only):** `src/cognition_agent_os/memory_candidates.py` records untrusted, SHA-pinned semantic/procedural candidates in the existing ledger; `native_mcp_bridge.py` opt-in read/write tools require separate operator flags. Source, parent and grant changes invalidate; no automatic truth/method promotion, account connection or child writes. Check `tests/test_memory_candidates.py` and `tests/test_memory_mcp_boundary.py` against exact HEAD CI.
-
-**Unpromoted non-PR research (ON-DEMAND):** nine frozen items in `evaluation/historical_branch_provenance_v1.json` are byte-preserved in `archive/research/nonpr-{engineering-method,graphify-old-workflow,model-quality-v5}/`; older audit in `archive/research/nonpr-safe-fixture-audit/`. Use exact blob checks, not automatic method activation or branch cleanup.
+1. **Owner authority:** Current owner request, PRIVATE original contract and subsequent corrections; not derived summaries or historical labels.
+2. **Live source:** Default-branch GitHub HEAD, active Draft/PR ancestry and matching-HEAD CI; stale hashes do not govern.
+3. **Open outcome:** Every unfinished original obligation, conflicting result, failed method, negative case and independent acceptance condition.
+4. **Existing capability:** Reuse current source, tools, past research and Agent-Learning-Hub originals; `scripts/architecture_probe.py --repo .` is for AST location, not semantic truth.
+5. **Architecture:** `docs/01-ARCHITECTURE-DECISIONS.md` and `docs/PRODUCT-READINESS-GATE.md` are revisable candidates, not preapproved answers.
+6. **Codex surface:** `AGENTS.md`, on-demand `.agents/skills/goal-grounded-semantic-review/SKILL.md`; file existence cannot certify invocation.
+7. **ChatGPT surface:** Installed private Skill vs `integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md`; fresh client activation requires real traces.
+8. **Local Host:** `ledger.py`, `host.py`, `native_decision.py`, `native_local_planner.py`, `memory_candidates.py`; don't claim an unconnected Host controls native chat.
+9. **Outcome evidence:** Exact permissions, provider readback, complete owner result, unseen tasks, false-positive controls, correction burden and costs.
+10. **Historical reuse:** `evidence/recovery/2026-10-31-source-map.json` and `scripts/plan_incremental_audit.py` locate unchanged code; prior archives and CI remain dated evidence.
 
 ## Work cycle after recovery
 
-**This is a recursive decision controller, NOT a six-step sequence.** Before action, challenge competing root causes and the diagnosis itself; deep-read relevant source implementations, tests and failures; compare applicable reuse/adapt/replace/remove/build choices, then **challenge the preferred method and research coverage AGAIN**. Contradictions reopen upstream assumptions, sources and architecture. Only authorized actions execute; independent whole-owner outcome failures go BACK into root-cause research. Persist evidence and falsifiers in existing stores; CI, self-score and local sandbox success never prove the entire user goal.
+**Recursive causal diagnosis, not six sequential workflow boxes:** question competing causes, tools, context and test method; read original mechanisms and counterexamples; re-question initial selection before authorized action; independently observe the actual outcome and reopen its upstream basis if it fails. Retain source version, method applicability and falsifier. Do NOT add another controller, duplicate ledger, generic promise, new checklist or source-only test as a proxy for owner success.
 
-For interruptions, context limits or a new `继续/继承`: rerun this recovery order and continue the same evidence-backed objective. Do not ask the owner to restate tool lists, system architecture or already recoverable requirements.
+**Current audit:** Source inventory includes 56 Python modules, memory/feedback/goal code and their call relationships, but structural coverage is not semantic proof. Further cleanup should remove only *demonstrably* redundant source or stale hot context. The private Library navigation was compacted from 16,261 to 4,480 bytes; full private original remains intact. No speculative deletion or unnecessary reimplementation.
 
-## Current unresolved product gates
-
-**NOT_READY.** Before release claims, independently demonstrate at minimum: high-capability ChatGPT/Codex solving an uncurated professional owner goal via autonomous research/comparison/tool use; real full-result verification and method change after failure; low owner correction burden; reliable opt-in Skill activation/version evidence; real new ChatGPT-session owner-woken continuity; child-native business acceptance without authority takeover; and measured simplification/removal of redundant runtime paths.
-
-No main merge, production deployment, metered inference, child production mutation or new permission is implied by this file.
-
-**Why this file is bounded:** the old active handoff grew large enough to mix historical and live instructions. The 8 KiB verifier is a safety ceiling for bootstrap context, not a storage budget to be filled. Detailed engineering history belongs in Git provenance and is retrieved just-in-time.
+**Product status: NOT_READY.** Interactive fresh-session Skill selection, unfamiliar-task root-cause quality, true reusable method transfer and fewer user corrections have not been independently demonstrated. No unapproved main merge, paid inference, deployment, destructive cleanup or child production write.
