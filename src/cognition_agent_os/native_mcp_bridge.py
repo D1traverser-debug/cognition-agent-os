@@ -299,6 +299,15 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 db_path, workspace, fixtures, root_task_id)
             if observed["status"] == "NATIVE_GOAL_UNVERIFIABLE":
                 raise ValueError("NATIVE_ROOT_NOT_ADMITTED")
+            # Operator opt-in to expose local bytes is not a substitute for
+            # the current owner's grant. Match the public-source read fence.
+            readable = (
+                "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                "NATIVE_AWAITING_WORKER",
+                "NATIVE_DECISION_BUDGET_EXHAUSTED",
+            )
+            if observed["status"] not in readable:
+                raise PermissionError("LOCAL_SOURCE_READ_NOT_ADMISSIBLE")
             manifest = _sources(fixtures)
             if (not isinstance(file_name, str)
                 or file_name not in manifest):
@@ -313,14 +322,23 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 raise ValueError("SOURCE_NOT_UTF8_TEXT") from exc
             excerpt = full[offset_chars:offset_chars + 4096]
             next_offset = offset_chars + len(excerpt)
+            # The read and its delivery are distinct authorization moments.
+            # A revoked goal must not receive the bytes produced in between.
+            post_read = inspect_native_goal(
+                db_path, workspace, fixtures, root_task_id)
+            if (post_read.get("status") not in readable
+                or post_read.get("original_goal") != observed.get("original_goal")):
+                raise PermissionError("LOCAL_SOURCE_GRANT_CHANGED_DURING_READ")
             return {
                 "status": "NATIVE_SOURCE_EXCERPT",
                 "file_name": file_name, "source_sha256": digest,
+                "source_bytes": len(data), "offset_chars": offset_chars,
                 "excerpt": excerpt,
                 "next_offset_chars": (
                     next_offset if next_offset < len(full) else None),
                 "total_chars": len(full), "source_trust": "UNTRUSTED_DATA",
                 "owner_outcome_verified": False,
+                "new_tool_execution_authorized": False,
             }
 
     if public_source_goal_sha256 is not None:
