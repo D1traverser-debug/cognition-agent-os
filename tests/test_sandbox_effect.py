@@ -1,4 +1,5 @@
 """P6 sandbox outcome acceptance tests; never write original fixture sources."""
+from contextlib import closing
 import hashlib
 import json
 import os
