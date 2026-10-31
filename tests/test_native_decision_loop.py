@@ -910,6 +910,47 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertNotEqual(first["child_task_id"], second["child_task_id"])
 
+    def test_trusted_source_drift_reopens_actual_decision_and_downstream(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        # An independent new primary source supports a second *different*
+        # plan without invalidating the completed comparison.
+        (self.fixtures / "independent.md").write_text(
+            "The handoff requires separately signed records.", encoding="utf-8")
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.structure(), self.reconcile()))
+        with closing(connect(self.db)) as db:
+            decisions = db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
+                (root,)).fetchall()
+        event_ids = [item["event_id"] for item in decisions]
+        # The original first-plan source was changed *after* the second
+        # plan entered the same authoritative SQLite lineage.
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\\nDelta,9\\n", encoding="utf-8")
+        state = self.view(root)
+        self.assertEqual(state["status"], "NATIVE_SOURCE_CHANGED")
+        reentry = state["causal_reentry"]
+        self.assertEqual(reentry["observed_cause"], "SOURCE_PIN_DRIFT")
+        self.assertEqual(reentry["reopened_decision_event_ids"], [event_ids[0]])
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [event_ids[1]])
+        self.assertEqual(set(reentry["affected_child_task_ids"]),
+                         {first["child_task_id"], second["child_task_id"]})
+        self.assertFalse(reentry["authorizes_action"])
+        self.assertFalse(reentry["owner_outcome_verified"])
+        self.assertFalse(reentry["root_cause_semantically_verified"])
+        self.assertNotIn("observation_sha256", state)
+        # Independent cold inspection must derive the same causal frontier
+        # from real source bytes and ledger, not a caller's reopen_ids.
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)["causal_reentry"],
+                         reentry)
+
     def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
         root = self.root_id()
         admit_native_decision(
