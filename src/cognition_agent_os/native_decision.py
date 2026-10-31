@@ -391,11 +391,13 @@ def record_native_hypothesis(db_path: Path, workspace: Path, fixtures: Path,
             observed = _audit(db, db_path, workspace, fixtures, root_id)
             if observed["status"] not in (
                     "NATIVE_NEXT_DECISION_ADMISSIBLE",
-                    "NATIVE_SOURCE_CHANGED"):
+                    "NATIVE_SOURCE_CHANGED",
+                    "NATIVE_EVIDENCE_UNVERIFIABLE"):
                 raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE:" +
                                  observed["status"])
             key = ("research_reentry_sha256"
-                   if observed["status"] == "NATIVE_SOURCE_CHANGED"
+                   if observed["status"] in (
+                       "NATIVE_SOURCE_CHANGED", "NATIVE_EVIDENCE_UNVERIFIABLE")
                    else "observation_sha256")
             if observed[key] != observation_sha256:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
@@ -551,17 +553,31 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
     if preflight.get("status") not in (
             "NATIVE_NEXT_DECISION_ADMISSIBLE",
             "NATIVE_DECISION_BUDGET_EXHAUSTED",
-            "NATIVE_SOURCE_CHANGED"):
+            "NATIVE_SOURCE_CHANGED",
+            "NATIVE_EVIDENCE_UNVERIFIABLE"):
         raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE")
-    reentry = preflight["status"] == "NATIVE_SOURCE_CHANGED"
+    reentry = preflight["status"] in (
+        "NATIVE_SOURCE_CHANGED", "NATIVE_EVIDENCE_UNVERIFIABLE")
     observation_key = ("research_reentry_sha256" if reentry
                        else "observation_sha256")
-    with closing(connect(db_path)) as db:
+    # Real grant check BEFORE any network read. The _audit status can be
+    # evidence-invalid even after grant revocation, because evidence audit
+    # happens earlier than the final status decision. Never infer a grant
+    # from the existence of research_reentry_sha256.
+    with readonly_snapshot(db_path) as db:
         original = db.execute(
-            "SELECT source_spec FROM tasks WHERE task_id=? AND parent_task IS NULL",
+            "SELECT source_spec,goal_rev,grant_rev FROM tasks "
+            "WHERE task_id=? AND parent_task IS NULL",
             (root_id,)).fetchone()
+        authority = db.execute(
+            "SELECT goal_rev,grant_rev,write_allowed FROM authority "
+            "WHERE singleton=1").fetchone()
         if original is None:
             raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
+        if (authority is None or authority["write_allowed"] != 1
+            or (authority["goal_rev"], authority["grant_rev"]) !=
+               (original["goal_rev"], original["grant_rev"])):
+            raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
         original_contract = json.loads(original["source_spec"])
     _checked_open_research(proposal, original_contract["goal"])
     if proposal["observation_sha256"] != preflight[observation_key]:
@@ -584,10 +600,11 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             if state["status"] not in (
                     "NATIVE_NEXT_DECISION_ADMISSIBLE",
                     "NATIVE_DECISION_BUDGET_EXHAUSTED",
-                    "NATIVE_SOURCE_CHANGED"):
+                    "NATIVE_SOURCE_CHANGED",
+                    "NATIVE_EVIDENCE_UNVERIFIABLE"):
                 raise ValueError(
                     "NATIVE_DECISION_NOT_ADMISSIBLE:" + state["status"])
-            if (state["status"] == "NATIVE_SOURCE_CHANGED") != reentry:
+            if state["status"] != preflight["status"]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
             root = db.execute(
                 "SELECT source_spec,goal_rev,grant_rev FROM tasks "
@@ -1144,6 +1161,17 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             "child_artifact_sha256": child["artifact_hash"],
                             "verdict": verdict, "failure_reason": check_reason,
                             "current_sources": current_sources}))
+                    # Read-only discovery/research can proceed when an
+                    # artifact is corrupt, but execution remains BLOCKED.
+                    # CAS includes source, state, hypothesis and research
+                    # event history so a later repair, new owner correction
+                    # or an added hypothesis never silently reuses old grants.
+                    research_window = list(reversed([
+                        e for e in open_research
+                        if research_before_event_id is None
+                        or e["event_id"] < research_before_event_id
+                    ]))
+                    research_page = research_window[:_MAX_OPEN_RESEARCH_PREVIEW]
                     return {**fail, "status": "NATIVE_EVIDENCE_UNVERIFIABLE",
                             "original_goal": contract["goal"],
                             "reason": verdict,
@@ -1153,7 +1181,27 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             "causal_reentry": {
                                 **graph, "evidence_verdict": verdict,
                                 "evidence_failure_reason": check_reason,
-                            }, "authorizes_action": False}
+                            },
+                            "hypotheses": hypotheses,
+                            "open_research": research_page,
+                            "open_research_count": len(open_research),
+                            "open_research_next_before_event_id": (
+                                research_page[-1]["event_id"]
+                                if len(research_window) > len(research_page)
+                                else None),
+                            "research_reentry_sha256": _digest({
+                                "root_id": root_id, "contract": contract,
+                                "goal_rev": root["goal_rev"],
+                                "grant_rev": root["grant_rev"],
+                                "current_sources": current_sources,
+                                "decisions": [dict(x) for x in decisions],
+                                "children": [dict(ch) for ch in children],
+                                "hypotheses": hypotheses,
+                                "research": [dict(rr) for rr in research_rows],
+                                "failed_event_id": item["event_id"],
+                                "failed_verdict": verdict,
+                                "failed_reason": check_reason}),
+                            "authorizes_action": False}
             observations.append({
                 "task_id": child["task_id"], "task_state": child["state"],
                 "selected_objective": selected["objective"],
