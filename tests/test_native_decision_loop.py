@@ -909,6 +909,69 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertNotEqual(first["child_task_id"], second["child_task_id"])
 
+    def test_source_drift_allows_only_research_with_fresh_cas(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,1\n", encoding="utf-8")
+        note = self.fixtures / "followup.md"
+        note.write_text("Conflicting supplier revisions need independent tracing.",
+                        encoding="utf-8")
+        blocked = self.view(root)
+        self.assertEqual(blocked["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertNotIn("observation_sha256", blocked)
+        self.assertFalse(blocked["authorizes_action"])
+        self.assertRegex(blocked["research_reentry_sha256"], r"^[a-f0-9]{64}$")
+        proposal = {
+            "observation_sha256": blocked["research_reentry_sha256"],
+            "owner_clause": "Reconcile a supplier stock shortfall",
+            "unresolved_question": "Which supplier revision caused the conflict?",
+            "competing_methods": [
+                {"name": "original_recheck",
+                 "applicability": "Crosscheck immutable supplier originals.",
+                 "failure_mode": "Archived originals may also be incomplete.",
+                 "falsifier": "Signed supplier update contradicts originals."},
+                {"name": "external_audit",
+                 "applicability": "Seek separately verified vendor records.",
+                 "failure_mode": "The external source may not be independent.",
+                 "falsifier": "Third party audit contradicts external data."}],
+            "source_refs": [{"path": note.name,
+                             "sha256": hashlib.sha256(note.read_bytes()).hexdigest()}],
+            "next_research_step": "Inspect the primary supplier version history.",
+            "uncertainty": "Neither research route has independent outcome evidence.",
+        }
+        recorded = record_native_open_research(
+            self.db, self.workspace, self.fixtures, root, proposal)
+        self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        resumed = self.view(root)
+        self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertEqual(len(resumed.get("decisions", [])), 0)
+        self.assertNotIn("observation_sha256", resumed)
+        self.assertNotEqual(resumed["research_reentry_sha256"],
+                            blocked["research_reentry_sha256"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                self.candidate(self.view(root), self.structure(), self.reconcile()))
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+        self.assertEqual(admitted["selected_objective"], "compare_records")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        newer = dict(proposal)
+        newer["observation_sha256"] = self.view(root)["research_reentry_sha256"]
+        with self.assertRaises(PermissionError):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, newer)
+
     def test_new_research_document_before_investigation_execution_fences_old_scope(self):
         (self.fixtures / "initial.md").write_text(
             "Only the initial research evidence is approved.", encoding="utf-8")
