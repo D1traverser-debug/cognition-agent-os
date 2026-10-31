@@ -987,41 +987,6 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         research_page = eligible_research[:_MAX_OPEN_RESEARCH_PREVIEW]
         waiting = bool(observations and
             observations[-1]["task_state"] in ("PENDING", "RUNNING"))
-        # Derive the NEXT cognition step from provider/ledger evidence, never
-        # from a model's claim that its reasoning or the owner goal is done.
-        # This is part of the native observation CAS above, not a new planner.
-        pending_challenges = (
-            list(unresolved_hypotheses.values())
-            + [h for h in hypotheses
-               if h["event_id"] > previous_decision_event_id])
-        last_effect = ({
-            "task_id": observations[-1]["task_id"],
-            "task_state": observations[-1]["task_state"],
-            "error_code": observations[-1]["error_code"],
-            "mechanical_verdict": observations[-1]["mechanical_verdict"],
-        } if observations else None)
-        stage = (
-            "AWAIT_WORKER_EVIDENCE" if waiting else
-            "DIAGNOSE_FAILED_EFFECT_AND_REOPEN_METHOD"
-                if last_effect and last_effect["task_state"] == "UNKNOWN" else
-            "CHALLENGE_UNRESOLVED_CAUSES"
-                if pending_challenges else
-            "INDEPENDENTLY_VERIFY_OWNER_POSTCONDITION"
-                if last_effect and last_effect["task_state"] in
-                    ("NEEDS_REVIEW", "VERIFIED") else
-            "RECHECK_STALE_RESEARCH"
-                if any(x["source_status"] == "SOURCE_STALE_OR_REMOVED"
-                       for x in open_research) else
-            "INVESTIGATE_COMPARE_AND_SELECT")
-        workflow = {
-            "next_stage": stage,
-            "last_independently_observed_effect": last_effect,
-            "pending_challenge_count": len(pending_challenges),
-            "source_scope_bound_to_observation": True,
-            "requires_real_effect_readback": True,
-            "authorizes_action": False,
-            "owner_outcome_verified": False,
-        }
         return {
             "root_task_id": root_id,
             "status": ("NATIVE_GRANT_REVOKED" if not grant_current
@@ -1040,8 +1005,10 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             "open_research_next_before_event_id": (
                 research_page[-1]["event_id"]
                 if len(eligible_research) > len(research_page) else None),
-            "pending_hypotheses": pending_challenges,
-            "cognition_workflow": workflow,
+            "pending_hypotheses": (
+                list(unresolved_hypotheses.values())
+                + [h for h in hypotheses
+                   if h["event_id"] > previous_decision_event_id]),
             "owner_outcome_verified": False, "business_outcome_verified": False,
         }
     except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
