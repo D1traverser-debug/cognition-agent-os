@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -1393,6 +1394,25 @@ class NativeDecisionLoop(unittest.TestCase):
             for x in self.fixtures.iterdir()})
         self.assertEqual(
             self.view(root)["causal_reentry"], damaged["causal_reentry"])
+        # An actual NEW Python process, not a second object in this process,
+        # reconstructs the same current reentry from SQLite + source bytes.
+        script = (
+            "import json,sys;"
+            "from pathlib import Path;"
+            "from cognition_agent_os.native_decision import inspect_native_goal;"
+            "r=inspect_native_goal(Path(sys.argv[1]),Path(sys.argv[2]),"
+            "Path(sys.argv[3]),sys.argv[4]);"
+            "print(json.dumps(r,ensure_ascii=True))")
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
+        cold = subprocess.run(
+            [sys.executable, "-c", script,
+             str(self.db), str(self.workspace), str(self.fixtures), root],
+            capture_output=True, text=True, env=env, timeout=35, check=True)
+        readback = json.loads(cold.stdout)
+        self.assertEqual(readback["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(readback["causal_reentry"], damaged["causal_reentry"])
+        self.assertNotIn("observation_sha256", readback)
         with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
             admit_native_decision(
                 self.db, self.workspace, self.fixtures, root,
