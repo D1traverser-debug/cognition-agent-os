@@ -157,6 +157,52 @@ class DomainContractHostIntegration(unittest.TestCase):
         self.assertEqual(clean["declared_skill_entrypoint"], "UAOS_SKILL.md")
         self.assertFalse(clean["parent_replacement_admitted"])
 
+    def test_four_child_semantic_authority_shapes_block_false_clean_cutover(self):
+        """Four live child schemas have different old-parent semantic bindings.
+
+        The URLs alone are not sufficient: test the adapter's typed owner,
+        current inherited method and cognitive-policy origin.  No child is
+        written, and this audit still never authorizes cutover.
+        """
+        from cognition_agent_os.domain_contract import _native_contract
+
+        cases = (
+            ("video", "video-growth-agent",
+             "cross_chat_parent_continuity_authority",
+             "UAOS_FOR_PARENT_OR_SELECTOR_CONTEXT", "UAOS_HOSTED"),
+            ("financial_writing", "financial-writing-agent",
+             "parent_continuity_authority", "UAOS", "UAOS_HOSTED"),
+            ("novel", "novel-writing-agent",
+             "cross_chat_continuity_authority", "UAOS", "UAOS_HOSTED"),
+            ("ashare", "a-share-event-driven-agent",
+             "parent_router_identity_authority", "UAOS",
+             "UAOS_HOSTED_METHOD__DOMAIN_OWNS_BUSINESS_STATE_AND_TASK_GRAPH"),
+        )
+        for domain, name, auth_name, auth_value, inherited in cases:
+            with self.subTest(domain=domain):
+                repo = "D1traverser-debug/" + name
+                docs = make_native(domain, repo,
+                    controller="D1traverser-debug/cognition-agent-os@main")
+                adapter = json.loads(docs[FILES[1]])
+                caps = json.loads(docs[FILES[2]])
+                adapter[auth_name] = auth_value
+                caps["common_capabilities_inheritance"] = inherited
+                caps["hosted_cognition_semantics"] = {
+                    "source": "CURRENT_UAOS_DELIBERATION_POLICY"}
+                docs[FILES[1]] = json.dumps(adapter).encode()
+                docs[FILES[2]] = json.dumps(caps).encode()
+                found = _native_contract(docs, {
+                    "kind": "domain_contract", "domain_id": domain,
+                    "repo": repo, "ref": SHA})
+                self.assertTrue(found["legacy_parent_bound"], found)
+                self.assertIn(
+                    "adapter." + auth_name, found["legacy_parent_binding_refs"])
+                self.assertIn("capabilities.common_capabilities_inheritance",
+                              found["legacy_parent_binding_refs"])
+                self.assertIn("capabilities.hosted_cognition_semantics.source",
+                              found["legacy_parent_binding_refs"])
+                self.assertFalse(found["parent_replacement_admitted"])
+
     def test_four_native_domains_and_a_future_unregistered_domain(self):
         domains = (
             ("video", "video-growth-agent"),
