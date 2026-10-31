@@ -10,7 +10,7 @@ import time
 from .ledger import claim_one, connect, current_guard, event, finalize_observed, require_initialized_ledger, lineage_guard
 from .planner import propose
 from .local_model import LocalModelUnavailable, propose_local
-from .source import SourceUnavailable, get_pair
+from .source import SourceUnavailable, get_pair, safe_fixture
 from .isolated_filesystem import stage_immutable, ImmutableStageConflict
 
 
@@ -43,6 +43,38 @@ def verify_artifact(workspace: Path, task: dict) -> bool:
     if not path.is_file() or path.is_symlink():
         return False
     return hashlib.sha256(path.read_bytes()).hexdigest() == task["artifact_hash"]
+
+
+def read_audited_artifact(workspace: Path, task_id: str, audit: dict,
+                          *, max_bytes: int) -> bytes:
+    """Read only the exact bytes whose digest the independent audit accepted.
+
+    Auditors and effect adapters use separate file reads. Reopening an artifact
+    after a successful audit without comparing its bytes to the audited digest
+    creates a time-of-check/time-of-use gap. Return the bounded, safe in-root
+    snapshot only when it still has the exact audited identity.
+    """
+    if (not isinstance(task_id, str) or len(task_id) != 32
+        or any(c not in "0123456789abcdef" for c in task_id)
+        or not isinstance(audit, dict)
+        or type(max_bytes) is not int or not 1 <= max_bytes <= 1024 * 1024):
+        raise ArtifactConflict("INVALID_AUDITED_ARTIFACT_REQUEST")
+    expected = audit.get("artifact_sha256")
+    if (not isinstance(expected, str) or len(expected) != 64
+        or any(c not in "0123456789abcdef" for c in expected)):
+        raise ArtifactConflict("AUDITED_ARTIFACT_IDENTITY_MISSING")
+    relative = f"artifacts/{task_id}.json"
+    path = workspace / relative
+    if (workspace.is_symlink() or (workspace / "artifacts").is_symlink()
+        or path.is_symlink()):
+        raise ArtifactConflict("ARTIFACT_CHANGED_AFTER_AUDIT")
+    try:
+        raw = safe_fixture(workspace, relative)
+    except (OSError, ValueError, SourceUnavailable) as exc:
+        raise ArtifactConflict("ARTIFACT_CHANGED_AFTER_AUDIT") from exc
+    if len(raw) > max_bytes or hashlib.sha256(raw).hexdigest() != expected:
+        raise ArtifactConflict("ARTIFACT_CHANGED_AFTER_AUDIT")
+    return raw
 
 
 def run_once(db_path: Path, workspace: Path, fixture_root: Path, *, fail_at: str | None = None,

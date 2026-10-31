@@ -19,7 +19,7 @@ from .ledger import readonly_snapshot
 from .container_lab import candidate_changes,cases_from_bytes,run_suite,ContainerUnavailable
 from .repo_repair import audit_repo,_sources,_candidate_from_model,sha
 from .source import safe_fixture
-from .runner import store_once,ArtifactConflict
+from .runner import store_once,ArtifactConflict,read_audited_artifact
 from .ledger import connect,create_task,event,current_guard
 
 MAX_ATTEMPTS_PER_LINEAGE=3
@@ -99,17 +99,26 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
         or type(max_attempts) is not int
         or not 1<=max_attempts<=MAX_ATTEMPTS_PER_LINEAGE):
         return _deny("INVALID_PUBLIC_REFINEMENT_REQUEST")
-    from .conformance import effect_preflight,capability_disabled,REPAIR_LAB_CAPABILITY
+    from .conformance import (effect_preflight,capability_disabled,
+        REPAIR_LAB_CAPABILITY)
     if capability_disabled(db_path) or capability_disabled(db_path,REPAIR_LAB_CAPABILITY):
         return _deny("CAPABILITY_DISABLED")
+    # Run shared governance before a task-specific audit can return early.
+    # A previously tampered parent must be quarantined on retry, not remain
+    # indefinitely NEEDS_REVIEW behind the same local-audit failure.
+    admit=effect_preflight(db_path,workspace,fixtures)
+    if not admit["admitted"]:
+        return _deny("PREFLIGHT_BLOCKED",
+                     reason=admit["reason"],
+                     preflight_status=admit["status"],
+                     checked=admit["checked"],eligible=admit["eligible"],
+                     quarantined=admit["quarantined"],
+                     emergency_stops=admit["emergency_stops"])
     # Verify exact immutable original proposal, task, and public source
     # identities before any candidate is executed or passed to a model.
     audit=audit_repo(db_path,workspace,fixtures,tid)
     if audit["status"]!="REPO_BYTES_MECHANICALLY_VALID":
         return _deny("PARENT_EVIDENCE_UNVERIFIABLE",reason=audit.get("reason"))
-    admit=effect_preflight(db_path,workspace,fixtures)
-    if not admit["admitted"]:
-        return _deny("PREFLIGHT_BLOCKED")
     try:
         with readonly_snapshot(db_path) as db:
             task=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
@@ -134,8 +143,16 @@ def refine_repo_public(db_path:Path,workspace:Path,fixtures:Path,tid:str,
             remaining=min(max_attempts,MAX_ATTEMPTS_PER_LINEAGE-prior)
             if remaining<=0:
                 return _deny("REFINEMENT_BUDGET_EXHAUSTED")
+            if task["artifact_hash"] != audit.get("artifact_sha256"):
+                return _deny("PARENT_EVIDENCE_UNVERIFIABLE",
+                             reason="ARTIFACT_CHANGED_AFTER_AUDIT")
             parent=dict(task)
-        frozen=json.loads((workspace/"artifacts"/(tid+".json")).read_bytes())
+        try:
+            frozen_raw=read_audited_artifact(
+                workspace,tid,audit,max_bytes=65536)
+        except ArtifactConflict as exc:
+            return _deny("PARENT_EVIDENCE_UNVERIFIABLE",reason=str(exc))
+        frozen=json.loads(frozen_raw)
         # P21 may have spent TWO generations before initial freeze
         # (first no-change, second differing). Do not silently exceed
         # the 3-call model budget through subsequent PUBLIC refinement.
@@ -281,6 +298,12 @@ def _freeze_revision(db_path,workspace,fixtures,tid,parent,spec,base,visible,cha
         if not allowed:
             db.commit()
             return _deny("REVISION_AUTHORITY_CHANGED_BEFORE_FREEZE",reason=reason)
+        from .conformance import (
+            capability_disabled_in_transaction,REPAIR_LAB_CAPABILITY)
+        if capability_disabled_in_transaction(
+                db,"goal_sandbox_stage",REPAIR_LAB_CAPABILITY):
+            db.commit()
+            return _deny("CAPABILITY_DISABLED")
         if ({p:sha(safe_fixture(fixtures,p)) for p in spec["files"]}!=immutable["source_sha256"]
             or sha(safe_fixture(fixtures,spec["visible"]))!=immutable["public_sha256"]):
             db.commit()

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_utc": "2026-10-30",
+  "updated_utc": "2026-10-31",
   "atlas": {
     "repository": "datawhalechina/Agent-Learning-Hub",
     "commit": "dddf777dde6788228136862f270203424a28efbc",
@@ -185,8 +185,21 @@
       "label": "Onyx",
       "section": "Stage 2: Learn Tool Use, RAG, And Memory",
       "atlas_line": 84,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
+      "status": "SOURCE_AND_CODE_READ",
+      "evidence": [
+        {
+          "repo": "onyx-dot-app/onyx",
+          "path": "backend/onyx/indexing/adapters/document_indexing_adapter.py",
+          "blob_sha": "7752e81aafe407864487f1c8d57fa94fad05c0b0",
+          "kind": "implementation"
+        },
+        {
+          "repo": "onyx-dot-app/onyx",
+          "path": "backend/onyx/indexing/indexing_pipeline.py",
+          "blob_sha": "cf792770f6875fc73e2d3975c612b01029ec4d41",
+          "kind": "implementation"
+        }
+      ],
       "nested_leads": []
     },
     {
@@ -727,8 +740,27 @@
       "label": "DeerFlow",
       "section": "Project Map",
       "atlas_line": 251,
-      "status": "DISCOVERED_NOT_DEEPLY_AUDITED",
-      "evidence": [],
+      "status": "SOURCE_AND_TEST_READ",
+      "evidence": [
+        {
+          "repo": "bytedance/deer-flow",
+          "path": "backend/packages/harness/deerflow/runtime/checkpoint_state.py",
+          "blob_sha": "920bfd18b5cae035e834cd540ee4966897d562ae",
+          "kind": "implementation"
+        },
+        {
+          "repo": "bytedance/deer-flow",
+          "path": "backend/packages/harness/deerflow/runtime/checkpoint_mode.py",
+          "blob_sha": "321bcb474165f584a4d57ae7313cdb63b3a291d8",
+          "kind": "implementation"
+        },
+        {
+          "repo": "bytedance/deer-flow",
+          "path": "backend/tests/test_checkpoint_mode.py",
+          "blob_sha": "a3ee0d17cedf3f80caf50098b904149476017968",
+          "kind": "tests"
+        }
+      ],
       "nested_leads": []
     },
     {
@@ -1481,6 +1513,119 @@
         }
       ],
       "nested_leads": []
+    }
+  ],
+  "recursive_studies": [
+    {
+      "topic": "context-mode",
+      "canonical_repo": "mksglu/context-mode",
+      "status": "SOURCE_AND_IMPLEMENTATION_READ; PRODUCT_ADOPTION_NOT_CONNECTED",
+      "evidence": [
+        {
+          "path": "README.md",
+          "blob_sha": "b796169524473691594af24995d21ca94027f7c7",
+          "kind": "host_support_and_claims"
+        },
+        {
+          "path": "src/server.ts",
+          "blob_sha": "5a884c20b8cee64c5753d31d92e16044f5705469",
+          "kind": "MCP_server_and_output_virtualization"
+        },
+        {
+          "path": "src/session/db.ts",
+          "blob_sha": "9422739e295b260d6505221fbee08df931ebdcb4",
+          "kind": "SQLite_event_store"
+        },
+        {
+          "path": "src/session/snapshot.ts",
+          "blob_sha": "e49902d608a719a8382d7d1010f2801fbd220b60",
+          "kind": "resume_snapshot"
+        },
+        {
+          "path": "src/session/extract.ts",
+          "blob_sha": "2b399be1ff9c97b07a8022b7bac7dacd218be0b8",
+          "kind": "event_extraction"
+        },
+        {
+          "path": "src/adapters/codex/hooks.ts",
+          "blob_sha": "290f73313efba72279e791fcc853ba019fc0e53b",
+          "kind": "current_codex_adapter_and_limits"
+        }
+      ],
+      "counterexamples": [
+        "vendor context-savings percentage not independently reproduced",
+        "event cap and priority eviction can drop history",
+        "Codex MCP reachability is not hook trust or dispatch",
+        "ChatGPT web host cannot attach this local stdio MCP in current session"
+      ],
+      "next_falsifier": "same-task filtered/unfiltered A-B plus compaction, fresh-session, event-overflow, failed-tool, multi-project and privacy/purge tests"
+    },
+    {
+      "topic": "ub-mode",
+      "canonical_repo": "unclebob/ub-mode",
+      "status": "SKILL_AND_COMPANION_DESIGNS_READ; LOCAL_METRICS_NOT_RUN",
+      "evidence": [
+        {
+          "path": "SKILL.md",
+          "blob_sha": "9ac940b23b61d77e8e5192721d7b6066357f892c",
+          "kind": "engineering_method"
+        },
+        {
+          "repo": "unclebob/crapper",
+          "path": "README.md",
+          "blob_sha": "f5690415b719a010d23cfbed76fb5add957f1988",
+          "kind": "complexity_coverage_metric"
+        },
+        {
+          "repo": "unclebob/dryer",
+          "path": "README.md",
+          "blob_sha": "fae6e640c1d77ab94c599d96d987c63df5452da3",
+          "kind": "structural_duplication_metric"
+        },
+        {
+          "repo": "unclebob/mutator",
+          "path": "README.md",
+          "blob_sha": "1152ce6da20cb132905f50ecd6304fabe313d03b",
+          "kind": "mutation_testing"
+        }
+      ],
+      "counterexamples": [
+        "metric thresholds may not correlate with actual defects in this repository",
+        "mutation operators are finite",
+        "upstream push-to-main instruction conflicts with owner merge boundary"
+      ],
+      "next_falsifier": "run targeted mutation against the shared capability guard after validating toolchain compatibility; compare detected survivors with actual defect classes"
+    },
+    {
+      "topic": "playwright",
+      "canonical_repo": "microsoft/playwright-cli + microsoft/playwright-mcp",
+      "status": "CLI_SKILL_AND_MCP_DESIGNS_READ; NOT_INSTALLED_IN_CHATGPT",
+      "evidence": [
+        {
+          "repo": "microsoft/playwright-cli",
+          "path": "README.md",
+          "blob_sha": "9595a2d8735726383662102aadd839ab788920e",
+          "kind": "CLI_vs_MCP_tradeoff"
+        },
+        {
+          "repo": "microsoft/playwright-cli",
+          "path": "skills/playwright-cli/SKILL.md",
+          "blob_sha": "633fb0be881d1a5be31ae46404a16a412065d60b",
+          "kind": "browser_skill_commands"
+        },
+        {
+          "repo": "microsoft/playwright-mcp",
+          "path": "README.md",
+          "blob_sha": "7cecc4144025919587399336dff41b0d3ba366ad",
+          "kind": "MCP_browser_accessibility"
+        }
+      ],
+      "counterexamples": [
+        "tool availability is host-specific",
+        "MCP schema and accessibility trees may consume context",
+        "persistent browser profiles require separate privacy and effect controls"
+      ],
+      "next_falsifier": "same task A-B against existing Opera browser connector, CLI+Skill and MCP on a compatible host"
     }
   ]
 }

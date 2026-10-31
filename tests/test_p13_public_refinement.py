@@ -118,6 +118,31 @@ class PublicRevisionTests(unittest.TestCase):
         self.assertEqual(len(observations),2)
         self.assertEqual([json.loads(x[0])["public_passes"] for x in observations],[1,2])
 
+    def test_capability_circuit_tripped_during_model_blocks_revision_freeze(self):
+        def model_then_trip(*args,**kwargs):
+            with closing(connect(self.db)) as db:
+                db.execute("""INSERT OR REPLACE INTO conformance_capability_guard
+                    (kind,disabled,reason,trigger_task)
+                    VALUES('pure_code_repair_lab',1,'TEST_INTEGRITY_BREACH',?)""",
+                    (self.parent,))
+                db.commit()
+            return self.model_output(self.good)
+
+        with patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite), \
+             patch("cognition_agent_os.repo_refinement._candidate_from_model",
+                   side_effect=model_then_trip):
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b",max_attempts=1)
+        self.assertEqual(result["status"],"CAPABILITY_DISABLED",result)
+        self.assertEqual(self.task(self.parent)["state"],"NEEDS_REVIEW")
+        with closing(connect(self.db)) as db:
+            children=db.execute(
+                "SELECT task_id FROM tasks WHERE parent_task=?",(self.parent,)).fetchall()
+            self.assertFalse(children)
+        self.assertFalse((self.ws/"repo_lab").exists())
+        self.assertFalse(result["production_write_authorized"])
+
     def test_blocked_ancestor_during_model_cannot_freeze_revision(self):
         """A late ancestor stop invalidates the revision, not just the model."""
         with closing(connect(self.db)) as db:
@@ -284,6 +309,51 @@ class PublicRevisionTests(unittest.TestCase):
                                       model="installed:7b")
         self.assertEqual(result["status"],"REVIEW_AUTHORITY_OR_BUDGET_CHANGED")
         self.assertEqual(self.task(self.parent)["state"],"NEEDS_REVIEW")
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
+
+    def test_artifact_changed_after_audit_is_rejected_before_refinement(self):
+        from cognition_agent_os import repo_refinement
+        artifact=self.ws/"artifacts"/(self.parent+".json")
+        original=artifact.read_bytes()
+        real_audit=repo_refinement.audit_repo
+
+        def audit_then_mutate(*args,**kwargs):
+            result=real_audit(*args,**kwargs)
+            artifact.write_bytes(original+b" ")
+            return result
+
+        with patch("cognition_agent_os.conformance.effect_preflight",
+                   return_value={"admitted":True}),\
+             patch("cognition_agent_os.repo_refinement.audit_repo",
+                   side_effect=audit_then_mutate),\
+             patch("cognition_agent_os.repo_refinement.run_suite",
+                   side_effect=self.suite) as suite,\
+             patch("cognition_agent_os.repo_refinement._candidate_from_model") as model:
+            result=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                      model="installed:7b")
+
+        self.assertEqual(result["status"],"PARENT_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(result["reason"],"ARTIFACT_CHANGED_AFTER_AUDIT")
+        suite.assert_not_called()
+        model.assert_not_called()
+        self.assertEqual(self.task(self.parent)["state"],"NEEDS_REVIEW")
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
+            self.assertEqual(db.execute(
+                """SELECT COUNT(*) FROM events WHERE task_id=?
+                AND kind='REPO_LOCAL_PUBLIC_REVISION_TRIAL'""",
+                (self.parent,)).fetchone()[0],0)
+
+        # A subsequent direct CLI invocation must run conformance before
+        # returning another early audit failure; otherwise this corrupted
+        # NEEDS_REVIEW parent remains indefinitely eligible.
+        second=refine_repo_public(self.db,self.ws,self.fx,self.parent,
+                                  model="installed:7b")
+        self.assertEqual(second["status"],"PARENT_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(self.task(self.parent)["state"],"UNKNOWN")
+        self.assertEqual(self.task(self.parent)["error_code"],
+                         "CONFORMANCE_PROPOSAL_HASH_CHANGED")
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],1)
 

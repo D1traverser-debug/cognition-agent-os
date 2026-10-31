@@ -45,6 +45,7 @@ def _legacy_parent_ref_paths(manifest: dict, adapter: dict, caps: dict) -> list[
     """
     refs = []
     for prefix, fields in (
+        ("manifest", manifest),
         ("manifest.binding", manifest.get("binding")),
         ("adapter", adapter),
         ("capabilities", caps),

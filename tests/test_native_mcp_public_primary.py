@@ -159,6 +159,55 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
                     PermissionError, "PUBLIC_SOURCE_GRANT_CHANGED_DURING_READ"):
                 reader(self.root, *self.remote)
 
+    def test_local_source_read_refuses_revoked_goal_before_disclosing_bytes(self):
+        (self.fx / "private.md").write_text("owner-pinned source", encoding="utf-8")
+        reader = self.server(allow_source_read=True).tools["native_source_read"]
+        self.assertEqual(reader(self.root, "private.md")["excerpt"],
+                         "owner-pinned source")
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE authority SET grant_rev=grant_rev+1 "
+                       "WHERE singleton=1")
+            db.commit()
+        # An opt-in operator flag alone is not a still-current goal grant.
+        with self.assertRaisesRegex(
+                PermissionError, "LOCAL_SOURCE_READ_NOT_ADMISSIBLE"):
+            reader(self.root, "private.md")
+
+    def test_local_source_read_refuses_revocation_during_bounded_read(self):
+        (self.fx / "private.md").write_text("must not leak", encoding="utf-8")
+        reader = self.server(allow_source_read=True).tools["native_source_read"]
+        from cognition_agent_os import native_mcp_bridge as bridge
+        original_read = bridge.safe_fixture
+        def revoke_during_fetch(root, relative):
+            raw = original_read(root, relative)
+            with closing(connect(self.db)) as db:
+                db.execute("UPDATE authority SET grant_rev=grant_rev+1 "
+                           "WHERE singleton=1")
+                db.commit()
+            return raw
+        # _sources() is a distinct source-layer read: revoke only at the
+        # actual local tool disclosure boundary after the first admission.
+        with patch.object(bridge, "safe_fixture",
+                          side_effect=revoke_during_fetch):
+            with self.assertRaisesRegex(
+                    PermissionError, "LOCAL_SOURCE_GRANT_CHANGED_DURING_READ"):
+                reader(self.root, "private.md")
+
+    def test_local_read_receipt_reports_exact_window_not_semantic_acceptance(self):
+        source = "A" * 4096 + "LAST_SENTENCE"
+        (self.fx / "private.md").write_text(source, encoding="utf-8")
+        reader = self.server(allow_source_read=True).tools["native_source_read"]
+        first = reader(self.root, "private.md")
+        second = reader(self.root, "private.md",
+                        offset_chars=first["next_offset_chars"])
+        self.assertEqual(first["offset_chars"], 0)
+        self.assertEqual(second["offset_chars"], 4096)
+        self.assertEqual(first["source_sha256"], second["source_sha256"])
+        self.assertEqual(first["total_chars"], len(source))
+        self.assertEqual(first["excerpt"] + second["excerpt"], source)
+        self.assertIsNone(second["next_offset_chars"])
+        self.assertFalse(second["owner_outcome_verified"])
+
     def test_invalid_input_and_binary_rejected_without_claiming_truth(self):
         reader = self.server(
             public_source_goal_sha256=self.scope).tools[

@@ -41,14 +41,14 @@ def _classify_audit(reason: str) -> tuple[str, str, str]:
 
 
 def record_audit_failure(db: sqlite3.Connection, task: sqlite3.Row,
-                         reason: str) -> dict:
+                         reason: str, *, error_prefix: str="AUDIT") -> dict:
     """Caller holds BEGIN IMMEDIATE and has independently reaudited reason."""
     if reason not in AUDIT_FAILURES:
         raise ValueError("Unrecognized audit failure")
     group, action, state = _classify_audit(reason)
     db.execute("""UPDATE tasks SET state=?,error_code=?,state_version=state_version+1,
                lease_until=NULL,claim_token=NULL WHERE task_id=? AND state='NEEDS_REVIEW'""",
-               (state,"AUDIT_"+reason,task["task_id"]))
+               (state,error_prefix+"_"+reason,task["task_id"]))
     event(db,task["task_id"],"DIAGNOSIS_RECORDED",{
         "observation":reason,
         "candidate_explanations":[
@@ -71,9 +71,28 @@ def reject_review_if_untrusted(db_path: Path, workspace: Path,
     try:
         db.execute("BEGIN IMMEDIATE")
         task=db.execute("SELECT * FROM tasks WHERE task_id=?",(task_id,)).fetchone()
-        if not task or task["state"]!="NEEDS_REVIEW":
+        if not task:
             db.commit()
-            return {"task_id":task_id,"status":"NOT_ADMITTED","reason":"TASK_NOT_PENDING_REVIEW"}
+            return {"task_id":task_id,"status":"NOT_ADMITTED",
+                    "reason":"TASK_NOT_FOUND"}
+        if task["state"]!="NEEDS_REVIEW":
+            # The shared conformance sweep may have diagnosed and quarantined
+            # this task earlier in the same admission path. Return that durable
+            # diagnosis rather than losing it behind a generic not-pending reply.
+            recorded=db.execute("""SELECT details FROM events
+                WHERE task_id=? AND kind='DIAGNOSIS_RECORDED'
+                ORDER BY event_id DESC LIMIT 1""",(task_id,)).fetchone()
+            if recorded:
+                details=json.loads(recorded["details"])
+                db.commit()
+                return {"task_id":task_id,"status":"NOT_ADMITTED",
+                        "reason":details.get("observation"),
+                        "diagnosis":details.get("evidence_class"),
+                        "next_action":details.get("next_action"),
+                        "business_outcome_verified":False}
+            db.commit()
+            return {"task_id":task_id,"status":"NOT_ADMITTED",
+                    "reason":"TASK_NOT_PENDING_REVIEW"}
         actual=audit_goal(db_path,workspace,fixtures,task_id)
         if actual["status"]=="CANDIDATE_MECHANICALLY_VALID" or actual["status"]=="SOURCE_CHANGED_SINCE_PROPOSAL":
             db.commit()

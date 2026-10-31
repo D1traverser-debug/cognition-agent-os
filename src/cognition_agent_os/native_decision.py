@@ -389,11 +389,26 @@ def record_native_hypothesis(db_path: Path, workspace: Path, fixtures: Path,
         db.execute("BEGIN IMMEDIATE")
         try:
             observed = _audit(db, db_path, workspace, fixtures, root_id)
-            if observed["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+            if observed["status"] not in (
+                    "NATIVE_NEXT_DECISION_ADMISSIBLE",
+                    "NATIVE_SOURCE_CHANGED"):
                 raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE:" +
                                  observed["status"])
-            if observed["observation_sha256"] != observation_sha256:
+            key = ("research_reentry_sha256"
+                   if observed["status"] == "NATIVE_SOURCE_CHANGED"
+                   else "observation_sha256")
+            if observed[key] != observation_sha256:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
+            root = db.execute(
+                "SELECT goal_rev,grant_rev FROM tasks WHERE task_id=?",
+                (root_id,)).fetchone()
+            auth = db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed "
+                "FROM authority WHERE singleton=1").fetchone()
+            if (root is None or auth is None or auth["write_allowed"] != 1
+                or (auth["goal_rev"], auth["grant_rev"]) !=
+                   (root["goal_rev"], root["grant_rev"])):
+                raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             if len(observed["hypotheses"]) >= _MAX_HYPOTHESES:
                 raise ValueError("NATIVE_HYPOTHESIS_BOUND_EXCEEDED")
             digest = _digest(idea)
@@ -535,8 +550,12 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
     preflight = inspect_native_goal(db_path, workspace, fixtures, root_id)
     if preflight.get("status") not in (
             "NATIVE_NEXT_DECISION_ADMISSIBLE",
-            "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+            "NATIVE_DECISION_BUDGET_EXHAUSTED",
+            "NATIVE_SOURCE_CHANGED"):
         raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE")
+    reentry = preflight["status"] == "NATIVE_SOURCE_CHANGED"
+    observation_key = ("research_reentry_sha256" if reentry
+                       else "observation_sha256")
     with closing(connect(db_path)) as db:
         original = db.execute(
             "SELECT source_spec FROM tasks WHERE task_id=? AND parent_task IS NULL",
@@ -545,7 +564,7 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
         original_contract = json.loads(original["source_spec"])
     _checked_open_research(proposal, original_contract["goal"])
-    if proposal["observation_sha256"] != preflight["observation_sha256"]:
+    if proposal["observation_sha256"] != preflight[observation_key]:
         raise ValueError("NATIVE_STALE_OBSERVATION")
     public_refs = [ref for ref in proposal["source_refs"]
                    if ref.get("kind") == "github"]
@@ -564,9 +583,12 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             state = _audit(db, db_path, workspace, fixtures, root_id)
             if state["status"] not in (
                     "NATIVE_NEXT_DECISION_ADMISSIBLE",
-                    "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+                    "NATIVE_DECISION_BUDGET_EXHAUSTED",
+                    "NATIVE_SOURCE_CHANGED"):
                 raise ValueError(
                     "NATIVE_DECISION_NOT_ADMISSIBLE:" + state["status"])
+            if (state["status"] == "NATIVE_SOURCE_CHANGED") != reentry:
+                raise ValueError("NATIVE_STALE_OBSERVATION")
             root = db.execute(
                 "SELECT source_spec,goal_rev,grant_rev FROM tasks "
                 "WHERE task_id=?", (root_id,)).fetchone()
@@ -574,8 +596,15 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
                 raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
             contract = json.loads(root["source_spec"])
             _checked_open_research(proposal, contract["goal"])
-            if proposal["observation_sha256"] != state["observation_sha256"]:
+            if proposal["observation_sha256"] != state[observation_key]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
+            auth = db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed "
+                "FROM authority WHERE singleton=1").fetchone()
+            if (auth is None or auth["write_allowed"] != 1
+                or (auth["goal_rev"], auth["grant_rev"]) !=
+                   (root["goal_rev"], root["grant_rev"])):
+                raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             digest = _open_research_fingerprint(proposal)
             # A bounded read page must never become a bounded duplicate
             # detector. Query the authoritative ledger across ALL old events.
@@ -594,13 +623,6 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
                 raise ValueError("NATIVE_RESEARCH_SOURCE_UNVERIFIABLE")
             if public_refs and not contract.get("allow_public_source_read"):
                 raise PermissionError("PUBLIC_SOURCE_READ_NOT_AUTHORIZED")
-            auth = db.execute(
-                "SELECT goal_rev,grant_rev,write_allowed "
-                "FROM authority WHERE singleton=1").fetchone()
-            if (auth is None or auth["write_allowed"] != 1
-                or (auth["goal_rev"], auth["grant_rev"]) !=
-                   (root["goal_rev"], root["grant_rev"])):
-                raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             record = {
                 "contract_sha256": _digest(contract),
                 "proposal_sha256": digest,
@@ -899,9 +921,54 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     receipt["source_sha256"], current_sources,
                     selected["child_source_spec"]["kind"],
                     finished=child["state"] in ("NEEDS_REVIEW", "VERIFIED")):
+                # Fail closed, but expose the actual replay evidence that
+                # invalidated this decision instead of a generic failure.
+                # The returned paths are pinned provider-observed facts,
+                # NOT a model-authored root cause, permission or new plan.
+                pinned = receipt["source_sha256"]
+                invalidated_paths = sorted(
+                    name for name, digest in pinned.items()
+                    if current_sources.get(name) != digest)
+                added_investigation_paths = (
+                    sorted(name for name in current_sources.keys() - pinned.keys()
+                           if Path(name).suffix.lower() in (".md", ".txt"))
+                    if selected["child_source_spec"]["kind"] == "investigate_goal"
+                    and child["state"] not in ("NEEDS_REVIEW", "VERIFIED")
+                    else [])
+                research_window = list(reversed([
+                    e for e in open_research
+                    if research_before_event_id is None
+                    or e["event_id"] < research_before_event_id
+                ]))
+                research_page = research_window[:_MAX_OPEN_RESEARCH_PREVIEW]
                 return {**fail, "status": "NATIVE_SOURCE_CHANGED",
                         "original_goal": contract["goal"],
-                        "reason": "SOURCE_PIN_DRIFT"}
+                        "reason": "SOURCE_PIN_DRIFT",
+                        "reopen_scope": "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION",
+                        "reopen_decision_ordinal": index,
+                        "affected_decision_event_ids": [
+                            d["event_id"] for d in decisions[index:]],
+                        "invalidated_source_paths": invalidated_paths,
+                        "new_investigation_source_paths": added_investigation_paths,
+                        # Expose verified historical research without
+                        # declaring it valid for the changed source version.
+                        "open_research": research_page,
+                        "open_research_count": len(open_research),
+                        "open_research_next_before_event_id": (
+                            research_page[-1]["event_id"]
+                            if len(research_window) > len(research_page) else None),
+                        "hypotheses": hypotheses,
+                        "research_reentry_sha256": _digest({
+                            "root_id": root_id, "contract": contract,
+                            "goal_rev": root["goal_rev"],
+                            "grant_rev": root["grant_rev"],
+                            "source_hashes": current_sources,
+                            "decisions": [dict(d) for d in decisions],
+                            "children": [dict(ch) for ch in children],
+                            "hypotheses": hypotheses,
+                            "research": [dict(rr) for rr in research_rows],
+                        }),
+                        "authorizes_action": False}
             _ground_decision(
                 receipt["proposal"], parsed, receipt["source_sha256"], previous_id)
             previous_id = child["task_id"]

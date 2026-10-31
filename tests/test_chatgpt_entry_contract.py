@@ -93,9 +93,28 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         skill = SKILL.read_text(encoding="utf-8")
         for term in ("Owner-visible decision and execution evidence",
                      "competing root-cause hypotheses", "counterevidence",
-                     "reuse/adapt/replace/build", "falsifier/rollback",
-                     "NOT_TESTED/UNKNOWN", "private chain-of-thought"):
+                     "falsifier/rollback", "NOT_TESTED/UNKNOWN",
+                     "private chain-of-thought"):
             self.assertIn(term, skill)
+        # Verify the comparison obligation, not one frozen slogan that
+        # rejects legitimate additions such as retire/remove.
+        study = skill.split("3. **Study deeply / traverse original projects:**", 1)[1].split("\n4. ", 1)[0]
+        for method in ("reuse", "adapt", "replace", "remove", "build"):
+            self.assertRegex(study, rf"\b{method}\b")
+        self.assertIn("For EVERY cognition-system decision", skill)
+        # Source-contract regression only: any one-way stage representation
+        # must fail source checks, but a runtime Client trace is still needed.
+        self.assertLess(skill.index("recursive root cause"),
+                        skill.index("Study deeply / traverse original projects"))
+        self.assertLess(skill.index("Study deeply / traverse original projects"),
+                        skill.index("Rechallenge BEFORE decision"))
+        self.assertIn("LOOP BACK into root-cause investigation", skill)
+        self.assertIn("architecture, real implementation and call paths", skill)
+        self.assertIn("tests/negative cases", skill)
+        self.assertIn("issues and compatibility limits", skill)
+        self.assertIn("challenge the preferred solution and the completeness of the research again", skill)
+        self.assertIn("Failed or contradictory evidence can invalidate upstream causal assumptions", skill)
+
         self.assertIn("AB. Ordinary-chat entry versus Project-only false baseline",
                       PROBES.read_text(encoding="utf-8"))
 
@@ -117,7 +136,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
                       "SKILL_DEFECT", "EXECUTION_LAPSE", "ENTRY_NOT_SELECTED",
                       "Bounded critique", "without new evidence", "independent readback"):
             self.assertIn(token, core)
-        self.assertLess(core.index("Decision self-critique"), core.index("Execute & verify"))
+        self.assertLess(core.index("Rechallenge BEFORE decision"), core.index("Execute / independent check / recursive reopen"))
         self.assertIn("Do not rewrite an existing valid rule", core)
 
     def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):

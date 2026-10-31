@@ -12,6 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -909,6 +910,177 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
         self.assertNotEqual(first["child_task_id"], second["child_task_id"])
 
+    def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,4\n", encoding="utf-8")
+        drift = self.view(root)
+        self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED")
+        recorded = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent", idea="Maybe the supplier changed its stock version",
+            observation_sha256=drift["research_reentry_sha256"])
+        self.assertEqual(recorded["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        self.assertFalse(recorded["origin_authenticated"])
+        resumed = self.view(root)
+        self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertNotEqual(resumed["research_reentry_sha256"],
+                            drift["research_reentry_sha256"])
+        self.assertEqual(len(resumed["hypotheses"]), 1)
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Maybe another timestamp is wrong",
+                observation_sha256=drift["research_reentry_sha256"])
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        with self.assertRaises(PermissionError):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent", idea="Maybe a third unrelated source is wrong",
+                observation_sha256=self.view(root)["research_reentry_sha256"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+
+    def test_source_drift_allows_only_research_with_fresh_cas(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,1\n", encoding="utf-8")
+        note = self.fixtures / "followup.md"
+        note.write_text("Conflicting supplier revisions need independent tracing.",
+                        encoding="utf-8")
+        blocked = self.view(root)
+        self.assertEqual(blocked["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertNotIn("observation_sha256", blocked)
+        self.assertFalse(blocked["authorizes_action"])
+        self.assertRegex(blocked["research_reentry_sha256"], r"^[a-f0-9]{64}$")
+        proposal = {
+            "observation_sha256": blocked["research_reentry_sha256"],
+            "owner_clause": "Reconcile a supplier stock shortfall",
+            "unresolved_question": "Which supplier revision caused the conflict?",
+            "competing_methods": [
+                {"name": "original_recheck",
+                 "applicability": "Crosscheck immutable supplier originals.",
+                 "failure_mode": "Archived originals may also be incomplete.",
+                 "falsifier": "Signed supplier update contradicts originals."},
+                {"name": "external_audit",
+                 "applicability": "Seek separately verified vendor records.",
+                 "failure_mode": "The external source may not be independent.",
+                 "falsifier": "Third party audit contradicts external data."}],
+            "source_refs": [{"path": note.name,
+                             "sha256": hashlib.sha256(note.read_bytes()).hexdigest()}],
+            "next_research_step": "Inspect the primary supplier version history.",
+            "uncertainty": "Neither research route has independent outcome evidence.",
+        }
+        # Real MCP tool body over the single SQLite authority; only
+        # the MCP SDK registration layer is simulated.
+        from cognition_agent_os.native_mcp_bridge import build_mcp_server
+        class _McpShim:
+            def __init__(self, name):
+                self.tools = {}
+            def tool(self):
+                def register(func):
+                    self.tools[func.__name__] = func
+                    return func
+                return register
+        fake = types.ModuleType("mcp")
+        fake_server = types.ModuleType("mcp.server")
+        fake_server.MCPServer = _McpShim
+        with patch.dict(sys.modules, {"mcp": fake, "mcp.server": fake_server}):
+            service = build_mcp_server(
+                self.db, self.workspace, self.fixtures,
+                allow_goal_writes=True)
+        observed = service.tools["native_goal_inspect"](root)
+        self.assertEqual(observed["research_reentry_sha256"],
+                         blocked["research_reentry_sha256"])
+        recorded = service.tools["native_open_research_record"](root, proposal)
+        self.assertEqual(recorded["status"], "NATIVE_OPEN_RESEARCH_RECORDED")
+        self.assertFalse(recorded["authorizes_action"])
+        resumed = service.tools["native_goal_inspect"](root)
+        self.assertEqual(resumed["status"], "NATIVE_SOURCE_CHANGED")
+        self.assertEqual(resumed["open_research_count"], 1)
+        self.assertEqual(len(resumed["open_research"]), 1)
+        self.assertEqual(resumed["open_research"][0]["source_status"],
+                         "SOURCE_PIN_CURRENT_UNVERIFIED_SEMANTICS")
+        self.assertFalse(resumed["open_research"][0]["authorizes_action"])
+        self.assertNotIn("observation_sha256", resumed)
+        self.assertNotEqual(resumed["research_reentry_sha256"],
+                            blocked["research_reentry_sha256"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                {"observation_sha256": "f" * 64})
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM tasks WHERE parent_task=?",
+                (root,)).fetchone()[0], 1)
+        self.assertEqual(admitted["selected_objective"], "compare_records")
+        with closing(connect(self.db)) as db:
+            alter_authority(db, revoke=True)
+        newer = dict(proposal)
+        newer["observation_sha256"] = self.view(root)["research_reentry_sha256"]
+        with self.assertRaises(PermissionError):
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, newer)
+
+    def test_source_drift_research_page_recovers_all_history(self):
+        root = self.root_id()
+        admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\nDelta,7\n", encoding="utf-8")
+        for index in range(18):
+            state = self.view(root)
+            self.assertEqual(state["status"], "NATIVE_SOURCE_CHANGED")
+            proposal = {
+                "observation_sha256": state["research_reentry_sha256"],
+                "owner_clause": "Reconcile a supplier stock shortfall",
+                "unresolved_question": "Which source revision is trustworthy?",
+                "competing_methods": [
+                    {"name": "ledger_check",
+                     "applicability": "Inspect immutable original records.",
+                     "failure_mode": "Original file may already be incomplete.",
+                     "falsifier": "Independent vendor signed record disagrees."},
+                    {"name": "vendor_probe",
+                     "applicability": "Compare independent vendor source reports.",
+                     "failure_mode": "Vendor report may share the same input.",
+                     "falsifier": "Independent third party audit disagrees."}],
+                "source_refs": [],
+                "next_research_step": (
+                    f"Check external revision and negative control {index}."),
+                "uncertainty": "External effect has not yet been independently tested.",
+            }
+            record_native_open_research(
+                self.db, self.workspace, self.fixtures, root, proposal)
+        first = self.view(root)
+        self.assertEqual(first["open_research_count"], 18)
+        self.assertEqual(len(first["open_research"]), 16)
+        self.assertIsNotNone(first["open_research_next_before_event_id"])
+        second = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root,
+            research_before_event_id=first["open_research_next_before_event_id"])
+        self.assertEqual(len(second["open_research"]), 2)
+        self.assertIsNone(second["open_research_next_before_event_id"])
+        all_ids = [x["event_id"] for x in first["open_research"]]
+        all_ids += [x["event_id"] for x in second["open_research"]]
+        self.assertEqual(all_ids, sorted(all_ids, reverse=True))
+        self.assertEqual(len(set(all_ids)), 18)
+        self.assertNotIn("observation_sha256", first)
+        self.assertNotIn("observation_sha256", second)
+
     def test_new_research_document_before_investigation_execution_fences_old_scope(self):
         (self.fixtures / "initial.md").write_text(
             "Only the initial research evidence is approved.", encoding="utf-8")
@@ -1026,7 +1198,12 @@ class NativeDecisionLoop(unittest.TestCase):
         (self.fixtures / "new_review.md").write_text("Extra research", encoding="utf-8")
         (self.fixtures / "observed.csv").write_text(
             "supplier,received\nDelta,999\n", encoding="utf-8")
-        self.assertEqual(self.view(root)["status"], "NATIVE_SOURCE_CHANGED")
+        observation = self.view(root)
+        self.assertEqual(observation["status"], "NATIVE_SOURCE_CHANGED")
+        # A new unrelated research note cannot conceal the modified primary fact.
+        self.assertEqual(observation["invalidated_source_paths"], ["observed.csv"])
+        self.assertEqual(observation["reopen_decision_ordinal"], 0)
+        self.assertFalse(observation["owner_outcome_verified"])
 
     def test_source_drift_and_revocation_block_new_model_choice(self):
         root = self.root_id()
@@ -1039,6 +1216,20 @@ class NativeDecisionLoop(unittest.TestCase):
             "supplier,received\nDelta,1\n", encoding="utf-8")
         drift = self.view(root)
         self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED", drift)
+        self.assertEqual(drift["invalidated_source_paths"], ["observed.csv"])
+        self.assertEqual(drift["reopen_decision_ordinal"], 0)
+        self.assertEqual(drift["reopen_scope"], "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION")
+        self.assertTrue(drift["affected_decision_event_ids"])
+        self.assertNotIn("observation_sha256", drift)
+        self.assertFalse(drift["owner_outcome_verified"])
+        from cognition_agent_os.host import _goal_progress
+        host_view = _goal_progress(self.db, self.workspace, self.fixtures)
+        reported = next(x for x in host_view["goals"]
+                        if x["root_task_id"] == root)
+        self.assertEqual(reported["next_control_action"],
+                         "REOPEN_NATIVE_CAUSAL_SOURCE_REVIEW")
+        self.assertEqual(reported["reopen_source_paths"], ["observed.csv"])
+        self.assertEqual(reported["reopen_decision_ordinal"], 0)
         with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
             admit_native_decision(self.db, self.workspace, self.fixtures, root,
                 self.candidate(old, self.structure(), self.reconcile()))

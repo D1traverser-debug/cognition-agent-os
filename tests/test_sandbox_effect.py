@@ -1,4 +1,5 @@
 """P6 sandbox outcome acceptance tests; never write original fixture sources."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -138,6 +139,86 @@ class SandboxEffectTests(unittest.TestCase):
         before=path.read_bytes()
         path.write_bytes(before+b"x")
         self.assertEqual(stage_one(self.db,self.out,self.fx,tid)["status"],"NOT_ADMITTED")
+        self.assertFalse((self.out/"sandbox"/(tid+".candidate")).exists())
+
+    def test_effect_uses_exact_artifact_bytes_that_were_audited(self):
+        from cognition_agent_os import sandbox_effect
+        tid,_,_=self.make()
+        artifact=self.out/"artifacts"/(tid+".json")
+        original_artifact=artifact.read_bytes()
+        original_record=json.loads(original_artifact)
+        approved=original_record["candidate_text"].encode("utf-8")
+        real_audit=sandbox_effect.audit_goal
+        calls=0
+
+        def mutate_after_final_audit(*args, **kwargs):
+            nonlocal calls
+            result=real_audit(*args, **kwargs)
+            calls+=1
+            if calls==2:
+                self.assertEqual(result["status"],
+                                 "CANDIDATE_MECHANICALLY_VALID")
+                changed=(json.dumps(
+                    json.loads(original_record["candidate_text"]),
+                    ensure_ascii=False,separators=(",",":"))+"\n")
+                self.assertNotEqual(changed.encode("utf-8"),approved)
+                original_record["candidate_text"]=changed
+                original_record["candidate_sha256"]=hashlib.sha256(
+                    changed.encode("utf-8")).hexdigest()
+                artifact.write_text(json.dumps(original_record),
+                                    encoding="utf-8")
+            return result
+
+        with patch.object(sandbox_effect,"audit_goal",
+                          side_effect=mutate_after_final_audit):
+            result=stage_one(self.db,self.out,self.fx,tid)
+        self.assertEqual(calls,2)
+        self.assertEqual(result["status"],"NOT_ADMITTED",result)
+        self.assertEqual(result.get("reason"),"ARTIFACT_CHANGED_AFTER_AUDIT")
+        self.assertFalse((self.out/"sandbox"/(tid+".candidate")).exists())
+        self.assertEqual(self.task(tid)["state"],"NEEDS_REVIEW")
+        self.assertNotEqual(hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                            self.task(tid)["artifact_hash"])
+
+    def test_retry_after_artifact_drift_runs_conformance_before_early_audit(self):
+        from cognition_agent_os import sandbox_effect,conformance
+        tid,_,_=self.make()
+        artifact=self.out/"artifacts"/(tid+".json")
+        original=artifact.read_bytes()
+        real_audit=sandbox_effect.audit_goal
+        real_preflight=conformance.effect_preflight
+        audit_calls=0
+        preflight_calls=0
+
+        def mutate_after_final_audit(*args,**kwargs):
+            nonlocal audit_calls
+            result=real_audit(*args,**kwargs)
+            audit_calls+=1
+            if audit_calls==2:
+                self.assertEqual(result["status"],"CANDIDATE_MECHANICALLY_VALID")
+                artifact.write_bytes(original+b" ")
+            return result
+
+        def preflight(*args,**kwargs):
+            nonlocal preflight_calls
+            preflight_calls+=1
+            if preflight_calls==1:
+                return {"admitted":True}
+            return real_preflight(*args,**kwargs)
+
+        with (
+            patch.object(sandbox_effect,"audit_goal",side_effect=mutate_after_final_audit),
+            patch.object(conformance,"effect_preflight",side_effect=preflight),
+        ):
+            first=stage_one(self.db,self.out,self.fx,tid)
+            self.assertEqual(first.get("reason"),"ARTIFACT_CHANGED_AFTER_AUDIT",first)
+            self.assertEqual(self.task(tid)["state"],"NEEDS_REVIEW")
+            second=stage_one(self.db,self.out,self.fx,tid)
+
+        self.assertEqual(preflight_calls,2)
+        self.assertEqual(self.task(tid)["state"],"UNKNOWN")
+        self.assertEqual(self.task(tid)["error_code"],
+                         "CONFORMANCE_ARTIFACT_HASH_MISMATCH")
         self.assertFalse((self.out/"sandbox"/(tid+".candidate")).exists())
 
     def test_reconcile_crash_between_stage_file_and_db_commit(self):

@@ -4,6 +4,8 @@
 
 Historical pre-compaction text is preserved at `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for evidence only. Private user conversations must remain private.
 
+Audit reuse: `evidence/recovery/2026-10-31-source-map.json` → `scripts/plan_incremental_audit.py`. Reopen changed blobs; old receipts never certify semantics.
+
 ## Owner-activated continuity — 2026-10-29
 
 Each owner-woken chat (including new chats) resumes the full original goal,
@@ -16,7 +18,7 @@ progress can be inferred from this dated index.
 
 Build ONE opt-in `D1traverser-debug/cognition-agent-os` cognition parent that preserves the COMPLETE owner goal and corrections; decomposes and challenges assumptions; independently searches/learns professional sources and existing tools; compares reuse/adapt/replace/new methods; lawfully executes; independently verifies full owner and child-business outcomes; changes method after failure; retains verified learning; resumes across interruption; transfers to unfamiliar domains; and reduces owner correction work and unnecessary complexity.
 
-2026-10-26 owner correction remains controlling unless newer direct owner text supersedes it: prioritize real ChatGPT/Codex research -> comparison -> connected-tool action -> independent result -> correction now. Ordinary ChatGPT chats do not require the parent workflow. Persistent Host/cloud bridge, paid APIs and deployment are later authorization phases. Child systems retain their own IDs, grants, state and business-result oracles. Legacy `universal-agent-os` / `uaos-controller-runtime` is not the active parent.
+2026-10-26 owner correction remains controlling unless newer direct owner text supersedes it: prioritize real ChatGPT/Codex research -> comparison -> connected-tool action -> independent result -> correction now. Ordinary ChatGPT chats do not require the parent workflow. Persistent Host/cloud bridge, paid APIs and deployment are later authorization phases. Child systems retain their own IDs, grants, state and business-result oracles. UAOS remains four children's current controller but is DEPRECATED; replace and retire old capabilities quickly after independent child-native verification, not by copying UAOS or silently rewriting business state.
 
 ## Recovery order and responsibility map
 

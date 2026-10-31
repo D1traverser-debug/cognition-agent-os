@@ -37,14 +37,23 @@ applicable cross-domain methods, routes advice/work through the child's
 admitted interface, coordinates dependencies and reads independent
 business outcomes without overwriting child state.
 
-**Old-UAOS migration:** existing child `UAOS_SKILL.md` entries still
-bind `universal-agent-os` to parent cognition/governance. That is the
-historical parent still in use by those integration documents.
-New cognition-agent-os adoption is NOT demonstrated by the current
-Draft PR. No child repo edit, UAOS retirement or production cutover is
-approved. A parent replacement requires a verified adapter migration,
-unchanged legitimate child tasks, regression of both parent and child
-state/permission/identity, and explicit owner authorization.
+**UAOS retirement and child redesign (owner update 2026-10-31):**
+`universal-agent-os` is a DEPRECATED MIGRATION DEPENDENCY, **not a design
+baseline to preserve or imitate**. All four children still point at it through
+native contracts, and that observed operational binding must not be falsely
+reported as a new cognition-parent cutover. The target is prompt retirement of
+unneeded legacy controls, policies and duplicate capabilities, plus **permission
+to redesign weak child architecture** when measured business outcomes justify
+it—not one-to-one cloning of UAOS behavior or indefinite compatibility.
+Use per-capability contract discovery, a candidate new path, independent
+child-native regression, original identity/state/grant and negative-neighbor
+checks, then retire the corresponding old dependency. A deleted/replaced
+capability need not preserve bad implementation details or redundant fields.
+A simple controller rename is insufficient; check top-level and nested normative
+references. Silent edits to child production/business state, root/main merge,
+irreversible UAOS retirement, deployments and cutover still require their own
+explicit authorization and real outcome verification. Compatible interim
+behavior is a **temporary fallback**, not a permanent dual-controller goal.
 
 **One cognition parent, two presently distinct technical surfaces.**
 This ChatGPT/tool session participates as the actual parent's interactive
