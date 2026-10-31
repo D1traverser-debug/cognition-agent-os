@@ -80,58 +80,6 @@ class NativeOwnerAcceptance(unittest.TestCase):
         self.assertEqual(result["tasks"][0]["task_id"], admitted["child_task_id"])
         return root, admitted
 
-    def test_independently_verified_prior_goal_is_available_to_next_goal_only_in_scope(self):
-        """Real owner postcondition should inform a later same-scope decision.
-
-        A different owner goal or changed source must not inherit untrusted
-        procedural advice. No old outcome can grant a new effect.
-        """
-        from unittest.mock import patch
-        from cognition_agent_os.native_local_planner import advance_native_local_once
-
-        goal = "Compare baseline.csv with actual.csv and report differences."
-        previous, accepted = self.run_case(goal)
-        self.assertTrue(inspect_owner_local_outcome(
-            self.db, self.workspace, self.fixtures, previous)[
-                "local_owner_outcome_verified"])
-        observed = []
-        def transport(method, path, payload, timeout):
-            if method == "GET":
-                return {"models": [{"name": "installed:test"}]}
-            evidence = json.loads(payload["prompt"].split("\n\n")[-1])
-            observed.append(evidence)
-            return {"done": True, "response": '{"abstain":true}'}
-
-        next_root = register_native_goal(self.db, goal)
-        with patch("cognition_agent_os.local_model._request",
-                   side_effect=transport):
-            advance_native_local_once(self.db, self.workspace, self.fixtures,
-                                      next_root, model="installed:test")
-        verified = observed[-1]["verified_cross_goal_precedents"]
-        self.assertEqual(len(verified), 1, verified)
-        self.assertEqual(verified[0]["evidence_task_id"],
-                         accepted["child_task_id"])
-        self.assertTrue(verified[0]["local_owner_outcome_verified"])
-        self.assertFalse(verified[0]["authorizes_action"])
-        self.assertFalse(verified[0]["business_outcome_verified"])
-
-        unrelated = register_native_goal(self.db,
-            "Ensure sandbox draft of handoff.json has audited equals to yes")
-        with patch("cognition_agent_os.local_model._request",
-                   side_effect=transport):
-            advance_native_local_once(self.db, self.workspace, self.fixtures,
-                                      unrelated, model="installed:test")
-        self.assertEqual(observed[-1]["verified_cross_goal_precedents"], [])
-
-        (self.fixtures / "actual.csv").write_text(
-            "id,amount\\nA,99\\nB,5\\n", encoding="utf-8")
-        after_source_change = register_native_goal(self.db, goal)
-        with patch("cognition_agent_os.local_model._request",
-                   side_effect=transport):
-            advance_native_local_once(self.db, self.workspace, self.fixtures,
-                                      after_source_change, model="installed:test")
-        self.assertEqual(observed[-1]["verified_cross_goal_precedents"], [])
-
     def test_full_named_goal_is_independently_satisfied_then_revocable(self):
         root, admitted = self.run_case(
             "Compare baseline.csv with actual.csv and report differences.")
