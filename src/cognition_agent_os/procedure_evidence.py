@@ -24,6 +24,16 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def procedure_evidence_sha256(evidence: dict) -> str:
+    """Fingerprint the exact read-only cross-root projection shown to a planner."""
+    if not isinstance(evidence, dict):
+        raise ValueError("INVALID_PROCEDURE_EVIDENCE")
+    raw = json.dumps(
+        evidence, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
 def _procedure_identity(intent: dict) -> dict:
     """Fingerprint the registered procedure family, excluding task bindings."""
     from .intent_planner import compile_intent

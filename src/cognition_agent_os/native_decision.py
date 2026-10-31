@@ -188,12 +188,21 @@ def _proposal(candidate: dict, contract: dict) -> dict:
         or set(candidate) not in (base_fields,
                                   base_fields | {"hypothesis_reviews"})):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+    basis_fields = {
+        "source_refs", "previous_result_task_id", "challenge",
+        "falsifier", "uncertainty",
+    }
     if (not isinstance(candidate["decision_basis"], dict)
-        or set(candidate["decision_basis"]) !=
-        {"source_refs", "previous_result_task_id", "challenge", "falsifier",
-         "uncertainty"}):
+        or set(candidate["decision_basis"]) not in (
+            basis_fields,
+            basis_fields | {"cross_root_procedure_evidence_sha256"})):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
     basis = candidate["decision_basis"]
+    cross_root_digest = basis.get("cross_root_procedure_evidence_sha256")
+    if (cross_root_digest is not None
+        and (not isinstance(cross_root_digest, str)
+             or not re.fullmatch(r"[0-9a-f]{64}", cross_root_digest))):
+        raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
     for field in ("challenge", "falsifier", "uncertainty"):
         if (not isinstance(basis[field], str)
             or not 12 <= len(basis[field].strip()) <= 500):
@@ -1359,6 +1368,39 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                    (root["goal_rev"], root["grant_rev"])):
                 raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             source_hashes = _sources(fixtures)
+            # Cross-root procedure evidence is a decision input, not merely
+            # prompt context. Recompute the same bounded projection under the
+            # existing write transaction and bind it to the model's digest.
+            # A prior result changed during inference must not ground a child.
+            from .procedure_evidence import (
+                inspect_cross_root_procedure_trials,
+                procedure_evidence_sha256,
+            )
+            catalog = capability_catalog(
+                fixtures,
+                allow_public_discovery=contract["allow_public_discovery"])
+            eligible_objectives = tuple(sorted({
+                method["objective"] for method in catalog["methods"]
+                if method["currently_eligible"]
+            }))
+            cross_root_trials = (
+                inspect_cross_root_procedure_trials(
+                    db_path, workspace, fixtures, root_id,
+                    eligible_objectives=eligible_objectives)
+                if eligible_objectives else {"items": []}
+            )
+            supplied_cross_root_digest = candidate["decision_basis"].get(
+                "cross_root_procedure_evidence_sha256")
+            if cross_root_trials.get("items"):
+                if supplied_cross_root_digest is None:
+                    raise ValueError(
+                        "NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_NOT_BOUND")
+                if supplied_cross_root_digest != procedure_evidence_sha256(
+                        cross_root_trials):
+                    raise ValueError(
+                        "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
+            elif supplied_cross_root_digest is not None:
+                raise ValueError("NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
             _ground_decision(
                 candidate, parsed, source_hashes,
                 observed["decisions"][-1]["task_id"] if observed["decisions"] else None)

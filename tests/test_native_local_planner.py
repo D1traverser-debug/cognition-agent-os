@@ -60,13 +60,17 @@ class NativeLocalModelLoop(unittest.TestCase):
         refs = [{"path": p, "sha256": sha}
                 for p, sha in sorted(evidence["source_digest_manifest"].items())]
         past = evidence["past_methods_and_independent_verdicts"]
-        return {
+        basis = {
             "source_refs": refs,
             "previous_result_task_id": past[-1]["task_id"] if past else None,
             "challenge": "An apparently valid source comparison may still miss the owner result.",
             "falsifier": "Independent artifact readback or changed source facts must invalidate this selection.",
             "uncertainty": "The selected method cannot prove the entire business outcome.",
         }
+        if evidence.get("cross_root_procedure_evidence_sha256") is not None:
+            basis["cross_root_procedure_evidence_sha256"] = (
+                evidence["cross_root_procedure_evidence_sha256"])
+        return basis
 
     def basis_for_root(self, root):
         from cognition_agent_os.native_decision import _sources
@@ -788,6 +792,8 @@ class NativeLocalModelLoop(unittest.TestCase):
             self.assertEqual(evidence["status"],
                              "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE")
             self.assertEqual(evidence["items"][0]["source_root_id"], source_root)
+            self.assertRegex(
+                history["cross_root_procedure_evidence_sha256"], r"^[a-f0-9]{64}$")
             self.assertFalse(evidence["items"][0]["authorizes_action"])
             self.assertIn("NOT proof of current", payload["prompt"])
             calls.append(evidence["items"][0]["procedure_fingerprint"])

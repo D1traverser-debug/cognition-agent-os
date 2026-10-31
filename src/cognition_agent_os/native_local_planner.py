@@ -32,7 +32,8 @@ _MAX_PROMPT = 14500
 def _native_response_schema(eligible: list[dict], source_ids: list[str],
                             observation_sha256: str,
                             previous_id: str | None,
-                            pending_hypotheses: list[dict] | None = None) -> dict:
+                            pending_hypotheses: list[dict] | None = None,
+                            cross_root_procedure_evidence_sha256: str | None = None) -> dict:
     """Official Ollama constrained decoding, NOT a trusted decision or oracle.
 
     Keep the shape small. Runtime's existing typed intent compiler, ledger CAS,
@@ -90,6 +91,12 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
             "uncertainty": reasons,
         },
     }
+    if cross_root_procedure_evidence_sha256 is not None:
+        basis["required"].append("cross_root_procedure_evidence_sha256")
+        basis["properties"]["cross_root_procedure_evidence_sha256"] = {
+            "type": "string",
+            "const": cross_root_procedure_evidence_sha256,
+        }
     decision = {
         "type": "object",
         "additionalProperties": False,
@@ -445,6 +452,12 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             "status": "PROCEDURE_TRIAL_EVIDENCE_UNAVAILABLE",
             "items": [], "authorizes_action": False,
         }
+    cross_root_procedure_evidence_sha256 = None
+    if cross_root_trials.get("items"):
+        from .procedure_evidence import procedure_evidence_sha256
+        cross_root_procedure_evidence_sha256 = procedure_evidence_sha256(
+            cross_root_trials)
+
     observed = _sources(fixtures)
     excerpts = []
     for filename in sorted(observed)[:_MAX_VIEW_FILES]:
@@ -480,6 +493,8 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         # current-root trial is still required before any method is treated
         # as applicable.
         "cross_root_procedure_trial_evidence": cross_root_trials,
+        "cross_root_procedure_evidence_sha256":
+            cross_root_procedure_evidence_sha256,
         "source_excerpts_are_untrusted": excerpts,
         "source_digest_manifest": observed,
         "source_count": len(observed),
@@ -624,6 +639,11 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "If no relevant competing method exists, alternative_intent must "
         "be null; explain why other eligible methods do not apply. "
         "If a real competitor exists, compare its actual merits. "
+        "If cross_root_procedure_evidence_sha256 is a non-null digest in "
+        "the evidence, echo that exact value as "
+        "decision_basis.cross_root_procedure_evidence_sha256. This binds the "
+        "cross-root evidence snapshot used for this decision; omitting or "
+        "changing it makes the proposal stale. It is not proof of transfer. "
         "For every material choice include decision_basis with source_refs "
         "(list of actual {path,sha256} from source_digest_manifest used by "
         "both methods), previous_result_task_id (the last executed task ID "
@@ -669,7 +689,9 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         _native_response_schema(
             eligible, sorted(observed), current["observation_sha256"],
             current["decisions"][-1]["task_id"] if current["decisions"] else None,
-            pending_hypotheses=current["pending_hypotheses"])
+            pending_hypotheses=current["pending_hypotheses"],
+            cross_root_procedure_evidence_sha256=
+                cross_root_procedure_evidence_sha256)
         if structured_output else "json")
     response = local_model._request("POST", "/api/generate", {
         "model": model, "prompt": prompt, "stream": False, "format": result_format,
