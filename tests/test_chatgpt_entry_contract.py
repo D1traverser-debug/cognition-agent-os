@@ -93,9 +93,15 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         skill = SKILL.read_text(encoding="utf-8")
         for term in ("Owner-visible decision and execution evidence",
                      "competing root-cause hypotheses", "counterevidence",
-                     "reuse/adapt/replace/build", "falsifier/rollback",
-                     "NOT_TESTED/UNKNOWN", "private chain-of-thought"):
+                     "falsifier/rollback", "NOT_TESTED/UNKNOWN",
+                     "private chain-of-thought"):
             self.assertIn(term, skill)
+        # Verify the comparison obligation, not one frozen slogan that
+        # rejects legitimate additions such as retire/remove.
+        study = skill.split("3. **Study/compare:**", 1)[1].split("\n4. ", 1)[0]
+        for method in ("reuse", "adapt", "replace", "remove", "build"):
+            self.assertRegex(study, rf"\b{method}\b")
+        self.assertIn("For EVERY cognition-system decision", skill)
         self.assertIn("AB. Ordinary-chat entry versus Project-only false baseline",
                       PROBES.read_text(encoding="utf-8"))
 
