@@ -535,8 +535,12 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
     preflight = inspect_native_goal(db_path, workspace, fixtures, root_id)
     if preflight.get("status") not in (
             "NATIVE_NEXT_DECISION_ADMISSIBLE",
-            "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+            "NATIVE_DECISION_BUDGET_EXHAUSTED",
+            "NATIVE_SOURCE_CHANGED"):
         raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE")
+    reentry = preflight["status"] == "NATIVE_SOURCE_CHANGED"
+    observation_key = ("research_reentry_sha256" if reentry
+                       else "observation_sha256")
     with closing(connect(db_path)) as db:
         original = db.execute(
             "SELECT source_spec FROM tasks WHERE task_id=? AND parent_task IS NULL",
@@ -545,7 +549,7 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
         original_contract = json.loads(original["source_spec"])
     _checked_open_research(proposal, original_contract["goal"])
-    if proposal["observation_sha256"] != preflight["observation_sha256"]:
+    if proposal["observation_sha256"] != preflight[observation_key]:
         raise ValueError("NATIVE_STALE_OBSERVATION")
     public_refs = [ref for ref in proposal["source_refs"]
                    if ref.get("kind") == "github"]
@@ -564,9 +568,12 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             state = _audit(db, db_path, workspace, fixtures, root_id)
             if state["status"] not in (
                     "NATIVE_NEXT_DECISION_ADMISSIBLE",
-                    "NATIVE_DECISION_BUDGET_EXHAUSTED"):
+                    "NATIVE_DECISION_BUDGET_EXHAUSTED",
+                    "NATIVE_SOURCE_CHANGED"):
                 raise ValueError(
                     "NATIVE_DECISION_NOT_ADMISSIBLE:" + state["status"])
+            if (state["status"] == "NATIVE_SOURCE_CHANGED") != reentry:
+                raise ValueError("NATIVE_STALE_OBSERVATION")
             root = db.execute(
                 "SELECT source_spec,goal_rev,grant_rev FROM tasks "
                 "WHERE task_id=?", (root_id,)).fetchone()
@@ -574,7 +581,7 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
                 raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
             contract = json.loads(root["source_spec"])
             _checked_open_research(proposal, contract["goal"])
-            if proposal["observation_sha256"] != state["observation_sha256"]:
+            if proposal["observation_sha256"] != state[observation_key]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
             digest = _open_research_fingerprint(proposal)
             # A bounded read page must never become a bounded duplicate
