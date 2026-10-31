@@ -1130,10 +1130,11 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     # model's last proposal. Its failed postcondition is
                     # an EVIDENCE-layer contradiction. Unlike source drift
                     # it does not falsely claim an input revision changed.
-                    check_reason = (result.get("reason")
-                                    if kind in ("goal_case", "record_reconciliation",
-                                                "investigate_goal", "public_tool_discovery")
-                                    else "UNREGISTERED_NATIVE_KIND")
+                    check_reason = (
+                        (result.get("reason") or verdict)
+                        if kind in ("goal_case", "record_reconciliation",
+                                    "investigate_goal", "public_tool_discovery")
+                        else "UNREGISTERED_NATIVE_KIND")
                     # A verifier returning UNKNOWN/unavailable is NOT
                     # proof that the Worker produced corrupt bytes. Only
                     # explicit artifact/result contradictions may be
@@ -1142,7 +1143,8 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     if check_reason in (
                             "EVIDENCE_RECHECK_UNAVAILABLE",
                             "UNSAFE_OR_MISSING_LEDGER",
-                            "INDEPENDENT_CHECK_UNAVAILABLE"):
+                            "INDEPENDENT_CHECK_UNAVAILABLE",
+                            "AUDIT_UNVERIFIABLE"):
                         failure_cause = "INDEPENDENT_VERIFIER_UNAVAILABLE"
                     elif check_reason in (
                             "ARTIFACT_HASH_MISMATCH",
