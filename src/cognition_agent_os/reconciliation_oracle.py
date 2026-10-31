@@ -183,8 +183,12 @@ def audit_stored_report(db_path, workspace, fixture_root, task_id: str) -> dict:
                     or not artifact.is_file() or artifact.stat().st_size>150000):
                 return {**fail,"reason":"ARTIFACT_MISSING_OR_UNSAFE"}
             data=artifact.read_bytes()
-            if (hashlib.sha256(data).hexdigest()!=row["artifact_hash"]):
-                return {**fail,"reason":"ARTIFACT_HASH_MISMATCH"}
+            observed_artifact_sha256=hashlib.sha256(data).hexdigest()
+            if observed_artifact_sha256!=row["artifact_hash"]:
+                # Provider-observed bytes, not the pre-existing ledger hash;
+                # distinct corrupt revisions must not reuse one reentry CAS.
+                return {**fail,"reason":"ARTIFACT_HASH_MISMATCH",
+                        "observed_artifact_sha256":observed_artifact_sha256}
             document=json.loads(data)
             if (document.get("task_id")!=task_id or
                 document.get("source_spec")!=source_spec or
