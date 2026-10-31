@@ -646,5 +646,22 @@
       "disposition": "DO_NOT_CLOSE_OR_DELETE_BY_FILENAME_OVERLAP"
     },
     "limitations": "Commit ancestry and file SHA can reject automatic deletion, but do not prove semantic equivalence or owner approval to close PRs"
+  },
+  "installed_chatgpt_plugin": {
+    "plugin_id": "plugins_6ade22c4245081918d6899c73d1319dd",
+    "scope": "USER",
+    "discoverability": "PRIVATE",
+    "version": "0.1.18",
+    "release_id": "pluginrel_6ae56151ad448191918a5dd70d0d119f",
+    "released_from_git_blob": "dcdf81291999431ce03659b1488601bb4de65da5",
+    "source_path": "integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md",
+    "source_branch": "fix/systemic-preflight-diagnostics-20261030",
+    "source_commit": "3c6606541a1a914730d100014cec27d25b486cda",
+    "ci_artifact_name": "cognition-chatgpt-plugin-overlay-head",
+    "ci_artifact_id": 13029040032,
+    "readback": "GET_PLUGIN_FILES_VERSION_AND_SKILL_ASSERTIONS_CONFIRMED",
+    "selection_in_ordinary_fresh_chat": "NOT_TESTED",
+    "live_native_sqlite_host_link": "NOT_CONNECTED",
+    "next_resume_rule": "Read this once, compare current plugin release ID + source Git blob; do not rebuild/redeploy identical ZIP. Never claim account Skill auto-selected from source equality."
   }
 }
