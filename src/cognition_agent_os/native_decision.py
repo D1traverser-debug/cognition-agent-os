@@ -922,6 +922,16 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             d["event_id"] for d in decisions[index:]],
                         "invalidated_source_paths": invalidated_paths,
                         "new_investigation_source_paths": added_investigation_paths,
+                        "research_reentry_sha256": _digest({
+                            "root_id": root_id, "contract": contract,
+                            "goal_rev": root["goal_rev"],
+                            "grant_rev": root["grant_rev"],
+                            "source_hashes": current_sources,
+                            "decisions": [dict(d) for d in decisions],
+                            "children": [dict(ch) for ch in children],
+                            "hypotheses": hypotheses,
+                            "research": [dict(rr) for rr in research_rows],
+                        }),
                         "authorizes_action": False}
             _ground_decision(
                 receipt["proposal"], parsed, receipt["source_sha256"], previous_id)
