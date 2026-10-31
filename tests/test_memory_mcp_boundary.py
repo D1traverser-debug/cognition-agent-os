@@ -60,32 +60,6 @@ class MemoryMcpToolTests(unittest.TestCase):
         self.assertNotIn("native_memory_candidate_record", read.tools)
         self.assertNotIn("native_memory_candidates_inspect",
                          self.server(allow_goal_writes=True).tools)
-        self.assertNotIn("native_method_experience_inspect", s.tools)
-        self.assertIn("native_method_experience_inspect", read.tools)
-        self.assertNotIn("native_method_experience_inspect",
-                         self.server(allow_goal_writes=True).tools)
-        before = self._ledger_counts()
-        result = read.tools["native_method_experience_inspect"](self.goal)
-        self.assertEqual(result["status"], "NO_REPLICATED_LOCAL_METHOD_EXPERIENCE")
-        self.assertFalse(result["authorizes_action"])
-        self.assertFalse(result["business_outcome_verified"])
-        self.assertEqual(self._ledger_counts(), before)
-
-    def _ledger_counts(self):
-        with closing(connect(self.db)) as db:
-            return (
-                db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0],
-                db.execute("SELECT COUNT(*) FROM events").fetchone()[0],
-            )
-
-    def test_method_experience_refuses_revoked_or_unverifiable_root(self):
-        reader = self.server(allow_source_read=True)
-        tool = reader.tools["native_method_experience_inspect"]
-        with closing(connect(self.db)) as db:
-            alter_authority(db, revoke=True)
-        result = tool(self.goal)
-        self.assertEqual(result["status"], "METHOD_EXPERIENCE_UNAVAILABLE")
-        self.assertFalse(result["authorizes_action"])
 
     def test_only_dual_operator_optin_allows_untrusted_candidate(self):
         s = self.server(allow_source_read=True, allow_goal_writes=True)

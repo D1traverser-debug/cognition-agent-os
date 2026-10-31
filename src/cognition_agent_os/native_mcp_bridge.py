@@ -25,7 +25,6 @@ from .native_decision import (
 )
 from .owner_postcondition import inspect_owner_local_outcome
 from .memory_candidates import record_candidate, inspect_candidates
-from .native_method_memory import inspect_replicated_local_methods
 
 
 def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
@@ -252,20 +251,6 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             return inspect_candidates(
                 db_path, fixtures, root_task_id=root_task_id,
                 after_memory_id=after_memory_id, limit=limit)
-
-        @mcp.tool()
-        def native_method_experience_inspect(
-                root_task_id: str, scan_limit: int = 64) -> dict:
-            """Read replicated local method patterns from independently rechecked owner outcomes.
-
-            This is advisory procedural memory, not semantic truth, a new
-            capability, an action grant, or an external business outcome.
-            The projection requires distinct owner goals, source bindings
-            and result artifacts, and is recomputed from current evidence.
-            """
-            return inspect_replicated_local_methods(
-                db_path, workspace, fixtures, root_task_id,
-                scan_limit=scan_limit)
 
         if allow_goal_writes:
             @mcp.tool()
