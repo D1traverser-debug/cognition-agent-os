@@ -59,7 +59,47 @@ def _legacy_parent_ref_paths(manifest: dict, adapter: dict, caps: dict) -> list[
                      or "ref" in name or "authority" in name)
                 and value.startswith(_HISTORICAL_PARENT)):
                 refs.append(f"{prefix}.{name}")
-    return sorted(refs)
+    # A URL-only rename is not a child migration.  The four real child
+    # adapters also encode parent governance in typed authority/status fields,
+    # capabilities' inheritance semantics, and explicit required methods.
+    # These are operative declarations, unlike inert UAOS_SKILL.md filenames
+    # or historical notes.  Report them without granting any cutover.
+    for prefix, fields in (
+        ("manifest", manifest),
+        ("adapter", adapter),
+        ("capabilities", caps),
+    ):
+        if not isinstance(fields, dict):
+            continue
+        for name, value in fields.items():
+            if not isinstance(name, str) or not isinstance(value, str):
+                continue
+            if (name in ("status", "binding_status")
+                and value == "UAOS_CONTROL_PLANE_ACTIVE"):
+                refs.append(f"{prefix}.{name}")
+            elif ((name.endswith("_authority")
+                   or name.endswith("_inheritance"))
+                  and (value == "UAOS"
+                       or value.startswith("UAOS_HOSTED")
+                       or value.startswith("UAOS_FOR_PARENT"))):
+                refs.append(f"{prefix}.{name}")
+    hosted = caps.get("hosted_cognition_semantics")
+    if (isinstance(hosted, dict)
+        and hosted.get("source") == "CURRENT_UAOS_DELIBERATION_POLICY"):
+        refs.append("capabilities.hosted_cognition_semantics.source")
+    capabilities = caps.get("capabilities")
+    if isinstance(capabilities, list):
+        for idx, item in enumerate(capabilities):
+            if not isinstance(item, dict):
+                continue
+            required = item.get("required")
+            if isinstance(required, list):
+                for dependency_idx, dependency in enumerate(required):
+                    if (isinstance(dependency, str)
+                        and dependency.startswith("UAOS:")):
+                        refs.append(
+                            f"capabilities.capabilities[{idx}].required[{dependency_idx}]")
+    return sorted(set(refs))
 
 
 def _skill_entrypoint(manifest: dict) -> str:

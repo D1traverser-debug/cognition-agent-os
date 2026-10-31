@@ -391,11 +391,13 @@ def record_native_hypothesis(db_path: Path, workspace: Path, fixtures: Path,
             observed = _audit(db, db_path, workspace, fixtures, root_id)
             if observed["status"] not in (
                     "NATIVE_NEXT_DECISION_ADMISSIBLE",
-                    "NATIVE_SOURCE_CHANGED"):
+                    "NATIVE_SOURCE_CHANGED",
+                    "NATIVE_EVIDENCE_UNVERIFIABLE"):
                 raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE:" +
                                  observed["status"])
             key = ("research_reentry_sha256"
-                   if observed["status"] == "NATIVE_SOURCE_CHANGED"
+                   if observed["status"] in (
+                       "NATIVE_SOURCE_CHANGED", "NATIVE_EVIDENCE_UNVERIFIABLE")
                    else "observation_sha256")
             if observed[key] != observation_sha256:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
@@ -551,17 +553,31 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
     if preflight.get("status") not in (
             "NATIVE_NEXT_DECISION_ADMISSIBLE",
             "NATIVE_DECISION_BUDGET_EXHAUSTED",
-            "NATIVE_SOURCE_CHANGED"):
+            "NATIVE_SOURCE_CHANGED",
+            "NATIVE_EVIDENCE_UNVERIFIABLE"):
         raise ValueError("NATIVE_DECISION_NOT_ADMISSIBLE")
-    reentry = preflight["status"] == "NATIVE_SOURCE_CHANGED"
+    reentry = preflight["status"] in (
+        "NATIVE_SOURCE_CHANGED", "NATIVE_EVIDENCE_UNVERIFIABLE")
     observation_key = ("research_reentry_sha256" if reentry
                        else "observation_sha256")
-    with closing(connect(db_path)) as db:
+    # Real grant check BEFORE any network read. The _audit status can be
+    # evidence-invalid even after grant revocation, because evidence audit
+    # happens earlier than the final status decision. Never infer a grant
+    # from the existence of research_reentry_sha256.
+    with readonly_snapshot(db_path) as db:
         original = db.execute(
-            "SELECT source_spec FROM tasks WHERE task_id=? AND parent_task IS NULL",
+            "SELECT source_spec,goal_rev,grant_rev FROM tasks "
+            "WHERE task_id=? AND parent_task IS NULL",
             (root_id,)).fetchone()
+        authority = db.execute(
+            "SELECT goal_rev,grant_rev,write_allowed FROM authority "
+            "WHERE singleton=1").fetchone()
         if original is None:
             raise ValueError("NATIVE_ORIGINAL_GOAL_NOT_FOUND")
+        if (authority is None or authority["write_allowed"] != 1
+            or (authority["goal_rev"], authority["grant_rev"]) !=
+               (original["goal_rev"], original["grant_rev"])):
+            raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
         original_contract = json.loads(original["source_spec"])
     _checked_open_research(proposal, original_contract["goal"])
     if proposal["observation_sha256"] != preflight[observation_key]:
@@ -584,10 +600,11 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             if state["status"] not in (
                     "NATIVE_NEXT_DECISION_ADMISSIBLE",
                     "NATIVE_DECISION_BUDGET_EXHAUSTED",
-                    "NATIVE_SOURCE_CHANGED"):
+                    "NATIVE_SOURCE_CHANGED",
+                    "NATIVE_EVIDENCE_UNVERIFIABLE"):
                 raise ValueError(
                     "NATIVE_DECISION_NOT_ADMISSIBLE:" + state["status"])
-            if (state["status"] == "NATIVE_SOURCE_CHANGED") != reentry:
+            if state["status"] != preflight["status"]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
             root = db.execute(
                 "SELECT source_spec,goal_rev,grant_rev FROM tasks "
@@ -745,6 +762,103 @@ def _registered_native_contract_matches(
             and all(actual[k] == v for k, v in expected.items())
             and isinstance(actual["client_request_id"], str)
             and bool(_CLIENT_REQUEST_ID.fullmatch(actual["client_request_id"])))
+
+
+def _trusted_native_causal_reentry(decisions: list, by_id: dict,
+        contract: dict, root, target_index: int, *, cause: str,
+        evidence_sha256: str, current_sources: dict | None = None) -> dict:
+    """Separate verified source/effect dependencies from temporal ordering.
+
+    A previous_result_task_id proves that earlier feedback was available,
+    NOT that every later decision semantically depends on it. Never invent
+    edges from the order of decisions. A changed source pin may separately
+    invalidate later receipts. Only _audit determines reentry targets.
+    """
+    from .decision_reentry_projection import (
+        Contradiction, Decision, project_reentry)
+    if (cause not in ("SOURCE_PIN_DRIFT", "WORKER_REPORTED_FAILURE",
+                      "WORKER_EVIDENCE_UNVERIFIABLE",
+                      "INDEPENDENT_VERIFIER_UNAVAILABLE",
+                      "INDEPENDENT_EVALUATION_INCONCLUSIVE")
+        or not 0 <= target_index < len(decisions)
+        or not isinstance(evidence_sha256, str)
+        or not re.fullmatch(r"[a-f0-9]{64}", evidence_sha256)):
+        raise ValueError("NATIVE_REENTRY_EVIDENCE_INVALID")
+    if cause == "SOURCE_PIN_DRIFT" and not isinstance(current_sources, dict):
+        raise ValueError("NATIVE_REENTRY_SOURCE_SNAPSHOT_MISSING")
+    nodes = [Decision("original_goal", layer="authority")]
+    stale_source_decisions = []
+    stale_source_children = []
+    required = {"child_task_id", "ordinal", "proposal",
+                "selected_plan_sha256", "source_sha256",
+                "prior_child_task_id", "owner_outcome_verified"}
+    old_child = None
+    lineage = []
+    for index, row in enumerate(decisions):
+        receipt = json.loads(row["details"])
+        if (not isinstance(receipt, dict) or set(receipt) != required
+            or receipt["ordinal"] != index
+            or receipt["prior_child_task_id"] != old_child
+            or receipt["owner_outcome_verified"] is not False):
+            raise ValueError("NATIVE_REENTRY_LINEAGE_INVALID")
+        parsed = _proposal(receipt["proposal"], contract)
+        child_id = receipt["child_task_id"]
+        child = by_id.get(child_id)
+        if (child is None or child["goal_rev"] != root["goal_rev"]
+            or child["grant_rev"] != root["grant_rev"]
+            or json.loads(child["source_spec"])
+                != parsed["selected"]["child_source_spec"]
+            or receipt["selected_plan_sha256"]
+                != parsed["selected"]["plan_sha256"]):
+            raise ValueError("NATIVE_REENTRY_LINEAGE_INVALID")
+        _ground_decision(receipt["proposal"], parsed,
+                         receipt["source_sha256"], old_child)
+        decision_id = f"decision:{row['event_id']}"
+        effect_id = f"effect:{child_id}"
+        # Every decision is scoped to the immutable owner goal. The
+        # previous result is chronological/context evidence, not a causal
+        # parent edge; only decision -> admitted child is guaranteed here.
+        nodes.append(Decision(decision_id, ("original_goal",), layer="method"))
+        nodes.append(Decision(effect_id, (decision_id,), layer="execution"))
+        lineage.append((row["event_id"], child_id))
+        if cause == "SOURCE_PIN_DRIFT" and index > target_index:
+            if not _sources_compatible(
+                    receipt["source_sha256"], current_sources,
+                    parsed["selected"]["child_source_spec"]["kind"],
+                    finished=child["state"] in ("NEEDS_REVIEW", "VERIFIED")):
+                stale_source_decisions.append(row["event_id"])
+                stale_source_children.append(child_id)
+        old_child = child_id
+    graph = project_reentry(tuple(nodes), Contradiction(
+        evidence_sha256, (f"decision:{lineage[target_index][0]}",)))
+    return {
+        "observed_cause": cause,
+        "reopened_decision_event_ids": [
+            event_id for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.reopen_required],
+        "invalidated_decision_event_ids": [
+            event_id for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.descendants_invalidated],
+        "affected_child_task_ids": [
+            child_id for _, child_id in lineage
+            if f"effect:{child_id}" in graph.descendants_invalidated],
+        # These were independently invalidated by changed provider hashes,
+        # NOT deduced as semantic children of an earlier decision.
+        "source_pin_stale_decision_event_ids": stale_source_decisions,
+        "source_pin_stale_child_task_ids": stale_source_children,
+        "chronological_later_decisions_to_review": [
+            event_id for event_id, _ in lineage[target_index + 1:]],
+        "prior_result_order_proves_causality": False,
+        "ancestor_decision_event_ids_to_challenge": [
+            event_id for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.ancestors_to_challenge],
+        "original_goal_identity_retained": True,
+        "original_goal_assumptions_to_challenge": (
+            "original_goal" in graph.ancestors_to_challenge),
+        "verified_evidence_sha256": evidence_sha256,
+        "root_cause_semantically_verified": False,
+        "owner_outcome_verified": False, "authorizes_action": False,
+    }
 
 
 def _audit(db: sqlite3.Connection, db_path: Path,
@@ -944,6 +1058,15 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 return {**fail, "status": "NATIVE_SOURCE_CHANGED",
                         "original_goal": contract["goal"],
                         "reason": "SOURCE_PIN_DRIFT",
+                        "causal_reentry": _trusted_native_causal_reentry(
+                            decisions, by_id, contract, root, index,
+                            cause="SOURCE_PIN_DRIFT",
+                            evidence_sha256=_digest({
+                                "root_id": root_id,
+                                "ordinal": index,
+                                "pinned": receipt["source_sha256"],
+                                "current": current_sources}),
+                            current_sources=current_sources),
                         "reopen_scope": "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION",
                         "reopen_decision_ordinal": index,
                         "affected_decision_event_ids": [
@@ -1002,9 +1125,89 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 else:
                     accepted = False
                 if not accepted:
+                    # This result is independently reread from the real
+                    # original Worker artifact/effect, not inferred from the
+                    # model's last proposal. Its failed postcondition is
+                    # an EVIDENCE-layer contradiction. Unlike source drift
+                    # it does not falsely claim an input revision changed.
+                    check_reason = (result.get("reason")
+                                    if kind in ("goal_case", "record_reconciliation",
+                                                "investigate_goal", "public_tool_discovery")
+                                    else "UNREGISTERED_NATIVE_KIND")
+                    # A verifier returning UNKNOWN/unavailable is NOT
+                    # proof that the Worker produced corrupt bytes. Only
+                    # explicit artifact/result contradictions may be
+                    # attributed to the Worker evidence layer. Unknown
+                    # reasons remain a separate inconclusive hypothesis.
+                    if check_reason in (
+                            "EVIDENCE_RECHECK_UNAVAILABLE",
+                            "UNSAFE_OR_MISSING_LEDGER",
+                            "INDEPENDENT_CHECK_UNAVAILABLE"):
+                        failure_cause = "INDEPENDENT_VERIFIER_UNAVAILABLE"
+                    elif check_reason in (
+                            "ARTIFACT_HASH_MISMATCH",
+                            "ARTIFACT_IDENTITY_MISMATCH",
+                            "CANDIDATE_ARTIFACT_CHANGED",
+                            "INDEPENDENT_SQL_REJECTION"):
+                        failure_cause = "WORKER_EVIDENCE_UNVERIFIABLE"
+                    else:
+                        failure_cause = "INDEPENDENT_EVALUATION_INCONCLUSIVE"
+                    graph = _trusted_native_causal_reentry(
+                        decisions, by_id, contract, root, index,
+                        cause=failure_cause,
+                        evidence_sha256=_digest({
+                            "root_id": root_id, "decision_event_id": item["event_id"],
+                            "child_id": child["task_id"], "child_state": child["state"],
+                            "child_artifact_sha256": child["artifact_hash"],
+                            "observed_artifact_sha256":
+                                result.get("observed_artifact_sha256"),
+                            "verdict": verdict, "failure_reason": check_reason,
+                            "current_sources": current_sources}))
+                    # Read-only discovery/research can proceed when an
+                    # artifact is corrupt, but execution remains BLOCKED.
+                    # CAS includes source, state, hypothesis and research
+                    # event history so a later repair, new owner correction
+                    # or an added hypothesis never silently reuses old grants.
+                    research_window = list(reversed([
+                        e for e in open_research
+                        if research_before_event_id is None
+                        or e["event_id"] < research_before_event_id
+                    ]))
+                    research_page = research_window[:_MAX_OPEN_RESEARCH_PREVIEW]
                     return {**fail, "status": "NATIVE_EVIDENCE_UNVERIFIABLE",
                             "original_goal": contract["goal"],
-                            "reason": verdict}
+                            "reason": verdict,
+                            "reopen_decision_event_id": item["event_id"],
+                            "reopen_decision_ordinal": index,
+                            "reopen_scope": "EVIDENCE_AND_VERIFIER_CAUSAL_REEXAMINATION",
+                            "causal_reentry": {
+                                **graph, "evidence_verdict": verdict,
+                                "evidence_failure_reason": check_reason,
+                                "observed_artifact_sha256":
+                                    result.get("observed_artifact_sha256"),
+                            },
+                            "hypotheses": hypotheses,
+                            "open_research": research_page,
+                            "open_research_count": len(open_research),
+                            "open_research_next_before_event_id": (
+                                research_page[-1]["event_id"]
+                                if len(research_window) > len(research_page)
+                                else None),
+                            "research_reentry_sha256": _digest({
+                                "root_id": root_id, "contract": contract,
+                                "goal_rev": root["goal_rev"],
+                                "grant_rev": root["grant_rev"],
+                                "current_sources": current_sources,
+                                "decisions": [dict(x) for x in decisions],
+                                "children": [dict(ch) for ch in children],
+                                "hypotheses": hypotheses,
+                                "research": [dict(rr) for rr in research_rows],
+                                "failed_event_id": item["event_id"],
+                                "failed_verdict": verdict,
+                                "failed_reason": check_reason,
+                                "observed_artifact_sha256":
+                                    result.get("observed_artifact_sha256")}),
+                            "authorizes_action": False}
             observations.append({
                 "task_id": child["task_id"], "task_state": child["state"],
                 "selected_objective": selected["objective"],
@@ -1077,6 +1280,13 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                 + [h for h in hypotheses
                    if h["event_id"] > previous_decision_event_id]),
             "owner_outcome_verified": False, "business_outcome_verified": False,
+            **({"causal_reentry": _trusted_native_causal_reentry(
+                decisions, by_id, contract, root, len(decisions) - 1,
+                cause="WORKER_REPORTED_FAILURE",
+                evidence_sha256=fingerprint)}
+               if observations and observations[-1]["task_state"] == "UNKNOWN"
+                  and observations[-1]["error_code"] is not None
+               else {}),
         }
     except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
             IntentError, SourceUnavailable, PermissionError) as exc:

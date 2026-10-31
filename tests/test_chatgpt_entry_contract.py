@@ -88,6 +88,23 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
                         skill.index("## Work on the problem, not the instructions"))
         self.assertIn("ordinary new ChatGPT chat", PROBES.read_text(encoding="utf-8"))
 
+    def test_first_mile_parent_dependency_is_recursive_before_any_effect(self):
+        """Static entry contract, NOT a ChatGPT native selection trace.
+
+        Prevent the earlier regression where a correct recursive body was
+        contradicted by a one-way six-step headline and then overlooked.
+        """
+        skill = SKILL.read_text(encoding="utf-8")
+        intro = skill.split("**Root-before-leaves dependency gate", 1)[1].split(
+            "\n", 1)[0]
+        self.assertIn("NOT a linear pipeline", intro)
+        self.assertIn("RECURSIVELY", intro)
+        self.assertIn("RECHALLENGE", intro)
+        self.assertIn("BEFORE action", intro)
+        self.assertIn("BACK into investigation", intro)
+        self.assertNotIn("selected goal -> original private requirement/", intro)
+        self.assertIn("Neither a checklist nor green CI", intro)
+
     def test_material_decisions_have_owner_visible_receipts(self):
         """Traceable comparison is required; native output cannot be asserted here."""
         skill = SKILL.read_text(encoding="utf-8")

@@ -468,6 +468,11 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "truncated_source_previews": len(observed) > _MAX_VIEW_FILES,
         "observation_sha256": current["observation_sha256"],
     }
+    # Native _audit reconstructs this from the actual SQLite task lineage
+    # and observed Worker/source failure. It is NOT a model-authored reopen
+    # request, grant or proof of the semantic root cause.
+    if "causal_reentry" in current:
+        evidence["trusted_causal_reentry"] = current["causal_reentry"]
     # Reconnect already verified-on-read SQLite research to the NEXT
     # decision. These are UNTRUSTED historical hypotheses, not new tools,
     # executed studies, authority, or independently accepted domain facts.
