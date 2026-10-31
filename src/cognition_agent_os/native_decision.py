@@ -583,6 +583,13 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
             _checked_open_research(proposal, contract["goal"])
             if proposal["observation_sha256"] != state[observation_key]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
+            auth = db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed "
+                "FROM authority WHERE singleton=1").fetchone()
+            if (auth is None or auth["write_allowed"] != 1
+                or (auth["goal_rev"], auth["grant_rev"]) !=
+                   (root["goal_rev"], root["grant_rev"])):
+                raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             digest = _open_research_fingerprint(proposal)
             # A bounded read page must never become a bounded duplicate
             # detector. Query the authoritative ledger across ALL old events.
@@ -601,13 +608,6 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
                 raise ValueError("NATIVE_RESEARCH_SOURCE_UNVERIFIABLE")
             if public_refs and not contract.get("allow_public_source_read"):
                 raise PermissionError("PUBLIC_SOURCE_READ_NOT_AUTHORIZED")
-            auth = db.execute(
-                "SELECT goal_rev,grant_rev,write_allowed "
-                "FROM authority WHERE singleton=1").fetchone()
-            if (auth is None or auth["write_allowed"] != 1
-                or (auth["goal_rev"], auth["grant_rev"]) !=
-                   (root["goal_rev"], root["grant_rev"])):
-                raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             record = {
                 "contract_sha256": _digest(contract),
                 "proposal_sha256": digest,
