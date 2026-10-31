@@ -150,6 +150,13 @@ class NativeSameMethodCorrection(unittest.TestCase):
             self.assertEqual(method, "POST")
             state = self.view()
             count = len(state["decisions"])
+            # The real Host planner must consume the trusted causal result,
+            # not merely expose it through a disconnected inspector.
+            if count == 1:
+                self.assertIn('"trusted_causal_reentry"', payload["prompt"])
+                self.assertIn("WORKER_REPORTED_FAILURE", payload["prompt"])
+            else:
+                self.assertNotIn('"trusted_causal_reentry"', payload["prompt"])
             proposed.append(count)
             self.assertIn(self.root, self.view()["root_task_id"])
             method_intent = (
