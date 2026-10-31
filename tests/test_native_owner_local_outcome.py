@@ -98,7 +98,7 @@ class NativeOwnerAcceptance(unittest.TestCase):
         def transport(method, path, payload, timeout):
             if method == "GET":
                 return {"models": [{"name": "installed:test"}]}
-            evidence = json.loads(payload["prompt"].split("\\n\\n")[-1])
+            evidence = json.loads(payload["prompt"].split("\n\n")[-1])
             observed.append(evidence)
             return {"done": True, "response": '{"abstain":true}'}
 
