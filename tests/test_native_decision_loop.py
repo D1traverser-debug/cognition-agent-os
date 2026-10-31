@@ -1347,6 +1347,45 @@ class NativeDecisionLoop(unittest.TestCase):
                 "AND kind='OWNER_GOAL_LOCAL_RESULT_OBSERVED'",(root,)
             ).fetchone()[0],0)
 
+    def test_worker_artifact_corruption_reopens_evidence_not_source_decision(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        verified = self.view(root)
+        self.assertEqual(verified["decisions"][0]["mechanical_verdict"],
+                         "REPORT_MECHANICALLY_VERIFIED")
+        original_sources = {
+            x.name: hashlib.sha256(x.read_bytes()).hexdigest()
+            for x in self.fixtures.iterdir()}
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" adversarial mutation")
+        damaged = self.view(root)
+        self.assertEqual(damaged["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(damaged["original_goal"], self.goal)
+        self.assertEqual(damaged["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(damaged["causal_reentry"]["reopened_decision_event_ids"],
+                         [damaged["reopen_decision_event_id"]])
+        self.assertEqual(damaged["causal_reentry"]["affected_child_task_ids"],
+                         [admitted["child_task_id"]])
+        self.assertEqual(damaged["causal_reentry"]["evidence_verdict"],
+                         "REPORT_ARTIFACT_UNVERIFIABLE")
+        self.assertFalse(damaged["causal_reentry"]["authorizes_action"])
+        self.assertFalse(damaged["causal_reentry"]["owner_outcome_verified"])
+        self.assertNotIn("observation_sha256", damaged)
+        self.assertEqual(original_sources, {
+            x.name: hashlib.sha256(x.read_bytes()).hexdigest()
+            for x in self.fixtures.iterdir()})
+        self.assertEqual(
+            self.view(root)["causal_reentry"], damaged["causal_reentry"])
+        with self.assertRaisesRegex(ValueError, "NATIVE_DECISION_NOT_ADMISSIBLE"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root,
+                self.candidate(verified, self.structure(), self.reconcile()))
+
     def test_native_accepted_artifact_tamper_sets_objective_drift(self):
         root=self.root_id()
         start=self.view(root)
