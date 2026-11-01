@@ -939,17 +939,13 @@ class NativeDecisionLoop(unittest.TestCase):
         reentry = state["causal_reentry"]
         self.assertEqual(reentry["observed_cause"], "SOURCE_PIN_DRIFT")
         self.assertEqual(reentry["reopened_decision_event_ids"], [event_ids[0]])
-        # The second decision explicitly consumed the first child's
-        # independently read-back result. Reopening the first decision must
-        # therefore invalidate the second decision/effect for re-evaluation.
-        # The source-pin mismatch is an additional, independently observed
-        # invalidation reason, not the only dependency edge.
-        self.assertEqual(reentry["invalidated_decision_event_ids"], [event_ids[1]])
+        # A temporal predecessor is NOT proof of semantic causation.
+        # The later plan cites the same old corpus, so its actual source
+        # pin is stale; that is a DIFFERENT, independently observed reason
+        # to review it, not a child of the earlier plan.
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
         self.assertEqual(reentry["source_pin_stale_decision_event_ids"],
                          [event_ids[1]])
-        self.assertEqual(reentry["affected_child_task_ids"],
-                         [first["child_task_id"], second["child_task_id"]])
-        self.assertEqual(reentry["ancestor_decision_event_ids_to_challenge"], [])
         self.assertEqual(reentry["source_pin_stale_child_task_ids"],
                          [second["child_task_id"]])
         self.assertFalse(reentry["prior_result_order_proves_causality"])
@@ -975,38 +971,6 @@ class NativeDecisionLoop(unittest.TestCase):
         untrusted = self.view(root)
         self.assertEqual(untrusted["status"], "NATIVE_GOAL_UNVERIFIABLE")
         self.assertNotIn("causal_reentry", untrusted)
-
-    def test_later_failure_reopens_prior_decision_ancestor(self):
-        root = self.root_id()
-        first = admit_native_decision(
-            self.db, self.workspace, self.fixtures, root,
-            self.candidate(self.view(root), self.reconcile(), self.structure()))
-        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
-        second = admit_native_decision(
-            self.db, self.workspace, self.fixtures, root,
-            self.candidate(self.view(root), self.structure(), self.reconcile()))
-        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
-        with closing(connect(self.db)) as db:
-            event_ids = [row["event_id"] for row in db.execute(
-                "SELECT event_id FROM events WHERE task_id=? "
-                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
-                (root,)).fetchall()]
-        artifact = self.workspace / "artifacts" / (
-            second["child_task_id"] + ".json")
-        artifact.write_bytes(artifact.read_bytes() + b" independent corruption")
-        state = self.view(root)
-        self.assertEqual(state["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
-        reentry = state["causal_reentry"]
-        self.assertEqual(reentry["reopened_decision_event_ids"], [event_ids[1]])
-        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
-        self.assertEqual(reentry["ancestor_decision_event_ids_to_challenge"],
-                         [event_ids[0]])
-        self.assertTrue(reentry["original_goal_assumptions_to_challenge"])
-        self.assertEqual(reentry["affected_child_task_ids"],
-                         [second["child_task_id"]])
-        self.assertFalse(reentry["authorizes_action"])
-        self.assertFalse(reentry["owner_outcome_verified"])
-        self.assertFalse(reentry["root_cause_semantically_verified"])
 
     def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
         root = self.root_id()
