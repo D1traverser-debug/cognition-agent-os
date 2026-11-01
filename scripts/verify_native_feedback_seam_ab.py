@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix="native-feedback-real-host-") as td:
         # The originally correct owner result must be invalidated by a real
         # fixture revision; no implied semantic success or duplicate effect.
         (fixtures/"actual.csv").write_text(
-            "id,amount\\nA,999\\nB,5\\n", encoding="utf-8")
+            "id,amount\nA,999\nB,5\n", encoding="utf-8")
     ticks.append(run_tick(
         db, work, fixtures, max_jobs=1, auto_native_cognition=True,
         auto_stage_goals=(case=="exact_json")))
