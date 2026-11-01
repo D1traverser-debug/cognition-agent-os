@@ -72,9 +72,35 @@ class GraphifyEvidenceTests(unittest.TestCase):
         result=self.result()
         self.assertEqual(result["status"],"PASS",result)
         self.assertEqual(result["commit"],self.sha)
-        self.assertEqual(len(result["control_edges"]),len(checker.REQUIRED_PATHS))
-        self.assertTrue(all(e["confidence"]=="EXTRACTED"
-                            for e in result["control_edges"]))
+        extracted = [e for e in result["control_edges"]
+                     if e["confidence"] == "EXTRACTED"]
+        delegation = [e for e in result["control_edges"]
+                      if e["confidence"] == "SOURCE_AST_EXPLICIT_DEPENDENCY_WIRING"]
+        self.assertEqual(len(extracted), len(checker.REQUIRED_PATHS))
+        self.assertEqual(len(delegation), 1)
+        self.assertEqual(delegation[0]["callee"],
+                         "src_cognition_agent_os_runner_run_once")
+
+    def test_rewired_native_worker_dependency_is_not_mistaken_for_real_runner(self):
+        repo=Path(__file__).resolve().parents[1]
+        dest=Path(self.tmp.name)/"src"/"cognition_agent_os"
+        dest.mkdir(parents=True, exist_ok=True)
+        for filename in ("capability_dispatch.py", "native_mcp_bridge.py",
+                         "native_local_planner.py", "host.py", "native_tick_flow.py"):
+            content=(repo/"src"/"cognition_agent_os"/filename).read_text(
+                encoding="utf-8")
+            if filename=="host.py":
+                self.assertIn("run_one=run_once", content)
+                content=content.replace("run_one=run_once",
+                                        "run_one=unauthorized_runner")
+            (dest/filename).write_text(content, encoding="utf-8")
+        self.path.write_text(json.dumps(self.graph), encoding="utf-8")
+        with patch.object(checker.subprocess, "check_output",
+                          return_value=self.sha+"\\n"):
+            result=checker.check(self.path, Path(self.tmp.name))
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("NATIVE_FEEDBACK_WORKER_DELEGATION_UNPROVEN",
+                      result["errors"])
 
     def test_registry_cannot_silently_change_goal_intent_destination(self):
         live = (Path(__file__).resolve().parents[1] /
