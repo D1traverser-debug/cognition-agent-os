@@ -99,6 +99,31 @@ class FeedbackSeamTests(unittest.TestCase):
         self.assertEqual(out[1], [])
         self.assertEqual(called, [("worker", "c1"), ("worker", None)])
 
+    def test_unstaged_json_must_not_trigger_model_replanning(self):
+        choices = [{"status": "NATIVE_METHOD_ENQUEUED",
+                    "child_task_id": "json1", "root_task_id": "owner-json",
+                    "selected_objective": "ensure_structure"}]
+        observed, events, selected, reviews = self.run_case(
+            [{"status": "NEEDS_REVIEW", "task_id": "json1"}],
+            choices, enabled=True, stage=False, max_jobs=2)
+        self.assertEqual(selected, [], "No new model plan without sandbox grant")
+        self.assertEqual(reviews, [])
+        self.assertEqual(choices[-1]["status"],
+                         "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN")
+        self.assertEqual(observed[0][0]["task_id"], "json1")
+        self.assertNotIn(("policy", "owner-json"), events)
+
+    def test_staged_json_preserves_followup_independent_readback(self):
+        choices = [{"status": "NATIVE_METHOD_ENQUEUED",
+                    "child_task_id": "json1", "root_task_id": "owner-json",
+                    "selected_objective": "ensure_structure"}]
+        _, events, selected, reviews = self.run_case(
+            [{"status": "NEEDS_REVIEW", "task_id": "json1"}],
+            choices, enabled=True, stage=True, admitted=True, max_jobs=2)
+        self.assertEqual(selected, ["owner-json"])
+        self.assertEqual(len(reviews), 1)
+        self.assertIn(("policy", "owner-json"), events)
+
     def test_real_review_budget_shared_and_fail_closed(self):
         decisions = [{"status": "NATIVE_METHOD_ENQUEUED",
                       "child_task_id": "c1", "root_task_id": "root"}]
