@@ -39,9 +39,9 @@ with tempfile.TemporaryDirectory(prefix="native-feedback-real-host-") as td:
     work=root/"work";work.mkdir()
     fixtures=root/"fixtures";fixtures.mkdir()
     data={
-        "baseline.csv":"id,amount\\nA,7\\n",
-        "actual.csv":"id,amount\\nA,5\\n",
-        "settings.json":'{"timeout":12}\\n',
+        "baseline.csv":"id,amount\nA,7\n",
+        "actual.csv":"id,amount\nA,5\n",
+        "settings.json":'{"timeout":12}\n',
     }
     for name,value in data.items():
         (fixtures/name).write_text(value, encoding="utf-8")
@@ -178,7 +178,7 @@ def main() -> None:
                             "--force",str(baseline)],check=False,
                            stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     report["result"]="PASS" if not report["mismatches"] else "FAIL"
-    args.output.write_text(json.dumps(report,indent=2,sort_keys=True)+"\\n",
+    args.output.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n",
                            encoding="utf-8")
     print(json.dumps({"result":report["result"],
                       "baseline_sha":BASELINE_SHA,"candidate_sha":candidate,
