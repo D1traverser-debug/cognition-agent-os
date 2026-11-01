@@ -17,7 +17,8 @@ import tempfile
 import time
 
 BASELINE_SHA = "89614f0d1ba0214f4717fb24c6a554158fbac54c"
-SCENARIOS = ("exact_csv", "exact_json", "revoked_before_execution")
+SCENARIOS = ("exact_csv", "exact_json", "revoked_before_execution",
+             "source_drift_after_first")
 REPETITIONS = 2
 
 # This program is executed in two isolated, separately imported repository
@@ -59,6 +60,11 @@ with tempfile.TemporaryDirectory(prefix="native-feedback-real-host-") as td:
     ticks=[run_tick(
         db, work, fixtures, max_jobs=1, auto_native_cognition=True,
         auto_stage_goals=(case=="exact_json"))]
+    if case=="source_drift_after_first":
+        # The originally correct owner result must be invalidated by a real
+        # fixture revision; no implied semantic success or duplicate effect.
+        (fixtures/"actual.csv").write_text(
+            "id,amount\\nA,999\\nB,5\\n", encoding="utf-8")
     ticks.append(run_tick(
         db, work, fixtures, max_jobs=1, auto_native_cognition=True,
         auto_stage_goals=(case=="exact_json")))
@@ -108,13 +114,18 @@ def _replay(root: Path, scenario: str) -> tuple[dict, float]:
 
 def _oracle(value: dict, scenario: str) -> bool:
     # Negative cases do not become "pass" by agreeing on a broken effect.
-    if not value["source_unchanged"] or value["business_outcome_verified"]:
+    if (value["source_unchanged"] !=
+            (scenario != "source_drift_after_first")
+        or value["business_outcome_verified"]):
         return False
     if value["semantic_outcome_verified"]:
         return False
     if scenario=="revoked_before_execution":
         return (not value["local_owner_outcome_verified"] and
                 value["child_count"]==0 and value["tick_processed"]==[0,0])
+    if scenario=="source_drift_after_first":
+        return (not value["local_owner_outcome_verified"] and
+                value["child_count"]==1 and value["tick_processed"]==[1,0])
     return (value["local_owner_outcome_verified"] and
             value["child_count"]==1 and value["tick_processed"]==[1,0])
 
