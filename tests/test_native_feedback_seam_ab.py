@@ -13,14 +13,15 @@ spec.loader.exec_module(ab)
 class NativeFeedbackABOracleTests(unittest.TestCase):
     def observed(self, case):
         revoked = case == "revoked_before_execution"
+        drifted = case == "source_drift_after_first"
         return {
             "case": case,
-            "local_owner_outcome_verified": not revoked,
+            "local_owner_outcome_verified": not revoked and not drifted,
             "business_outcome_verified": False,
             "outcome_scope": None,
             "child_count": 0 if revoked else 1,
             "tick_processed": [0, 0] if revoked else [1, 0],
-            "source_unchanged": True,
+            "source_unchanged": not drifted,
             "semantic_outcome_verified": False,
         }
 
@@ -55,11 +56,22 @@ class NativeFeedbackABOracleTests(unittest.TestCase):
             self.assertFalse(ab._oracle(
                 observation, "revoked_before_execution"))
 
-    def test_source_mutation_always_fails(self):
+    def test_wrong_source_revision_state_fails(self):
         for case in ab.SCENARIOS:
             observation = self.observed(case)
-            observation["source_unchanged"] = False
+            observation["source_unchanged"] = not observation["source_unchanged"]
             self.assertFalse(ab._oracle(observation, case))
+
+    def test_drift_cannot_keep_owner_success_or_mint_second_effect(self):
+        for field, value in (
+            ("local_owner_outcome_verified", True),
+            ("child_count", 2),
+            ("tick_processed", [1, 1]),
+        ):
+            observation = self.observed("source_drift_after_first")
+            observation[field] = value
+            self.assertFalse(
+                ab._oracle(observation, "source_drift_after_first"))
 
 
 if __name__ == "__main__":
