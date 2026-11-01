@@ -14,8 +14,10 @@ from unittest.mock import patch
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, initialize
 from cognition_agent_os.native_decision import (
-    register_native_goal, inspect_native_goal, record_native_hypothesis)
-from cognition_agent_os.native_local_planner import advance_native_local_once
+    register_native_goal, inspect_native_goal, record_native_hypothesis,
+    _DECISION_LAYERS)
+from cognition_agent_os.native_local_planner import (
+    advance_native_local_once, _native_response_schema)
 
 
 class NativeLocalModelLoop(unittest.TestCase):
@@ -42,6 +44,20 @@ class NativeLocalModelLoop(unittest.TestCase):
             "changing any original files or production access."
         )
 
+    def test_response_schema_requires_bounded_unverified_decision_layer(self):
+        schema = _native_response_schema(
+            [{"objective": "compare_records"}],
+            ["reference.csv", "observed.csv"], "a" * 64, None,
+            prior_decisions=[])
+        decision = schema["oneOf"][2]
+        basis = decision["properties"]["decision_basis"]
+        self.assertIn("decision_layer", basis["required"])
+        self.assertEqual(
+            set(basis["properties"]["decision_layer"]["enum"]),
+            set(_DECISION_LAYERS))
+        self.assertNotIn("execution", _DECISION_LAYERS)
+        self.assertNotIn("authority", _DECISION_LAYERS)
+
     @staticmethod
     def compare():
         return {"kind": "goal_intent", "objective": "compare_records",
@@ -61,6 +77,7 @@ class NativeLocalModelLoop(unittest.TestCase):
                 for p, sha in sorted(evidence["source_digest_manifest"].items())]
         past = evidence["past_methods_and_independent_verdicts"]
         basis = {
+            "decision_layer": "method_selection",
             "source_refs": refs,
             "previous_result_task_id": past[-1]["task_id"] if past else None,
             "challenge": "An apparently valid source comparison may still miss the owner result.",
@@ -99,6 +116,8 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertIn("past_methods_and_independent_verdicts", payload["prompt"])
         self.assertIn("registered_local_methods", payload["prompt"])
         self.assertIn("untrusted_excerpt", payload["prompt"])
+        self.assertIn("decision_basis.decision_layer", payload["prompt"])
+        self.assertIn("unverified model hypothesis", payload["prompt"])
         self.assertNotIn("production_mutation_authorized", payload["prompt"])
         # A real model would supply these, not a preset script.
         history = json.loads(payload["prompt"].split("\n\n")[-1])
