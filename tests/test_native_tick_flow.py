@@ -118,6 +118,20 @@ class FeedbackSeamTests(unittest.TestCase):
         self.assertEqual(observed[0][0]["task_id"], "json1")
         self.assertNotIn(("policy", "owner-json"), events)
 
+    def test_exhausted_job_budget_still_reports_json_opt_in_block(self):
+        choices = [{"status": "NATIVE_METHOD_ENQUEUED",
+                    "child_task_id": "json1", "root_task_id": "owner-json",
+                    "selected_objective": "ensure_structure"}]
+        observed, events, selected, reviews = self.run_case(
+            [{"status": "NEEDS_REVIEW", "task_id": "json1"}],
+            choices, enabled=True, stage=False, max_jobs=1)
+        self.assertEqual(len(observed[0]), 1)
+        self.assertEqual(selected, [])
+        self.assertEqual(reviews, [])
+        self.assertEqual(choices[-1]["status"],
+                         "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN")
+        self.assertEqual(events, [("worker", "json1")])
+
     def test_staged_json_preserves_followup_independent_readback(self):
         choices = [{"status": "NATIVE_METHOD_ENQUEUED",
                     "child_task_id": "json1", "root_task_id": "owner-json",
