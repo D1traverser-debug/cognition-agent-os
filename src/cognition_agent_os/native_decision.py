@@ -31,6 +31,13 @@ _CLIENT_REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{15,127}\Z")
 _HYPOTHESIS_DISPOSITIONS = frozenset({
     "REJECTED", "CONDITIONALLY_USEFUL", "UNRESOLVED_RESEARCH_REQUIRED",
 })
+# Model-facing review focus only. "execution" and "authority" are reserved
+# by the graph projection for effect and owner-authority nodes.
+_DECISION_LAYERS = frozenset({
+    "entrypoint", "goal_interpretation", "context_retrieval",
+    "method_selection", "implementation", "verification",
+    "architecture", "permission_boundary", "method", "unspecified",
+})
 _MAX_SOURCE_COUNT = 64
 # Keep original words, including late prohibitions, in ONE canonical SQLite
 # contract. The model must refuse an over-budget prompt rather than truncate.
@@ -194,16 +201,27 @@ def _proposal(candidate: dict, contract: dict) -> dict:
     }
     review_fields = {"decision_review_version", "decision_reviews"}
     cross_root_field = {"cross_root_procedure_evidence_sha256"}
+    layer_field = frozenset({"decision_layer"})
+    optional_basis_fields = (
+        frozenset(), frozenset(cross_root_field),
+        frozenset(review_fields), frozenset(review_fields | cross_root_field),
+    )
     allowed_basis = {
-        frozenset(basis_fields),
-        frozenset(basis_fields | cross_root_field),
-        frozenset(basis_fields | review_fields),
-        frozenset(basis_fields | review_fields | cross_root_field),
+        frozenset(basis_fields) | optional
+        for optional in optional_basis_fields
     }
+    allowed_basis.update({
+        frozenset(basis_fields) | optional | layer_field
+        for optional in optional_basis_fields
+    })
     if (not isinstance(candidate["decision_basis"], dict)
         or frozenset(candidate["decision_basis"]) not in allowed_basis):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
     basis = candidate["decision_basis"]
+    if ("decision_layer" in basis
+        and (not isinstance(basis["decision_layer"], str)
+             or basis["decision_layer"] not in _DECISION_LAYERS)):
+        raise ValueError("INVALID_NATIVE_DECISION_LAYER")
     cross_root_digest = basis.get("cross_root_procedure_evidence_sha256")
     if (cross_root_digest is not None
         and (not isinstance(cross_root_digest, str)
@@ -854,6 +872,7 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
     current_required = legacy_required | {"decision_review_version"}
     old_child = None
     lineage = []
+    decision_layers_by_event = {}
     for index, row in enumerate(decisions):
         receipt = json.loads(row["details"])
         if (not isinstance(receipt, dict)
@@ -892,8 +911,11 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
             "original_goal",
             *(f"decision:{event_id}" for event_id in review_ids),
         )
+        decision_layer = receipt["proposal"]["decision_basis"].get(
+            "decision_layer", "method")
+        decision_layers_by_event[row["event_id"]] = decision_layer
         nodes.append(Decision(
-            decision_id, (), layer="method",
+            decision_id, (), layer=decision_layer,
             review_parent_ids=review_parent_ids))
         nodes.append(Decision(effect_id, (decision_id,), layer="execution"))
         lineage.append((row["event_id"], child_id))
@@ -928,6 +950,17 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
         "ancestor_decision_event_ids_to_challenge": [
             event_id for event_id, _ in lineage
             if f"decision:{event_id}" in graph.ancestors_to_challenge],
+        "reopened_decision_layer": decision_layers_by_event[
+            lineage[target_index][0]],
+        "ancestor_decision_layers_to_challenge": [
+            {"event_id": event_id, "layer": decision_layers_by_event[event_id]}
+            for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.ancestors_to_challenge],
+        "review_descendant_decision_layers_to_reopen": [
+            {"event_id": event_id, "layer": decision_layers_by_event[event_id]}
+            for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.review_descendant_decisions_to_reopen],
+        "decision_layers_are_model_hypotheses": True,
         "review_descendant_decision_event_ids_to_reopen": [
             event_id for event_id, _ in lineage
             if f"decision:{event_id}" in graph.review_descendant_decisions_to_reopen],
@@ -1317,6 +1350,9 @@ def _audit(db: sqlite3.Connection, db_path: Path,
             observations.append({
                 "event_id": item["event_id"],
                 "task_id": child["task_id"], "task_state": child["state"],
+                "decision_layer": receipt["proposal"]["decision_basis"].get(
+                    "decision_layer", "method"),
+                "decision_layer_is_unverified": True,
                 "selected_objective": selected["objective"],
                 "alternative_objective": (parsed["alternative"]["objective"]
                                          if parsed["alternative"] is not None else None),
@@ -1332,6 +1368,9 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     "selected_reason": receipt["proposal"]["decision_reason"],
                     "alternative_reason": receipt["proposal"]["alternative_reason"],
                     "expected_evidence": receipt["proposal"]["expected_evidence"],
+                    "decision_layer": receipt["proposal"]["decision_basis"].get(
+                        "decision_layer", "method"),
+                    "decision_layer_semantics": "UNVERIFIED_MODEL_HYPOTHESIS",
                     "challenge": receipt["proposal"]["decision_basis"]["challenge"],
                     "falsifier": receipt["proposal"]["decision_basis"]["falsifier"],
                     "uncertainty": receipt["proposal"]["decision_basis"]["uncertainty"],
