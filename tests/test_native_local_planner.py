@@ -957,6 +957,15 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(failure["worker_error_code"], "JOIN_KEY_AMBIGUOUS")
         self.assertEqual(failure["trial_status"], "PRIOR_WORKER_REFUSAL_OBSERVED")
         self.assertEqual(
+            {item["role"] for item in failure["source_refs"]},
+            {"reference", "observed"})
+        self.assertEqual(
+            failure["prior_decision_context_semantics"],
+            "UNTRUSTED_MODEL_HYPOTHESES_NOT_CAUSAL_EVIDENCE")
+        self.assertTrue(failure["prior_decision_context"].get("falsifier"))
+        self.assertLessEqual(
+            max(map(len, failure["prior_decision_context"].values())), 512)
+        self.assertEqual(
             failure["procedure_fingerprint"],
             evidence["items"][0]["procedure_fingerprint"])
         self.assertFalse(failure["owner_outcome_verified"])
@@ -977,6 +986,14 @@ class NativeLocalModelLoop(unittest.TestCase):
             self.assertEqual(
                 projection["failure_items"][0]["worker_error_code"],
                 "JOIN_KEY_AMBIGUOUS")
+            self.assertEqual(
+                {item["role"] for item in
+                 projection["failure_items"][0]["source_refs"]},
+                {"reference", "observed"})
+            self.assertTrue(
+                projection["failure_items"][0]["prior_decision_context"].get(
+                    "falsifier"))
+            self.assertIn("historical model-authored", payload["prompt"])
             self.assertIn("NOT independent owner outcomes", payload["prompt"])
             self.assertIn("do not automatically", payload["prompt"])
             calls.append(projection["failure_items"][0]["procedure_fingerprint"])

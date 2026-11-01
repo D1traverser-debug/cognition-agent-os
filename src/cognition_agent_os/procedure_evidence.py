@@ -208,6 +208,7 @@ def inspect_cross_root_procedure_trials(
                 refs_valid = True
                 for resource in resources:
                     if (not isinstance(resource, dict)
+                        or not isinstance(resource.get("role"), str)
                         or not isinstance(resource.get("path"), str)):
                         refs_valid = False
                         break
@@ -217,10 +218,23 @@ def inspect_cross_root_procedure_trials(
                         or not re.fullmatch(r"[a-f0-9]{64}", digest)):
                         refs_valid = False
                         break
-                    source_refs.append({"path": path, "sha256": digest})
+                    source_refs.append({
+                        "role": resource["role"], "path": path,
+                        "sha256": digest,
+                    })
                 if not refs_valid:
                     continue
-                source_refs.sort(key=lambda item: item["path"])
+                source_refs.sort(key=lambda item: (item["role"], item["path"]))
+                trace = attempt.get("research_trace")
+                trace = trace if isinstance(trace, dict) else {}
+                prior_decision_context = {}
+                for key in (
+                    "selected_reason", "alternative_reason", "expected_evidence",
+                    "challenge", "falsifier", "uncertainty",
+                ):
+                    value = trace.get(key)
+                    if isinstance(value, str) and value.strip():
+                        prior_decision_context[key] = value[:512]
                 failure_items.append({
                     "source_root_id": candidate_id,
                     "source_goal_sha256": prior_goal_sha256,
@@ -231,6 +245,9 @@ def inspect_cross_root_procedure_trials(
                     "capability": identity["capability"],
                     "procedure_fingerprint": identity["procedure_fingerprint"],
                     "source_refs": source_refs,
+                    "prior_decision_context": prior_decision_context,
+                    "prior_decision_context_semantics":
+                        "UNTRUSTED_MODEL_HYPOTHESES_NOT_CAUSAL_EVIDENCE",
                     "worker_error_code": failure_code,
                     "task_state": "UNKNOWN",
                     "trial_status": "PRIOR_WORKER_REFUSAL_OBSERVED",
