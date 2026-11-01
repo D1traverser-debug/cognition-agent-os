@@ -242,4 +242,48 @@ Codex Goal/Work、独立 SQLite Host、定时任务和 API 桥接现在均为
 
 **程序性学习边界（2026-11-01 更新）：** `knowledge_candidates` 仍是 root-scoped、source-pinned、unverified candidate；`signed_outcome_feedback` 仍是受签名/holdout 约束的窄领域反馈，不是通用跨任务 method library。新增 `procedure_evidence.py` 是只读投影：从同一 SQLite ledger 中最多扫描 64 个当前 grant 下的其他 native roots，只把“原始完整 owner-local postcondition 现在仍可独立复验、且对应最后一个已登记 intent”的不同 goal 结果作为 prior procedure-family trial 提供给 native local planner。fingerprint 排除 task-specific resource paths；model 必须自行判断适用性。每次重新计算，source、artifact、goal/grant revision 或 lineage 失效会移除旧 trial；不同 objective 不会互相借用。它不写新表、不提升 memory、不创建可执行 capability、不授权行动，也不证明 general method transfer 或 cross-domain transfer。当前只验证“同一已注册本地 capability family 曾在另一个不同 goal 上通过完整 local owner oracle”，不是可迁移 procedure 已学会。
 
-**当前状态：NOT_READY。** Draft PR、绿色测试、模型文字或方法卡均不能代替 first-turn fresh ChatGPT session activation、陌生 owner task 的独立结果与纠错负担测量。当前唯一活跃集成面为 PR #62；产品/交互验收仍 OPEN。
+**当前状态：NOT_READY。** Draft PR、绿色测试、模型文字或方法卡均不能代替 first-turn fresh ChatGPT session activation、陌生 owner task 的独立结果与纠错负担测量。PR #62 是本轮指定集成候选，而非仓库唯一开放 PR；产品/交互验收仍 OPEN。
+
+
+## K. 2026-11-01 架构根因重开：允许替换认知层，禁止再以补丁数量衡量进展
+
+**触发的用户纠正：** 多轮修复仍未获得原目标的独立验收。用户明确允许重新学习原始 Agent-Learning-Hub / Hello Agents，并把上层架构错误、删减、重构甚至推倒重建作为正式备选。此处不是对当前架构的批准；本轮重新开放 I、J 的既有选择。
+
+**实际观察，而非结论：**
+- 当前 main 的 `host.py::run_tick` 同一函数管理 due tasks、native plan、Worker 反馈重规划、local review/recovery、conformance、goal drift 等多个工作路径；`native_decision.py` 约 1,577 行，`native_local_planner.py` 约 1,164 行。长度本身不证明错误，但职责交织、改动波及率可以验证。
+- 现有 native 方法是固定 registered objectives 的合法受控执行入口；它保留权限安全，却不能凭此证明未见领域的自主工具选择和深层因果研究。
+- PR #62 的第一个“previous_result_task_id → 因果父边”实现被既有反例推翻；随后版本化 review 迁移在第一次 exact-head CI 中触发大量旧入口拒绝。修正后 exact-head CI 41302410522 全部必需作业 PASS；这验证回归与打包，不验证真实认知收益。
+- 当前历史 ADR 已经建议实际任务 A/B，但工作仍偏向代码与离线断言；**“有实验计划”不能当成“实验已完成”**。
+
+**向根因追问，保留竞争解释：**
+1. H-ARCH：认知层与确定性 Host 的职责没有真正解耦，所以每次改“决策/研究”都扩散到 receipt、planner、Host 和 test fixtures。反证：在相同陌生任务上已有代码无需改动即可比候选架构表现更好。
+2. H-EVAL：缺少足以区分“通过已知程序测试”和“完成原用户目标”的真实在线对照与独立语义 oracle；这可以解释绿色回归却持续 NOT_READY。反证：已有可重复、包含陌生任务和独立成果验收的真实比较记录。
+3. H-MODEL：当前工具或本地模型认知能力/上下文/信息源不足，而不是控制架构问题。反证：相同模型与同样工具、预算在另一种编排下持续完成同类未知目标。
+4. H-CONTEXT：长时间对话及旧材料上下文混入，导致已经证伪的选择反复引入。反证：干净会话、严格版本源与反例检索下仍复现相同失败。
+5. H-MIXED：上述因素组合，不能预设只有一个单点根因。
+
+**真正竞争的架构候选（不锁定原选择）：**
+
+| 候选 | 保留和删除 | 是否应晋级 |
+| --- | --- | --- |
+| A：继续现有 Host 上打补丁 | 保留一切，包括原多入口与当前 native planner；仅对单个问题局部修 | 作为基线，不再默认胜出 |
+| B：重新分层的轻量认知核心 | 保留现有单一 SQLite 权限账本、Worker、effect/oracle；把模型驱动的调研、候选方案、反证、工具选择、回退编排作为**可替换的无效果权限层**，移除重复上层分支（只在替代路径通过后删除） | 首选实验假设，不是最终产品决策 |
+| C：采用成熟 Agent SDK / graph harness 做认知编排 | 替换重复的高层 loop/recovery，复用其状态/interrupt 语义；仍必须经原权限与真实结果合同接回 | 与 B 同任务对照，若显著胜出可替换 |
+| D：重写整个 Host / SQLite | 连授权账本、调度和效果检查一起重建 | **条件性选择**：只有 A/B/C 无法在职责或复杂度上消除已证实阻碍，且 D 的迁移/回滚试验超过现状时启动；不以“清爽”为依据 |
+
+**本轮重新选择的理由：** Agent-Learning-Hub (README, checked 2026-11-01) 要求先证明为什么 agent 优于固定 workflow，随后建设有限循环、严格 tool schema、trace、eval 和 safety；Hello Agents 区分固定流程与 AI-native Agent；Anthropic `Building effective agents` 也强调由简单可组合系统起步，复杂度必须以效果证明。三者是方法先验，不是本项目验收。结合上面的实际源码，B/C 与 A 的对照比直接 D 更能隔离“认知层问题”与“安全内核问题”，但如果 B/C 负面证据充分，**必须允许重新评价 D，不保护现状**。
+
+**可执行的同任务 A/B/C，不接受源码绿灯代替：**
+- 固定 3 组真实、此前没有专门加入 objective/正则/测试答案的任务：陌生软件故障的竞争根因诊断与可验证修复；跨来源研究后有证据的方案取舍；曾成功方法在**不同目标**下的迁移与失败撤销。为每组提供明确 owner postconditions 和独立检查数据。随机化顺序或隔离上下文，防泄漏。
+- 三个候选共享**相同原始目标、初始来源、工具权限、模型、时间/调用预算**。A 的固定代码路径可以明确返回 unsupported；B/C 不得依靠偷偷添加 task-specific hardcode 获胜。
+- 记录 source versions、所有行动与 grant、决策反证、真实工具调用、结果读取、完整 owner outcome、超时/费用、人工纠正、未知任务成功率、回归影响面。至少一次做中断恢复、过期来源、错误模型建议、工具拒绝和未授权写的负例。
+- 以完整目标**独立成功率与授权零越界**为硬门，之后按纠正次数、恢复质量、维护影响面与执行成本比较。局部测试数与代码长度不作单独胜负。
+- B/C 在相同案例没有可测收益则撤销新增编排，继续反问 H-EVAL/H-MODEL/H-CONTEXT；若 B/C 明确改进则逐能力切换，验证合法旧路径后删除对应重复控制层；若所有候选失败则重新开放底层协议和全重写 D。
+- 在完成上述独立 A/B 前，**冻结新增固定自然语言 grammar / 多余控制器 / 粉饰性的 review 字段**。允许修安全漏洞、跨平台阻断和已实证错误；不允许这些修复自行被记作产品认知进展。
+
+**当前结果：** 架构根因重新登记，H-ARCH/H-EVAL/H-MODEL/H-CONTEXT 尚未通过实验判别。B/C 为待做实验，D 是被明确允许的有条件替换方案。尚无真实 A/B 结果、跨任务方法晋升证明、跨会话可靠触发证据；`NOT_READY`。PR #62 继续 Draft，不因 exact-head CI 绿色直接合并或部署。
+
+研究来源：
+- https://github.com/datawhalechina/Agent-Learning-Hub
+- https://github.com/datawhalechina/hello-agents
+- https://www.anthropic.com/engineering/building-effective-agents
