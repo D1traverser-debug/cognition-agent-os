@@ -77,6 +77,13 @@ class NativeDecisionLoop(unittest.TestCase):
                 "challenge": "The proposed method might not satisfy all original clauses.",
                 "falsifier": "Independent mechanical results or original source drift could refute this choice.",
                 "uncertainty": "Mechanical success cannot establish the whole owner outcome.",
+                "decision_review_version": 1,
+                "decision_reviews": [{
+                    "event_id": item["event_id"],
+                    "disposition": "NOT_RELEVANT",
+                    "rationale": "No current evidence links this prior decision to the present method choice.",
+                    "falsifier": "A shared premise or newly observed dependency would make it relevant.",
+                } for item in state["decisions"]],
             },
             "observation_sha256": state["observation_sha256"],
             "selected_intent": selected, "alternative_intent": alternative,
@@ -986,7 +993,7 @@ class NativeDecisionLoop(unittest.TestCase):
         state = self.view(root)
         second_candidate = self.candidate(
             state, self.structure(), self.reconcile())
-        second_candidate["decision_reviews"] = [{
+        second_candidate["decision_basis"]["decision_reviews"] = [{
             "event_id": first_event_id,
             "disposition": "RELEVANT",
             "rationale": (
