@@ -116,6 +116,26 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         self.assertFalse((self.work / "sandbox").exists())
         self.unchanged()
 
+    def test_one_job_json_host_reports_missing_effect_opt_in(self):
+        root = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model authorized")) as provider:
+            tick = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=1,
+                auto_native_cognition=True, auto_stage_goals=False)
+        provider.assert_not_called()
+        self.assertEqual(tick["processed"], 1, tick)
+        self.assertEqual(
+            [x["status"] for x in tick["native_cognition"]],
+            ["NATIVE_METHOD_ENQUEUED",
+             "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN"], tick)
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)[
+                "local_owner_outcome_verified"])
+        self.unchanged()
+
     def test_one_opted_in_host_tick_executes_and_checks_exact_owner_goal(self):
         """A single explicit Host invocation must not stop after just planning.
 
