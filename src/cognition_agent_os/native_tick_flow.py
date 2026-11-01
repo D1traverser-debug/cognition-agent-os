@@ -75,17 +75,31 @@ def drain_native_feedback(
         # Without that grant, another model attempt cannot supply the missing
         # effect, and would waste calls or create misleading new decisions.
         if (selected.get("selected_objective") == "ensure_structure"
-            and result["status"] == "NEEDS_REVIEW"
-            and not (auto_stage_goals and preflight is not None
-                     and preflight["admitted"])):
-            native_choices.append({
-                "status": "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN",
-                "root_task_id": selected_root,
-                "child_task_id": result.get("task_id"),
-                "owner_outcome_verified": False,
-                "reason": "SANDBOX_STAGING_NOT_AUTHORIZED",
-            })
-            continue
+            and result["status"] == "NEEDS_REVIEW"):
+            stage_granted = (
+                auto_stage_goals and preflight is not None
+                and preflight["admitted"])
+            # The grant alone cannot prove an effect. The current child's
+            # exact independent stage receipt must be present; a missing,
+            # failed or unrelated review cannot justify another model call.
+            stage_observed = any(
+                review.get("task_id") == result.get("task_id")
+                and review.get("status") == "SANDBOX_VERIFIED"
+                for review in early_reviews if isinstance(review, dict))
+            if not stage_granted or not stage_observed:
+                native_choices.append({
+                    "status": (
+                        "NATIVE_SANDBOX_EFFECT_AWAITING_VERIFICATION"
+                        if stage_granted else
+                        "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN"),
+                    "root_task_id": selected_root,
+                    "child_task_id": result.get("task_id"),
+                    "owner_outcome_verified": False,
+                    "reason": (
+                        "SANDBOX_STAGE_NOT_VERIFIED" if stage_granted
+                        else "SANDBOX_STAGING_NOT_AUTHORIZED"),
+                })
+                continue
         followup = advance_cognition(
             db_path, workspace, fixture_root, selected["root_task_id"],
             model=local_model)
