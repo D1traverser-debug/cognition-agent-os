@@ -372,11 +372,26 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
             planned = run_tick(
                 self.db, self.work, self.fixtures,
                 max_jobs=2, auto_native_cognition=True)
+        # The Host can add one independent completion readback for first
+        # without admitting another task. Only the first two records enqueue
+        # effects; the third is the verified terminal observation for first.
+        enqueued = [
+            x for x in planned["native_cognition"]
+            if x["status"] == "NATIVE_METHOD_ENQUEUED"]
         self.assertEqual(
-            [x["root_task_id"] for x in planned["native_cognition"]],
-            [first, second], planned)
-        self.assertTrue(all(x["status"] == "NATIVE_METHOD_ENQUEUED"
-                            for x in planned["native_cognition"]))
+            [x["root_task_id"] for x in enqueued], [first, second], planned)
+        self.assertEqual(planned["processed"], 2, planned)
+        self.assertEqual(len(planned["tasks"]), 2, planned)
+        self.assertEqual([
+            x["root_task_id"] for x in planned["native_cognition"]
+            if x["status"] == "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED"],
+            [first], planned)
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures,
+            first)["local_owner_outcome_verified"])
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures,
+            second)["local_owner_outcome_verified"])
         self.assertEqual(inspect_native_goal(
             self.db, self.work, self.fixtures, unknown)["decision_count"], 0)
         self.assertFalse(inspect_owner_local_outcome(
