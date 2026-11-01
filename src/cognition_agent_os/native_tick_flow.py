@@ -59,8 +59,16 @@ def drain_native_feedback(
         }
         selected = planned.get(result.get("task_id"))
         completed_ids = {item.get("task_id") for item in results}
-        if selected is None or any(
-                task_id not in completed_ids for task_id in planned):
+        # Only same-root siblings can establish this local wait dependency.
+        # A pending child belonging to an unrelated original goal has no
+        # inferred causal relationship with this root, and must not starve it.
+        if selected is None:
+            continue
+        selected_root = selected["root_task_id"]
+        if any(
+                child_id not in completed_ids
+                for child_id, choice in planned.items()
+                if choice["root_task_id"] == selected_root):
             continue
         followup = advance_cognition(
             db_path, workspace, fixture_root, selected["root_task_id"],
