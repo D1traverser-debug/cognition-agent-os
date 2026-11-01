@@ -16,6 +16,8 @@ class NativeFeedbackABOracleTests(unittest.TestCase):
         drifted = case == "source_drift_after_first"
         return {
             "case": case,
+            "before_change_owner_verified": not revoked,
+            "before_change_owner_evidence_present": not revoked,
             "local_owner_outcome_verified": not revoked and not drifted,
             "business_outcome_verified": False,
             "outcome_scope": None,
@@ -55,6 +57,15 @@ class NativeFeedbackABOracleTests(unittest.TestCase):
             observation[key] = value
             self.assertFalse(ab._oracle(
                 observation, "revoked_before_execution"))
+
+    def test_drift_cannot_claim_success_without_prior_owner_proof(self):
+        for field in ("before_change_owner_verified",
+                      "before_change_owner_evidence_present"):
+            observation = self.observed("source_drift_after_first")
+            observation[field] = False
+            self.assertFalse(ab._oracle(
+                observation, "source_drift_after_first"),
+                "Never count invalidation when the earlier result was unproved")
 
     def test_wrong_source_revision_state_fails(self):
         for case in ab.SCENARIOS:
