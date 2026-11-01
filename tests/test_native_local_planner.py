@@ -66,6 +66,13 @@ class NativeLocalModelLoop(unittest.TestCase):
             "challenge": "An apparently valid source comparison may still miss the owner result.",
             "falsifier": "Independent artifact readback or changed source facts must invalidate this selection.",
             "uncertainty": "The selected method cannot prove the entire business outcome.",
+            "decision_review_version": 1,
+            "decision_reviews": [{
+                "event_id": item["event_id"],
+                "disposition": "NOT_RELEVANT",
+                "rationale": "No evidence currently links this earlier choice to the new task.",
+                "falsifier": "A shared premise or source dependency would make it relevant.",
+            } for item in past],
         }
         if evidence.get("cross_root_procedure_evidence_sha256") is not None:
             basis["cross_root_procedure_evidence_sha256"] = (
