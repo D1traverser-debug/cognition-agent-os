@@ -1024,6 +1024,76 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertFalse(reentry["root_cause_semantically_verified"])
         self.assertFalse(reentry["authorizes_action"])
 
+    def test_prior_decision_review_coverage_is_exact_and_fail_closed(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        state = self.view(root)
+        candidate = self.candidate(state, self.structure(), self.reconcile())
+        candidate["decision_basis"]["decision_reviews"] = []
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_PRIOR_DECISIONS_NOT_REVIEWED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, candidate)
+        self.assertEqual(self.view(root)["decision_count"], 1)
+        candidate = self.candidate(state, self.structure(), self.reconcile())
+        candidate["decision_basis"]["decision_reviews"][0]["event_id"] += 1000
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_PRIOR_DECISIONS_NOT_REVIEWED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, candidate)
+        self.assertEqual(self.view(root)["decision_count"], 1)
+
+    def test_source_drift_reopens_explicit_review_descendant_not_temporal_sibling(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        with closing(connect(self.db)) as db:
+            first_event_id = db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id LIMIT 1",
+                (root,)).fetchone()["event_id"]
+        second_candidate = self.candidate(
+            self.view(root), self.structure(), self.reconcile())
+        second_candidate["decision_basis"]["decision_reviews"][0].update({
+            "disposition": "RELEVANT",
+            "rationale": (
+                "The second choice explicitly reuses the first decision's "
+                "method boundary and verified output."),
+            "falsifier": (
+                "An independent input lineage showing no shared premise "
+                "would falsify this review relationship."),
+        })
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, second_candidate)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        with closing(connect(self.db)) as db:
+            event_ids = [row["event_id"] for row in db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
+                (root,)).fetchall()]
+        self.assertEqual(event_ids[0], first_event_id)
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\\nDelta,10\\n", encoding="utf-8")
+        state = self.view(root)
+        self.assertEqual(state["status"], "NATIVE_SOURCE_CHANGED")
+        reentry = state["causal_reentry"]
+        self.assertEqual(reentry["reopened_decision_event_ids"], [first_event_id])
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
+        self.assertEqual(
+            reentry["review_descendant_decision_event_ids_to_reopen"],
+            [event_ids[1]])
+        self.assertEqual(
+            reentry["review_descendant_effect_child_task_ids_to_reverify"],
+            [second["child_task_id"]])
+        self.assertFalse(reentry["review_lineage_semantics_verified"])
+        self.assertFalse(reentry["prior_result_order_proves_causality"])
+        self.assertFalse(reentry["authorizes_action"])
+
     def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
         root = self.root_id()
         admit_native_decision(
