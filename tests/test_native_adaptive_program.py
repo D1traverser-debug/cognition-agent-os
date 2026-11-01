@@ -121,6 +121,38 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         self.assertEqual(resumed["tasks"], [], resumed)
         self.unchanged()
 
+    def test_two_owner_roots_reach_independent_postconditions_in_one_tick(self):
+        """Real Host must not couple two unrelated owner roots.
+
+        Source/owner readback is independent. Native method completion for A
+        cannot be delayed by B's still-pending effect, and same-root
+        admission remains subject to the single ledger and owner oracle.
+        """
+        csv_root = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        json_root = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model authorized")) as model:
+            tick = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=3,
+                auto_native_cognition=True, auto_stage_goals=True)
+        model.assert_not_called()
+        self.assertEqual(tick["processed"], 2, tick)
+        observed = [c.get("status") for c in tick["native_cognition"]]
+        self.assertEqual(observed.count("NATIVE_METHOD_ENQUEUED"), 2, tick)
+        # Both roots must be reconsidered independently once their respective
+        # effects have finished; an unrelated pending sibling cannot starve A.
+        self.assertEqual(
+            observed.count("NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED"), 2, tick)
+        for root in (csv_root, json_root):
+            outcome = inspect_owner_local_outcome(
+                self.db, self.work, self.fixtures, root)
+            self.assertTrue(outcome["local_owner_outcome_verified"], outcome)
+            self.assertFalse(outcome["business_outcome_verified"])
+        self.unchanged()
+
     def test_real_host_worker_owner_outcome_not_starved_by_132_older_roots(self):
         """Reproduce the old 128-root starvation at the ACTUAL Host entry.
 
