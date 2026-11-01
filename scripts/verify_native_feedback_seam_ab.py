@@ -60,6 +60,10 @@ with tempfile.TemporaryDirectory(prefix="native-feedback-real-host-") as td:
     ticks=[run_tick(
         db, work, fixtures, max_jobs=1, auto_native_cognition=True,
         auto_stage_goals=(case=="exact_json"))]
+    # Check the ORIGINAL whole-owner outcome BEFORE any deliberate drift.
+    # Otherwise a never-successful baseline could falsely be labeled as
+    # successful invalidation when the final outcome also fails.
+    pre_change=inspect_owner_local_outcome(db, work, fixtures, root_id)
     if case=="source_drift_after_first":
         # The originally correct owner result must be invalidated by a real
         # fixture revision; no implied semantic success or duplicate effect.
@@ -75,6 +79,10 @@ with tempfile.TemporaryDirectory(prefix="native-feedback-real-host-") as td:
             (root_id,)).fetchall()
     snapshot={
         "case":case,
+        "before_change_owner_verified":pre_change["local_owner_outcome_verified"],
+        "before_change_owner_evidence_present":bool(
+            pre_change.get("evidence_task_id") and
+            pre_change.get("evidence_sha256")),
         "local_owner_outcome_verified":outcome["local_owner_outcome_verified"],
         "business_outcome_verified":outcome["business_outcome_verified"],
         "outcome_scope":outcome.get("outcome_scope"),
@@ -124,8 +132,11 @@ def _oracle(value: dict, scenario: str) -> bool:
         return (not value["local_owner_outcome_verified"] and
                 value["child_count"]==0 and value["tick_processed"]==[0,0])
     if scenario=="source_drift_after_first":
-        return (not value["local_owner_outcome_verified"] and
-                value["child_count"]==1 and value["tick_processed"]==[1,0])
+        return (value["before_change_owner_verified"] is True
+                and value["before_change_owner_evidence_present"] is True
+                and value["local_owner_outcome_verified"] is False
+                and value["child_count"]==1
+                and value["tick_processed"]==[1,0])
     return (value["local_owner_outcome_verified"] and
             value["child_count"]==1 and value["tick_processed"]==[1,0])
 
