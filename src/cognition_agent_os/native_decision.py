@@ -1530,7 +1530,8 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             # projection must bind it; the local planner separately enforces
             # that it cannot omit a digest after seeing non-empty evidence.
             if supplied_cross_root_digest is not None:
-                if not cross_root_trials.get("items"):
+                if not (cross_root_trials.get("items")
+                        or cross_root_trials.get("failure_items")):
                     raise ValueError(
                         "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
                 if supplied_cross_root_digest != procedure_evidence_sha256(

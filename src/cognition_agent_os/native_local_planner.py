@@ -477,10 +477,10 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
         cross_root_trials = {
             "status": "PROCEDURE_TRIAL_EVIDENCE_UNAVAILABLE",
-            "items": [], "authorizes_action": False,
+            "items": [], "failure_items": [], "authorizes_action": False,
         }
     cross_root_procedure_evidence_sha256 = None
-    if cross_root_trials.get("items"):
+    if cross_root_trials.get("items") or cross_root_trials.get("failure_items"):
         from .procedure_evidence import procedure_evidence_sha256
         cross_root_procedure_evidence_sha256 = procedure_evidence_sha256(
             cross_root_trials)
@@ -667,17 +667,25 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "of goal relevance. When all methods are irrelevant, evidence is "
         "insufficient, or a comparison cannot justify the next action, "
         "return only the abstain JSON object; do not manufacture a decision. "
-        "Prior cross_root_procedure_trial_evidence, when present, is a "
-        "read-only projection of other roots whose COMPLETE local owner "
-        "postcondition was independently rechecked against current source and "
-        "output bytes. It is evidence that the same registered capability "
-        "family worked on a DIFFERENT goal once; it is NOT proof of current "
-        "applicability, general method transfer, business truth or authority. "
-        "Compare its source/goal scope and failure conditions against this "
-        "goal; reject it when the task differs materially. A current-root "
-        "decision still needs fresh source pins, the normal SQLite grant/CAS, "
-        "Worker execution and this root's independent owner postcondition. "
-        "Never copy a prior success label into the current result. "
+        "Prior cross_root_procedure_trial_evidence is a read-only projection. "
+        "Its items contain other roots whose COMPLETE local owner postcondition "
+        "was independently rechecked against current source and output bytes: "
+        "the same registered capability family worked on a DIFFERENT goal once, "
+        "but this is NOT proof of current applicability, general method "
+        "transfer, business truth or authority. Its failure_items contain only "
+        "narrowly classified completed Worker refusals from different goals "
+        "(JOIN_KEY_AMBIGUOUS or NO_SAFE_GOAL_PLAN), with their pinned source "
+        "references and rechecked root snapshot. These are observed execution "
+        "counterexamples, NOT independent owner outcomes or verified root "
+        "causes. Compare their exact source/goal scope and failure conditions "
+        "against this goal; do not ignore them and do not automatically "
+        "blacklist the method. A different current source may make the same "
+        "registered family applicable, but only after a fresh challenge and "
+        "falsifier. The combined evidence digest binds positive AND negative "
+        "items. A current-root decision still needs fresh source pins, the "
+        "normal SQLite grant/CAS, Worker execution and this root's independent "
+        "owner postcondition. Never copy a prior success or failure label into "
+        "the current result. "
         "A registered eligible method may not match the owner goal. "
         "If no relevant competing method exists, alternative_intent must "
         "be null; explain why other eligible methods do not apply. "

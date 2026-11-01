@@ -105,6 +105,32 @@ class NativeLocalModelLoop(unittest.TestCase):
             "past_methods_and_independent_verdicts": state["decisions"],
         })
 
+    def _failed_compare_root(self, prefix="bad"):
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+
+        reference = f"{prefix}_reference.csv"
+        observed = f"{prefix}_observed.csv"
+        (self.fixtures / reference).write_text(
+            "invoice_id,amount\nA,100\nB,200\n", encoding="utf-8")
+        (self.fixtures / observed).write_text(
+            "invoice_id,amount\nA,99\nA,98\n", encoding="utf-8")
+        root = register_native_goal(
+            self.db,
+            f"Compare {reference} with {observed} and report the differences.")
+        planned = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, root, model=None)
+        self.assertEqual(planned["status"], "NATIVE_METHOD_ENQUEUED", planned)
+        worker = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(worker["tasks"][0]["task_id"], planned["child_task_id"])
+        self.assertEqual(worker["tasks"][0]["status"], "UNKNOWN", worker)
+        state = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertEqual(state["decisions"][-1]["error_code"],
+                         "JOIN_KEY_AMBIGUOUS", state)
+        self.assertEqual(state["decisions"][-1]["task_state"], "UNKNOWN", state)
+        return root, planned["child_task_id"]
+
     def transport(self, method, path, payload, timeout):
         if method == "GET":
             return {"models": [{"name": "installed:test"}]}
@@ -888,6 +914,191 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertFalse(third_trials["authorizes_action"])
 
 
+
+    def test_cross_root_failure_is_a_bound_counterexample_not_a_blacklist(self):
+        from cognition_agent_os.native_local_planner import (
+            advance_native_adaptive_once, advance_native_local_once)
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        success_root = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        success = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, success_root, model=None)
+        self.assertEqual(success["status"], "NATIVE_METHOD_ENQUEUED", success)
+        success_worker = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(success_worker["tasks"][0]["status"], "NEEDS_REVIEW")
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, success_root)[
+                "local_owner_outcome_verified"])
+
+        failure_root, _failed_child = self._failed_compare_root("failure")
+        (self.fixtures / "reference_c.csv").write_text(
+            "invoice_id,amount\nC,13\nD,14\n", encoding="utf-8")
+        (self.fixtures / "observed_c.csv").write_text(
+            "invoice_id,amount\nC,12\nD,14\n", encoding="utf-8")
+        target_root = register_native_goal(
+            self.db,
+            "Compare reference_c.csv with observed_c.csv and report the differences.")
+
+        evidence = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records",))
+        self.assertEqual(evidence["status"],
+                         "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE", evidence)
+        self.assertEqual(len(evidence["items"]), 1, evidence)
+        self.assertEqual(evidence["items"][0]["source_root_id"], success_root)
+        self.assertEqual(len(evidence["failure_items"]), 1, evidence)
+        failure = evidence["failure_items"][0]
+        self.assertEqual(failure["source_root_id"], failure_root)
+        self.assertEqual(failure["worker_error_code"], "JOIN_KEY_AMBIGUOUS")
+        self.assertEqual(failure["trial_status"], "PRIOR_WORKER_REFUSAL_OBSERVED")
+        self.assertEqual(
+            failure["procedure_fingerprint"],
+            evidence["items"][0]["procedure_fingerprint"])
+        self.assertFalse(failure["owner_outcome_verified"])
+        self.assertFalse(failure["root_cause_semantically_verified"])
+        self.assertFalse(failure["authorizes_action"])
+        self.assertEqual(failure["applicability_to_current_goal"], "NOT_YET_TESTED")
+
+        calls = []
+        def model(method, endpoint, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            self.assertEqual(method, "POST")
+            history = json.loads(payload["prompt"].rsplit("\n\n", 1)[1])
+            projection = history["cross_root_procedure_trial_evidence"]
+            self.assertEqual(projection["items"][0]["source_root_id"], success_root)
+            self.assertEqual(projection["failure_items"][0]["source_root_id"],
+                             failure_root)
+            self.assertEqual(
+                projection["failure_items"][0]["worker_error_code"],
+                "JOIN_KEY_AMBIGUOUS")
+            self.assertIn("NOT independent owner outcomes", payload["prompt"])
+            self.assertIn("do not automatically", payload["prompt"])
+            calls.append(projection["failure_items"][0]["procedure_fingerprint"])
+            answer = {
+                "selected_intent": {
+                    "kind": "goal_intent", "objective": "compare_records",
+                    "resources": [
+                        {"role": "reference", "path": "reference_c.csv"},
+                        {"role": "observed", "path": "observed_c.csv"}]},
+                "alternative_intent": None,
+                "decision_reason": (
+                    "The prior refusal was caused by duplicate identity values; "
+                    "the current source readback shows unique invoice IDs, so "
+                    "the same registered comparison family remains worth testing."),
+                "alternative_reason": (
+                    "No other registered local capability directly compares "
+                    "these exact CSV source roles."),
+                "expected_evidence": (
+                    "A fresh independent SQL report readback for this owner root."),
+                "observation_sha256": history["observation_sha256"],
+                "decision_basis": self.basis_from_evidence(history),
+            }
+            return {"done": True, "response": json.dumps(answer)}
+
+        with patch("cognition_agent_os.local_model._request", side_effect=model):
+            admitted = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, target_root,
+                model="installed:test")
+        self.assertEqual(calls, [failure["procedure_fingerprint"]])
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED", admitted)
+        self.assertFalse(admitted["owner_outcome_verified"])
+        worker = run_tick(
+            self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(worker["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(worker["tasks"][0]["status"], "NEEDS_REVIEW", worker)
+        target_outcome = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, target_root)
+        self.assertTrue(target_outcome["local_owner_outcome_verified"])
+        self.assertFalse(target_outcome["business_outcome_verified"])
+
+    def test_cross_root_failure_evidence_is_invalidated_by_source_drift(self):
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        failure_root, _failed_child = self._failed_compare_root("drift")
+        (self.fixtures / "reference_c.csv").write_text(
+            "invoice_id,amount\nC,13\n", encoding="utf-8")
+        (self.fixtures / "observed_c.csv").write_text(
+            "invoice_id,amount\nC,12\n", encoding="utf-8")
+        target_root = register_native_goal(
+            self.db,
+            "Compare reference_c.csv with observed_c.csv and report the differences.")
+        before = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records",))
+        self.assertEqual(len(before["failure_items"]), 1, before)
+        self.assertEqual(before["failure_items"][0]["source_root_id"], failure_root)
+
+        (self.fixtures / "drift_observed.csv").write_text(
+            "invoice_id,amount\nA,97\nA,98\n", encoding="utf-8")
+        after = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target_root,
+            eligible_objectives=("compare_records",))
+        self.assertEqual(after["status"],
+                         "NO_VERIFIED_CROSS_ROOT_PROCEDURE_TRIALS", after)
+        self.assertEqual(after["items"], [])
+        self.assertEqual(after["failure_items"], [])
+        self.assertFalse(after["authorizes_action"])
+
+    def test_cross_root_failure_evidence_changed_during_inference_blocks_admission(self):
+        from cognition_agent_os.native_local_planner import advance_native_local_once
+
+        _failure_root, failed_child = self._failed_compare_root("cas")
+        (self.fixtures / "reference_c.csv").write_text(
+            "invoice_id,amount\nC,13\n", encoding="utf-8")
+        (self.fixtures / "observed_c.csv").write_text(
+            "invoice_id,amount\nC,12\n", encoding="utf-8")
+        target_root = register_native_goal(
+            self.db,
+            "Compare reference_c.csv with observed_c.csv and report the differences.")
+
+        def model(method, endpoint, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            self.assertEqual(method, "POST")
+            history = json.loads(payload["prompt"].rsplit("\n\n", 1)[1])
+            evidence = history["cross_root_procedure_trial_evidence"]
+            self.assertEqual(len(evidence["failure_items"]), 1, evidence)
+            answer = {
+                "selected_intent": {
+                    "kind": "goal_intent", "objective": "compare_records",
+                    "resources": [
+                        {"role": "reference", "path": "reference_c.csv"},
+                        {"role": "observed", "path": "observed_c.csv"}]},
+                "alternative_intent": None,
+                "decision_reason": "The current source is distinct and needs a fresh test.",
+                "alternative_reason": "No other registered capability fits the exact comparison.",
+                "expected_evidence": "A fresh independent SQL report readback.",
+                "observation_sha256": history["observation_sha256"],
+                "decision_basis": self.basis_from_evidence(history),
+            }
+            # Change only the sibling failure receipt's observed Worker result.
+            # The current root's own observation CAS stays unchanged; the
+            # cross-root evidence digest must independently reject the stale
+            # negative example at admission.
+            with closing(connect(self.db)) as db:
+                db.execute(
+                    "UPDATE tasks SET error_code=? WHERE task_id=?",
+                    ("OTHER_WORKER_RESULT", failed_child))
+                db.commit()
+            return {"done": True, "response": json.dumps(answer)}
+
+        with patch("cognition_agent_os.local_model._request", side_effect=model):
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, target_root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_LOCAL_PLAN_REFUSED", result)
+        self.assertIn(
+            "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE", result["reason"])
+        state = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, target_root)
+        self.assertEqual(state["decision_count"], 0, state)
 
     def test_local_planner_cannot_drop_cross_root_evidence_binding(self):
         """The model cannot use a prior trial while omitting its CAS digest."""
