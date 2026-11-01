@@ -33,7 +33,8 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
                             observation_sha256: str,
                             previous_id: str | None,
                             pending_hypotheses: list[dict] | None = None,
-                            cross_root_procedure_evidence_sha256: str | None = None) -> dict:
+                            cross_root_procedure_evidence_sha256: str | None = None,
+                            prior_decisions: list[dict] | None = None) -> dict:
     """Official Ollama constrained decoding, NOT a trusted decision or oracle.
 
     Keep the shape small. Runtime's existing typed intent compiler, ledger CAS,
@@ -74,8 +75,30 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
     basis = {
         "type": "object", "additionalProperties": False,
         "required": ["source_refs", "previous_result_task_id",
-                     "challenge", "falsifier", "uncertainty"],
+                     "challenge", "falsifier", "uncertainty",
+                     "decision_review_version", "decision_reviews"],
         "properties": {
+            "decision_review_version": {"type": "integer", "const": 1},
+            "decision_reviews": {
+                "type": "array",
+                "minItems": len(prior_decisions or []),
+                "maxItems": len(prior_decisions or []),
+                "items": {
+                    "type": "object", "additionalProperties": False,
+                    "required": ["event_id", "disposition", "rationale", "falsifier"],
+                    "properties": {
+                        "event_id": {
+                            "type": "integer",
+                            **({"enum": [row["event_id"] for row in (prior_decisions or [])]}
+                               if prior_decisions else {"minimum": 1}),
+                        },
+                        "disposition": {"type": "string", "enum": [
+                            "RELEVANT", "NOT_RELEVANT", "UNRESOLVED"]},
+                        "rationale": {"type": "string", "minLength": 12, "maxLength": 256},
+                        "falsifier": {"type": "string", "minLength": 12, "maxLength": 256},
+                    },
+                },
+            },
             "source_refs": {
                 "type": "array", "maxItems": 16,
                 "items": {"type": "object",
@@ -607,6 +630,16 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "CONDITIONALLY_USEFUL or UNRESOLVED_RESEARCH_REQUIRED), "
         "counterargument and verification_needed; do not omit one. "
         "No ideas means hypothesis_reviews may be omitted. "
+        "For EVERY material decision, review EVERY prior admitted decision "
+        "exactly once, in event_id order, inside decision_basis.decision_reviews. "
+        "Each entry must include event_id, disposition (RELEVANT, NOT_RELEVANT, "
+        "or UNRESOLVED), rationale and falsifier. Empty history means an empty "
+        "array. RELEVANT/UNRESOLVED creates a REVIEW-LINEAGE edge only: it "
+        "schedules ancestors for challenge and descendants for reconsideration; "
+        "it does NOT establish semantic causality, invalidate an effect, or "
+        "authorize execution. NOT_RELEVANT creates no edge. Treat every "
+        "disposition as an unverified model hypothesis. Never infer a parent "
+        "edge from previous_result_task_id or chronological order. "
         "Only select an eligible registered method IF it can advance "
         "the original owner objective. When a complete "
         "explicit_owner_local_contract_if_recognized is provided, preserve "
@@ -662,8 +695,9 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "the permitted public metadata scope. Return JSON with seven keys: "
         "selected_intent, alternative_intent, decision_reason, "
         "alternative_reason, expected_evidence, observation_sha256, "
-        "decision_basis; plus hypothesis_reviews if there are incoming "
-        "method ideas. Both "
+        "decision_basis must include decision_review_version=1 and the "
+        "complete decision_reviews array; plus hypothesis_reviews if there "
+        "are incoming method ideas. Both "
         "intents must be goal_intent dictionaries with the registered objective "
         "and exact required resources. Do not add authority or success claims. "
         "If a decisive source passage is missing from bounded previews, "
@@ -691,11 +725,12 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
             current["decisions"][-1]["task_id"] if current["decisions"] else None,
             pending_hypotheses=current["pending_hypotheses"],
             cross_root_procedure_evidence_sha256=
-                cross_root_procedure_evidence_sha256)
+                cross_root_procedure_evidence_sha256,
+            prior_decisions=current["decisions"])
         if structured_output else "json")
     response = local_model._request("POST", "/api/generate", {
         "model": model, "prompt": prompt, "stream": False, "format": result_format,
-        "options": {"temperature": 0, "num_predict": 900}, "keep_alive": "0",
+        "options": {"temperature": 0, "num_predict": 1800}, "keep_alive": "0",
     }, timeout)
     if response.get("done") is not True or not isinstance(
             response.get("response"), str):
