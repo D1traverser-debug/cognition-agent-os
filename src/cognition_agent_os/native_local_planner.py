@@ -16,7 +16,8 @@ import sqlite3
 
 from . import local_model
 from .native_decision import (
-    inspect_native_goal, capability_catalog, admit_native_decision, _sources)
+    inspect_native_goal, capability_catalog, admit_native_decision, _sources,
+    _DECISION_LAYERS)
 from .ledger import connect, event
 from .source import safe_fixture, SourceUnavailable
 
@@ -76,8 +77,11 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
         "type": "object", "additionalProperties": False,
         "required": ["source_refs", "previous_result_task_id",
                      "challenge", "falsifier", "uncertainty",
-                     "decision_review_version", "decision_reviews"],
+                     "decision_layer", "decision_review_version",
+                     "decision_reviews"],
         "properties": {
+            "decision_layer": {
+                "type": "string", "enum": sorted(_DECISION_LAYERS)},
             "decision_review_version": {"type": "integer", "const": 1},
             "decision_reviews": {
                 "type": "array",
@@ -630,6 +634,12 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "CONDITIONALLY_USEFUL or UNRESOLVED_RESEARCH_REQUIRED), "
         "counterargument and verification_needed; do not omit one. "
         "No ideas means hypothesis_reviews may be omitted. "
+        "Every material decision must classify its primary review focus in "
+        "decision_basis.decision_layer using exactly one of "
+        + ", ".join(sorted(_DECISION_LAYERS))
+        + ". This is an unverified model hypothesis for organizing review, "
+        "not a root-cause verdict, causal edge or execution authority. "
+        "If uncertain use unspecified. "
         "For EVERY material decision, review EVERY prior admitted decision "
         "exactly once, in event_id order, inside decision_basis.decision_reviews. "
         "Each entry must include event_id, disposition (RELEVANT, NOT_RELEVANT, "
@@ -695,8 +705,9 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "the permitted public metadata scope. Return JSON with seven keys: "
         "selected_intent, alternative_intent, decision_reason, "
         "alternative_reason, expected_evidence, observation_sha256, "
-        "decision_basis must include decision_review_version=1 and the "
-        "complete decision_reviews array; plus hypothesis_reviews if there "
+        "decision_basis must include decision_layer, "
+        "decision_review_version=1 and the complete decision_reviews array; "
+        "plus hypothesis_reviews if there "
         "are incoming method ideas. Both "
         "intents must be goal_intent dictionaries with the registered objective "
         "and exact required resources. Do not add authority or success claims. "
@@ -1053,6 +1064,7 @@ def advance_native_adaptive_once(db_path: Path, workspace: Path,
                     "expected_evidence": expected,
                     "observation_sha256": state["observation_sha256"],
                     "decision_basis": {
+                        "decision_layer": "method_selection",
                         "source_refs": [
                             {"path": name, "sha256": observed[name]}
                             for name in sorted(names) if name in observed],
