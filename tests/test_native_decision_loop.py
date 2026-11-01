@@ -972,6 +972,51 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(untrusted["status"], "NATIVE_GOAL_UNVERIFIABLE")
         self.assertNotIn("causal_reentry", untrusted)
 
+    def test_failed_child_challenges_explicit_prior_decision_review_parent(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        with closing(connect(self.db)) as db:
+            first_event_id = db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id LIMIT 1",
+                (root,)).fetchone()["event_id"]
+        state = self.view(root)
+        second_candidate = self.candidate(
+            state, self.structure(), self.reconcile())
+        second_candidate["decision_reviews"] = [{
+            "event_id": first_event_id,
+            "disposition": "RELEVANT",
+            "rationale": (
+                "The second plan explicitly reuses the first decision's "
+                "method boundary and its independent result."),
+            "falsifier": (
+                "If the second plan's actual inputs are independent of the "
+                "first decision, this review link should be removed."),
+        }]
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, second_candidate)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        artifact = self.workspace / "artifacts" / (
+            second["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" independent corruption")
+        failed = self.view(root)
+        self.assertEqual(failed["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        reentry = failed["causal_reentry"]
+        self.assertEqual(
+            reentry["ancestor_decision_event_ids_to_challenge"],
+            [first_event_id])
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
+        self.assertEqual(
+            reentry["affected_child_task_ids"], [second["child_task_id"]])
+        self.assertEqual(
+            reentry["review_descendant_decision_event_ids_to_reopen"], [])
+        self.assertFalse(reentry["review_lineage_semantics_verified"])
+        self.assertFalse(reentry["root_cause_semantically_verified"])
+        self.assertFalse(reentry["authorizes_action"])
+
     def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
         root = self.root_id()
         admit_native_decision(
