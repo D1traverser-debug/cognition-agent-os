@@ -824,10 +824,16 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
                          receipt["source_sha256"], old_child)
         decision_id = f"decision:{row['event_id']}"
         effect_id = f"effect:{child_id}"
-        # Every decision is scoped to the immutable owner goal. The
-        # previous result is chronological/context evidence, not a causal
-        # parent edge; only decision -> admitted child is guaranteed here.
-        nodes.append(Decision(decision_id, ("original_goal",), layer="method"))
+        # Every decision is scoped to the immutable owner goal. In
+        # addition, the validated previous_result_task_id is an explicit
+        # decision-input reference: the planner receives prior decisions and
+        # independently read-back results. Treat that as a conservative
+        # re-evaluation dependency, NOT proof that the prior result is the
+        # semantic root cause. A contradiction must therefore invalidate
+        # later decisions that were formed with this result in context.
+        decision_parents = (("original_goal",) if old_child is None
+                            else ("original_goal", f"effect:{old_child}"))
+        nodes.append(Decision(decision_id, decision_parents, layer="method"))
         nodes.append(Decision(effect_id, (decision_id,), layer="execution"))
         lineage.append((row["event_id"], child_id))
         if cause == "SOURCE_PIN_DRIFT" and index > target_index:
