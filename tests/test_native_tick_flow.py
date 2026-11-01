@@ -16,14 +16,19 @@ class FeedbackSeamTests(unittest.TestCase):
         called = []
         decisions = []
         reviews = []
+        most_recent_task_id = None
         def worker(*args, **kwargs):
+            nonlocal most_recent_task_id
             event = queue.pop(0) if queue else {"status": "IDLE"}
-            called.append(("worker", event.get("task_id")))
+            most_recent_task_id = event.get("task_id")
+            called.append(("worker", most_recent_task_id))
             return event
         def review(*args, **kwargs):
             called.append(("review", kwargs.get("max_reviews")))
-            reviews.append({"verified": True})
-            return [{"verified": True}]
+            receipt = {"task_id": most_recent_task_id,
+                       "status": "SANDBOX_VERIFIED"}
+            reviews.append(receipt)
+            return [receipt]
         def policy(*args, **kwargs):
             called.append(("policy", args[3]))
             decisions.append(args[3])
@@ -146,6 +151,46 @@ class FeedbackSeamTests(unittest.TestCase):
         self.assertEqual(reviews, [])
         self.assertEqual(out[2], 1)
         self.assertEqual(called, [("worker", "unrelated")])
+
+    def test_granted_stage_without_verified_receipt_does_not_replan(self):
+        choices = [{"status": "NATIVE_METHOD_ENQUEUED",
+                    "child_task_id": "json1", "root_task_id": "root",
+                    "selected_objective": "ensure_structure"}]
+        queue = iter([{"status": "NEEDS_REVIEW", "task_id": "json1"},
+                      {"status": "IDLE"}])
+        policy_calls = []
+        output = drain_native_feedback(
+            Path("ledger"), Path("work"), Path("fixtures"), max_jobs=2,
+            planner_mode="deterministic", local_model=None,
+            auto_native_cognition=True, auto_stage_goals=True,
+            preflight={"admitted": True}, native_choices=choices,
+            run_one=lambda *a, **k: next(queue),
+            review_due=lambda *a, **k: [],
+            advance_cognition=lambda *a, **k: policy_calls.append("model"))
+        self.assertEqual(policy_calls, [])
+        self.assertEqual(output[0][0]["task_id"], "json1")
+        self.assertEqual(choices[-1]["status"],
+                         "NATIVE_SANDBOX_EFFECT_AWAITING_VERIFICATION")
+
+    def test_unrelated_stage_receipt_cannot_complete_json(self):
+        choices = [{"status": "NATIVE_METHOD_ENQUEUED",
+                    "child_task_id": "json1", "root_task_id": "root",
+                    "selected_objective": "ensure_structure"}]
+        queue = iter([{"status": "NEEDS_REVIEW", "task_id": "json1"},
+                      {"status": "IDLE"}])
+        policy_calls = []
+        drain_native_feedback(
+            Path("ledger"), Path("work"), Path("fixtures"), max_jobs=2,
+            planner_mode="deterministic", local_model=None,
+            auto_native_cognition=True, auto_stage_goals=True,
+            preflight={"admitted": True}, native_choices=choices,
+            run_one=lambda *a, **k: next(queue),
+            review_due=lambda *a, **k: [
+                {"task_id": "other", "status": "SANDBOX_VERIFIED"}],
+            advance_cognition=lambda *a, **k: policy_calls.append("model"))
+        self.assertEqual(policy_calls, [])
+        self.assertEqual(choices[-1]["status"],
+                         "NATIVE_SANDBOX_EFFECT_AWAITING_VERIFICATION")
 
     def test_budget_and_choice_validation(self):
         with self.assertRaisesRegex(ValueError, "INVALID_NATIVE_FEEDBACK_BUDGET"):
