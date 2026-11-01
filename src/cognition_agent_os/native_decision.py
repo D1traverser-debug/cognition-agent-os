@@ -184,11 +184,9 @@ def _proposal(candidate: dict, contract: dict) -> dict:
     base_fields = {"selected_intent", "alternative_intent", "decision_reason",
                    "alternative_reason", "expected_evidence",
                    "observation_sha256", "decision_basis"}
-    optional_fields = {"hypothesis_reviews"}
     if (not isinstance(candidate, dict)
-        or not base_fields.issubset(candidate)
-        or set(candidate) - base_fields not in (
-            set(), optional_fields, {"decision_reviews"})):
+        or set(candidate) not in (
+            base_fields, base_fields | {"hypothesis_reviews"})):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
     basis_fields = {
         "source_refs", "previous_result_task_id", "challenge",
@@ -847,17 +845,21 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
     nodes = [Decision("original_goal", layer="authority")]
     stale_source_decisions = []
     stale_source_children = []
-    required = {"child_task_id", "ordinal", "proposal",
-                "selected_plan_sha256", "source_sha256",
-                "prior_child_task_id", "owner_outcome_verified"}
+    legacy_required = {"child_task_id", "ordinal", "proposal",
+                       "selected_plan_sha256", "source_sha256",
+                       "prior_child_task_id", "owner_outcome_verified"}
+    current_required = legacy_required | {"decision_review_version"}
     old_child = None
     lineage = []
     for index, row in enumerate(decisions):
         receipt = json.loads(row["details"])
-        if (not isinstance(receipt, dict) or set(receipt) != required
+        if (not isinstance(receipt, dict)
+            or set(receipt) not in (legacy_required, current_required)
             or receipt["ordinal"] != index
             or receipt["prior_child_task_id"] != old_child
-            or receipt["owner_outcome_verified"] is not False):
+            or receipt["owner_outcome_verified"] is not False
+            or ("decision_review_version" in receipt
+                and receipt["decision_review_version"] != 1)):
             raise ValueError("NATIVE_REENTRY_LINEAGE_INVALID")
         parsed = _proposal(receipt["proposal"], contract)
         child_id = receipt["child_task_id"]
@@ -877,7 +879,12 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
         # prior decisions are review ancestors too; they are NOT causal parents.
         # Only decision -> its admitted child is a causal effect edge.
         review_ids = _validate_decision_reviews(
-            receipt["proposal"], decisions[:index], require_current=False)
+            receipt["proposal"], decisions[:index],
+            require_current=receipt.get("decision_review_version") == 1)
+        if (("decision_review_version" in receipt)
+            != (receipt["proposal"]["decision_basis"].get(
+                "decision_review_version") == 1)):
+            raise ValueError("NATIVE_DECISION_REVIEW_RECEIPT_MISMATCH")
         review_parent_ids = (
             "original_goal",
             *(f"decision:{event_id}" for event_id in review_ids),
@@ -1047,17 +1054,29 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         unresolved_hypotheses: dict[str, dict] = {}
         for index, item in enumerate(decisions):
             receipt = json.loads(item["details"])
+            legacy_receipt_keys = {
+                "child_task_id", "ordinal", "proposal",
+                "selected_plan_sha256", "source_sha256",
+                "prior_child_task_id", "owner_outcome_verified"}
+            current_receipt_keys = legacy_receipt_keys | {
+                "decision_review_version"}
             if (not isinstance(receipt, dict)
-                or set(receipt) != {"child_task_id", "ordinal", "proposal",
-                                   "selected_plan_sha256", "source_sha256",
-                                   "prior_child_task_id", "owner_outcome_verified"}
+                or set(receipt) not in (legacy_receipt_keys, current_receipt_keys)
                 or receipt["ordinal"] != index
                 or receipt["prior_child_task_id"] != previous_id
-                or receipt["owner_outcome_verified"] is not False):
+                or receipt["owner_outcome_verified"] is not False
+                or ("decision_review_version" in receipt
+                    and receipt["decision_review_version"] != 1)):
+
                 raise ValueError("DECISION_RECEIPT_CHANGED")
             parsed = _proposal(receipt["proposal"], contract)
             _validate_decision_reviews(
-                receipt["proposal"], observations, require_current=False)
+                receipt["proposal"], observations,
+                require_current=receipt.get("decision_review_version") == 1)
+            if (("decision_review_version" in receipt)
+                != (receipt["proposal"]["decision_basis"].get(
+                    "decision_review_version") == 1)):
+                raise ValueError("NATIVE_DECISION_REVIEW_RECEIPT_MISMATCH")
             newly_recorded = [
                 h for h in hypotheses if (previous_decision_event_id <
                     h["event_id"] < item["event_id"])]
@@ -1585,6 +1604,7 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                 "selected_plan_sha256": parsed["selected"]["plan_sha256"],
                 "source_sha256": source_hashes,
                 "prior_child_task_id": previous,
+                "decision_review_version": 1,
                 "owner_outcome_verified": False})
             db.commit()
             return {"status": "NATIVE_METHOD_ENQUEUED",
@@ -1632,15 +1652,29 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
         previous_decision_event_id = -1
         for ordinal, r in enumerate(receipts):
             entry = json.loads(r["details"])
-            if (entry["ordinal"] != ordinal
+            legacy_receipt_keys = {
+                "child_task_id", "ordinal", "proposal",
+                "selected_plan_sha256", "source_sha256",
+                "prior_child_task_id", "owner_outcome_verified"}
+            current_receipt_keys = legacy_receipt_keys | {
+                "decision_review_version"}
+            if (set(entry) not in (legacy_receipt_keys, current_receipt_keys)
+                or entry["ordinal"] != ordinal
                 or entry["prior_child_task_id"] != previous
-                or entry["owner_outcome_verified"] is not False):
+                or entry["owner_outcome_verified"] is not False
+                or ("decision_review_version" in entry
+                    and entry["decision_review_version"] != 1)):
+
                 return False
             parsed = _proposal(entry["proposal"], contract)
             _validate_decision_reviews(
                 entry["proposal"],
                 [{"event_id": prior["event_id"]} for prior in receipts[:ordinal]],
-                require_current=False)
+                require_current=entry.get("decision_review_version") == 1)
+            if (("decision_review_version" in entry)
+                != (entry["proposal"]["decision_basis"].get(
+                    "decision_review_version") == 1)):
+                return False
             _challenge_hypotheses(
                 entry["proposal"], [h for h in hypotheses
                     if previous_decision_event_id < h["event_id"] < r["event_id"]])
