@@ -48,8 +48,10 @@ def drain_native_feedback(
                 db_path, workspace, fixture_root, max_reviews=1)
             early_reviews.extend(observed_reviews)
             review_budget -= len(observed_reviews)
-        if not auto_native_cognition or len(results) == max_jobs:
+        if not auto_native_cognition:
             continue
+        # Read-only blocked-state reporting remains valid at the job-budget
+        # boundary; only new planning/admission must stop at that boundary.
         # Only an effect of this tick's admitted child can request new planning;
         # unrelated completed tasks never trigger another model call.
         planned = {
@@ -100,6 +102,9 @@ def drain_native_feedback(
                         else "SANDBOX_STAGING_NOT_AUTHORIZED"),
                 })
                 continue
+        # No extra model decision or admission after the bounded Worker budget.
+        if len(results) == max_jobs:
+            continue
         followup = advance_cognition(
             db_path, workspace, fixture_root, selected["root_task_id"],
             model=local_model)
