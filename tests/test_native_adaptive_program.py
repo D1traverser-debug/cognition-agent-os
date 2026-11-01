@@ -89,6 +89,33 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
                          "ORIGINAL_SANDBOX_DRAFT_POSTCONDITION")
         self.unchanged()
 
+    def test_no_json_stage_opt_in_does_not_spend_another_model_call(self):
+        """A mechanically valid JSON candidate is not an authorized effect.
+
+        Actual Host/SQLite/Worker and owner oracle must preserve source and
+        stop the futile model retry without silently staging a draft.
+        """
+        root = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("Unapproved model retry")) as model:
+            tick = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=2,
+                planner_mode="ollama-local", local_model="not-installed",
+                auto_native_cognition=True, auto_stage_goals=False)
+        model.assert_not_called()
+        self.assertEqual(tick["processed"], 1, tick)
+        self.assertEqual(
+            [x["status"] for x in tick["native_cognition"]],
+            ["NATIVE_METHOD_ENQUEUED",
+             "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN"], tick)
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)[
+                "local_owner_outcome_verified"])
+        self.assertFalse((self.work / "sandbox").exists())
+        self.unchanged()
+
     def test_one_opted_in_host_tick_executes_and_checks_exact_owner_goal(self):
         """A single explicit Host invocation must not stop after just planning.
 
