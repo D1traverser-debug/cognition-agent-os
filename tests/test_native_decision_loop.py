@@ -1402,7 +1402,7 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED", drift)
         self.assertEqual(drift["invalidated_source_paths"], ["observed.csv"])
         self.assertEqual(drift["reopen_decision_ordinal"], 0)
-        self.assertEqual(drift["reopen_scope"], "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION")
+        self.assertEqual(drift["reopen_scope"], "SOURCE_AND_METHOD_REEXAMINATION")
         self.assertTrue(drift["affected_decision_event_ids"])
         self.assertNotIn("observation_sha256", drift)
         self.assertFalse(drift["owner_outcome_verified"])
