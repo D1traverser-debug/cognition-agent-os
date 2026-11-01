@@ -60,6 +60,34 @@ class FeedbackSeamTests(unittest.TestCase):
             [{"status": "PROCESSED", "task_id": "c1"}], decisions)
         self.assertEqual(selected, [])
 
+    def test_unrelated_pending_root_does_not_block_completed_root(self):
+        # Two separately admitted owner roots have no causal dependency.
+        # Root B's queued child must not suppress Root A's legal follow-up.
+        decisions = [
+            {"status": "NATIVE_METHOD_ENQUEUED",
+             "child_task_id": "a1", "root_task_id": "root-a"},
+            {"status": "NATIVE_METHOD_ENQUEUED",
+             "child_task_id": "b1", "root_task_id": "root-b"},
+        ]
+        _, calls, selected, _ = self.run_case(
+            [{"status": "PROCESSED", "task_id": "a1"}], decisions)
+        self.assertEqual(selected, ["root-a"])
+        self.assertEqual(calls[:2], [
+            ("worker", "a1"), ("policy", "root-a")])
+
+    def test_same_root_unfinished_peer_still_blocks_followup(self):
+        decisions = [
+            {"status": "NATIVE_METHOD_ENQUEUED",
+             "child_task_id": "a1", "root_task_id": "root-a"},
+            {"status": "NATIVE_METHOD_ENQUEUED",
+             "child_task_id": "a2", "root_task_id": "root-a"},
+            {"status": "NATIVE_METHOD_ENQUEUED",
+             "child_task_id": "b1", "root_task_id": "root-b"},
+        ]
+        _, _, selected, _ = self.run_case(
+            [{"status": "PROCESSED", "task_id": "a1"}], decisions)
+        self.assertEqual(selected, [])
+
     def test_opt_out_prevents_model_and_review_writes(self):
         decisions = [{"status": "NATIVE_METHOD_ENQUEUED",
                       "child_task_id": "c1", "root_task_id": "root"}]
