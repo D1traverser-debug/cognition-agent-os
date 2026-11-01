@@ -75,6 +75,13 @@ class NativeSameMethodCorrection(unittest.TestCase):
                 "challenge": "The same objective may remain unable to satisfy all owner clauses.",
                 "falsifier": "Fresh independent Host check rejects the corrected candidate.",
                 "uncertainty": "Even a repaired local artifact does not prove the owner outcome.",
+                "decision_review_version": 1,
+                "decision_reviews": [{
+                    "event_id": item["event_id"],
+                    "disposition": "NOT_RELEVANT",
+                    "rationale": "No evidence currently links this prior choice to the correction.",
+                    "falsifier": "A shared premise or reused constraint would make it relevant.",
+                } for item in state["decisions"]],
             }
         }
 
