@@ -181,9 +181,16 @@ class NativeSameMethodCorrection(unittest.TestCase):
         self.assertEqual(
             [x["status"] for x in tick["tasks"]],
             ["UNKNOWN", "NEEDS_REVIEW"], tick)
+        # Two admitted methods are actions; the third item is a truthful,
+        # read-only sandbox opt-in observation, not an extra decision/effect.
+        self.assertEqual(tick["processed"], 2, tick)
         self.assertEqual(
             [x["status"] for x in tick["native_cognition"]],
-            ["NATIVE_METHOD_ENQUEUED", "NATIVE_METHOD_ENQUEUED"], tick)
+            ["NATIVE_METHOD_ENQUEUED", "NATIVE_METHOD_ENQUEUED",
+             "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN"], tick)
+        self.assertEqual(
+            tick["native_cognition"][-1]["reason"],
+            "SANDBOX_STAGING_NOT_AUTHORIZED")
         state = self.view()
         self.assertEqual(state["decision_count"], 2, state)
         self.assertEqual(state["decisions"][0]["error_code"],
