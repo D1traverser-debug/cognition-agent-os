@@ -196,6 +196,13 @@ class NativeOwnerAcceptance(unittest.TestCase):
                         "The independent owner scope check rejects the direction.",
                     "uncertainty":
                         "A CSV mismatch report does not resolve physical inventory.",
+                    "decision_review_version": 1,
+                    "decision_reviews": [{
+                        "event_id": item["event_id"],
+                        "disposition": "NOT_RELEVANT",
+                        "rationale": "No evidence currently links this prior plan to the corrected input direction.",
+                        "falsifier": "A shared premise or source dependency would make it relevant.",
+                    } for item in state["decisions"]],
                 },
             }
 
