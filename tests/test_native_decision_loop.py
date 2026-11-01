@@ -64,7 +64,8 @@ class NativeDecisionLoop(unittest.TestCase):
                 "resources": [{"role": "input", "path": "handoff.json"}],
                 "requirements": [{"field": "audit", "equals": "confirmed"}]}
 
-    def candidate(self, state, selected, alternative):
+    def candidate(self, state, selected, alternative, *,
+                  decision_layer="method_selection"):
         refs = [
             {"path": path.name,
              "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
@@ -73,6 +74,7 @@ class NativeDecisionLoop(unittest.TestCase):
                     if state["decisions"] else None)
         return {
             "decision_basis": {
+                "decision_layer": decision_layer,
                 "source_refs": refs, "previous_result_task_id": previous,
                 "challenge": "The proposed method might not satisfy all original clauses.",
                 "falsifier": "Independent mechanical results or original source drift could refute this choice.",
@@ -651,6 +653,13 @@ class NativeDecisionLoop(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UNSUPPORTED_UNGROUNDED_DECISION"):
             admit_native_decision(self.db, self.workspace, self.fixtures,
                                   root, proposal)
+        invalid_layer = self.candidate(
+            observed, self.reconcile(), self.structure(),
+            decision_layer="execution")
+        with self.assertRaisesRegex(
+                ValueError, "INVALID_NATIVE_DECISION_LAYER"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, invalid_layer)
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM tasks WHERE parent_task=?",
@@ -983,7 +992,9 @@ class NativeDecisionLoop(unittest.TestCase):
         root = self.root_id()
         first = admit_native_decision(
             self.db, self.workspace, self.fixtures, root,
-            self.candidate(self.view(root), self.reconcile(), self.structure()))
+            self.candidate(
+                self.view(root), self.reconcile(), self.structure(),
+                decision_layer="context_retrieval"))
         run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
         with closing(connect(self.db)) as db:
             first_event_id = db.execute(
@@ -992,7 +1003,8 @@ class NativeDecisionLoop(unittest.TestCase):
                 (root,)).fetchone()["event_id"]
         state = self.view(root)
         second_candidate = self.candidate(
-            state, self.structure(), self.reconcile())
+            state, self.structure(), self.reconcile(),
+            decision_layer="implementation")
         second_candidate["decision_basis"]["decision_reviews"] = [{
             "event_id": first_event_id,
             "disposition": "RELEVANT",
@@ -1015,6 +1027,12 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(
             reentry["ancestor_decision_event_ids_to_challenge"],
             [first_event_id])
+        self.assertEqual(reentry["reopened_decision_layer"], "implementation")
+        self.assertEqual(
+            reentry["ancestor_decision_layers_to_challenge"],
+            [{"event_id": first_event_id, "layer": "context_retrieval"}])
+        self.assertEqual(reentry["review_descendant_decision_layers_to_reopen"], [])
+        self.assertTrue(reentry["decision_layers_are_model_hypotheses"])
         self.assertEqual(reentry["invalidated_decision_event_ids"], [])
         self.assertEqual(
             reentry["affected_child_task_ids"], [second["child_task_id"]])
