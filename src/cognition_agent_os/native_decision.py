@@ -379,7 +379,10 @@ def _validate_decision_reviews(
     basis = candidate.get("decision_basis", {})
     version = basis.get("decision_review_version")
     if version is None:
-        if require_current:
+        # A first decision has no prior decision to review. Preserve the
+        # established deterministic/legacy first-choice path; once any prior
+        # decision exists, the complete versioned review is mandatory.
+        if require_current and prior_decisions:
             raise ValueError("NATIVE_PRIOR_DECISIONS_NOT_REVIEWED")
         return []
     if type(version) is not int or version != 1:
@@ -1604,7 +1607,9 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                 "selected_plan_sha256": parsed["selected"]["plan_sha256"],
                 "source_sha256": source_hashes,
                 "prior_child_task_id": previous,
-                "decision_review_version": 1,
+                **({"decision_review_version": 1}
+                   if candidate["decision_basis"].get(
+                       "decision_review_version") == 1 else {}),
                 "owner_outcome_verified": False})
             db.commit()
             return {"status": "NATIVE_METHOD_ENQUEUED",
