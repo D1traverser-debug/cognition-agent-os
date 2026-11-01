@@ -70,6 +70,22 @@ def drain_native_feedback(
                 for child_id, choice in planned.items()
                 if choice["root_task_id"] == selected_root):
             continue
+        # JSON ensure_structure produces a candidate NEEDS_REVIEW artifact;
+        # owner completion depends on a separately opted-in sandbox stage.
+        # Without that grant, another model attempt cannot supply the missing
+        # effect, and would waste calls or create misleading new decisions.
+        if (selected.get("selected_objective") == "ensure_structure"
+            and result["status"] == "NEEDS_REVIEW"
+            and not (auto_stage_goals and preflight is not None
+                     and preflight["admitted"])):
+            native_choices.append({
+                "status": "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN",
+                "root_task_id": selected_root,
+                "child_task_id": result.get("task_id"),
+                "owner_outcome_verified": False,
+                "reason": "SANDBOX_STAGING_NOT_AUTHORIZED",
+            })
+            continue
         followup = advance_cognition(
             db_path, workspace, fixture_root, selected["root_task_id"],
             model=local_model)
