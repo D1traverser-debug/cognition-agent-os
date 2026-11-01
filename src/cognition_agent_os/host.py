@@ -382,48 +382,18 @@ def run_tick(db_path: Path, workspace: Path, fixture_root: Path, *, max_jobs: in
             limit=min(max_jobs,2))
     else:
         native_choices=[]
-    results = []
-    # Reviews share the original bounded batch limit. An opted-in cognitive
-    # continuation must read independent effect feedback before deciding again,
-    # rather than treating a merely enqueued/locally valid plan as completion.
-    review_budget = min(max_jobs, 8)
-    early_reviews = []
-    for _ in range(max_jobs):
-        result = run_once(db_path, workspace, fixture_root,
-                          planner_mode=planner_mode, local_model=local_model)
-        if result["status"] == "IDLE":
-            break
-        results.append(result)
-        if auto_native_cognition and auto_stage_goals and preflight["admitted"] and review_budget:
-            # The same existing sandbox verifier checks the effect before a
-            # model can choose a successor. No new grant or effect executor.
-            observed_reviews = advance_due_reviews(
-                db_path, workspace, fixture_root, max_reviews=1)
-            early_reviews.extend(observed_reviews)
-            review_budget -= len(observed_reviews)
-        if not auto_native_cognition or len(results) == max_jobs:
-            continue
-        # Replan only after a REAL Worker result for the exact child admitted
-        # in this invocation. Do not spend model calls on unrelated due jobs,
-        # or enqueue more decisions while another planned child is still due.
-        planned = {
-            choice["child_task_id"]: choice
-            for choice in native_choices
-            if choice.get("status") == "NATIVE_METHOD_ENQUEUED"
-        }
-        selected = planned.get(result.get("task_id"))
-        completed_ids = {item.get("task_id") for item in results}
-        if selected is None or any(
-                task_id not in completed_ids for task_id in planned):
-            continue
-        from .native_local_planner import advance_native_adaptive_once
-        followup = advance_native_adaptive_once(
-            db_path, workspace, fixture_root, selected["root_task_id"],
-            model=local_model)
-        native_choices.append(followup)
-        # No new admission means no new native effect; the next run_once will
-        # drain unrelated already-admitted work or return IDLE. The finite
-        # max_jobs budget also caps model/worker feedback cycles.
+    # The native cognition policy is an extractable Host-owned seam, not a
+    # new scheduler or effect authority. Continue using the original runner,
+    # effect reviewer, SQLite grants and full owner postcondition checks.
+    from .native_tick_flow import drain_native_feedback
+    results, early_reviews, review_budget = drain_native_feedback(
+        db_path, workspace, fixture_root, max_jobs=max_jobs,
+        planner_mode=planner_mode, local_model=local_model,
+        auto_native_cognition=auto_native_cognition,
+        auto_stage_goals=auto_stage_goals, preflight=preflight,
+        native_choices=native_choices, run_one=run_once,
+        review_due=advance_due_reviews)
+
     # Optional sandbox-only follow-up: requires an explicit host flag.
     # All early and late reviews share the preexisting <=8 effect budget.
     reviews = early_reviews + (
