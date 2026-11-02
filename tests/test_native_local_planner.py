@@ -857,6 +857,56 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertEqual(files_before,
                          {p.name:p.read_bytes() for p in self.fixtures.iterdir()})
 
+    def test_idle_newer_roots_do_not_hide_older_verified_procedure(self):
+        """A finite history window must select actual trials, not idle goals.
+
+        This exercises real SQLite registration, original Host/Worker execution,
+        and independent owner readback; it is not a mocked method endorsement
+        or a claim of general cross-domain transfer.
+        """
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials, _MAX_ROOT_SCAN)
+
+        source = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        worker = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(worker["tasks"][0]["task_id"], first["child_task_id"])
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, source)[
+                "local_owner_outcome_verified"])
+
+        # These roots are registered, current-grant and DECOMPOSED, but none
+        # has any method decision or owner-local outcome. They must not consume
+        # the historical procedure-trial scan budget.
+        for index in range(_MAX_ROOT_SCAN + 1):
+            register_native_goal(
+                self.db,
+                f"Investigate unfamiliar catalog anomaly {index}; "
+                "require independent evidence before any action.")
+        (self.fixtures / "reference_new.csv").write_text(
+            "item,expected\nC,8\n", encoding="utf-8")
+        (self.fixtures / "observed_new.csv").write_text(
+            "item,expected\nC,6\n", encoding="utf-8")
+        target = register_native_goal(
+            self.db,
+            "Compare reference_new.csv with observed_new.csv "
+            "and report the differences.")
+        observed = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target,
+            eligible_objectives=("compare_records",))
+        self.assertIn(
+            source, {item["source_root_id"] for item in observed["items"]},
+            observed)
+        self.assertLessEqual(observed["source_roots_scanned"], _MAX_ROOT_SCAN)
+        self.assertFalse(observed["authorizes_action"])
+        self.assertFalse(observed["any_general_method_transfer_verified"])
+
     def test_cross_root_verified_procedure_trial_is_challenged_not_promoted(self):
         """A verified prior procedure is trialled on a distinct goal, not promoted."""
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
