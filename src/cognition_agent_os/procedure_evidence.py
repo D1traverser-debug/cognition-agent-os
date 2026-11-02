@@ -15,7 +15,8 @@ import re
 from .ledger import readonly_snapshot
 
 _ID = re.compile(r"[0-9a-f]{32}\Z")
-_MAX_ROOT_SCAN = 64
+_MAX_ROOT_SCAN = 64  # per read-only keyset page
+_MAX_TOTAL_ROOT_SCAN = 512  # hard cap across all pages in one invocation
 _MAX_TRIALS = 8
 _MAX_PER_OBJECTIVE = 3
 # Only deterministic, capability-specific refusals are surfaced as
@@ -132,7 +133,7 @@ def inspect_cross_root_procedure_trials(
         # reject forged, stale, or inapplicable records.
         relevant_objectives = tuple(sorted(allowed))
         placeholders = ",".join("?" for _ in relevant_objectives)
-        rows = db.execute(
+        candidate_selector = (
             "SELECT task_id,created_at FROM tasks "
             "WHERE parent_task IS NULL AND state='DECOMPOSED' "
             "AND goal_rev=? AND grant_rev=? AND task_id<>? "
@@ -152,22 +153,54 @@ def inspect_cross_root_procedure_trials(
             "AND child.parent_task=e.task_id "
             "AND child.state IN "
             "('NEEDS_REVIEW','SANDBOX_VERIFIED','UNKNOWN')) "
-            "ORDER BY created_at DESC,task_id DESC LIMIT ?",
-            (authority["goal_rev"], authority["grant_rev"], root_task_id,
-             *relevant_objectives, _MAX_ROOT_SCAN + 1)).fetchall()
-        candidate_ids = [row["task_id"] for row in rows[:_MAX_ROOT_SCAN]]
-        scan_truncated = len(rows) > _MAX_ROOT_SCAN
+        )
+        candidate_args = (authority["goal_rev"], authority["grant_rev"],
+                          root_task_id, *relevant_objectives)
+        page_size = min(_MAX_ROOT_SCAN, _MAX_TOTAL_ROOT_SCAN)
+        rows = db.execute(
+            candidate_selector + "ORDER BY created_at DESC,task_id DESC LIMIT ?",
+            (*candidate_args, page_size + 1)).fetchall()
+        page_rows = rows[:page_size]
+        scan_truncated = len(rows) > page_size
         starting_authority = (
             authority["goal_rev"], authority["grant_rev"],
             authority["write_allowed"])
         starting_root = (root["goal_rev"], root["grant_rev"], root["state"])
+
+    # A single recent page is not sufficient when it contains stale,
+    # forged or independently unverified trials. Advance by stable
+    # (created_at, task_id) keyset without holding a WAL snapshot open
+    # during slow per-root source/output verification. Stop after a fixed
+    # total work budget, marking remaining history INCOMPLETE.
+    candidate_ids = []
+    def _candidate_roots():
+        nonlocal scan_truncated
+        batch = page_rows
+        while batch:
+            for row in batch:
+                candidate_ids.append(row["task_id"])
+                yield row["task_id"]
+            if (not scan_truncated
+                or len(candidate_ids) >= _MAX_TOTAL_ROOT_SCAN):
+                return
+            cursor = (batch[-1]["created_at"], batch[-1]["task_id"])
+            next_size = min(_MAX_ROOT_SCAN,
+                            _MAX_TOTAL_ROOT_SCAN - len(candidate_ids))
+            with readonly_snapshot(db_path) as db:
+                next_rows = db.execute(
+                    candidate_selector
+                    + "AND (created_at,task_id) < (?,?) "
+                    + "ORDER BY created_at DESC,task_id DESC LIMIT ?",
+                    (*candidate_args, *cursor, next_size + 1)).fetchall()
+            batch = next_rows[:next_size]
+            scan_truncated = len(next_rows) > next_size
 
     items = []
     per_objective = {}
     failure_items = []
     failure_per_objective = {}
     failure_snapshots = {}
-    for candidate_id in candidate_ids:
+    for candidate_id in _candidate_roots():
         try:
             prior = inspect_native_goal(
                 db_path, workspace, fixtures, candidate_id)
