@@ -1046,9 +1046,13 @@ class NativeLocalModelLoop(unittest.TestCase):
         # result is still independently verifiable, but below this page.
         (self.fixtures / "old_stale_obs.csv").write_text(
             "id,value" + chr(10) + "A,8" + chr(10), encoding="utf-8")
+        (self.fixtures / "fresh_target_ref.csv").write_text(
+            "id,value" + chr(10) + "B,4" + chr(10), encoding="utf-8")
+        (self.fixtures / "fresh_target_obs.csv").write_text(
+            "id,value" + chr(10) + "B,3" + chr(10), encoding="utf-8")
         target = register_native_goal(
-            self.db, "Compare reference.csv with observed.csv and "
-            "report the differences.")
+            self.db, "Compare fresh_target_ref.csv with fresh_target_obs.csv "
+            "and report the differences.")
         with patch("cognition_agent_os.procedure_evidence._MAX_ROOT_SCAN", 1):
             evidence = inspect_cross_root_procedure_trials(
                 self.db, self.workspace, self.fixtures, target,
