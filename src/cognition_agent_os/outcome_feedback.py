@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from .ledger import connect, create_task, event, current_guard
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 from .goal_loop import validate_goal
 from .reconciliation import validate_reconciliation, propose_reconciliation
 from .goal_audit import audit_goal
@@ -268,7 +268,7 @@ def _admit(db:sqlite3.Connection, root:sqlite3.Row,
     method=contract["alternatives"][ordinal]
     try:
         pinned_now=_pins(method["task_spec"],fixtures)
-    except (OSError,ValueError,TypeError,KeyError,UnicodeError):
+    except (OSError,ValueError,TypeError,KeyError,UnicodeError,SourceUnavailable):
         return _finish(db,root,_UNVERIFIABLE,"SOURCE_UNAVAILABLE_AT_ADMISSION")
     if pinned_now!=method["source_sha256"]:
         return _finish(db,root,_UNVERIFIABLE,"SOURCE_PIN_DRIFT")
@@ -453,7 +453,7 @@ def verify_feedback_root(db:sqlite3.Connection,root:sqlite3.Row,
                         require_staged=contract["version"]==3,
                         verifier_db=db)!="SATISFIED":
                 return {"valid":False,"reason":"ACCEPTED_OUTCOME_NO_LONGER_VERIFIABLE"}
-        except (OSError,ValueError,TypeError,KeyError,sqlite3.Error,UnicodeError):
+        except (OSError,ValueError,TypeError,KeyError,sqlite3.Error,UnicodeError,SourceUnavailable):
             return {"valid":False,"reason":"OUTCOME_RECHECK_UNAVAILABLE"}
     return {"valid":True,"reason":"INDEPENDENT_LOCAL_MECHANICAL_EVIDENCE"}
 
@@ -487,7 +487,7 @@ def advance_evidence_goals(db_path:Path,workspace:Path,fixtures:Path,
                              require_staged=contract["version"]==3,
                              verifier_db=db)
         except (OSError,ValueError,TypeError,KeyError,
-                sqlite3.Error,UnicodeError):
+                sqlite3.Error,UnicodeError,SourceUnavailable):
             verdict="INCONCLUSIVE"
         if verdict=="WAITING":
             return {"root_task_id":root["task_id"],"status":"AWAITING_CHILD"}
