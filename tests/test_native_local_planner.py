@@ -955,6 +955,63 @@ class NativeLocalModelLoop(unittest.TestCase):
             evidence)
         self.assertFalse(evidence["authorizes_action"])
 
+    def test_completed_unrelated_goals_cannot_hide_relevant_verified_experience(self):
+        """Independent completed JSON goals must not crowd out prior CSV evidence.
+
+        An exact owner outcome is checked on every prior root, without mocks.
+        The narrowed scan budget reproduces the history-selection failure
+        deterministically rather than requiring a huge ledger.
+        """
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+        from cognition_agent_os.procedure_evidence import inspect_cross_root_procedure_trials
+        from cognition_agent_os.sandbox_effect import stage_one
+
+        source = register_native_goal(
+            self.db, "Compare reference.csv with observed.csv and report the differences.")
+        source_plan = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source, model=None)
+        self.assertEqual(source_plan["status"], "NATIVE_METHOD_ENQUEUED", source_plan)
+        source_worker = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(source_worker["tasks"][0]["task_id"], source_plan["child_task_id"])
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, source)["local_owner_outcome_verified"])
+
+        # Later owner goals genuinely finish a DIFFERENT procedure family,
+        # so registration and child-state prefilters alone cannot solve this.
+        for _ in range(3):
+            other = register_native_goal(
+                self.db, "Please ensure an isolated draft of handoff.json "
+                "has owner equal to ops.")
+            other_plan = advance_native_adaptive_once(
+                self.db, self.workspace, self.fixtures, other, model=None)
+            self.assertEqual(other_plan["status"], "NATIVE_METHOD_ENQUEUED", other_plan)
+            result = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+            self.assertEqual(result["tasks"][0]["task_id"], other_plan["child_task_id"])
+            staged = stage_one(
+                self.db, self.workspace, self.fixtures, other_plan["child_task_id"])
+            self.assertEqual(staged["status"], "SANDBOX_VERIFIED", staged)
+            self.assertTrue(inspect_owner_local_outcome(
+                self.db, self.workspace, self.fixtures, other)["local_owner_outcome_verified"])
+
+        (self.fixtures / "reference_recent.csv").write_text(
+            "item,expected\\nQ,8\\n", encoding="utf-8")
+        (self.fixtures / "observed_recent.csv").write_text(
+            "item,expected\\nQ,6\\n", encoding="utf-8")
+        target = register_native_goal(
+            self.db, "Compare reference_recent.csv with observed_recent.csv "
+            "and report the differences.")
+        with patch("cognition_agent_os.procedure_evidence._MAX_ROOT_SCAN", 2):
+            evidence = inspect_cross_root_procedure_trials(
+                self.db, self.workspace, self.fixtures, target,
+                eligible_objectives=("compare_records",))
+        self.assertIn(
+            source, {trial["source_root_id"] for trial in evidence["items"]},
+            evidence)
+        self.assertTrue(all(item["objective"] == "compare_records"
+                            for item in evidence["items"]))
+        self.assertFalse(evidence["authorizes_action"])
+
     def test_cross_root_verified_procedure_trial_is_challenged_not_promoted(self):
         """A verified prior procedure is trialled on a distinct goal, not promoted."""
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
