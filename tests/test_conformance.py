@@ -123,6 +123,66 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(r["findings"][0]["disposition"],"PASS")
         self.assertEqual(self.task(tid)["state"],"NEEDS_REVIEW")
 
+    def test_unavailable_staged_source_is_inconclusive_without_quarantine(self):
+        """Real oversized source cannot crash conformance or prove tampering."""
+        tid = self.create_staged()
+        path = self.fx / "config.json"
+        original = path.read_bytes()
+        path.write_bytes(b"X" * (1024 * 1024 + 1))
+        preview = self.check()
+        self.assertEqual(preview["status"], "EVIDENCE_INSUFFICIENT", preview)
+        self.assertEqual(preview["findings"][0]["proof"],
+                         "STAGED_EVIDENCE_UNAVAILABLE", preview)
+        self.assertEqual(preview["findings"][0]["disposition"],
+                         "INSUFFICIENT_EVIDENCE", preview)
+        enforced = self.check(enforce=True)
+        self.assertEqual(enforced["status"], "EVIDENCE_INSUFFICIENT", enforced)
+        self.assertEqual(enforced["quarantined"], [])
+        self.assertEqual(self.task(tid)["state"], "SANDBOX_VERIFIED")
+        self.assertEqual(self.events(tid, "CONFORMANCE_VIOLATION"), [])
+        path.write_bytes(original)
+        self.assertEqual(self.check()["status"],
+                         "MECHANICAL_EVIDENCE_OBSERVED")
+
+    def test_unavailable_pending_source_is_not_confirmed_corruption(self):
+        """Missing fresh evidence cannot invalidate a legitimate candidate."""
+        path = self.fx / "config.json"
+        path.write_text("{}")
+        tid = self.seed()
+        self.assertEqual(run_once(self.dbpath, self.ws, self.fx)["status"],
+                         "NEEDS_REVIEW")
+        original = path.read_bytes()
+        path.write_bytes(b"X" * (1024 * 1024 + 1))
+        result = self.check(enforce=True)
+        self.assertEqual(result["status"], "EVIDENCE_INSUFFICIENT", result)
+        self.assertEqual(result["findings"][0]["proof"], "AUDIT_UNVERIFIABLE")
+        self.assertEqual(result["findings"][0]["disposition"],
+                         "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(result["quarantined"], [])
+        self.assertEqual(self.task(tid)["state"], "NEEDS_REVIEW")
+        path.write_bytes(original)
+        self.assertEqual(self.check()["status"],
+                         "MECHANICAL_EVIDENCE_OBSERVED")
+
+    def test_unavailable_verified_noop_source_does_not_crash_or_revoke(self):
+        """A previously valid no-op requires reattestation, not accusation."""
+        path = self.fx / "config.json"
+        path.write_text('{"owner":"ops"}')
+        tid = self.seed()
+        self.assertEqual(run_once(self.dbpath, self.ws, self.fx)["status"],
+                         "VERIFIED")
+        original = path.read_bytes()
+        path.write_bytes(b"X" * (1024 * 1024 + 1))
+        result = self.check(enforce=True)
+        self.assertEqual(result["status"], "EVIDENCE_INSUFFICIENT", result)
+        self.assertEqual(result["findings"][0]["proof"],
+                         "SUCCESS_EVIDENCE_UNAVAILABLE", result)
+        self.assertEqual(result["quarantined"], [])
+        self.assertEqual(self.task(tid)["state"], "VERIFIED")
+        path.write_bytes(original)
+        self.assertEqual(self.check()["status"],
+                         "MECHANICAL_EVIDENCE_OBSERVED")
+
     def test_bona_fide_sandbox_readback_is_not_business_success(self):
         tid=self.create_staged()
         r=self.check()
