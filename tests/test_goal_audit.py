@@ -65,7 +65,7 @@ class GoalAuditTests(unittest.TestCase):
         with patch("cognition_agent_os.goal_audit.safe_fixture",
                    side_effect=SourceUnavailable("Fixture too large")):
             result = self.audit(tid)
-        self.assertEqual(result["status"], "AUDIT_UNVERIFIABLE")
+        self.assertEqual(result["status"], "AUDIT_SOURCE_UNAVAILABLE")
         self.assertFalse(result["mechanical_audit"])
         self.assertFalse(result["semantic_goal_achieved"])
         self.assertFalse(result["authorizes_source_mutation"])
@@ -79,7 +79,7 @@ class GoalAuditTests(unittest.TestCase):
         self.assertEqual(run_once(self.db, self.out, self.fx)["status"], "NEEDS_REVIEW")
         src.write_bytes(b"X" * (1024 * 1024 + 1))
         result = self.audit(tid)
-        self.assertEqual(result["status"], "AUDIT_UNVERIFIABLE")
+        self.assertEqual(result["status"], "AUDIT_SOURCE_UNAVAILABLE")
         self.assertFalse(result["mechanical_audit"])
         self.assertFalse(result["semantic_goal_achieved"])
         self.assertFalse(result["authorizes_source_mutation"])
