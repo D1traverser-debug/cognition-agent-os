@@ -167,8 +167,9 @@ def _verify_staged(db, row: sqlite3.Row, workspace: Path, fixtures: Path) -> str
             receipt.get("effect_sha256")!=hashlib.sha256(staged).hexdigest()):
             return "FALSE_EFFECT_RECEIPT"
         return "MECHANICALLY_VALID"
-    except (OSError,ValueError,KeyError,TypeError,UnicodeError,sqlite3.Error,
-            SourceUnavailable):
+    except SourceUnavailable:
+        return "STAGED_SOURCE_UNAVAILABLE"
+    except (OSError,ValueError,KeyError,TypeError,UnicodeError,sqlite3.Error):
         return "STAGED_EVIDENCE_UNAVAILABLE"
 
 
@@ -392,7 +393,7 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
         if dependency is not None:
             proof=dependency
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
-              "STAGED_EVIDENCE_UNAVAILABLE","AUDIT_UNVERIFIABLE",
+              "STAGED_SOURCE_UNAVAILABLE","AUDIT_SOURCE_UNAVAILABLE",
               "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
               "DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE",
