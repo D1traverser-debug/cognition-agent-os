@@ -57,6 +57,28 @@ class GraphifyEvidenceTests(unittest.TestCase):
                     "cognition_agent_os." + module)
                 self.assertTrue(callable(getattr(implementation, symbol, None)))
 
+    def test_runtime_dispatch_reaches_all_registered_handlers_without_effect(self):
+        """Exercise the actual dispatcher; never grant or run business effects."""
+        from cognition_agent_os import capability_dispatch as dispatch
+        self.assertEqual(set(dispatch._HANDLERS),
+                         set(checker.EXPECTED_CAPABILITY_ROUTES))
+        context = dispatch.CapabilityContext(
+            db=None, task={"task_id": "test-only", "parent_task": None},
+            db_path=Path("not-connected.sqlite"), workspace=Path("no-output"),
+            fixtures=Path("no-sources"), planner_mode="deterministic",
+            local_model=None, fail_at=None)
+        for kind in checker.EXPECTED_CAPABILITY_ROUTES:
+            with self.subTest(kind=kind):
+                calls = []
+                def sentinel(observed, selected_kind=kind):
+                    calls.append(observed)
+                    return {"status": "SENTINEL_ROUTE", "selected": selected_kind}
+                with patch.dict(dispatch._HANDLERS, {kind: sentinel}):
+                    result = dispatch.dispatch_capability(context, {"kind": kind})
+                self.assertEqual(result, {"status": "SENTINEL_ROUTE",
+                                          "selected": kind})
+                self.assertEqual(calls, [context])
+
     def test_missing_shared_kernel_grant_gate_cannot_pass_old_path_checks(self):
         target=("src_cognition_agent_os_control_kernel_drive_active_controller",
                 "src_cognition_agent_os_ledger_current_guard")
