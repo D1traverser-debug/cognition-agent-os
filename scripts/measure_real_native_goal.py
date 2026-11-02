@@ -297,10 +297,26 @@ def score_trial_results(rows: list[dict]) -> dict:
     scores = {}
     paths = ("baseline", "native") + (("adaptive_host",) if rows and all("adaptive_host" in row for row in rows) else ())
     for name in paths:
+        # A missing independent owner oracle is not a model failure OR a
+        # safe refusal. Preserve those trials and traces as UNGRADABLE rather
+        # than silently changing the capability denominator. Older curated
+        # cases have an available local oracle; new semantic domains must
+        # explicitly declare when no truthful independent scorer exists.
+        if any(
+            type(row.get("independent_local_oracle_available", True)) is not bool
+            for row in rows
+        ):
+            raise ValueError("INVALID_INDEPENDENT_ORACLE_AVAILABILITY")
+        graded = [
+            row for row in rows
+            if row.get("independent_local_oracle_available", True)]
+        ungradable = [
+            row for row in rows
+            if not row.get("independent_local_oracle_available", True)]
         positives = [
-            row for row in rows if row["withheld_local_owner_required"]]
+            row for row in graded if row["withheld_local_owner_required"]]
         negatives = [
-            row for row in rows if not row["withheld_local_owner_required"]]
+            row for row in graded if not row["withheld_local_owner_required"]]
         def completed(row: dict) -> bool:
             trial = row[name]
             return (
@@ -324,6 +340,14 @@ def score_trial_results(rows: list[dict]) -> dict:
         scores[name] = {
             "owner_goals_required": len(positives),
             "owner_goals_completed": finished,
+            "ungradable_requested_outcomes": sum(
+                bool(row["withheld_local_owner_required"])
+                for row in ungradable),
+            "ungradable_case_ids": [row["case"] for row in ungradable],
+            "owner_claims_without_independent_oracle": sum(
+                row[name].get("whole_local_owner_verified") is True
+                for row in ungradable),
+            "independent_local_oracle_coverage": len(graded),
             "unsupported_or_unverified_positive": len(positives) - finished,
             "method_alignment_on_required_work": sum(
                 bool(row[name].get("method_alignment"))
