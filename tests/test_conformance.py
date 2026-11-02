@@ -183,6 +183,49 @@ class ConformanceTests(unittest.TestCase):
         self.assertEqual(self.check()["status"],
                          "MECHANICAL_EVIDENCE_OBSERVED")
 
+    def test_forged_matching_digest_does_not_hide_malformed_staged_receipt(self):
+        """Malformed receipt with a rewritten stored digest is NOT mere outage."""
+        import hashlib
+        tid = self.create_staged()
+        artifact = self.ws / "artifacts" / (tid + ".json")
+        tampered = b"{invalid-json"
+        artifact.write_bytes(tampered)
+        db = connect(self.dbpath)
+        try:
+            db.execute("UPDATE tasks SET artifact_hash=? WHERE task_id=?",
+                       (hashlib.sha256(tampered).hexdigest(), tid))
+            db.commit()
+        finally:
+            db.close()
+        result = self.check(enforce=True)
+        self.assertEqual(result["status"], "CONFORMANCE_VIOLATIONS", result)
+        self.assertEqual(result["findings"][0]["disposition"],
+                         "CONFIRMED_INCONSISTENCY", result)
+        self.assertEqual(self.task(tid)["state"], "UNKNOWN")
+
+    def test_forged_matching_digest_does_not_hide_malformed_pending_receipt(self):
+        """Audit parse failures must not be confused with source read failure."""
+        import hashlib
+        (self.fx / "config.json").write_text("{}")
+        tid = self.seed()
+        self.assertEqual(run_once(self.dbpath, self.ws, self.fx)["status"],
+                         "NEEDS_REVIEW")
+        artifact = self.ws / "artifacts" / (tid + ".json")
+        tampered = b"{invalid-json"
+        artifact.write_bytes(tampered)
+        db = connect(self.dbpath)
+        try:
+            db.execute("UPDATE tasks SET artifact_hash=? WHERE task_id=?",
+                       (hashlib.sha256(tampered).hexdigest(), tid))
+            db.commit()
+        finally:
+            db.close()
+        result = self.check(enforce=True)
+        self.assertEqual(result["status"], "CONFORMANCE_VIOLATIONS", result)
+        self.assertEqual(result["findings"][0]["disposition"],
+                         "CONFIRMED_INCONSISTENCY", result)
+        self.assertEqual(self.task(tid)["state"], "UNKNOWN")
+
     def test_bona_fide_sandbox_readback_is_not_business_success(self):
         tid=self.create_staged()
         r=self.check()
