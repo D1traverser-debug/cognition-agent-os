@@ -33,6 +33,30 @@ class GraphifyEvidenceTests(unittest.TestCase):
     def test_valid_extracted_control_edges_pass(self):
         self.assertEqual(self.result()["status"],"PASS")
 
+    def test_every_registered_capability_has_source_located_route_proof(self):
+        """Independent contract reports every adapter, not just goal_intent."""
+        result = self.result()
+        self.assertEqual(result["status"], "PASS", result)
+        routes = result["capability_routes"]
+        self.assertEqual(len(routes), 15, result)
+        self.assertEqual(
+            {x["task_kind"] for x in routes},
+            set(checker.EXPECTED_CAPABILITY_ROUTES))
+        self.assertTrue(all(
+            x["source_file"] == "src/cognition_agent_os/capability_dispatch.py"
+            and x["source_location"].startswith("L")
+            and x["confidence"] == "SOURCE_AST_STATIC_ROUTE_NOT_RUNTIME_PROOF"
+            for x in routes))
+
+    def test_real_registered_module_targets_import_without_executing_tasks(self):
+        """Static mapping is also backed by importable native code modules."""
+        import importlib
+        for kind, (_, module, symbol) in checker.EXPECTED_CAPABILITY_ROUTES.items():
+            with self.subTest(kind=kind):
+                implementation = importlib.import_module(
+                    "cognition_agent_os." + module)
+                self.assertTrue(callable(getattr(implementation, symbol, None)))
+
     def test_missing_shared_kernel_grant_gate_cannot_pass_old_path_checks(self):
         target=("src_cognition_agent_os_control_kernel_drive_active_controller",
                 "src_cognition_agent_os_ledger_current_guard")
