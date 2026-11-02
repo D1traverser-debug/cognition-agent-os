@@ -109,6 +109,11 @@ class NativeLocalModelLoop(unittest.TestCase):
                 model="installed:test")
         self.assertEqual(result["status"], "NATIVE_LOCAL_MODEL_ABSTAINED")
         self.assertEqual(observed, [True])
+        # Budget reductions must never mutate the complete projection that
+        # the admission path later re-reads and fingerprints.
+        self.assertEqual(len(large["items"]), 8)
+        self.assertEqual(len(large["failure_items"]), 8)
+        self.assertEqual(procedure_evidence_sha256(large), pinned)
         self.assertEqual(
             inspect_native_goal(self.db, self.workspace, self.fixtures,
                                 root)["decision_count"], 0)
