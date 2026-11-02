@@ -81,7 +81,7 @@ class NativeLocalModelLoop(unittest.TestCase):
         def model(method, path, payload, timeout):
             if method == "GET":
                 return {"models": [{"name": "installed:test"}]}
-            evidence = json.loads(payload["prompt"].rsplit("\\n\\n", 1)[1])
+            evidence = json.loads(payload["prompt"].rsplit("\n\n", 1)[1])
             preview = evidence["cross_root_procedure_trial_evidence"]
             self.assertEqual(
                 evidence["cross_root_procedure_evidence_sha256"], pinned)
