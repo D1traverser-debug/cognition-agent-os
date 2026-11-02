@@ -286,6 +286,42 @@ class GraphifyEvidenceTests(unittest.TestCase):
         self.graph["nodes"].append(dict(self.graph["nodes"][0]))
         self.assertIn("DUPLICATE_NODE",self.result()["errors"])
 
+    def test_module_import_cycle_is_rejected_even_when_function_graph_passes(self):
+        """Two newly linked modules must not become a dependency loop."""
+        for name in ("alpha", "beta"):
+            self.graph["nodes"].append({
+                "id": "src_cognition_agent_os_" + name,
+                "source_file": "src/cognition_agent_os/" + name + ".py"})
+        for source, target in (("alpha", "beta"), ("beta", "alpha")):
+            self.graph["links"].append({
+                "source": "src_cognition_agent_os_" + source,
+                "target": "src_cognition_agent_os_" + target,
+                "relation": "imports_from", "confidence": "EXTRACTED",
+                "source_file": "src/cognition_agent_os/" + source + ".py",
+                "source_location": "L1"})
+        result = self.result()
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertTrue(any(
+            x.startswith("MODULE_IMPORT_CYCLE:")
+            for x in result["errors"]), result)
+
+    def test_acyclic_module_imports_preserve_valid_routing(self):
+        """A→B→C without a back edge is not incorrectly called a cycle."""
+        for name in ("alpha", "beta", "gamma"):
+            self.graph["nodes"].append({
+                "id": "src_cognition_agent_os_" + name,
+                "source_file": "src/cognition_agent_os/" + name + ".py"})
+        for source, target in (("alpha", "beta"), ("beta", "gamma")):
+            self.graph["links"].append({
+                "source": "src_cognition_agent_os_" + source,
+                "target": "src_cognition_agent_os_" + target,
+                "relation": "imports_from", "confidence": "EXTRACTED",
+                "source_file": "src/cognition_agent_os/" + source + ".py",
+                "source_location": "L1"})
+        result = self.result()
+        self.assertEqual(result["status"], "PASS", result)
+        self.assertEqual(result["module_import_cycle_count"], 0)
+
     def test_dangling_internal_edge_is_rejected(self):
         self.graph["links"].append({"source":"src_nonexistent_node",
                                      "target":"src_cognition_agent_os_host_run_tick",
