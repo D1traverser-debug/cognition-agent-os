@@ -137,6 +137,15 @@ def inspect_cross_root_procedure_trials(
             # verified trials when many newer goals accumulate.
             "AND task_id IN (SELECT task_id FROM events "
             "WHERE kind='NATIVE_DECISION_ADMITTED') "
+            # Admission is not an observation. A queued/running child has
+            # no independently checkable method outcome, and must not
+            # displace earlier completed evidence from this bounded scan.
+            # These are the existing completed local evidence/failure states;
+            # the per-root and independent owner audit below still decides
+            # whether any such child is actually trustworthy or relevant.
+            "AND task_id IN (SELECT parent_task FROM tasks "
+            "WHERE parent_task IS NOT NULL AND "
+            "state IN ('NEEDS_REVIEW','SANDBOX_VERIFIED','UNKNOWN')) "
             "ORDER BY created_at DESC,task_id DESC LIMIT ?",
             (authority["goal_rev"], authority["grant_rev"], root_task_id,
              _MAX_ROOT_SCAN + 1)).fetchall()
