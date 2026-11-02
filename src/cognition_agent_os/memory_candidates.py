@@ -15,7 +15,7 @@ import sqlite3
 import uuid
 
 from .ledger import connect, require_initialized_ledger, readonly_snapshot
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 
 _ID = re.compile(r"[0-9a-f]{32}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
@@ -307,7 +307,7 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
                     raw = safe_fixture(source_root, identity[0])
                     source_state[identity] = (
                         raw.decode("utf-8") if _sha(raw) == identity[1] else None)
-                except (OSError, ValueError, UnicodeDecodeError):
+                except (OSError, ValueError, UnicodeDecodeError, SourceUnavailable):
                     source_state[identity] = None
         statuses = {}
         for key, row in all_rows.items():
