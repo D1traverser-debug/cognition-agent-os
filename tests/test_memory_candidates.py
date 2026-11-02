@@ -111,6 +111,19 @@ class CandidateMemoryTests(unittest.TestCase):
                 self.assertIsNone(result["items"][0]["interpretation"])
                 self.assertFalse(result["items"][0]["authorizes_action"])
 
+    def test_oversized_source_after_registration_invalidates_memory(self):
+        """Exercise the real safe_fixture bounded-read error without mocks."""
+        entry = self.add()
+        self.note.write_bytes(b"X" * (1024 * 1024 + 1))
+        result = self.snapshot()
+        self.assertEqual(result["status"], "READ_ONLY_CANDIDATES")
+        item = next(row for row in result["items"]
+                    if row["memory_id"] == entry["memory_id"])
+        self.assertEqual(item["status"], "SOURCE_CHANGED_OR_UNAVAILABLE")
+        self.assertIsNone(item["quote"])
+        self.assertIsNone(item["interpretation"])
+        self.assertFalse(item["authorizes_action"])
+
     def test_semantic_source_drift_invalidates_dependent_method(self):
         prior = self.add()
         child = self.add(kind="procedural", quote="Fact beta.",
