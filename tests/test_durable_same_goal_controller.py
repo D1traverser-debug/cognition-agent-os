@@ -294,6 +294,30 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertEqual(len(matches),1,scan)
         self.assertEqual(matches[0]["proof"],"MECHANICALLY_VALID",matches)
 
+    def test_controlled_candidate_source_unavailable_remains_unproven(self):
+        """Direct controller oracle cannot crash or falsely quarantine."""
+        root = self.register(json_conflict=False)
+        self.tick(); self.tick()
+        self.assertEqual(self.root_state(root)[0], "CONTROL_CANDIDATE_MATCHED")
+        path = self.fx / "first.json"
+        original = path.read_bytes()
+        path.write_bytes(b"X" * (1024 * 1024 + 1))
+        audit = audit_controlled_candidate(self.db, self.work, self.fx, root)
+        self.assertEqual(audit["status"], "UNVERIFIABLE", audit)
+        self.assertEqual(audit["reason"], "SOURCE_UNAVAILABLE", audit)
+        self.assertFalse(audit["mechanical_audit"])
+        self.assertFalse(audit["business_outcome_verified"])
+        self.assertFalse(audit["authorizes_mutation"])
+        scan = inspect_conformance(self.db, self.work, self.fx,
+                                   enforce=True, max_cases=64)
+        self.assertEqual(scan["status"], "EVIDENCE_INSUFFICIENT", scan)
+        self.assertEqual(scan["quarantined"], [], scan)
+        self.assertEqual(self.root_state(root)[0], "CONTROL_CANDIDATE_MATCHED")
+        path.write_bytes(original)
+        recovered = audit_controlled_candidate(self.db, self.work, self.fx, root)
+        self.assertEqual(recovered["status"], "CONTROL_LOCAL_RECEIPT_VERIFIED",
+                         recovered)
+
     def test_forged_controller_receipt_detected_and_quarantined(self):
         root=self.register()
         self.tick();self.tick();self.tick()
