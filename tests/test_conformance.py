@@ -132,7 +132,7 @@ class ConformanceTests(unittest.TestCase):
         preview = self.check()
         self.assertEqual(preview["status"], "EVIDENCE_INSUFFICIENT", preview)
         self.assertEqual(preview["findings"][0]["proof"],
-                         "STAGED_EVIDENCE_UNAVAILABLE", preview)
+                         "STAGED_SOURCE_UNAVAILABLE", preview)
         self.assertEqual(preview["findings"][0]["disposition"],
                          "INSUFFICIENT_EVIDENCE", preview)
         enforced = self.check(enforce=True)
@@ -155,7 +155,7 @@ class ConformanceTests(unittest.TestCase):
         path.write_bytes(b"X" * (1024 * 1024 + 1))
         result = self.check(enforce=True)
         self.assertEqual(result["status"], "EVIDENCE_INSUFFICIENT", result)
-        self.assertEqual(result["findings"][0]["proof"], "AUDIT_UNVERIFIABLE")
+        self.assertEqual(result["findings"][0]["proof"], "AUDIT_SOURCE_UNAVAILABLE")
         self.assertEqual(result["findings"][0]["disposition"],
                          "INSUFFICIENT_EVIDENCE")
         self.assertEqual(result["quarantined"], [])
