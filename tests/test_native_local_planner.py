@@ -1012,6 +1012,53 @@ class NativeLocalModelLoop(unittest.TestCase):
                             for item in evidence["items"]))
         self.assertFalse(evidence["authorizes_action"])
 
+    def test_truncated_stale_history_is_not_claimed_to_be_no_experience(self):
+        """Incomplete history is UNKNOWN, not proof that no verified trial exists."""
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.procedure_evidence import inspect_cross_root_procedure_trials
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+
+        source = register_native_goal(
+            self.db, "Compare reference.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED", first)
+        result = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(result["tasks"][0]["task_id"], first["child_task_id"])
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, source)["local_owner_outcome_verified"])
+
+        for name, value in (("old_stale_ref.csv", "9"), ("old_stale_obs.csv", "7")):
+            (self.fixtures / name).write_text(
+                "id,value" + chr(10) + "A," + value + chr(10), encoding="utf-8")
+        stale = register_native_goal(
+            self.db, "Compare old_stale_ref.csv with old_stale_obs.csv "
+            "and report the differences.")
+        admitted = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, stale, model=None)
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED", admitted)
+        done = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(done["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, stale)["local_owner_outcome_verified"])
+
+        # Only the newer root's required input becomes stale. The older CSV
+        # result is still independently verifiable, but below this page.
+        (self.fixtures / "old_stale_obs.csv").write_text(
+            "id,value" + chr(10) + "A,8" + chr(10), encoding="utf-8")
+        target = register_native_goal(
+            self.db, "Compare reference.csv with observed.csv and "
+            "report the differences.")
+        with patch("cognition_agent_os.procedure_evidence._MAX_ROOT_SCAN", 1):
+            evidence = inspect_cross_root_procedure_trials(
+                self.db, self.workspace, self.fixtures, target,
+                eligible_objectives=("compare_records",))
+        self.assertTrue(evidence["source_root_scan_truncated"], evidence)
+        self.assertEqual(evidence["items"], [])
+        self.assertEqual(evidence["status"],
+                         "PROCEDURE_TRIAL_SEARCH_INCOMPLETE", evidence)
+        self.assertFalse(evidence["authorizes_action"])
+
     def test_cross_root_verified_procedure_trial_is_challenged_not_promoted(self):
         """A verified prior procedure is trialled on a distinct goal, not promoted."""
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
