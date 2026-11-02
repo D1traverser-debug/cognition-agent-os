@@ -215,6 +215,30 @@ class CandidateMemoryTests(unittest.TestCase):
             self.add(request_id=req, interpretation="A modified claim")
         self.assertEqual(len(self.snapshot()["items"]), 1)
 
+    def test_revocation_during_source_read_hides_memory_words(self):
+        """Grant revocation during external I/O must fence disclosure."""
+        entry = self.add()
+        from cognition_agent_os.source import safe_fixture as original_read
+        revoked = []
+
+        def revoke_after_read(root, relative):
+            raw = original_read(root, relative)
+            if not revoked:
+                with closing(connect(self.db)) as db:
+                    alter_authority(db, revoke=True)
+                revoked.append(True)
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=revoke_after_read):
+            result = self.snapshot()
+        self.assertTrue(revoked)
+        item = next(x for x in result["items"] if x["memory_id"] == entry["memory_id"])
+        self.assertEqual(item["status"], "GRANT_OR_GOAL_REVISION_STALE", result)
+        self.assertIsNone(item["quote"])
+        self.assertIsNone(item["interpretation"])
+        self.assertFalse(item["authorizes_action"])
+
     def test_revoke_blocks_candidate_write_but_read_still_works(self):
         self.add()
         with closing(connect(self.db)) as db:
