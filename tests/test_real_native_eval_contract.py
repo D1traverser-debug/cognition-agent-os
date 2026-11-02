@@ -177,6 +177,34 @@ class NativeRealModelEvalContract(unittest.TestCase):
             x["whole_local_owner_verified"] is False
             for x in report["cases"][2:]), report)
 
+    def test_offline_oracle_scope_artifact_is_reparseable_json_bytes(self):
+        """Read the actual disk receipt; uploaded garbage must fail in CI."""
+        import contextlib
+        import io
+        import json
+        import os
+        from unittest.mock import patch
+        bench = load_benchmark()
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "scope.json"
+            with patch.dict(os.environ, {
+                    "COGNITION_EVAL_ORACLE_SCOPE_ONLY": "1"}):
+                with patch.object(bench, "OUTPUT", output):
+                    with patch.object(
+                        bench.local_model, "_request",
+                        side_effect=AssertionError("No model permitted")
+                    ) as model:
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            bench.main()
+                    model.assert_not_called()
+            payload = output.read_bytes()
+            self.assertTrue(payload.endswith(b"\\n"))
+            report = json.loads(payload.decode("utf-8"))
+            self.assertEqual(report["total_probes"], 5)
+            self.assertEqual(report["ungradable_probes"], 3)
+            self.assertTrue(all(c["source_preserved"]
+                                for c in report["cases"]))
+
     def test_real_benchmark_includes_actual_host_adaptive_entry(self):
         """The model-only planner is a diagnostic arm, not the real Host path."""
         bench = load_benchmark()
