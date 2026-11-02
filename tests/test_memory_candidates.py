@@ -88,6 +88,29 @@ class CandidateMemoryTests(unittest.TestCase):
         with self.assertRaisesRegex(MemoryContractError, "QUOTE_NOT_IN_PINNED_SOURCE"):
             self.add(quote="Owner approved automatic financial transfers.")
 
+    def test_read_only_memory_fails_closed_when_safe_source_unavailable(self):
+        """Bounded source failures invalidate candidates, not the entire read."""
+        from cognition_agent_os.source import SourceUnavailable
+
+        entry = self.add()
+        for reason in ("Fixture too large", "Race-safe fixture opening unsupported"):
+            with self.subTest(reason=reason):
+                with patch(
+                    "cognition_agent_os.memory_candidates.safe_fixture",
+                    side_effect=SourceUnavailable(reason),
+                ):
+                    result = self.snapshot()
+                self.assertEqual(result["status"], "READ_ONLY_CANDIDATES")
+                self.assertFalse(result["any_semantic_truth_verified"])
+                self.assertEqual(len(result["items"]), 1)
+                self.assertEqual(result["items"][0]["memory_id"], entry["memory_id"])
+                self.assertEqual(
+                    result["items"][0]["status"], "SOURCE_CHANGED_OR_UNAVAILABLE"
+                )
+                self.assertIsNone(result["items"][0]["quote"])
+                self.assertIsNone(result["items"][0]["interpretation"])
+                self.assertFalse(result["items"][0]["authorizes_action"])
+
     def test_semantic_source_drift_invalidates_dependent_method(self):
         prior = self.add()
         child = self.add(kind="procedural", quote="Fact beta.",
