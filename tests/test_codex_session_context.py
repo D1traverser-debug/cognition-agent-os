@@ -798,7 +798,9 @@ class CodexSessionContext(unittest.TestCase):
             command = ["/bin/sh", "-c", handler["command"]]
         call = subprocess.run(
             command, cwd=nested, input=payload, text=True,
-            capture_output=True, env=env, timeout=8)
+            capture_output=True, env=env,
+            # Functional contract, not a Windows shell cold-start latency SLA.
+            timeout=30 if os.name == "nt" else 8)
         self.assertEqual(call.returncode, 0, call.stderr)
         wire = json.loads(call.stdout)
         self.assertEqual(wire["hookSpecificOutput"]["hookEventName"],
@@ -834,7 +836,8 @@ class CodexSessionContext(unittest.TestCase):
             command = ["/bin/sh", "-c", handler["command"]]
         result = subprocess.run(
             command, cwd=ROOT / "src", input=json.dumps(event), text=True,
-            capture_output=True, timeout=8)
+            capture_output=True,
+            timeout=30 if os.name == "nt" else 8)
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads(result.stdout)
         decision = receipt["hookSpecificOutput"]
