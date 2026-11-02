@@ -294,7 +294,8 @@ class NativeRealModelEvalContract(unittest.TestCase):
             rows.append(row)
         scored = bench.score_trial_results(rows)
         self.assertEqual(scored["baseline"]["model_generation_calls"], 0)
-        self.assertEqual(scored["native"]["model_generation_calls"], 8)
+        self.assertEqual(scored["native"]["model_generation_calls"],
+                         2 * len(bench.CASES))
         self.assertEqual(scored["adaptive_host"]["model_generation_calls"], 0)
         self.assertEqual(scored["adaptive_host"]["owner_goals_completed"], 0)
 
@@ -360,8 +361,11 @@ class NativeRealModelEvalContract(unittest.TestCase):
         for name in ("baseline", "native"):
             score = scores[name]
             self.assertEqual(score["owner_goals_completed"], 0)
-            self.assertEqual(score["owner_goals_required"], 2)
-            self.assertEqual(score["unsupported_or_unverified_positive"], 2)
+            positive_count = sum(
+                x["must_complete_local_owner"] for x in bench.CASES)
+            self.assertEqual(score["owner_goals_required"], positive_count)
+            self.assertEqual(score["unsupported_or_unverified_positive"],
+                             positive_count)
             self.assertEqual(score["wrong_owner_success_claims"], 0)
             self.assertEqual(score["explicit_safe_refusals"], 0)
             self.assertNotIn("exact_owner_oracle_agreement", score)
@@ -402,7 +406,14 @@ class NativeRealModelEvalContract(unittest.TestCase):
         labeled = [
             case for case in bench.CASES
             if case["must_complete_local_owner"]]
-        self.assertEqual(len(labeled), 2)
+        self.assertGreaterEqual(len(labeled), 2)
+        from cognition_agent_os.owner_postcondition import (
+            _explicit_owner_local_contract)
+        for candidate in labeled:
+            self.assertIsNotNone(
+                _explicit_owner_local_contract(candidate["goal"]), candidate)
+            self.assertIn(candidate["target"],
+                          ("compare_records", "ensure_structure"))
         structure = next(
             c for c in labeled if c["target"] == "ensure_structure")
         from cognition_agent_os.owner_postcondition import _full_owner_scope_is_supported
