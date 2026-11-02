@@ -152,6 +152,31 @@ class NativeRealModelEvalContract(unittest.TestCase):
         self.assertEqual(score["owner_goals_completed"], 0)
         self.assertEqual(score["owner_claims_without_independent_oracle"], 1)
 
+    def test_real_host_oracle_coverage_probe_shows_unknowns_without_model(self):
+        """Actual SQLite/Host/effect boundary across five predeclared goals."""
+        from unittest.mock import patch
+        bench = load_benchmark()
+        with patch.object(
+            bench.local_model, "_request",
+            side_effect=AssertionError("MODEL_MUST_NOT_RUN")
+        ) as model:
+            report = bench.measure_offline_owner_oracle_scope()
+        model.assert_not_called()
+        self.assertEqual(report["status"],
+                         "OFFLINE_OWNER_ORACLE_SCOPE_DIAGNOSTIC")
+        self.assertEqual(report["total_probes"], 5)
+        self.assertEqual(report["oracle_available_probes"], 2)
+        self.assertEqual(report["ungradable_probes"], 3)
+        self.assertTrue(report["source_isolated"], report)
+        self.assertFalse(report["real_model_capability_tested"])
+        self.assertFalse(report["whole_product_ready"])
+        self.assertTrue(all(
+            x["evidence_status"] == "OWNER_ORACLE_NOT_IMPLEMENTED"
+            for x in report["cases"][2:]), report)
+        self.assertTrue(all(
+            x["whole_local_owner_verified"] is False
+            for x in report["cases"][2:]), report)
+
     def test_real_benchmark_includes_actual_host_adaptive_entry(self):
         """The model-only planner is a diagnostic arm, not the real Host path."""
         bench = load_benchmark()
