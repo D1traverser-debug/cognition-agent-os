@@ -15,7 +15,7 @@ import re
 import sqlite3
 from contextlib import closing
 
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 from .ledger import lineage_guard, readonly_snapshot
 
 TASK_ID = re.compile(r"[a-f0-9]{32}\Z")
@@ -141,5 +141,5 @@ def audit_goal(db_path: Path, workspace: Path, fixture_root: Path, task_id: str)
                 "observed_artifact_sha256":observed_artifact_sha256,
                 "source_sha256":doc["source_sha256"],
                 "note":"Proposal preservation verified, not applied; no semantic approval"}
-    except (ValueError,TypeError,KeyError,UnicodeError,sqlite3.Error,OSError):
+    except (ValueError,TypeError,KeyError,UnicodeError,sqlite3.Error,OSError,SourceUnavailable):
         return _reject("AUDIT_UNVERIFIABLE",task_id, observed_artifact_sha256)
