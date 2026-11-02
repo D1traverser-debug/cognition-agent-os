@@ -123,6 +123,15 @@ def inspect_cross_root_procedure_trials(
                (authority["goal_rev"], authority["grant_rev"])):
             return {"status": "PROCEDURE_TRIAL_CURRENT_GRANT_UNAVAILABLE",
                     "items": [], "authorizes_action": False}
+        # Selection before the finite scan budget is a *retrieval hint*,
+        # never trusted evidence or authorization. Screening by registration,
+        # action, or completed child alone can starve an older relevant
+        # verified procedure behind newer irrelevant successes. Scope the
+        # window to completed observations of an eligible objective first;
+        # inspect_native_goal and the independent owner oracle below still
+        # reject forged, stale, or inapplicable records.
+        relevant_objectives = tuple(sorted(allowed))
+        placeholders = ",".join("?" for _ in relevant_objectives)
         rows = db.execute(
             "SELECT task_id,created_at FROM tasks "
             "WHERE parent_task IS NULL AND state='DECOMPOSED' "
@@ -131,24 +140,21 @@ def inspect_cross_root_procedure_trials(
             "AND json_extract(source_spec,'$.kind')='native_goal' "
             "AND task_id IN (SELECT task_id FROM events "
             "WHERE kind='NATIVE_GOAL_REGISTERED') "
-            # A newly registered but never attempted goal has no reusable
-            # procedure observation. Do not spend the finite scan window on
-            # such idle roots and silently starve older, independently
-            # verified trials when many newer goals accumulate.
-            "AND task_id IN (SELECT task_id FROM events "
-            "WHERE kind='NATIVE_DECISION_ADMITTED') "
-            # Admission is not an observation. A queued/running child has
-            # no independently checkable method outcome, and must not
-            # displace earlier completed evidence from this bounded scan.
-            # These are the existing completed local evidence/failure states;
-            # the per-root and independent owner audit below still decides
-            # whether any such child is actually trustworthy or relevant.
-            "AND task_id IN (SELECT parent_task FROM tasks "
-            "WHERE parent_task IS NOT NULL AND "
-            "state IN ('NEEDS_REVIEW','SANDBOX_VERIFIED','UNKNOWN')) "
+            "AND task_id IN (SELECT e.task_id FROM events AS e "
+            "JOIN tasks AS child ON child.task_id = "
+            "(CASE WHEN json_valid(e.details) "
+            "THEN json_extract(e.details,'$.child_task_id') END) "
+            "WHERE e.kind='NATIVE_DECISION_ADMITTED' "
+            "AND (CASE WHEN json_valid(e.details) "
+            "THEN json_extract(e.details,"
+            "'$.proposal.selected_intent.objective') END) IN ("
+            + placeholders + ") "
+            "AND child.parent_task=e.task_id "
+            "AND child.state IN "
+            "('NEEDS_REVIEW','SANDBOX_VERIFIED','UNKNOWN')) "
             "ORDER BY created_at DESC,task_id DESC LIMIT ?",
             (authority["goal_rev"], authority["grant_rev"], root_task_id,
-             _MAX_ROOT_SCAN + 1)).fetchall()
+             *relevant_objectives, _MAX_ROOT_SCAN + 1)).fetchall()
         candidate_ids = [row["task_id"] for row in rows[:_MAX_ROOT_SCAN]]
         scan_truncated = len(rows) > _MAX_ROOT_SCAN
         starting_authority = (
