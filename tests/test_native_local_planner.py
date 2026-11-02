@@ -44,6 +44,75 @@ class NativeLocalModelLoop(unittest.TestCase):
             "changing any original files or production access."
         )
 
+    def test_cross_root_preview_budget_keeps_learning_non_authorizing(self):
+        """Many verified/counterexample trials must not starve a new model turn.
+
+        This is a prompt-budget/authorization contract with a mocked transport,
+        not proof of model reasoning or learned cross-domain methodology.
+        """
+        from cognition_agent_os.native_local_planner import (
+            propose_native_local, _MAX_PROMPT)
+        from cognition_agent_os.procedure_evidence import (
+            procedure_evidence_sha256)
+
+        root = register_native_goal(self.db, self.goal)
+        large = {
+            "status": "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE",
+            "items": [
+                {"source_root_id": f"{i + 1:032x}",
+                 "procedure_fingerprint": "a" * 64,
+                 "outcome_scope": "LOCAL_ONLY",
+                 "untrusted_extra_context": "positive-" + "p" * 950,
+                 "authorizes_action": False}
+                for i in range(8)],
+            "failure_items": [
+                {"source_root_id": f"{i + 17:032x}",
+                 "worker_error_code": "JOIN_KEY_AMBIGUOUS",
+                 "prior_decision_context": {
+                     "challenge": "negative-" + "q" * 950},
+                 "root_cause_semantically_verified": False,
+                 "authorizes_action": False}
+                for i in range(8)],
+            "authorizes_action": False,
+        }
+        pinned = procedure_evidence_sha256(large)
+        observed = []
+
+        def model(method, path, payload, timeout):
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            evidence = json.loads(payload["prompt"].rsplit("\\n\\n", 1)[1])
+            preview = evidence["cross_root_procedure_trial_evidence"]
+            self.assertEqual(
+                evidence["cross_root_procedure_evidence_sha256"], pinned)
+            self.assertLessEqual(
+                len(json.dumps(evidence, ensure_ascii=False, sort_keys=True)),
+                _MAX_PROMPT)
+            self.assertTrue(evidence["cross_root_procedure_preview_truncated"])
+            self.assertEqual(evidence["cross_root_procedure_positive_total"], 8)
+            self.assertEqual(evidence["cross_root_procedure_failure_total"], 8)
+            self.assertTrue(preview["items"])
+            self.assertTrue(preview["failure_items"])
+            self.assertLess(
+                len(preview["items"]) + len(preview["failure_items"]), 16)
+            self.assertFalse(preview["authorizes_action"])
+            observed.append(True)
+            return {"done": True, "response": json.dumps({"abstain": True})}
+
+        with patch(
+            "cognition_agent_os.procedure_evidence."
+            "inspect_cross_root_procedure_trials", return_value=large
+        ), patch("cognition_agent_os.local_model._request",
+                 side_effect=model):
+            result = propose_native_local(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test")
+        self.assertEqual(result["status"], "NATIVE_LOCAL_MODEL_ABSTAINED")
+        self.assertEqual(observed, [True])
+        self.assertEqual(
+            inspect_native_goal(self.db, self.workspace, self.fixtures,
+                                root)["decision_count"], 0)
+
     def test_response_schema_requires_bounded_unverified_decision_layer(self):
         schema = _native_response_schema(
             [{"objective": "compare_records"}],
