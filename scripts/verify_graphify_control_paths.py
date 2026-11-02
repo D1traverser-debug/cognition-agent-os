@@ -78,6 +78,51 @@ def check(graph_path: Path, repo: Path) -> dict:
            if e.get("relation")=="calls" and e.get("confidence")=="EXTRACTED"}
     sha=subprocess.check_output(["git","rev-parse","HEAD"],cwd=repo,text=True).strip()
     errors=[]
+    # Graph reachability and module import layering are different properties.
+    # This catches NEW extracted Python module import cycles, while preserving
+    # legitimate recursive cognitive loops at the function/control level.
+    # An extracted AST graph is a bounded structural observation, not proof
+    # that dynamically imported modules or external plugins are cycle-free.
+    module_nodes = {}
+    for node in g["nodes"]:
+        source_file = node.get("source_file")
+        if (isinstance(source_file, str)
+            and source_file.startswith("src/cognition_agent_os/")
+            and source_file.endswith(".py")):
+            stem = source_file.rsplit("/", 1)[-1][:-3].strip("_")
+            if node.get("id") == "src_cognition_agent_os_" + stem:
+                module_nodes[node["id"]] = source_file
+    module_deps = {key: set() for key in module_nodes}
+    for edge in g["links"]:
+        if (edge.get("relation") == "imports_from"
+            and edge.get("confidence") == "EXTRACTED"
+            and edge.get("source") in module_nodes
+            and edge.get("target") in module_nodes):
+            module_deps[edge["source"]].add(edge["target"])
+    # Deterministic DFS with an explicit active stack identifies an actual
+    # cycle, not a module merely downstream of some unrelated cycle.
+    module_colors = {}
+    module_stack = []
+    import_cycles = []
+    def examine_module(module):
+        module_colors[module] = 1
+        module_stack.append(module)
+        for child in sorted(module_deps[module]):
+            if module_colors.get(child) == 1:
+                idx = module_stack.index(child)
+                import_cycles.append(module_stack[idx:] + [child])
+            elif module_colors.get(child, 0) == 0:
+                examine_module(child)
+        module_stack.pop()
+        module_colors[module] = 2
+    for module in sorted(module_deps):
+        if module_colors.get(module, 0) == 0:
+            examine_module(module)
+    if import_cycles:
+        for cycle in import_cycles[:10]:
+            errors.append("MODULE_IMPORT_CYCLE:" + "->".join(
+                module.removeprefix("src_cognition_agent_os_")
+                for module in cycle))
     if g.get("built_at_commit")!=sha:
         errors.append("STALE_GRAPH_COMMIT")
     if len(nodes)!=len(g["nodes"]):
@@ -353,7 +398,10 @@ def check(graph_path: Path, repo: Path) -> dict:
             })
         except (OSError, ValueError, SyntaxError, TypeError):
             errors.append(failure)
-    return {"status":"PASS" if not errors else "FAIL",
+    return {"module_count":len(module_nodes),
+            "module_import_edges":sum(len(v) for v in module_deps.values()),
+            "module_import_cycle_count":len(import_cycles),
+            "status":"PASS" if not errors else "FAIL",
             "commit":sha,"nodes":len(nodes),"edges":len(g["links"]),
             "inferred_edges":sum(e.get("confidence")=="INFERRED" for e in g["links"]),
             "control_edges":evidence,
