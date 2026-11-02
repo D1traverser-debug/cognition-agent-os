@@ -55,6 +55,22 @@ class GoalAuditTests(unittest.TestCase):
         path.write_bytes(path.read_bytes()+b"tamper")
         self.assertEqual(self.audit(tid)["status"],"ARTIFACT_HASH_MISMATCH")
 
+    def test_source_unavailable_during_independent_audit_fails_closed(self):
+        """SourceUnavailable must become an unverified audit, never a crash."""
+        from cognition_agent_os.source import SourceUnavailable
+
+        (self.fx/"config.json").write_text("{}")
+        tid = self.seed("json_keys", "config.json", {"owner": "ops"})
+        self.assertEqual(run_once(self.db, self.out, self.fx)["status"], "NEEDS_REVIEW")
+        with patch("cognition_agent_os.goal_audit.safe_fixture",
+                   side_effect=SourceUnavailable("Fixture too large")):
+            result = self.audit(tid)
+        self.assertEqual(result["status"], "AUDIT_UNVERIFIABLE")
+        self.assertFalse(result["mechanical_audit"])
+        self.assertFalse(result["semantic_goal_achieved"])
+        self.assertFalse(result["authorizes_source_mutation"])
+        self.assertIsNotNone(result["observed_artifact_sha256"])
+
     def test_post_proposal_source_change_rejected(self):
         src=self.fx/"config.json";src.write_text("{}")
         tid=self.seed("json_keys","config.json",{"owner":"ops"})
