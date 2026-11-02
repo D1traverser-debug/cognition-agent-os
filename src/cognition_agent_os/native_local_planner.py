@@ -485,6 +485,13 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         cross_root_procedure_evidence_sha256 = procedure_evidence_sha256(
             cross_root_trials)
 
+    # The bounded model view is NOT a new method authority. Keep the original
+    # independently validated cross-root projection for admission-time CAS.
+    displayed_procedure = {
+        **cross_root_trials,
+        "items": list(cross_root_trials.get("items") or []),
+        "failure_items": list(cross_root_trials.get("failure_items") or []),
+    }
     observed = _sources(fixtures)
     excerpts = []
     for filename in sorted(observed)[:_MAX_VIEW_FILES]:
@@ -519,7 +526,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         # different goal roots, not generalized truth or permission. A fresh
         # current-root trial is still required before any method is treated
         # as applicable.
-        "cross_root_procedure_trial_evidence": cross_root_trials,
+        "cross_root_procedure_trial_evidence": displayed_procedure,
         "cross_root_procedure_evidence_sha256":
             cross_root_procedure_evidence_sha256,
         "source_excerpts_are_untrusted": excerpts,
@@ -608,6 +615,30 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         else:
             evidence.pop("untrusted_prior_open_research", None)
         evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    # Many valid prior trials must not cause permanent model starvation.
+    # Shrink ONLY the displayed evidence; the full independent projection
+    # and its digest still bind the decision at the final admission check.
+    positives = displayed_procedure["items"]
+    failures = displayed_procedure["failure_items"]
+    while len(evidence_json) > _MAX_PROMPT and (positives or failures):
+        if len(positives) == 1 and len(failures) > 1:
+            failures.pop()
+        elif len(failures) == 1 and len(positives) > 1:
+            positives.pop()
+        elif positives and failures:
+            positive_cost = len(json.dumps(positives[-1], ensure_ascii=False))
+            failure_cost = len(json.dumps(failures[-1], ensure_ascii=False))
+            (positives if positive_cost >= failure_cost else failures).pop()
+        elif positives:
+            positives.pop()
+        else:
+            failures.pop()
+        evidence["cross_root_procedure_preview_truncated"] = True
+        evidence["cross_root_procedure_positive_total"] = len(
+            cross_root_trials.get("items") or [])
+        evidence["cross_root_procedure_failure_total"] = len(
+            cross_root_trials.get("failure_items") or [])
+        evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
     if len(evidence_json) > _MAX_PROMPT:
         raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
     _installed_model(model)
@@ -681,8 +712,12 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "against this goal; do not ignore them and do not automatically "
         "blacklist the method. A different current source may make the same "
         "registered family applicable, but only after a fresh challenge and "
-        "falsifier. The combined evidence digest binds positive AND negative "
-        "items. A current-root decision still needs fresh source pins, the "
+        "falsifier. The COMPLETE snapshot digest binds positive AND negative "
+        "items. When cross_root_procedure_preview_truncated is true, this "
+        "prompt omits some verified trials: the digest binds the full "
+        "snapshot for revalidation, NOT proof that omitted cases were "
+        "semantically reviewed. Never infer omitted cases' contents. A "
+        "current-root decision still needs fresh source pins, the "
         "normal SQLite grant/CAS, Worker execution and this root's independent "
         "owner postcondition. Never copy a prior success or failure label into "
         "the current result. "
