@@ -433,6 +433,11 @@ def inspect_cross_root_procedure_trials(
             "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE" if fresh_items else
             "CROSS_ROOT_PROCEDURE_FAILURE_EVIDENCE_AVAILABLE"
             if fresh_failure_items else
+            # An exhausted candidate page is not a proof that all prior
+            # relevant trials were exhausted. Keep the original owner goal
+            # and unseen older roots explicitly OPEN for further research.
+            "PROCEDURE_TRIAL_SEARCH_INCOMPLETE"
+            if scan_truncated else
             "NO_VERIFIED_CROSS_ROOT_PROCEDURE_TRIALS"),
         "items": fresh_items,
         "failure_items": fresh_failure_items,
