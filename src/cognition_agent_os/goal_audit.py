@@ -141,5 +141,7 @@ def audit_goal(db_path: Path, workspace: Path, fixture_root: Path, task_id: str)
                 "observed_artifact_sha256":observed_artifact_sha256,
                 "source_sha256":doc["source_sha256"],
                 "note":"Proposal preservation verified, not applied; no semantic approval"}
-    except (ValueError,TypeError,KeyError,UnicodeError,sqlite3.Error,OSError,SourceUnavailable):
+    except SourceUnavailable:
+        return _reject("AUDIT_SOURCE_UNAVAILABLE",task_id, observed_artifact_sha256)
+    except (ValueError,TypeError,KeyError,UnicodeError,sqlite3.Error,OSError):
         return _reject("AUDIT_UNVERIFIABLE",task_id, observed_artifact_sha256)
