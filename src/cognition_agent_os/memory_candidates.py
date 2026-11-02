@@ -309,6 +309,23 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
                         raw.decode("utf-8") if _sha(raw) == identity[1] else None)
                 except (OSError, ValueError, UnicodeDecodeError, SourceUnavailable):
                     source_state[identity] = None
+        # SQLite pins ledger rows, not external fixture bytes. A source may
+        # change *after* the first read and before the candidate is disclosed.
+        # Re-observe every distinct, initially valid source once immediately
+        # before dependency evaluation; both reads stay inside existing bounds.
+        # This narrows the external-file TOCTOU window, but cannot make a
+        # mutable file atomic with SQLite or prove semantic truth.
+        for identity, first_text in tuple(source_state.items()):
+            if first_text is None:
+                continue
+            try:
+                refreshed = safe_fixture(source_root, identity[0])
+                if (_sha(refreshed) != identity[1]
+                    or refreshed.decode("utf-8") != first_text):
+                    source_state[identity] = None
+            except (OSError, ValueError, UnicodeDecodeError, SourceUnavailable):
+                source_state[identity] = None
+
         statuses = {}
         for key, row in all_rows.items():
             source = source_state[(row["source_rel"], row["source_sha256"])]
