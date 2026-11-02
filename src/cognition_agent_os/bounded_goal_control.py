@@ -19,7 +19,7 @@ from .bounded_outcome_oracle import assess_local_record, record_from_bytes
 from .goal_audit import audit_goal
 from .goal_loop import validate_goal
 from .ledger import connect, create_task, current_guard, event
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 
 _ID=re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _ACTIVE="CONTROL_ACTIVE"
@@ -152,7 +152,12 @@ def _finish(db,root_id:str,state:str,reason:str,details:dict|None=None)->dict:
 def _admit(db,root,contract,ordinal:int,fixtures:Path)->dict:
     candidate=contract["alternatives"][ordinal]
     spec=candidate["task_spec"]
-    original=safe_fixture(fixtures,spec["input"])
+    try:
+        original=safe_fixture(fixtures,spec["input"])
+    except (OSError, SourceUnavailable):
+        return _finish(db,root["task_id"],_UNVERIFIABLE,"SOURCE_UNAVAILABLE")
+    except ValueError:
+        return _finish(db,root["task_id"],_UNVERIFIABLE,"SOURCE_SCOPE_INVALID")
     if hashlib.sha256(original).hexdigest()!=candidate["input_sha256"]:
         return _finish(db,root["task_id"],_UNVERIFIABLE,"SOURCE_CHANGED")
     child=create_task(db,spec,parent=root["task_id"],commit=False)
@@ -183,7 +188,12 @@ def _observe(db,root,contract,attempt,db_path:Path,workspace:Path,fixtures:Path)
     if child["state"] in ("PENDING","RUNNING"):
         return {"root_task_id":root["task_id"],"status":"AWAITING_CHILD",
                 "ordinal":ordinal,"business_outcome_verified":False}
-    raw=safe_fixture(fixtures,spec["input"])
+    try:
+        raw=safe_fixture(fixtures,spec["input"])
+    except (OSError, SourceUnavailable):
+        return _finish(db,root["task_id"],_UNVERIFIABLE,"SOURCE_UNAVAILABLE")
+    except ValueError:
+        return _finish(db,root["task_id"],_UNVERIFIABLE,"SOURCE_SCOPE_INVALID")
     source_hash=hashlib.sha256(raw).hexdigest()
     if source_hash!=bound["input_sha256"]:
         return _finish(db,root["task_id"],_UNVERIFIABLE,"SOURCE_CHANGED")
