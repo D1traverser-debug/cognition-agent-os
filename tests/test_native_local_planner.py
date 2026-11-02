@@ -1053,14 +1053,31 @@ class NativeLocalModelLoop(unittest.TestCase):
         target = register_native_goal(
             self.db, "Compare fresh_target_ref.csv with fresh_target_obs.csv "
             "and report the differences.")
+        # Exhausting the entire *total* budget still reports uncertainty,
+        # without silently treating the first page as the full history.
+        with (patch("cognition_agent_os.procedure_evidence._MAX_ROOT_SCAN", 1),
+              patch("cognition_agent_os.procedure_evidence._MAX_TOTAL_ROOT_SCAN",
+                    1, create=True)):
+            incomplete = inspect_cross_root_procedure_trials(
+                self.db, self.workspace, self.fixtures, target,
+                eligible_objectives=("compare_records",))
+        self.assertTrue(incomplete["source_root_scan_truncated"], incomplete)
+        self.assertEqual(incomplete["items"], [])
+        self.assertEqual(incomplete["status"],
+                         "PROCEDURE_TRIAL_SEARCH_INCOMPLETE", incomplete)
+        self.assertFalse(incomplete["authorizes_action"])
+
+        # Once allowed to inspect the second page the system must *continue*
+        # rather than merely acknowledge the missing history.
         with patch("cognition_agent_os.procedure_evidence._MAX_ROOT_SCAN", 1):
             evidence = inspect_cross_root_procedure_trials(
                 self.db, self.workspace, self.fixtures, target,
                 eligible_objectives=("compare_records",))
-        self.assertTrue(evidence["source_root_scan_truncated"], evidence)
-        self.assertEqual(evidence["items"], [])
         self.assertEqual(evidence["status"],
-                         "PROCEDURE_TRIAL_SEARCH_INCOMPLETE", evidence)
+                         "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE", evidence)
+        self.assertFalse(evidence["source_root_scan_truncated"], evidence)
+        self.assertEqual(evidence["source_roots_scanned"], 2, evidence)
+        self.assertEqual({x["source_root_id"] for x in evidence["items"]}, {source})
         self.assertFalse(evidence["authorizes_action"])
 
     def test_cross_root_verified_procedure_trial_is_challenged_not_promoted(self):
