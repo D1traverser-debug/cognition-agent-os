@@ -363,8 +363,8 @@ class CandidateMemoryTests(unittest.TestCase):
     def test_read_page_uses_one_sqlite_snapshot_across_concurrent_root_change(self):
         """A page must not combine pre-revoke authority and post-revoke edges.
 
-        The in-flight read has the old consistent snapshot. A subsequent
-        independent read must see the BLOCKED root and hide candidate words.
+        The in-flight SQLite row scan uses one old consistent snapshot, but
+        a fresh live-grant readback before disclosure must observe BLOCKED.
         Pagination across *multiple* calls is not falsely called pinned.
         """
         entry = self.add()
@@ -421,7 +421,9 @@ class CandidateMemoryTests(unittest.TestCase):
             in_flight = self.snapshot()
         self.assertEqual(triggered, [True])
         self.assertEqual(in_flight["status"], "READ_ONLY_CANDIDATES")
-        self.assertEqual(in_flight["items"][0]["status"], "CANDIDATE_UNVERIFIED")
+        self.assertEqual(in_flight["items"][0]["status"], "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(in_flight["items"][0]["quote"])
+        self.assertIsNone(in_flight["items"][0]["interpretation"])
         self.assertFalse(in_flight["cross_page_snapshot_pinned"])
 
         fresh = self.snapshot()
