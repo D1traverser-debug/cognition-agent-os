@@ -503,7 +503,7 @@ def main() -> None:
     if os.environ.get("COGNITION_EVAL_ORACLE_SCOPE_ONLY") == "1":
         report = measure_offline_owner_oracle_scope()
         OUTPUT.write_text(json.dumps(
-            report, ensure_ascii=False, indent=2, sort_keys=True) + "\\n",
+            report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8")
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         return
