@@ -22,10 +22,12 @@ TASK_ID = re.compile(r"[a-f0-9]{32}\Z")
 MAX_BYTES = 128 * 1024
 
 
-def _reject(reason: str, task_id: str) -> dict:
+def _reject(reason: str, task_id: str,
+            observed_artifact_sha256: str | None = None) -> dict:
     return {"task_id":task_id, "status":reason,
             "mechanical_audit":False, "semantic_goal_achieved":False,
-            "authorizes_source_mutation":False}
+            "authorizes_source_mutation":False,
+            "observed_artifact_sha256":observed_artifact_sha256}
 
 
 def _read_only(db_path: Path, task_id: str):
@@ -90,6 +92,7 @@ def _constraints(spec: dict, before: bytes, after: bytes) -> bool:
 def audit_goal(db_path: Path, workspace: Path, fixture_root: Path, task_id: str) -> dict:
     if not isinstance(task_id,str) or not TASK_ID.fullmatch(task_id):
         return _reject("INVALID_TASK_ID",str(task_id)[:64])
+    observed_artifact_sha256 = None
     try:
         fetched=_read_only(db_path,task_id)
         if not fetched or not fetched[0] or not fetched[1]:
@@ -112,28 +115,31 @@ def audit_goal(db_path: Path, workspace: Path, fixture_root: Path, task_id: str)
             or artifact.stat().st_size>MAX_BYTES):
             return _reject("ARTIFACT_UNAVAILABLE",task_id)
         raw_artifact=artifact.read_bytes()
+        observed_artifact_sha256=hashlib.sha256(raw_artifact).hexdigest()
         if (len(raw_artifact)>MAX_BYTES or
-            hashlib.sha256(raw_artifact).hexdigest()!=task["artifact_hash"]):
-            return _reject("ARTIFACT_HASH_MISMATCH",task_id)
+            observed_artifact_sha256!=task["artifact_hash"]):
+            return _reject("ARTIFACT_HASH_MISMATCH",task_id,
+                           observed_artifact_sha256)
         doc=json.loads(raw_artifact)
         if not isinstance(doc,dict) or doc.get("task_id")!=task_id or doc.get("goal_spec")!=spec:
-            return _reject("ARTIFACT_IDENTITY_MISMATCH",task_id)
+            return _reject("ARTIFACT_IDENTITY_MISMATCH",task_id, observed_artifact_sha256)
         if doc.get("status")!="PROPOSAL_NOT_APPROVED" or not isinstance(doc.get("candidate_text"),str):
-            return _reject("INVALID_PROPOSAL",task_id)
+            return _reject("INVALID_PROPOSAL",task_id, observed_artifact_sha256)
         candidate=doc["candidate_text"].encode("utf-8")
         if (len(candidate)>MAX_BYTES or
             hashlib.sha256(candidate).hexdigest()!=doc.get("candidate_sha256")):
-            return _reject("CANDIDATE_HASH_MISMATCH",task_id)
+            return _reject("CANDIDATE_HASH_MISMATCH",task_id, observed_artifact_sha256)
         source=safe_fixture(fixture_root,spec["input"])
         if hashlib.sha256(source).hexdigest()!=doc.get("source_sha256"):
-            return _reject("SOURCE_CHANGED_SINCE_PROPOSAL",task_id)
+            return _reject("SOURCE_CHANGED_SINCE_PROPOSAL",task_id, observed_artifact_sha256)
         if not _constraints(spec,source,candidate):
-            return _reject("CANDIDATE_CONSTRAINTS_FAILED",task_id)
+            return _reject("CANDIDATE_CONSTRAINTS_FAILED",task_id, observed_artifact_sha256)
         return {"task_id":task_id,"status":"CANDIDATE_MECHANICALLY_VALID",
                 "mechanical_audit":True,"semantic_goal_achieved":False,
                 "authorizes_source_mutation":False,
                 "artifact_sha256":task["artifact_hash"],
+                "observed_artifact_sha256":observed_artifact_sha256,
                 "source_sha256":doc["source_sha256"],
                 "note":"Proposal preservation verified, not applied; no semantic approval"}
     except (ValueError,TypeError,KeyError,UnicodeError,sqlite3.Error,OSError):
-        return _reject("AUDIT_UNVERIFIABLE",task_id)
+        return _reject("AUDIT_UNVERIFIABLE",task_id, observed_artifact_sha256)

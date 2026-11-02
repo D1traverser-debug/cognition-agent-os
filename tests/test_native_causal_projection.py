@@ -41,6 +41,52 @@ class NativeCausalProjectionTests(unittest.TestCase):
         self.assertEqual(set(result.descendants_invalidated), {
             "a_effect", "b", "b_effect"})
 
+    def test_review_parent_is_challenged_without_causal_invalidation(self):
+        nodes = (
+            Decision("owner", layer="authority"),
+            Decision("a", layer="method", review_parent_ids=("owner",)),
+            Decision("a_effect", ("a",), layer="execution"),
+            Decision("b", layer="method", review_parent_ids=("owner", "a")),
+            Decision("b_effect", ("b",), layer="execution"),
+        )
+        result = project_reentry(nodes, Contradiction(
+            "evidence:later-failure", ("b",)))
+        self.assertEqual(result.ancestors_to_challenge, ("a", "owner"))
+        self.assertEqual(result.descendants_invalidated, ("b_effect",))
+        self.assertEqual(result.review_descendant_decisions_to_reopen, ())
+        self.assertEqual(result.review_descendant_effects_to_reverify, ())
+        self.assertFalse(result.authorizes_action)
+        self.assertFalse(result.outcome_verified)
+
+    def test_contradicted_decision_reopens_only_explicit_review_descendants(self):
+        nodes = (
+            Decision("owner", layer="authority"),
+            Decision("a", layer="method", review_parent_ids=("owner",)),
+            Decision("a_effect", ("a",), layer="execution"),
+            Decision("b", layer="method", review_parent_ids=("owner", "a")),
+            Decision("b_effect", ("b",), layer="execution"),
+            Decision("c", layer="method", review_parent_ids=("owner",)),
+            Decision("c_effect", ("c",), layer="execution"),
+        )
+        result = project_reentry(nodes, Contradiction(
+            "evidence:source-drift", ("a",)))
+        self.assertEqual(result.descendants_invalidated, ("a_effect",))
+        self.assertEqual(result.review_descendant_decisions_to_reopen, ("b",))
+        self.assertEqual(result.review_descendant_effects_to_reverify, ("b_effect",))
+        self.assertEqual(result.ancestors_to_challenge, ("owner",))
+        self.assertEqual(set(result.unaffected), {"c", "c_effect"})
+
+    def test_review_parent_cycles_and_unknown_ids_fail_closed(self):
+        with self.assertRaisesRegex(ValueError, "REVIEW_GRAPH_CYCLE"):
+            project_reentry((
+                Decision("a", layer="method", review_parent_ids=("b",)),
+                Decision("b", layer="method", review_parent_ids=("a",)),
+            ), Contradiction("evidence:1", ("a",)))
+        with self.assertRaisesRegex(ValueError, "UNKNOWN_OR_SELF_REVIEW_PARENT"):
+            project_reentry((
+                Decision("a", layer="method", review_parent_ids=("ghost",)),
+            ), Contradiction("evidence:1", ("a",)))
+
     def test_multi_parent_descendant_invalidated_once(self):
         nodes = (Decision("a"), Decision("b"),
                  Decision("shared", ("a", "b")))

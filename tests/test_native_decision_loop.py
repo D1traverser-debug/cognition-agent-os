@@ -64,7 +64,8 @@ class NativeDecisionLoop(unittest.TestCase):
                 "resources": [{"role": "input", "path": "handoff.json"}],
                 "requirements": [{"field": "audit", "equals": "confirmed"}]}
 
-    def candidate(self, state, selected, alternative):
+    def candidate(self, state, selected, alternative, *,
+                  decision_layer="method_selection"):
         refs = [
             {"path": path.name,
              "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
@@ -73,10 +74,18 @@ class NativeDecisionLoop(unittest.TestCase):
                     if state["decisions"] else None)
         return {
             "decision_basis": {
+                "decision_layer": decision_layer,
                 "source_refs": refs, "previous_result_task_id": previous,
                 "challenge": "The proposed method might not satisfy all original clauses.",
                 "falsifier": "Independent mechanical results or original source drift could refute this choice.",
                 "uncertainty": "Mechanical success cannot establish the whole owner outcome.",
+                "decision_review_version": 1,
+                "decision_reviews": [{
+                    "event_id": item["event_id"],
+                    "disposition": "NOT_RELEVANT",
+                    "rationale": "No current evidence links this prior decision to the present method choice.",
+                    "falsifier": "A shared premise or newly observed dependency would make it relevant.",
+                } for item in state["decisions"]],
             },
             "observation_sha256": state["observation_sha256"],
             "selected_intent": selected, "alternative_intent": alternative,
@@ -644,6 +653,13 @@ class NativeDecisionLoop(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UNSUPPORTED_UNGROUNDED_DECISION"):
             admit_native_decision(self.db, self.workspace, self.fixtures,
                                   root, proposal)
+        invalid_layer = self.candidate(
+            observed, self.reconcile(), self.structure(),
+            decision_layer="execution")
+        with self.assertRaisesRegex(
+                ValueError, "INVALID_NATIVE_DECISION_LAYER"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, invalid_layer)
         with closing(connect(self.db)) as db:
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM tasks WHERE parent_task=?",
@@ -946,8 +962,6 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(reentry["invalidated_decision_event_ids"], [])
         self.assertEqual(reentry["source_pin_stale_decision_event_ids"],
                          [event_ids[1]])
-        self.assertEqual(reentry["affected_child_task_ids"],
-                         [first["child_task_id"]])
         self.assertEqual(reentry["source_pin_stale_child_task_ids"],
                          [second["child_task_id"]])
         self.assertFalse(reentry["prior_result_order_proves_causality"])
@@ -973,6 +987,130 @@ class NativeDecisionLoop(unittest.TestCase):
         untrusted = self.view(root)
         self.assertEqual(untrusted["status"], "NATIVE_GOAL_UNVERIFIABLE")
         self.assertNotIn("causal_reentry", untrusted)
+
+    def test_failed_child_challenges_explicit_prior_decision_review_parent(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(
+                self.view(root), self.reconcile(), self.structure(),
+                decision_layer="context_retrieval"))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        with closing(connect(self.db)) as db:
+            first_event_id = db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id LIMIT 1",
+                (root,)).fetchone()["event_id"]
+        state = self.view(root)
+        second_candidate = self.candidate(
+            state, self.structure(), self.reconcile(),
+            decision_layer="implementation")
+        second_candidate["decision_basis"]["decision_reviews"] = [{
+            "event_id": first_event_id,
+            "disposition": "RELEVANT",
+            "rationale": (
+                "The second plan explicitly reuses the first decision's "
+                "method boundary and its independent result."),
+            "falsifier": (
+                "If the second plan's actual inputs are independent of the "
+                "first decision, this review link should be removed."),
+        }]
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, second_candidate)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        artifact = self.workspace / "artifacts" / (
+            second["child_task_id"] + ".json")
+        artifact.write_bytes(artifact.read_bytes() + b" independent corruption")
+        failed = self.view(root)
+        self.assertEqual(failed["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        reentry = failed["causal_reentry"]
+        self.assertEqual(
+            reentry["ancestor_decision_event_ids_to_challenge"],
+            [first_event_id])
+        self.assertEqual(reentry["reopened_decision_layer"], "implementation")
+        self.assertEqual(
+            reentry["ancestor_decision_layers_to_challenge"],
+            [{"event_id": first_event_id, "layer": "context_retrieval"}])
+        self.assertEqual(reentry["review_descendant_decision_layers_to_reopen"], [])
+        self.assertTrue(reentry["decision_layers_are_model_hypotheses"])
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
+        self.assertEqual(
+            reentry["affected_child_task_ids"], [second["child_task_id"]])
+        self.assertEqual(
+            reentry["review_descendant_decision_event_ids_to_reopen"], [])
+        self.assertFalse(reentry["review_lineage_semantics_verified"])
+        self.assertFalse(reentry["root_cause_semantically_verified"])
+        self.assertFalse(reentry["authorizes_action"])
+
+    def test_prior_decision_review_coverage_is_exact_and_fail_closed(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        state = self.view(root)
+        candidate = self.candidate(state, self.structure(), self.reconcile())
+        candidate["decision_basis"]["decision_reviews"] = []
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_PRIOR_DECISIONS_NOT_REVIEWED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, candidate)
+        self.assertEqual(self.view(root)["decision_count"], 1)
+        candidate = self.candidate(state, self.structure(), self.reconcile())
+        candidate["decision_basis"]["decision_reviews"][0]["event_id"] += 1000
+        with self.assertRaisesRegex(
+                ValueError, "NATIVE_PRIOR_DECISIONS_NOT_REVIEWED"):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, root, candidate)
+        self.assertEqual(self.view(root)["decision_count"], 1)
+
+    def test_source_drift_reopens_explicit_review_descendant_not_temporal_sibling(self):
+        root = self.root_id()
+        first = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.reconcile(), self.structure()))
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        with closing(connect(self.db)) as db:
+            first_event_id = db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id LIMIT 1",
+                (root,)).fetchone()["event_id"]
+        second_candidate = self.candidate(
+            self.view(root), self.structure(), self.reconcile())
+        second_candidate["decision_basis"]["decision_reviews"][0].update({
+            "disposition": "RELEVANT",
+            "rationale": (
+                "The second choice explicitly reuses the first decision's "
+                "method boundary and verified output."),
+            "falsifier": (
+                "An independent input lineage showing no shared premise "
+                "would falsify this review relationship."),
+        })
+        second = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root, second_candidate)
+        run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        with closing(connect(self.db)) as db:
+            event_ids = [row["event_id"] for row in db.execute(
+                "SELECT event_id FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
+                (root,)).fetchall()]
+        self.assertEqual(event_ids[0], first_event_id)
+        (self.fixtures / "observed.csv").write_text(
+            "supplier,received\\nDelta,10\\n", encoding="utf-8")
+        state = self.view(root)
+        self.assertEqual(state["status"], "NATIVE_SOURCE_CHANGED")
+        reentry = state["causal_reentry"]
+        self.assertEqual(reentry["reopened_decision_event_ids"], [first_event_id])
+        self.assertEqual(reentry["invalidated_decision_event_ids"], [])
+        self.assertEqual(
+            reentry["review_descendant_decision_event_ids_to_reopen"],
+            [event_ids[1]])
+        self.assertEqual(
+            reentry["review_descendant_effect_child_task_ids_to_reverify"],
+            [second["child_task_id"]])
+        self.assertFalse(reentry["review_lineage_semantics_verified"])
+        self.assertFalse(reentry["prior_result_order_proves_causality"])
+        self.assertFalse(reentry["authorizes_action"])
 
     def test_source_drift_accepts_causal_hypothesis_without_resuming_action(self):
         root = self.root_id()
@@ -1282,7 +1420,7 @@ class NativeDecisionLoop(unittest.TestCase):
         self.assertEqual(drift["status"], "NATIVE_SOURCE_CHANGED", drift)
         self.assertEqual(drift["invalidated_source_paths"], ["observed.csv"])
         self.assertEqual(drift["reopen_decision_ordinal"], 0)
-        self.assertEqual(drift["reopen_scope"], "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION")
+        self.assertEqual(drift["reopen_scope"], "SOURCE_AND_METHOD_REEXAMINATION")
         self.assertTrue(drift["affected_decision_event_ids"])
         self.assertNotIn("observation_sha256", drift)
         self.assertFalse(drift["owner_outcome_verified"])
@@ -1465,6 +1603,91 @@ class NativeDecisionLoop(unittest.TestCase):
                 "AND kind='NATIVE_OPEN_RESEARCH_RECORDED'",
                 (root,)).fetchone()[0], 0)
         self.assertNotIn("observation_sha256", self.view(root))
+
+    def test_goal_case_verdicts_are_classified_by_actual_failure_layer(self):
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.structure(), self.reconcile()))
+        tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(tick["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
+
+        cases = (
+            ("ARTIFACT_UNAVAILABLE", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("INVALID_PROPOSAL", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("CANDIDATE_HASH_MISMATCH", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("CANDIDATE_CONSTRAINTS_FAILED", "WORKER_EVIDENCE_UNVERIFIABLE"),
+            ("AUDIT_UNVERIFIABLE", "INDEPENDENT_VERIFIER_UNAVAILABLE"),
+        )
+        for status, expected_cause in cases:
+            with self.subTest(status=status):
+                digest = hashlib.sha256(status.encode("ascii")).hexdigest()
+                with patch(
+                    "cognition_agent_os.goal_audit.audit_goal",
+                    return_value={
+                        "status": status,
+                        "observed_artifact_sha256": digest,
+                    },
+                ):
+                    state = self.view(root)
+                self.assertEqual(state["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+                self.assertEqual(
+                    state["causal_reentry"]["evidence_failure_reason"], status)
+                self.assertEqual(
+                    state["causal_reentry"]["observed_cause"], expected_cause)
+                self.assertFalse(state["authorizes_action"])
+
+    def test_goal_case_corrupt_bytes_bind_research_cas_and_verdict(self):
+        """Goal-case audit failures must expose exact corrupt bytes to native re-entry."""
+        root = self.root_id()
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.fixtures, root,
+            self.candidate(self.view(root), self.structure(), self.reconcile()))
+        tick = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(tick["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
+
+        artifact = self.workspace / "artifacts" / (
+            admitted["child_task_id"] + ".json")
+        original = artifact.read_bytes()
+        first_bytes = original + b" first corrupt goal-case revision"
+        artifact.write_bytes(first_bytes)
+        first = self.view(root)
+        self.assertEqual(first["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(first["causal_reentry"]["evidence_failure_reason"],
+                         "ARTIFACT_HASH_MISMATCH")
+        self.assertEqual(
+            first["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(first_bytes).hexdigest())
+
+        second_bytes = original + b" a different corrupt goal-case revision"
+        artifact.write_bytes(second_bytes)
+        second = self.view(root)
+        self.assertEqual(second["status"], "NATIVE_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(second["causal_reentry"]["observed_cause"],
+                         "WORKER_EVIDENCE_UNVERIFIABLE")
+        self.assertEqual(
+            second["causal_reentry"]["observed_artifact_sha256"],
+            hashlib.sha256(second_bytes).hexdigest())
+        self.assertNotEqual(first["research_reentry_sha256"],
+                            second["research_reentry_sha256"])
+
+        with self.assertRaisesRegex(ValueError, "NATIVE_STALE_OBSERVATION"):
+            record_native_hypothesis(
+                self.db, self.workspace, self.fixtures, root,
+                origin="agent",
+                idea="The first corrupt goal-case revision may be incomplete",
+                observation_sha256=first["research_reentry_sha256"])
+        accepted = record_native_hypothesis(
+            self.db, self.workspace, self.fixtures, root,
+            origin="agent",
+            idea="The second corrupt goal-case revision needs a new diagnosis",
+            observation_sha256=second["research_reentry_sha256"])
+        self.assertEqual(accepted["status"], "NATIVE_HYPOTHESIS_RECORDED")
+        self.assertFalse(accepted["authorizes_action"])
 
     def test_artifact_changes_without_verdict_change_invalidate_research_cas(self):
         root = self.root_id()

@@ -31,6 +31,13 @@ _CLIENT_REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{15,127}\Z")
 _HYPOTHESIS_DISPOSITIONS = frozenset({
     "REJECTED", "CONDITIONALLY_USEFUL", "UNRESOLVED_RESEARCH_REQUIRED",
 })
+# Model-facing review focus only. "execution" and "authority" are reserved
+# by the graph projection for effect and owner-authority nodes.
+_DECISION_LAYERS = frozenset({
+    "entrypoint", "goal_interpretation", "context_retrieval",
+    "method_selection", "implementation", "verification",
+    "architecture", "permission_boundary", "method", "unspecified",
+})
 _MAX_SOURCE_COUNT = 64
 # Keep original words, including late prohibitions, in ONE canonical SQLite
 # contract. The model must refuse an over-budget prompt rather than truncate.
@@ -185,15 +192,41 @@ def _proposal(candidate: dict, contract: dict) -> dict:
                    "alternative_reason", "expected_evidence",
                    "observation_sha256", "decision_basis"}
     if (not isinstance(candidate, dict)
-        or set(candidate) not in (base_fields,
-                                  base_fields | {"hypothesis_reviews"})):
+        or set(candidate) not in (
+            base_fields, base_fields | {"hypothesis_reviews"})):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+    basis_fields = {
+        "source_refs", "previous_result_task_id", "challenge",
+        "falsifier", "uncertainty",
+    }
+    review_fields = {"decision_review_version", "decision_reviews"}
+    cross_root_field = {"cross_root_procedure_evidence_sha256"}
+    layer_field = frozenset({"decision_layer"})
+    optional_basis_fields = (
+        frozenset(), frozenset(cross_root_field),
+        frozenset(review_fields), frozenset(review_fields | cross_root_field),
+    )
+    allowed_basis = {
+        frozenset(basis_fields) | optional
+        for optional in optional_basis_fields
+    }
+    allowed_basis.update({
+        frozenset(basis_fields) | optional | layer_field
+        for optional in optional_basis_fields
+    })
     if (not isinstance(candidate["decision_basis"], dict)
-        or set(candidate["decision_basis"]) !=
-        {"source_refs", "previous_result_task_id", "challenge", "falsifier",
-         "uncertainty"}):
+        or frozenset(candidate["decision_basis"]) not in allowed_basis):
         raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
     basis = candidate["decision_basis"]
+    if ("decision_layer" in basis
+        and (not isinstance(basis["decision_layer"], str)
+             or basis["decision_layer"] not in _DECISION_LAYERS)):
+        raise ValueError("INVALID_NATIVE_DECISION_LAYER")
+    cross_root_digest = basis.get("cross_root_procedure_evidence_sha256")
+    if (cross_root_digest is not None
+        and (not isinstance(cross_root_digest, str)
+             or not re.fullmatch(r"[0-9a-f]{64}", cross_root_digest))):
+        raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
     for field in ("challenge", "falsifier", "uncertainty"):
         if (not isinstance(basis[field], str)
             or not 12 <= len(basis[field].strip()) <= 500):
@@ -349,6 +382,50 @@ def _challenge_hypotheses(candidate: dict, hypotheses: list[dict]) -> None:
         covered.add(review["proposal_sha256"])
     if covered != {h["proposal_sha256"] for h in hypotheses}:
         raise ValueError("NATIVE_HYPOTHESES_NOT_CHALLENGED")
+
+
+def _validate_decision_reviews(
+        candidate: dict, prior_decisions: list[dict], *,
+        require_current: bool = False) -> list[int]:
+    """Validate a complete review of prior decisions, never semantic truth.
+
+    RELEVANT/UNRESOLVED records create review-lineage edges only. They schedule
+    ancestor challenge and descendant reconsideration; they never establish
+    causality or invalidate another decision. Missing version means a legacy
+    receipt and is accepted only during historical replay.
+    """
+    basis = candidate.get("decision_basis", {})
+    version = basis.get("decision_review_version")
+    if version is None:
+        # A first decision has no prior decision to review. Preserve the
+        # established deterministic/legacy first-choice path; once any prior
+        # decision exists, the complete versioned review is mandatory.
+        if require_current and prior_decisions:
+            raise ValueError("NATIVE_PRIOR_DECISIONS_NOT_REVIEWED")
+        return []
+    if type(version) is not int or version != 1:
+        raise ValueError("NATIVE_DECISION_REVIEW_VERSION_UNSUPPORTED")
+    reviews = basis.get("decision_reviews")
+    expected = [row["event_id"] for row in prior_decisions]
+    if (not isinstance(reviews, list) or len(reviews) != len(expected)
+        or len(reviews) > 12):
+        raise ValueError("NATIVE_PRIOR_DECISIONS_NOT_REVIEWED")
+    linked = []
+    for review, event_id in zip(reviews, expected):
+        if (not isinstance(review, dict)
+            or set(review) != {"event_id", "disposition", "rationale", "falsifier"}
+            or type(review["event_id"]) is not int
+            or review["event_id"] != event_id
+            or review["disposition"] not in (
+                "RELEVANT", "NOT_RELEVANT", "UNRESOLVED")
+            or not isinstance(review["rationale"], str)
+            or not isinstance(review["falsifier"], str)
+            or not 12 <= len(review["rationale"].strip()) <= 256
+            or not 12 <= len(review["falsifier"].strip()) <= 256):
+            raise ValueError("NATIVE_PRIOR_DECISIONS_NOT_REVIEWED")
+        if review["disposition"] in ("RELEVANT", "UNRESOLVED"):
+            linked.append(event_id)
+    return linked
 
 
 def _new_independent_source_cited(
@@ -789,17 +866,22 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
     nodes = [Decision("original_goal", layer="authority")]
     stale_source_decisions = []
     stale_source_children = []
-    required = {"child_task_id", "ordinal", "proposal",
-                "selected_plan_sha256", "source_sha256",
-                "prior_child_task_id", "owner_outcome_verified"}
+    legacy_required = {"child_task_id", "ordinal", "proposal",
+                       "selected_plan_sha256", "source_sha256",
+                       "prior_child_task_id", "owner_outcome_verified"}
+    current_required = legacy_required | {"decision_review_version"}
     old_child = None
     lineage = []
+    decision_layers_by_event = {}
     for index, row in enumerate(decisions):
         receipt = json.loads(row["details"])
-        if (not isinstance(receipt, dict) or set(receipt) != required
+        if (not isinstance(receipt, dict)
+            or set(receipt) not in (legacy_required, current_required)
             or receipt["ordinal"] != index
             or receipt["prior_child_task_id"] != old_child
-            or receipt["owner_outcome_verified"] is not False):
+            or receipt["owner_outcome_verified"] is not False
+            or ("decision_review_version" in receipt
+                and receipt["decision_review_version"] != 1)):
             raise ValueError("NATIVE_REENTRY_LINEAGE_INVALID")
         parsed = _proposal(receipt["proposal"], contract)
         child_id = receipt["child_task_id"]
@@ -815,10 +897,26 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
                          receipt["source_sha256"], old_child)
         decision_id = f"decision:{row['event_id']}"
         effect_id = f"effect:{child_id}"
-        # Every decision is scoped to the immutable owner goal. The
-        # previous result is chronological/context evidence, not a causal
-        # parent edge; only decision -> admitted child is guaranteed here.
-        nodes.append(Decision(decision_id, ("original_goal",), layer="method"))
+        # The immutable owner goal is a review ancestor. Explicitly reviewed
+        # prior decisions are review ancestors too; they are NOT causal parents.
+        # Only decision -> its admitted child is a causal effect edge.
+        review_ids = _validate_decision_reviews(
+            receipt["proposal"], decisions[:index],
+            require_current=receipt.get("decision_review_version") == 1)
+        if (("decision_review_version" in receipt)
+            != (receipt["proposal"]["decision_basis"].get(
+                "decision_review_version") == 1)):
+            raise ValueError("NATIVE_DECISION_REVIEW_RECEIPT_MISMATCH")
+        review_parent_ids = (
+            "original_goal",
+            *(f"decision:{event_id}" for event_id in review_ids),
+        )
+        decision_layer = receipt["proposal"]["decision_basis"].get(
+            "decision_layer", "method")
+        decision_layers_by_event[row["event_id"]] = decision_layer
+        nodes.append(Decision(
+            decision_id, (), layer=decision_layer,
+            review_parent_ids=review_parent_ids))
         nodes.append(Decision(effect_id, (decision_id,), layer="execution"))
         lineage.append((row["event_id"], child_id))
         if cause == "SOURCE_PIN_DRIFT" and index > target_index:
@@ -852,6 +950,25 @@ def _trusted_native_causal_reentry(decisions: list, by_id: dict,
         "ancestor_decision_event_ids_to_challenge": [
             event_id for event_id, _ in lineage
             if f"decision:{event_id}" in graph.ancestors_to_challenge],
+        "reopened_decision_layer": decision_layers_by_event[
+            lineage[target_index][0]],
+        "ancestor_decision_layers_to_challenge": [
+            {"event_id": event_id, "layer": decision_layers_by_event[event_id]}
+            for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.ancestors_to_challenge],
+        "review_descendant_decision_layers_to_reopen": [
+            {"event_id": event_id, "layer": decision_layers_by_event[event_id]}
+            for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.review_descendant_decisions_to_reopen],
+        "decision_layers_are_model_hypotheses": True,
+        "review_descendant_decision_event_ids_to_reopen": [
+            event_id for event_id, _ in lineage
+            if f"decision:{event_id}" in graph.review_descendant_decisions_to_reopen],
+        "review_descendant_effect_child_task_ids_to_reverify": [
+            child_id for _, child_id in lineage
+            if f"effect:{child_id}" in graph.review_descendant_effects_to_reverify],
+        "review_lineage_ids_verified": True,
+        "review_lineage_semantics_verified": False,
         "original_goal_identity_retained": True,
         "original_goal_assumptions_to_challenge": (
             "original_goal" in graph.ancestors_to_challenge),
@@ -973,15 +1090,29 @@ def _audit(db: sqlite3.Connection, db_path: Path,
         unresolved_hypotheses: dict[str, dict] = {}
         for index, item in enumerate(decisions):
             receipt = json.loads(item["details"])
+            legacy_receipt_keys = {
+                "child_task_id", "ordinal", "proposal",
+                "selected_plan_sha256", "source_sha256",
+                "prior_child_task_id", "owner_outcome_verified"}
+            current_receipt_keys = legacy_receipt_keys | {
+                "decision_review_version"}
             if (not isinstance(receipt, dict)
-                or set(receipt) != {"child_task_id", "ordinal", "proposal",
-                                   "selected_plan_sha256", "source_sha256",
-                                   "prior_child_task_id", "owner_outcome_verified"}
+                or set(receipt) not in (legacy_receipt_keys, current_receipt_keys)
                 or receipt["ordinal"] != index
                 or receipt["prior_child_task_id"] != previous_id
-                or receipt["owner_outcome_verified"] is not False):
+                or receipt["owner_outcome_verified"] is not False
+                or ("decision_review_version" in receipt
+                    and receipt["decision_review_version"] != 1)):
+
                 raise ValueError("DECISION_RECEIPT_CHANGED")
             parsed = _proposal(receipt["proposal"], contract)
+            _validate_decision_reviews(
+                receipt["proposal"], observations,
+                require_current=receipt.get("decision_review_version") == 1)
+            if (("decision_review_version" in receipt)
+                != (receipt["proposal"]["decision_basis"].get(
+                    "decision_review_version") == 1)):
+                raise ValueError("NATIVE_DECISION_REVIEW_RECEIPT_MISMATCH")
             newly_recorded = [
                 h for h in hypotheses if (previous_decision_event_id <
                     h["event_id"] < item["event_id"])]
@@ -1067,7 +1198,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                                 "pinned": receipt["source_sha256"],
                                 "current": current_sources}),
                             current_sources=current_sources),
-                        "reopen_scope": "SOURCE_AND_METHOD_CAUSAL_REEXAMINATION",
+                        "reopen_scope": "SOURCE_AND_METHOD_REEXAMINATION",
                         "reopen_decision_ordinal": index,
                         "affected_decision_event_ids": [
                             d["event_id"] for d in decisions[index:]],
@@ -1130,10 +1261,11 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     # model's last proposal. Its failed postcondition is
                     # an EVIDENCE-layer contradiction. Unlike source drift
                     # it does not falsely claim an input revision changed.
-                    check_reason = (result.get("reason")
-                                    if kind in ("goal_case", "record_reconciliation",
-                                                "investigate_goal", "public_tool_discovery")
-                                    else "UNREGISTERED_NATIVE_KIND")
+                    check_reason = (
+                        (result.get("reason") or verdict)
+                        if kind in ("goal_case", "record_reconciliation",
+                                    "investigate_goal", "public_tool_discovery")
+                        else "UNREGISTERED_NATIVE_KIND")
                     # A verifier returning UNKNOWN/unavailable is NOT
                     # proof that the Worker produced corrupt bytes. Only
                     # explicit artifact/result contradictions may be
@@ -1142,11 +1274,18 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     if check_reason in (
                             "EVIDENCE_RECHECK_UNAVAILABLE",
                             "UNSAFE_OR_MISSING_LEDGER",
-                            "INDEPENDENT_CHECK_UNAVAILABLE"):
+                            "INDEPENDENT_CHECK_UNAVAILABLE",
+                            "AUDIT_UNVERIFIABLE"):
                         failure_cause = "INDEPENDENT_VERIFIER_UNAVAILABLE"
+                    elif check_reason == "SOURCE_CHANGED_SINCE_PROPOSAL":
+                        failure_cause = "SOURCE_PIN_DRIFT"
                     elif check_reason in (
+                            "ARTIFACT_UNAVAILABLE",
                             "ARTIFACT_HASH_MISMATCH",
                             "ARTIFACT_IDENTITY_MISMATCH",
+                            "INVALID_PROPOSAL",
+                            "CANDIDATE_HASH_MISMATCH",
+                            "CANDIDATE_CONSTRAINTS_FAILED",
                             "CANDIDATE_ARTIFACT_CHANGED",
                             "INDEPENDENT_SQL_REJECTION"):
                         failure_cause = "WORKER_EVIDENCE_UNVERIFIABLE"
@@ -1179,7 +1318,7 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                             "reason": verdict,
                             "reopen_decision_event_id": item["event_id"],
                             "reopen_decision_ordinal": index,
-                            "reopen_scope": "EVIDENCE_AND_VERIFIER_CAUSAL_REEXAMINATION",
+                            "reopen_scope": "EVIDENCE_AND_VERIFIER_REEXAMINATION",
                             "causal_reentry": {
                                 **graph, "evidence_verdict": verdict,
                                 "evidence_failure_reason": check_reason,
@@ -1209,7 +1348,11 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                                     result.get("observed_artifact_sha256")}),
                             "authorizes_action": False}
             observations.append({
+                "event_id": item["event_id"],
                 "task_id": child["task_id"], "task_state": child["state"],
+                "decision_layer": receipt["proposal"]["decision_basis"].get(
+                    "decision_layer", "method"),
+                "decision_layer_is_unverified": True,
                 "selected_objective": selected["objective"],
                 "alternative_objective": (parsed["alternative"]["objective"]
                                          if parsed["alternative"] is not None else None),
@@ -1225,12 +1368,18 @@ def _audit(db: sqlite3.Connection, db_path: Path,
                     "selected_reason": receipt["proposal"]["decision_reason"],
                     "alternative_reason": receipt["proposal"]["alternative_reason"],
                     "expected_evidence": receipt["proposal"]["expected_evidence"],
+                    "decision_layer": receipt["proposal"]["decision_basis"].get(
+                        "decision_layer", "method"),
+                    "decision_layer_semantics": "UNVERIFIED_MODEL_HYPOTHESIS",
                     "challenge": receipt["proposal"]["decision_basis"]["challenge"],
                     "falsifier": receipt["proposal"]["decision_basis"]["falsifier"],
                     "uncertainty": receipt["proposal"]["decision_basis"]["uncertainty"],
                     "source_refs": receipt["proposal"]["decision_basis"]["source_refs"],
                     "hypothesis_reviews": (
                         receipt["proposal"].get("hypothesis_reviews") or []),
+                    "decision_reviews": (
+                        receipt["proposal"]["decision_basis"].get("decision_reviews") or []),
+                    "decision_review_semantics": "UNVERIFIED_MODEL_ARGUMENTS",
                     "semantic_verdict": "UNVERIFIED_MODEL_ARGUMENTS",
                 },
                 "owner_outcome_verified": False})
@@ -1340,6 +1489,8 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                               (root_id,)).fetchone()
             contract = json.loads(root["source_spec"])
             parsed = _proposal(candidate, contract)
+            _validate_decision_reviews(
+                candidate, observed["decisions"], require_current=True)
             if candidate["observation_sha256"] != observed["observation_sha256"]:
                 raise ValueError("NATIVE_STALE_OBSERVATION")
             _challenge_hypotheses(candidate, observed["pending_hypotheses"])
@@ -1351,6 +1502,42 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                    (root["goal_rev"], root["grant_rev"])):
                 raise PermissionError("CURRENT_NATIVE_GRANT_REVOKED")
             source_hashes = _sources(fixtures)
+            # Cross-root procedure evidence is a decision input, not merely
+            # prompt context. Recompute the same bounded projection under the
+            # existing write transaction and bind it to the model's digest.
+            # A prior result changed during inference must not ground a child.
+            from .procedure_evidence import (
+                inspect_cross_root_procedure_trials,
+                procedure_evidence_sha256,
+            )
+            catalog = capability_catalog(
+                fixtures,
+                allow_public_discovery=contract["allow_public_discovery"])
+            eligible_objectives = tuple(sorted({
+                method["objective"] for method in catalog["methods"]
+                if method["currently_eligible"]
+            }))
+            cross_root_trials = (
+                inspect_cross_root_procedure_trials(
+                    db_path, workspace, fixtures, root_id,
+                    eligible_objectives=eligible_objectives)
+                if eligible_objectives else {"items": []}
+            )
+            supplied_cross_root_digest = candidate["decision_basis"].get(
+                "cross_root_procedure_evidence_sha256")
+            # Direct MCP clients do not receive this private local-planner
+            # projection. Only a candidate that declares it used the
+            # projection must bind it; the local planner separately enforces
+            # that it cannot omit a digest after seeing non-empty evidence.
+            if supplied_cross_root_digest is not None:
+                if not (cross_root_trials.get("items")
+                        or cross_root_trials.get("failure_items")):
+                    raise ValueError(
+                        "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
+                if supplied_cross_root_digest != procedure_evidence_sha256(
+                        cross_root_trials):
+                    raise ValueError(
+                        "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
             _ground_decision(
                 candidate, parsed, source_hashes,
                 observed["decisions"][-1]["task_id"] if observed["decisions"] else None)
@@ -1460,6 +1647,9 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                 "selected_plan_sha256": parsed["selected"]["plan_sha256"],
                 "source_sha256": source_hashes,
                 "prior_child_task_id": previous,
+                **({"decision_review_version": 1}
+                   if candidate["decision_basis"].get(
+                       "decision_review_version") == 1 else {}),
                 "owner_outcome_verified": False})
             db.commit()
             return {"status": "NATIVE_METHOD_ENQUEUED",
@@ -1507,11 +1697,29 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
         previous_decision_event_id = -1
         for ordinal, r in enumerate(receipts):
             entry = json.loads(r["details"])
-            if (entry["ordinal"] != ordinal
+            legacy_receipt_keys = {
+                "child_task_id", "ordinal", "proposal",
+                "selected_plan_sha256", "source_sha256",
+                "prior_child_task_id", "owner_outcome_verified"}
+            current_receipt_keys = legacy_receipt_keys | {
+                "decision_review_version"}
+            if (set(entry) not in (legacy_receipt_keys, current_receipt_keys)
+                or entry["ordinal"] != ordinal
                 or entry["prior_child_task_id"] != previous
-                or entry["owner_outcome_verified"] is not False):
+                or entry["owner_outcome_verified"] is not False
+                or ("decision_review_version" in entry
+                    and entry["decision_review_version"] != 1)):
+
                 return False
             parsed = _proposal(entry["proposal"], contract)
+            _validate_decision_reviews(
+                entry["proposal"],
+                [{"event_id": prior["event_id"]} for prior in receipts[:ordinal]],
+                require_current=entry.get("decision_review_version") == 1)
+            if (("decision_review_version" in entry)
+                != (entry["proposal"]["decision_basis"].get(
+                    "decision_review_version") == 1)):
+                return False
             _challenge_hypotheses(
                 entry["proposal"], [h for h in hypotheses
                     if previous_decision_event_id < h["event_id"] < r["event_id"]])

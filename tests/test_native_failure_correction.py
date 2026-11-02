@@ -75,6 +75,13 @@ class NativeSameMethodCorrection(unittest.TestCase):
                 "challenge": "The same objective may remain unable to satisfy all owner clauses.",
                 "falsifier": "Fresh independent Host check rejects the corrected candidate.",
                 "uncertainty": "Even a repaired local artifact does not prove the owner outcome.",
+                "decision_review_version": 1,
+                "decision_reviews": [{
+                    "event_id": item["event_id"],
+                    "disposition": "NOT_RELEVANT",
+                    "rationale": "No evidence currently links this prior choice to the correction.",
+                    "falsifier": "A shared premise or reused constraint would make it relevant.",
+                } for item in state["decisions"]],
             }
         }
 
@@ -174,9 +181,16 @@ class NativeSameMethodCorrection(unittest.TestCase):
         self.assertEqual(
             [x["status"] for x in tick["tasks"]],
             ["UNKNOWN", "NEEDS_REVIEW"], tick)
+        # Two admitted methods are actions; the third item is a truthful,
+        # read-only sandbox opt-in observation, not an extra decision/effect.
+        self.assertEqual(tick["processed"], 2, tick)
         self.assertEqual(
             [x["status"] for x in tick["native_cognition"]],
-            ["NATIVE_METHOD_ENQUEUED", "NATIVE_METHOD_ENQUEUED"], tick)
+            ["NATIVE_METHOD_ENQUEUED", "NATIVE_METHOD_ENQUEUED",
+             "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN"], tick)
+        self.assertEqual(
+            tick["native_cognition"][-1]["reason"],
+            "SANDBOX_STAGING_NOT_AUTHORIZED")
         state = self.view()
         self.assertEqual(state["decision_count"], 2, state)
         self.assertEqual(state["decisions"][0]["error_code"],

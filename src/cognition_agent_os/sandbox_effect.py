@@ -151,7 +151,7 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
                            reason="ARTIFACT_CHANGED_AFTER_AUDIT")
         try:
             raw_artifact=read_audited_artifact(
-                workspace,task_id,audit,max_bytes=65536)
+                workspace,task_id,audit,max_bytes=MAX_STAGE_BYTES)
         except (ArtifactConflict,OSError,ValueError):
             event(db,task_id,"SANDBOX_REFUSED",{
                 "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"})

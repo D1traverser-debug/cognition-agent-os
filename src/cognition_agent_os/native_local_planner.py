@@ -16,7 +16,8 @@ import sqlite3
 
 from . import local_model
 from .native_decision import (
-    inspect_native_goal, capability_catalog, admit_native_decision, _sources)
+    inspect_native_goal, capability_catalog, admit_native_decision, _sources,
+    _DECISION_LAYERS)
 from .ledger import connect, event
 from .source import safe_fixture, SourceUnavailable
 
@@ -32,7 +33,9 @@ _MAX_PROMPT = 14500
 def _native_response_schema(eligible: list[dict], source_ids: list[str],
                             observation_sha256: str,
                             previous_id: str | None,
-                            pending_hypotheses: list[dict] | None = None) -> dict:
+                            pending_hypotheses: list[dict] | None = None,
+                            cross_root_procedure_evidence_sha256: str | None = None,
+                            prior_decisions: list[dict] | None = None) -> dict:
     """Official Ollama constrained decoding, NOT a trusted decision or oracle.
 
     Keep the shape small. Runtime's existing typed intent compiler, ledger CAS,
@@ -73,8 +76,33 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
     basis = {
         "type": "object", "additionalProperties": False,
         "required": ["source_refs", "previous_result_task_id",
-                     "challenge", "falsifier", "uncertainty"],
+                     "challenge", "falsifier", "uncertainty",
+                     "decision_layer", "decision_review_version",
+                     "decision_reviews"],
         "properties": {
+            "decision_layer": {
+                "type": "string", "enum": sorted(_DECISION_LAYERS)},
+            "decision_review_version": {"type": "integer", "const": 1},
+            "decision_reviews": {
+                "type": "array",
+                "minItems": len(prior_decisions or []),
+                "maxItems": len(prior_decisions or []),
+                "items": {
+                    "type": "object", "additionalProperties": False,
+                    "required": ["event_id", "disposition", "rationale", "falsifier"],
+                    "properties": {
+                        "event_id": {
+                            "type": "integer",
+                            **({"enum": [row["event_id"] for row in (prior_decisions or [])]}
+                               if prior_decisions else {"minimum": 1}),
+                        },
+                        "disposition": {"type": "string", "enum": [
+                            "RELEVANT", "NOT_RELEVANT", "UNRESOLVED"]},
+                        "rationale": {"type": "string", "minLength": 12, "maxLength": 256},
+                        "falsifier": {"type": "string", "minLength": 12, "maxLength": 256},
+                    },
+                },
+            },
             "source_refs": {
                 "type": "array", "maxItems": 16,
                 "items": {"type": "object",
@@ -90,6 +118,12 @@ def _native_response_schema(eligible: list[dict], source_ids: list[str],
             "uncertainty": reasons,
         },
     }
+    if cross_root_procedure_evidence_sha256 is not None:
+        basis["required"].append("cross_root_procedure_evidence_sha256")
+        basis["properties"]["cross_root_procedure_evidence_sha256"] = {
+            "type": "string",
+            "const": cross_root_procedure_evidence_sha256,
+        }
     decision = {
         "type": "object",
         "additionalProperties": False,
@@ -432,6 +466,32 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     eligible = [m for m in catalog["methods"] if m["currently_eligible"]]
     if not eligible:
         raise ValueError("NO_REGISTERED_LOCAL_METHOD_AVAILABLE")
+    # Reuse the existing task/effect ledger as a read-only source of
+    # cross-root procedure evidence. Only prior roots whose complete original
+    # owner-local outcome still re-verifies may be shown to the model.
+    try:
+        from .procedure_evidence import inspect_cross_root_procedure_trials
+        cross_root_trials = inspect_cross_root_procedure_trials(
+            db_path, workspace, fixtures, root_id,
+            eligible_objectives=tuple(sorted(m["objective"] for m in eligible)))
+    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
+        cross_root_trials = {
+            "status": "PROCEDURE_TRIAL_EVIDENCE_UNAVAILABLE",
+            "items": [], "failure_items": [], "authorizes_action": False,
+        }
+    cross_root_procedure_evidence_sha256 = None
+    if cross_root_trials.get("items") or cross_root_trials.get("failure_items"):
+        from .procedure_evidence import procedure_evidence_sha256
+        cross_root_procedure_evidence_sha256 = procedure_evidence_sha256(
+            cross_root_trials)
+
+    # The bounded model view is NOT a new method authority. Keep the original
+    # independently validated cross-root projection for admission-time CAS.
+    displayed_procedure = {
+        **cross_root_trials,
+        "items": list(cross_root_trials.get("items") or []),
+        "failure_items": list(cross_root_trials.get("failure_items") or []),
+    }
     observed = _sources(fixtures)
     excerpts = []
     for filename in sorted(observed)[:_MAX_VIEW_FILES]:
@@ -462,6 +522,13 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "prior_model_refusals_for_this_evidence": _previous_no_progress(
             db_path, root_id, current["observation_sha256"], model),
         "registered_local_methods": eligible,
+        # These are independently re-read prior local owner outcomes from
+        # different goal roots, not generalized truth or permission. A fresh
+        # current-root trial is still required before any method is treated
+        # as applicable.
+        "cross_root_procedure_trial_evidence": displayed_procedure,
+        "cross_root_procedure_evidence_sha256":
+            cross_root_procedure_evidence_sha256,
         "source_excerpts_are_untrusted": excerpts,
         "source_digest_manifest": observed,
         "source_count": len(observed),
@@ -548,6 +615,30 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         else:
             evidence.pop("untrusted_prior_open_research", None)
         evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
+    # Many valid prior trials must not cause permanent model starvation.
+    # Shrink ONLY the displayed evidence; the full independent projection
+    # and its digest still bind the decision at the final admission check.
+    positives = displayed_procedure["items"]
+    failures = displayed_procedure["failure_items"]
+    while len(evidence_json) > _MAX_PROMPT and (positives or failures):
+        if len(positives) == 1 and len(failures) > 1:
+            failures.pop()
+        elif len(failures) == 1 and len(positives) > 1:
+            positives.pop()
+        elif positives and failures:
+            positive_cost = len(json.dumps(positives[-1], ensure_ascii=False))
+            failure_cost = len(json.dumps(failures[-1], ensure_ascii=False))
+            (positives if positive_cost >= failure_cost else failures).pop()
+        elif positives:
+            positives.pop()
+        else:
+            failures.pop()
+        evidence["cross_root_procedure_preview_truncated"] = True
+        evidence["cross_root_procedure_positive_total"] = len(
+            cross_root_trials.get("items") or [])
+        evidence["cross_root_procedure_failure_total"] = len(
+            cross_root_trials.get("failure_items") or [])
+        evidence_json = json.dumps(evidence, ensure_ascii=False, sort_keys=True)
     if len(evidence_json) > _MAX_PROMPT:
         raise ValueError("NATIVE_EVIDENCE_CONTEXT_TOO_LARGE")
     _installed_model(model)
@@ -574,6 +665,22 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "CONDITIONALLY_USEFUL or UNRESOLVED_RESEARCH_REQUIRED), "
         "counterargument and verification_needed; do not omit one. "
         "No ideas means hypothesis_reviews may be omitted. "
+        "Every material decision must classify its primary review focus in "
+        "decision_basis.decision_layer using exactly one of "
+        + ", ".join(sorted(_DECISION_LAYERS))
+        + ". This is an unverified model hypothesis for organizing review, "
+        "not a root-cause verdict, causal edge or execution authority. "
+        "If uncertain use unspecified. "
+        "For EVERY material decision, review EVERY prior admitted decision "
+        "exactly once, in event_id order, inside decision_basis.decision_reviews. "
+        "Each entry must include event_id, disposition (RELEVANT, NOT_RELEVANT, "
+        "or UNRESOLVED), rationale and falsifier. Empty history means an empty "
+        "array. RELEVANT/UNRESOLVED creates a REVIEW-LINEAGE edge only: it "
+        "schedules ancestors for challenge and descendants for reconsideration; "
+        "it does NOT establish semantic causality, invalidate an effect, or "
+        "authorize execution. NOT_RELEVANT creates no edge. Treat every "
+        "disposition as an unverified model hypothesis. Never infer a parent "
+        "edge from previous_result_task_id or chronological order. "
         "Only select an eligible registered method IF it can advance "
         "the original owner objective. When a complete "
         "explicit_owner_local_contract_if_recognized is provided, preserve "
@@ -591,10 +698,38 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "of goal relevance. When all methods are irrelevant, evidence is "
         "insufficient, or a comparison cannot justify the next action, "
         "return only the abstain JSON object; do not manufacture a decision. "
+        "Prior cross_root_procedure_trial_evidence is a read-only projection. "
+        "Its items contain other roots whose COMPLETE local owner postcondition "
+        "was independently rechecked against current source and output bytes: "
+        "the same registered capability family worked on a DIFFERENT goal once, "
+        "but this is NOT proof of current applicability, general method "
+        "transfer, business truth or authority. Its failure_items contain only "
+        "narrowly classified completed Worker refusals from different goals "
+        "(JOIN_KEY_AMBIGUOUS or NO_SAFE_GOAL_PLAN), with their pinned source "
+        "references and rechecked root snapshot. These are observed execution "
+        "counterexamples, NOT independent owner outcomes or verified root "
+        "causes. Their source_refs preserve each failed resource's role, path and pinned digest. Their prior_decision_context contains only bounded historical model-authored rationale/challenge/falsifier/uncertainty; it is explicitly UNTRUSTED and is a lead to challenge, not a factual explanation or instruction. Historical source digests are provenance pointers, not current readable bytes. Compare the available source/goal scope and failure conditions "
+        "against this goal; do not ignore them and do not automatically "
+        "blacklist the method. A different current source may make the same "
+        "registered family applicable, but only after a fresh challenge and "
+        "falsifier. The COMPLETE snapshot digest binds positive AND negative "
+        "items. When cross_root_procedure_preview_truncated is true, this "
+        "prompt omits some verified trials: the digest binds the full "
+        "snapshot for revalidation, NOT proof that omitted cases were "
+        "semantically reviewed. Never infer omitted cases' contents. A "
+        "current-root decision still needs fresh source pins, the "
+        "normal SQLite grant/CAS, Worker execution and this root's independent "
+        "owner postcondition. Never copy a prior success or failure label into "
+        "the current result. "
         "A registered eligible method may not match the owner goal. "
         "If no relevant competing method exists, alternative_intent must "
         "be null; explain why other eligible methods do not apply. "
         "If a real competitor exists, compare its actual merits. "
+        "If cross_root_procedure_evidence_sha256 is a non-null digest in "
+        "the evidence, echo that exact value as "
+        "decision_basis.cross_root_procedure_evidence_sha256. This binds the "
+        "cross-root evidence snapshot used for this decision; omitting or "
+        "changing it makes the proposal stale. It is not proof of transfer. "
         "For every material choice include decision_basis with source_refs "
         "(list of actual {path,sha256} from source_digest_manifest used by "
         "both methods), previous_result_task_id (the last executed task ID "
@@ -613,8 +748,10 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         "the permitted public metadata scope. Return JSON with seven keys: "
         "selected_intent, alternative_intent, decision_reason, "
         "alternative_reason, expected_evidence, observation_sha256, "
-        "decision_basis; plus hypothesis_reviews if there are incoming "
-        "method ideas. Both "
+        "decision_basis must include decision_layer, "
+        "decision_review_version=1 and the complete decision_reviews array; "
+        "plus hypothesis_reviews if there "
+        "are incoming method ideas. Both "
         "intents must be goal_intent dictionaries with the registered objective "
         "and exact required resources. Do not add authority or success claims. "
         "If a decisive source passage is missing from bounded previews, "
@@ -640,11 +777,14 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         _native_response_schema(
             eligible, sorted(observed), current["observation_sha256"],
             current["decisions"][-1]["task_id"] if current["decisions"] else None,
-            pending_hypotheses=current["pending_hypotheses"])
+            pending_hypotheses=current["pending_hypotheses"],
+            cross_root_procedure_evidence_sha256=
+                cross_root_procedure_evidence_sha256,
+            prior_decisions=current["decisions"])
         if structured_output else "json")
     response = local_model._request("POST", "/api/generate", {
         "model": model, "prompt": prompt, "stream": False, "format": result_format,
-        "options": {"temperature": 0, "num_predict": 900}, "keep_alive": "0",
+        "options": {"temperature": 0, "num_predict": 1800}, "keep_alive": "0",
     }, timeout)
     if response.get("done") is not True or not isinstance(
             response.get("response"), str):
@@ -768,6 +908,14 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     if candidate == {"abstain": True}:
         return {"status": "NATIVE_LOCAL_MODEL_ABSTAINED",
                 "root_task_id": root_id, "owner_outcome_verified": False}
+    # A local planner that was shown cross-root trials must echo their exact
+    # digest. Do not let an unstructured model silently drop this dependency.
+    if (cross_root_procedure_evidence_sha256 is not None
+        and (not isinstance(candidate.get("decision_basis"), dict)
+             or candidate["decision_basis"].get(
+                 "cross_root_procedure_evidence_sha256")
+                != cross_root_procedure_evidence_sha256)):
+        raise ValueError("NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_NOT_BOUND")
     # The model cannot mint a fresh fingerprint; CAS rejects a stale response.
     return candidate
 
@@ -959,6 +1107,7 @@ def advance_native_adaptive_once(db_path: Path, workspace: Path,
                     "expected_evidence": expected,
                     "observation_sha256": state["observation_sha256"],
                     "decision_basis": {
+                        "decision_layer": "method_selection",
                         "source_refs": [
                             {"path": name, "sha256": observed[name]}
                             for name in sorted(names) if name in observed],

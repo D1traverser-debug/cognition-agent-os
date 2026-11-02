@@ -14,7 +14,9 @@ import unittest
 from unittest.mock import patch
 
 from cognition_agent_os.ledger import connect, initialize
-from cognition_agent_os.native_decision import register_native_goal
+from cognition_agent_os.host import run_tick
+from cognition_agent_os.native_decision import (
+    admit_native_decision, inspect_native_goal, register_native_goal)
 from cognition_agent_os.native_mcp_bridge import build_mcp_server
 
 
@@ -60,6 +62,68 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
                 "mcp": fake_mcp, "mcp.server": fake_server}):
             return build_mcp_server(
                 self.db, self.ws, self.fx, **kwargs)
+
+    def _native_root_with_failure(self, failure):
+        """Build a real native decision, then introduce one independent fault."""
+        for name, data in {
+            "expected.csv": b"supplier,received\nDelta,8\n",
+            "observed.csv": b"supplier,received\nDelta,6\n",
+            "handoff.json": b'{"retain":"immutable"}\n',
+        }.items():
+            path = self.fx / name
+            if not path.exists():
+                path.write_bytes(data)
+        goal = (
+            "Reconcile the supplier records and prepare a provenance-labelled "
+            "local handoff without editing original sources.")
+        root = register_native_goal(self.db, goal)
+        observed = inspect_native_goal(self.db, self.ws, self.fx, root)
+        refs = [
+            {"path": path.name,
+             "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            for path in sorted(self.fx.iterdir(), key=lambda p: p.name)
+        ]
+        proposal = {
+            "observation_sha256": observed["observation_sha256"],
+            "selected_intent": {
+                "kind": "goal_intent", "objective": "compare_records",
+                "resources": [
+                    {"role": "reference", "path": "expected.csv"},
+                    {"role": "observed", "path": "observed.csv"}]},
+            "alternative_intent": {
+                "kind": "goal_intent", "objective": "ensure_structure",
+                "resources": [{"role": "input", "path": "handoff.json"}],
+                "requirements": [{"field": "audit", "equals": "confirmed"}]},
+            "decision_reason": "Compare the original supplier records first.",
+            "alternative_reason": "The handoff structure is a separate later obligation.",
+            "expected_evidence": "An independently audited local reconciliation report.",
+            "decision_basis": {
+                "source_refs": refs, "previous_result_task_id": None,
+                "challenge": "The selected comparison may not cover the handoff clause.",
+                "falsifier": "An independent report audit may reject the computed discrepancy.",
+                "uncertainty": "Neither local mechanical success nor a report proves the whole owner outcome.",
+            },
+        }
+        admitted = admit_native_decision(
+            self.db, self.ws, self.fx, root, proposal)
+        tick = run_tick(self.db, self.ws, self.fx, max_jobs=1)
+        self.assertEqual(tick["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertEqual(tick["tasks"][0]["status"], "NEEDS_REVIEW")
+        if failure == "source":
+            (self.fx / "observed.csv").write_text(
+                "supplier,received\nDelta,999\n", encoding="utf-8")
+            expected_status = "NATIVE_SOURCE_CHANGED"
+        elif failure == "evidence":
+            artifact = self.ws / "artifacts" / (
+                admitted["child_task_id"] + ".json")
+            artifact.write_bytes(artifact.read_bytes() + b" corrupt evidence")
+            expected_status = "NATIVE_EVIDENCE_UNVERIFIABLE"
+        else:
+            raise AssertionError("unknown injected failure")
+        self.assertEqual(
+            inspect_native_goal(self.db, self.ws, self.fx, root)["status"],
+            expected_status)
+        return root, expected_status
 
     def test_observation_only_profile_excludes_every_mutating_tool(self):
         reader = self.server(allow_goal_writes=False)
@@ -192,6 +256,88 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(
                     PermissionError, "LOCAL_SOURCE_GRANT_CHANGED_DURING_READ"):
                 reader(self.root, "private.md")
+
+    def test_local_source_read_allows_scoped_investigation_during_source_or_evidence_failure(self):
+        reader = self.server(allow_source_read=True).tools["native_source_read"]
+        for failure in ("source", "evidence"):
+            with self.subTest(failure=failure):
+                root, expected = self._native_root_with_failure(failure)
+                self.assertEqual(
+                    inspect_native_goal(self.db, self.ws, self.fx, root)["status"],
+                    expected)
+                result = reader(root, "handoff.json")
+                self.assertEqual(result["status"], "NATIVE_SOURCE_EXCERPT")
+                self.assertEqual(result["excerpt"], '{"retain":"immutable"}' + chr(10))
+                self.assertFalse(result["new_tool_execution_authorized"])
+                self.assertFalse(result["owner_outcome_verified"])
+
+    def test_local_source_read_during_failure_rechecks_every_root_grant_field(self):
+        from cognition_agent_os import native_mcp_bridge as bridge
+
+        mutations = (
+            ("grant revision", "UPDATE authority SET grant_rev=grant_rev+1 "
+                               "WHERE singleton=1"),
+            ("goal revision", "UPDATE authority SET goal_rev=goal_rev+1 "
+                              "WHERE singleton=1"),
+            ("write permission", "UPDATE authority SET write_allowed=0 "
+                                 "WHERE singleton=1"),
+        )
+        for label, sql in mutations:
+            with self.subTest(field=label):
+                root, _ = self._native_root_with_failure("evidence")
+                with closing(connect(self.db)) as db:
+                    db.execute(sql)
+                    db.commit()
+                reader = self.server(
+                    allow_source_read=True).tools["native_source_read"]
+                # Hold the observed state at an otherwise investigable failure
+                # so this assertion specifically exercises the SQLite grant fence.
+                with patch.object(
+                    bridge, "inspect_native_goal",
+                    return_value={
+                        "status": "NATIVE_EVIDENCE_UNVERIFIABLE",
+                        "original_goal": "Reconcile the supplier records.",
+                    },
+                ):
+                    with self.assertRaisesRegex(
+                            PermissionError, "LOCAL_SOURCE_READ_NOT_ADMISSIBLE"):
+                        reader(root, "handoff.json")
+
+    def test_local_source_read_during_failure_refuses_revocation_during_read(self):
+        root, _ = self._native_root_with_failure("evidence")
+        reader = self.server(allow_source_read=True).tools["native_source_read"]
+        from cognition_agent_os import native_mcp_bridge as bridge
+        original = bridge.safe_fixture
+
+        def revoke_after_read(root_path, relative):
+            raw = original(root_path, relative)
+            with closing(connect(self.db)) as db:
+                db.execute("UPDATE authority SET grant_rev=grant_rev+1 "
+                           "WHERE singleton=1")
+                db.commit()
+            return raw
+
+        with patch.object(bridge, "safe_fixture", side_effect=revoke_after_read):
+            with self.assertRaisesRegex(
+                    PermissionError, "LOCAL_SOURCE_GRANT_CHANGED_DURING_READ"):
+                reader(root, "handoff.json")
+
+    def test_local_source_read_during_failure_rechecks_exact_source_digest(self):
+        root, _ = self._native_root_with_failure("evidence")
+        reader = self.server(allow_source_read=True).tools["native_source_read"]
+        from cognition_agent_os import native_mcp_bridge as bridge
+        original = bridge.safe_fixture
+        source = self.fx / "handoff.json"
+
+        def mutate_after_read(root_path, relative):
+            raw = original(root_path, relative)
+            source.write_text('{"retain":"changed during disclosure"}\\n',
+                              encoding="utf-8")
+            return raw
+
+        with patch.object(bridge, "safe_fixture", side_effect=mutate_after_read):
+            with self.assertRaisesRegex(ValueError, "SOURCE_CHANGED_DURING_READ"):
+                reader(root, "handoff.json")
 
     def test_local_read_receipt_reports_exact_window_not_semantic_acceptance(self):
         source = "A" * 4096 + "LAST_SENTENCE"

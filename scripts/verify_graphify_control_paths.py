@@ -10,7 +10,7 @@ from pathlib import Path
 
 REQUIRED_PATHS = (
     ("src_cognition_agent_os_cli_main", "src_cognition_agent_os_host_run_tick"),
-    ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_runner_run_once"),
+    ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_native_tick_flow_drain_native_feedback"),
     ("src_cognition_agent_os_runner_run_once", "src_cognition_agent_os_ledger_claim_one"),
     # Post-refactor: runner performs admission, a static adapter dispatches
     # capability-specific work. Prove BOTH real call edges independently.
@@ -83,6 +83,49 @@ def check(graph_path: Path, repo: Path) -> dict:
         evidence.append({"caller":src,"callee":dst,"confidence":"EXTRACTED",
                          "source_file":citations[0]["source_file"],
                          "source_location":citations[0]["source_location"]})
+    # The refactored Host routes its actual Worker dependency as an explicit
+    # function argument. This must be verified by AST instead of inventing a
+    # direct Host->runner call or relying on inferred Graphify reachability.
+    try:
+        host_ast = ast.parse(
+            (repo / "src/cognition_agent_os/host.py").read_text(encoding="utf-8"))
+        flow_ast = ast.parse(
+            (repo / "src/cognition_agent_os/native_tick_flow.py")
+            .read_text(encoding="utf-8"))
+        host_fn = next(n for n in host_ast.body
+                       if isinstance(n, ast.FunctionDef) and n.name == "run_tick")
+        flow_fn = next(n for n in flow_ast.body
+                       if isinstance(n, ast.FunctionDef)
+                       and n.name == "drain_native_feedback")
+        host_imports_worker = any(
+            isinstance(n, ast.ImportFrom) and n.level == 1
+            and n.module == "runner"
+            and any(alias.name == "run_once" for alias in n.names)
+            for n in host_ast.body)
+        flow_calls = [n for n in ast.walk(host_fn)
+                      if isinstance(n, ast.Call)
+                      and isinstance(n.func, ast.Name)
+                      and n.func.id == "drain_native_feedback"]
+        wired = any(
+            k.arg == "run_one" and isinstance(k.value, ast.Name)
+            and k.value.id == "run_once"
+            for call in flow_calls for k in call.keywords)
+        flow_executes = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "run_one" for n in ast.walk(flow_fn))
+        if not (host_imports_worker and wired and flow_executes):
+            errors.append("NATIVE_FEEDBACK_WORKER_DELEGATION_UNPROVEN")
+        else:
+            evidence.append({
+                "caller": "src_cognition_agent_os_host_run_tick",
+                "callee": "src_cognition_agent_os_runner_run_once",
+                "confidence": "SOURCE_AST_EXPLICIT_DEPENDENCY_WIRING",
+                "source_file": "src/cognition_agent_os/host.py",
+                "source_location": "L" + str(flow_calls[0].lineno),
+            })
+    except (OSError, ValueError, StopIteration, SyntaxError, TypeError):
+        errors.append("NATIVE_FEEDBACK_WORKER_DELEGATION_UNPROVEN")
+
     # The intentionally static registry is indirect. Python AST, not a
     # guessed Graphify edge, must independently witness both the exact
     # goal_intent binding and its direct call to the legacy target function.

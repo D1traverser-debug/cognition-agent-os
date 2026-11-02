@@ -62,6 +62,31 @@ jobs:
           path: architecture_ab.json
           if-no-files-found: warn
 
+  native_feedback_seam_ab:
+    # Explicitly scoped: actual pre-extraction Host vs current Host with the
+    # same local owner goals, grants, fixtures, worker and owner oracle.
+    # No model is run, so this is NOT semantic cognition/product acceptance.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-native-seam-ab]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
+      - name: Compare pre-extraction and candidate real owner outcomes
+        run: python scripts/verify_native_feedback_seam_ab.py --output native_feedback_seam_ab.json
+      - name: Preserve source-anchored A/B traces even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-feedback-seam-ab
+          path: native_feedback_seam_ab.json
+          if-no-files-found: warn
+
   installed_cli_cross_platform:
     # Package install in an isolated venv; this is NOT owner-machine install.
     if: ${{ github.event.repository.private == false }}
@@ -930,7 +955,7 @@ jobs:
     # Always runs after other jobs. A green PR cannot hide a skipped core gate.
     # Opt-in model/child experiments remain explicitly UNTESTED when skipped.
     if: ${{ always() }}
-    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout]
+    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, native_feedback_seam_ab, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

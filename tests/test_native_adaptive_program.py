@@ -89,6 +89,53 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
                          "ORIGINAL_SANDBOX_DRAFT_POSTCONDITION")
         self.unchanged()
 
+    def test_no_json_stage_opt_in_does_not_spend_another_model_call(self):
+        """A mechanically valid JSON candidate is not an authorized effect.
+
+        Actual Host/SQLite/Worker and owner oracle must preserve source and
+        stop the futile model retry without silently staging a draft.
+        """
+        root = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("Unapproved model retry")) as model:
+            tick = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=2,
+                planner_mode="ollama-local", local_model="not-installed",
+                auto_native_cognition=True, auto_stage_goals=False)
+        model.assert_not_called()
+        self.assertEqual(tick["processed"], 1, tick)
+        self.assertEqual(
+            [x["status"] for x in tick["native_cognition"]],
+            ["NATIVE_METHOD_ENQUEUED",
+             "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN"], tick)
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)[
+                "local_owner_outcome_verified"])
+        self.assertFalse((self.work / "sandbox").exists())
+        self.unchanged()
+
+    def test_one_job_json_host_reports_missing_effect_opt_in(self):
+        root = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model authorized")) as provider:
+            tick = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=1,
+                auto_native_cognition=True, auto_stage_goals=False)
+        provider.assert_not_called()
+        self.assertEqual(tick["processed"], 1, tick)
+        self.assertEqual(
+            [x["status"] for x in tick["native_cognition"]],
+            ["NATIVE_METHOD_ENQUEUED",
+             "NATIVE_SANDBOX_EFFECT_AWAITING_OPT_IN"], tick)
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures, root)[
+                "local_owner_outcome_verified"])
+        self.unchanged()
+
     def test_one_opted_in_host_tick_executes_and_checks_exact_owner_goal(self):
         """A single explicit Host invocation must not stop after just planning.
 
@@ -119,6 +166,38 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
         resumed = run_tick(self.db, self.work, self.fixtures, max_jobs=1,
                            auto_native_cognition=True)
         self.assertEqual(resumed["tasks"], [], resumed)
+        self.unchanged()
+
+    def test_two_owner_roots_reach_independent_postconditions_in_one_tick(self):
+        """Real Host must not couple two unrelated owner roots.
+
+        Source/owner readback is independent. Native method completion for A
+        cannot be delayed by B's still-pending effect, and same-root
+        admission remains subject to the single ledger and owner oracle.
+        """
+        csv_root = register_native_goal(
+            self.db, "Compare baseline.csv with actual.csv and report differences.")
+        json_root = register_native_goal(
+            self.db, "Please ensure an isolated draft of settings.json "
+                     "has owner equal to ops.")
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("No model authorized")) as model:
+            tick = run_tick(
+                self.db, self.work, self.fixtures, max_jobs=3,
+                auto_native_cognition=True, auto_stage_goals=True)
+        model.assert_not_called()
+        self.assertEqual(tick["processed"], 2, tick)
+        observed = [c.get("status") for c in tick["native_cognition"]]
+        self.assertEqual(observed.count("NATIVE_METHOD_ENQUEUED"), 2, tick)
+        # Both roots must be reconsidered independently once their respective
+        # effects have finished; an unrelated pending sibling cannot starve A.
+        self.assertEqual(
+            observed.count("NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED"), 2, tick)
+        for root in (csv_root, json_root):
+            outcome = inspect_owner_local_outcome(
+                self.db, self.work, self.fixtures, root)
+            self.assertTrue(outcome["local_owner_outcome_verified"], outcome)
+            self.assertFalse(outcome["business_outcome_verified"])
         self.unchanged()
 
     def test_real_host_worker_owner_outcome_not_starved_by_132_older_roots(self):
@@ -340,11 +419,26 @@ class NativeAdaptiveProgramTests(unittest.TestCase):
             planned = run_tick(
                 self.db, self.work, self.fixtures,
                 max_jobs=2, auto_native_cognition=True)
+        # The Host can add one independent completion readback for first
+        # without admitting another task. Only the first two records enqueue
+        # effects; the third is the verified terminal observation for first.
+        enqueued = [
+            x for x in planned["native_cognition"]
+            if x["status"] == "NATIVE_METHOD_ENQUEUED"]
         self.assertEqual(
-            [x["root_task_id"] for x in planned["native_cognition"]],
-            [first, second], planned)
-        self.assertTrue(all(x["status"] == "NATIVE_METHOD_ENQUEUED"
-                            for x in planned["native_cognition"]))
+            [x["root_task_id"] for x in enqueued], [first, second], planned)
+        self.assertEqual(planned["processed"], 2, planned)
+        self.assertEqual(len(planned["tasks"]), 2, planned)
+        self.assertEqual([
+            x["root_task_id"] for x in planned["native_cognition"]
+            if x["status"] == "NATIVE_ORIGINAL_OWNER_ALREADY_VERIFIED"],
+            [first], planned)
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures,
+            first)["local_owner_outcome_verified"])
+        self.assertFalse(inspect_owner_local_outcome(
+            self.db, self.work, self.fixtures,
+            second)["local_owner_outcome_verified"])
         self.assertEqual(inspect_native_goal(
             self.db, self.work, self.fixtures, unknown)["decision_count"], 0)
         self.assertFalse(inspect_owner_local_outcome(
