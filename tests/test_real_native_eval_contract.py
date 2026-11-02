@@ -97,6 +97,61 @@ class NativeRealModelEvalContract(unittest.TestCase):
         self.assertEqual(scored["native"]["explicit_safe_refusals"], 0)
         self.assertEqual(scored["native"]["ungradable_requested_outcomes"], 1)
 
+    def test_real_host_does_not_fabricate_owner_success_without_an_oracle(self):
+        """Actual fixture/Host/SQLite, no paid model, no simulated outcome."""
+        bench = load_benchmark()
+        case = {
+            "id": "unfamiliar_semantic_row_count_goal",
+            "goal": ("Count nonempty event rows in audit.csv, explain why two "
+                     "rows were discarded, and produce an isolated evidence "
+                     "report without changing the input."),
+            "files": {
+                "audit.csv": "id,state\\nA,good\\nB,invalid\\nC,good\\n",
+                "notes.md": "B has an invalid timestamp; verify cause.\\n",
+            },
+            "target": None, "must_complete_local_owner": True,
+            "independent_local_oracle_available": False,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            result = bench._baseline_trial(case, home)
+        self.assertTrue(result["source_preserved"], result)
+        self.assertFalse(result["whole_local_owner_verified"], result)
+        self.assertFalse(result["external_business_result_verified"])
+        row = {
+            "case": case["id"],
+            "withheld_expected_method": case["target"],
+            "withheld_local_owner_required": True,
+            "independent_local_oracle_available": False,
+            "baseline": result,
+            "native": {"whole_local_owner_verified": False,
+                       "source_preserved": True, "selected_objectives": [],
+                       "model_calls": 0},
+        }
+        scores = bench.score_trial_results([row])
+        self.assertEqual(scores["baseline"]["ungradable_requested_outcomes"], 1)
+        self.assertEqual(scores["baseline"]["owner_goals_required"], 0)
+        self.assertEqual(scores["baseline"]["owner_goals_completed"], 0)
+        self.assertEqual(scores["baseline"]["negative_cases"], 0)
+
+    def test_ungradable_false_positive_is_flagged_not_promoted(self):
+        bench = load_benchmark()
+        row = {
+            "case": "unsupported_claimed_success",
+            "withheld_expected_method": None,
+            "withheld_local_owner_required": True,
+            "independent_local_oracle_available": False,
+            "baseline": {"whole_local_owner_verified": False,
+                         "source_preserved": True, "selected_objectives": []},
+            "native": {"whole_local_owner_verified": True,
+                       "source_preserved": True,
+                       "selected_objectives": ["investigate_evidence"],
+                       "model_calls": 1},
+        }
+        score = bench.score_trial_results([row])["native"]
+        self.assertEqual(score["owner_goals_completed"], 0)
+        self.assertEqual(score["owner_claims_without_independent_oracle"], 1)
+
     def test_real_benchmark_includes_actual_host_adaptive_entry(self):
         """The model-only planner is a diagnostic arm, not the real Host path."""
         bench = load_benchmark()
