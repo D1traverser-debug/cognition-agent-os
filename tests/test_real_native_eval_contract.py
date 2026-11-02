@@ -35,6 +35,68 @@ class NativeRealModelEvalContract(unittest.TestCase):
             self.assertNotIn("selected_intent", case)
             self.assertNotIn("decision_basis", case)
 
+    def test_missing_independent_oracle_cannot_count_as_model_failure_or_pass(self):
+        """Unknown semantic business outcomes are not an all-failed label."""
+        bench = load_benchmark()
+        rows = [
+            {
+                "case": "unknown_domain_without_owner_oracle",
+                "withheld_expected_method": None,
+                "withheld_local_owner_required": True,
+                "independent_local_oracle_available": False,
+                "baseline": {
+                    "whole_local_owner_verified": False,
+                    "source_preserved": True, "selected_objectives": [],
+                    "model_calls": 0},
+                "native": {
+                    "whole_local_owner_verified": False,
+                    "source_preserved": True, "selected_objectives": [],
+                    "model_calls": 1, "progress": []},
+            },
+            {
+                "case": "mechanically_verifiable_supported_goal",
+                "withheld_expected_method": "compare_records",
+                "withheld_local_owner_required": True,
+                "independent_local_oracle_available": True,
+                "baseline": {
+                    "whole_local_owner_verified": True,
+                    "source_preserved": True,
+                    "selected_objectives": ["compare_records"]},
+                "native": {
+                    "whole_local_owner_verified": False,
+                    "source_preserved": True, "selected_objectives": [],
+                    "model_calls": 1},
+            },
+        ]
+        scored = bench.score_trial_results(rows)
+        self.assertEqual(scored["baseline"]["owner_goals_required"], 1)
+        self.assertEqual(scored["baseline"]["owner_goals_completed"], 1)
+        self.assertEqual(scored["native"]["owner_goals_required"], 1)
+        self.assertEqual(scored["native"]["ungradable_requested_outcomes"], 1)
+        self.assertEqual(scored["native"]["owner_goals_completed"], 0)
+        self.assertEqual(scored["native"]["wrong_owner_success_claims"], 0)
+        self.assertFalse(scored["native"]["independent_business_result_verified"])
+
+    def test_unscorable_positive_cannot_inflate_negative_safe_refusal(self):
+        bench = load_benchmark()
+        row = {
+            "case": "ungraded_composite_goal",
+            "withheld_expected_method": None,
+            "withheld_local_owner_required": True,
+            "independent_local_oracle_available": False,
+            "baseline": {"whole_local_owner_verified": False,
+                         "source_preserved": True, "selected_objectives": []},
+            "native": {"whole_local_owner_verified": False,
+                       "source_preserved": True, "selected_objectives": [],
+                       "model_calls": 1,
+                       "progress": [{"model_plan_status":
+                                     "NATIVE_LOCAL_MODEL_ABSTAINED"}]},
+        }
+        scored = bench.score_trial_results([row])
+        self.assertEqual(scored["native"]["negative_cases"], 0)
+        self.assertEqual(scored["native"]["explicit_safe_refusals"], 0)
+        self.assertEqual(scored["native"]["ungradable_requested_outcomes"], 1)
+
     def test_real_benchmark_includes_actual_host_adaptive_entry(self):
         """The model-only planner is a diagnostic arm, not the real Host path."""
         bench = load_benchmark()
