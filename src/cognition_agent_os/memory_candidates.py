@@ -363,6 +363,38 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
         if visited != len(all_rows):
             return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
                     "any_semantic_truth_verified": False}
+        # The original reader owns a consistent SQLite snapshot, but that
+        # snapshot can predate a grant revocation committed during source I/O.
+        # Open a NEW read-only snapshot before releasing candidate words; the
+        # existing connection would only re-read its old authority version.
+        # This cannot eliminate a change after final readback, and never
+        # upgrades untrusted interpretations to semantic facts.
+        with readonly_snapshot(db_path) as live_db:
+            live_grant = live_db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed FROM authority "
+                "WHERE singleton=1").fetchone()
+            live_root = live_db.execute(
+                "SELECT goal_rev,grant_rev,state FROM tasks "
+                "WHERE task_id=? AND parent_task IS NULL",
+                (root_task_id,)).fetchone()
+            grant_still_current = bool(
+                live_grant is not None and live_root is not None
+                and (live_grant["goal_rev"], live_grant["grant_rev"],
+                     live_grant["write_allowed"])
+                    == (authority["goal_rev"], authority["grant_rev"],
+                        authority["write_allowed"])
+                and (live_root["goal_rev"], live_root["grant_rev"],
+                     live_root["state"])
+                    == (root["goal_rev"], root["grant_rev"], root["state"])
+                and live_grant["write_allowed"] == 1
+                and live_root["state"] in _MEMORY_ELIGIBLE_ROOT_STATES)
+        if not grant_still_current:
+            statuses = {
+                key: ("GRANT_OR_GOAL_REVISION_STALE"
+                      if value == "CANDIDATE_UNVERIFIED" else value)
+                for key, value in statuses.items()
+            }
+
         items = []
         for row in page:
             key = row["memory_id"]
