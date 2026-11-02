@@ -131,6 +131,12 @@ def inspect_cross_root_procedure_trials(
             "AND json_extract(source_spec,'$.kind')='native_goal' "
             "AND task_id IN (SELECT task_id FROM events "
             "WHERE kind='NATIVE_GOAL_REGISTERED') "
+            # A newly registered but never attempted goal has no reusable
+            # procedure observation. Do not spend the finite scan window on
+            # such idle roots and silently starve older, independently
+            # verified trials when many newer goals accumulate.
+            "AND task_id IN (SELECT task_id FROM events "
+            "WHERE kind='NATIVE_DECISION_ADMITTED') "
             "ORDER BY created_at DESC,task_id DESC LIMIT ?",
             (authority["goal_rev"], authority["grant_rev"], root_task_id,
              _MAX_ROOT_SCAN + 1)).fetchall()
