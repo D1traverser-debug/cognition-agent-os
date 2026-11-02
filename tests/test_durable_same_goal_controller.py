@@ -340,6 +340,20 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertEqual(recovered["status"], "CONTROL_LOCAL_RECEIPT_VERIFIED",
                          recovered)
 
+    def test_controller_second_read_source_outage_is_not_artifact_forgery(self):
+        """An unavailable nested independent read must remain inconclusive."""
+        root = self.register(json_conflict=False)
+        self.tick(); self.tick()
+        with patch("cognition_agent_os.bounded_control_audit.audit_goal",
+                   return_value={"status": "AUDIT_SOURCE_UNAVAILABLE"}):
+            result = audit_controlled_candidate(self.db, self.work, self.fx, root)
+            self.assertEqual(result["reason"], "SOURCE_UNAVAILABLE", result)
+            scan = inspect_conformance(self.db, self.work, self.fx,
+                                       enforce=True, max_cases=64)
+        self.assertEqual(scan["status"], "EVIDENCE_INSUFFICIENT", scan)
+        self.assertEqual(scan["quarantined"], [])
+        self.assertEqual(self.root_state(root)[0], "CONTROL_CANDIDATE_MATCHED")
+
     def test_forged_controller_receipt_detected_and_quarantined(self):
         root=self.register()
         self.tick();self.tick();self.tick()
