@@ -907,6 +907,54 @@ class NativeLocalModelLoop(unittest.TestCase):
         self.assertFalse(observed["authorizes_action"])
         self.assertFalse(observed["any_general_method_transfer_verified"])
 
+    def test_unexecuted_decisions_do_not_starve_verified_procedure(self):
+        """Admitted-but-pending decisions are not completed method evidence.
+
+        Real registration/admission is used, not forged event payloads. A
+        smaller scan budget makes the same ordering defect deterministic.
+        """
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+
+        source = register_native_goal(
+            self.db,
+            "Compare reference.csv with observed.csv and report the differences.")
+        admitted = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, source, model=None)
+        self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED", admitted)
+        executed = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(executed["tasks"][0]["task_id"], admitted["child_task_id"])
+        self.assertTrue(inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, source)[
+                "local_owner_outcome_verified"])
+
+        for _ in range(3):
+            pending = register_native_goal(
+                self.db,
+                "Compare reference.csv with observed.csv and report the differences.")
+            plan = advance_native_adaptive_once(
+                self.db, self.workspace, self.fixtures, pending, model=None)
+            self.assertEqual(plan["status"], "NATIVE_METHOD_ENQUEUED", plan)
+            # Intentionally do not run their workers.
+
+        (self.fixtures / "reference_fresh.csv").write_text(
+            "item,expected\nZ,10\n", encoding="utf-8")
+        (self.fixtures / "observed_fresh.csv").write_text(
+            "item,expected\nZ,7\n", encoding="utf-8")
+        target = register_native_goal(
+            self.db, "Compare reference_fresh.csv with observed_fresh.csv "
+            "and report the differences.")
+        with patch("cognition_agent_os.procedure_evidence._MAX_ROOT_SCAN", 2):
+            evidence = inspect_cross_root_procedure_trials(
+                self.db, self.workspace, self.fixtures, target,
+                eligible_objectives=("compare_records",))
+        self.assertIn(
+            source, {item["source_root_id"] for item in evidence["items"]},
+            evidence)
+        self.assertFalse(evidence["authorizes_action"])
+
     def test_cross_root_verified_procedure_trial_is_challenged_not_promoted(self):
         """A verified prior procedure is trialled on a distinct goal, not promoted."""
         from cognition_agent_os.native_local_planner import advance_native_adaptive_once
