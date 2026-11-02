@@ -294,6 +294,28 @@ class DurableSameGoalControllerTests(unittest.TestCase):
         self.assertEqual(len(matches),1,scan)
         self.assertEqual(matches[0]["proof"],"MECHANICALLY_VALID",matches)
 
+    def test_unavailable_source_at_first_control_admission_fences_child(self):
+        """SourceUnavailable must not escape the shared controller kernel."""
+        root = self.register(json_conflict=False)
+        (self.fx / "first.json").write_bytes(b"X" * (1024 * 1024 + 1))
+        result = self.tick()
+        self.assertEqual(self.root_state(root),
+                         ("CONTROL_UNVERIFIABLE", "SOURCE_UNAVAILABLE"), result)
+        self.assertEqual(self.attempts(root), [])
+        self.assertFalse(result["semantic_outcome_verified"])
+
+    def test_unavailable_source_after_admission_fences_control_transition(self):
+        """A worker source failure cannot crash the root's next observation."""
+        root = self.register(json_conflict=False)
+        first = self.tick()
+        self.assertEqual(len(self.attempts(root)), 1, first)
+        (self.fx / "first.json").write_bytes(b"X" * (1024 * 1024 + 1))
+        result = self.tick()
+        self.assertEqual(self.root_state(root),
+                         ("CONTROL_UNVERIFIABLE", "SOURCE_UNAVAILABLE"), result)
+        self.assertEqual(len(self.attempts(root)), 1)
+        self.assertFalse(result["semantic_outcome_verified"])
+
     def test_controlled_candidate_source_unavailable_remains_unproven(self):
         """Direct controller oracle cannot crash or falsely quarantine."""
         root = self.register(json_conflict=False)
