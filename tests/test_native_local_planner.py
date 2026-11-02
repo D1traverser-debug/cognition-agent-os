@@ -995,9 +995,9 @@ class NativeLocalModelLoop(unittest.TestCase):
                 self.db, self.workspace, self.fixtures, other)["local_owner_outcome_verified"])
 
         (self.fixtures / "reference_recent.csv").write_text(
-            "item,expected\\nQ,8\\n", encoding="utf-8")
+            "item,expected\nQ,8\n", encoding="utf-8")
         (self.fixtures / "observed_recent.csv").write_text(
-            "item,expected\\nQ,6\\n", encoding="utf-8")
+            "item,expected\nQ,6\n", encoding="utf-8")
         target = register_native_goal(
             self.db, "Compare reference_recent.csv with observed_recent.csv "
             "and report the differences.")
