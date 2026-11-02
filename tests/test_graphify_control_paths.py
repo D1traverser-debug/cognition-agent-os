@@ -117,6 +117,45 @@ class GraphifyEvidenceTests(unittest.TestCase):
         self.assertIn("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN",
                       result["errors"])
 
+    def _audit_mutated_dispatch(self, old, new):
+        """The graph may remain unchanged while a static registry is rewired."""
+        repo = Path(__file__).resolve().parents[1]
+        source = (repo / "src/cognition_agent_os/capability_dispatch.py").read_text(
+            encoding="utf-8")
+        self.assertIn(old, source)
+        changed = source.replace(old, new, 1)
+        folder = Path(self.tmp.name) / "src" / "cognition_agent_os"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "capability_dispatch.py").write_text(
+            changed, encoding="utf-8")
+        self.path.write_text(json.dumps(self.graph), encoding="utf-8")
+        with patch.object(checker.subprocess, "check_output",
+                          return_value=self.sha + "\\n"):
+            return checker.check(self.path, Path(self.tmp.name))
+
+    def test_other_capability_misroute_detected_not_only_goal_intent(self):
+        result = self._audit_mutated_dispatch(
+            '"research_assessment": _assessment',
+            '"research_assessment": _gap')
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertIn("CAPABILITY_ROUTE_MISMATCH:research_assessment",
+                      result["errors"])
+
+    def test_capability_target_import_from_wrong_module_detected(self):
+        result = self._audit_mutated_dispatch(
+            "from .research_assessment import run_assessment",
+            "from .research_gap import run_assessment")
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertIn("CAPABILITY_TARGET_UNPROVEN:research_assessment",
+                      result["errors"])
+
+    def test_dispatcher_bypass_detected_despite_unchanged_registration(self):
+        result = self._audit_mutated_dispatch(
+            "return _HANDLERS[kind](context)",
+            "return _snapshot_diff(context)")
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertIn("CAPABILITY_DISPATCH_BYPASS", result["errors"])
+
     def test_current_mcp_research_path_cannot_be_cut_without_graph_notice(self):
         """A stale legacy graph must not pass when the ACTIVE MCP branch breaks."""
         repo=Path(__file__).resolve().parents[1]
