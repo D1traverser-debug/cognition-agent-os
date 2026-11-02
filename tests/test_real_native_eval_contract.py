@@ -198,7 +198,7 @@ class NativeRealModelEvalContract(unittest.TestCase):
                             bench.main()
                     model.assert_not_called()
             payload = output.read_bytes()
-            self.assertTrue(payload.endswith(b"\\n"))
+            self.assertTrue(payload.endswith(b"\n"))
             report = json.loads(payload.decode("utf-8"))
             self.assertEqual(report["total_probes"], 5)
             self.assertEqual(report["ungradable_probes"], 3)
