@@ -118,20 +118,25 @@ class GraphifyEvidenceTests(unittest.TestCase):
                       result["errors"])
 
     def _audit_mutated_dispatch(self, old, new):
-        """The graph may remain unchanged while a static registry is rewired."""
+        """Change only dispatch source; keep every other real graph probe."""
         repo = Path(__file__).resolve().parents[1]
-        source = (repo / "src/cognition_agent_os/capability_dispatch.py").read_text(
-            encoding="utf-8")
-        self.assertIn(old, source)
-        changed = source.replace(old, new, 1)
-        folder = Path(self.tmp.name) / "src" / "cognition_agent_os"
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / "capability_dispatch.py").write_text(
-            changed, encoding="utf-8")
+        target = repo / "src/cognition_agent_os/capability_dispatch.py"
+        real_read = Path.read_text
+        original = real_read(target, encoding="utf-8")
+        self.assertIn(old, original)
+        mutated = original.replace(old, new, 1)
         self.path.write_text(json.dumps(self.graph), encoding="utf-8")
-        with patch.object(checker.subprocess, "check_output",
-                          return_value=self.sha + "\\n"):
-            return checker.check(self.path, Path(self.tmp.name))
+
+        def read_with_single_override(path, *args, **kwargs):
+            if path == target:
+                return mutated
+            return real_read(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", autospec=True,
+                          side_effect=read_with_single_override):
+            with patch.object(checker.subprocess, "check_output",
+                              return_value=self.sha):
+                return checker.check(self.path, repo)
 
     def test_other_capability_misroute_detected_not_only_goal_intent(self):
         result = self._audit_mutated_dispatch(
