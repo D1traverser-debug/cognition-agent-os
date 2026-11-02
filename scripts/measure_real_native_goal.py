@@ -394,7 +394,105 @@ def score_trial_results(rows: list[dict]) -> dict:
     return scores
 
 
+# Independent ORACLE-COVERAGE DIAGNOSTIC, not a model-quality benchmark.
+# These have predeclared owner requirements and real disposable inputs. A
+# missing independent scorer is explicitly UNGRADABLE, not model failure.
+# No local/cloud model is invoked by this branch; it can run in private CI.
+ORACLE_SCOPE_PROBES = [
+    {**CASES[0], "independent_local_oracle_available": True},
+    {**CASES[1], "independent_local_oracle_available": True},
+    {
+        "id": "csv_goal_rephrased_outside_recognized_owner_grammar",
+        "goal": ("Use baseline.csv as the authoritative record, reconcile "
+                 "the discrepancies in actual.csv, and provide a local audit."),
+        "files": {
+            "baseline.csv": "item,qty\\nA,7\\nB,4\\n",
+            "actual.csv": "item,qty\\nA,5\\nB,4\\n",
+        },
+        "target": "compare_records", "must_complete_local_owner": True,
+        "independent_local_oracle_available": False,
+    },
+    {
+        "id": "compound_owner_goal_two_independent_effects",
+        "goal": ("Compare baseline.csv with actual.csv and report differences; "
+                 "then ensure an isolated draft of settings.json has owner "
+                 "equal to ops."),
+        "files": {
+            "baseline.csv": "item,qty\\nA,7\\n",
+            "actual.csv": "item,qty\\nA,6\\n",
+            "settings.json": '{"timeout":12}\\n',
+        },
+        "target": None, "must_complete_local_owner": True,
+        "independent_local_oracle_available": False,
+    },
+    {
+        "id": "causal_investigation_needs_a_domain_owner_verifier",
+        "goal": ("Identify the actual root cause in incident.md, independently "
+                 "falsify the competing explanation, and write a supported "
+                 "local decision report."),
+        "files": {
+            "incident.md": ("Alert A occurred after a deployment.\\n"
+                            "An unrelated upstream timeout also occurred.\\n"),
+            "notes.md": "No independent verified causal labels.\\n",
+        },
+        "target": "investigate_evidence", "must_complete_local_owner": True,
+        "independent_local_oracle_available": False,
+    },
+]
+
+
+def measure_offline_owner_oracle_scope() -> dict:
+    """Real Host+SQLite baseline; explicit owner-oracle coverage, ZERO model.
+
+    This cannot grade the three unfamiliar goals. Their unverified result is
+    evidence of the CURRENT grader's scope, not evidence of model incompetence.
+    No child, external target, or original source outside the temporary
+    fixture directory is modified.
+    """
+    outcomes = []
+    for probe in ORACLE_SCOPE_PROBES:
+        with tempfile.TemporaryDirectory(prefix="native-oracle-scope-") as tmp:
+            observation = _baseline_trial(probe, Path(tmp))
+        outcomes.append({
+            "case": probe["id"],
+            "independent_local_oracle_available":
+                probe["independent_local_oracle_available"],
+            "actual_owner_result": observation["independent_owner_result"],
+            "whole_local_owner_verified":
+                observation["whole_local_owner_verified"],
+            "source_preserved": observation["source_preserved"],
+            "selected_objectives": observation["selected_objectives"],
+            "baseline_error_class": observation.get("error_class"),
+            "evidence_status": (
+                "INDEPENDENT_LOCAL_OWNER_OBSERVED"
+                if probe["independent_local_oracle_available"]
+                else "OWNER_ORACLE_NOT_IMPLEMENTED"),
+        })
+    return {
+        "status": "OFFLINE_OWNER_ORACLE_SCOPE_DIAGNOSTIC",
+        "no_model_or_paid_provider_used": True,
+        "source_isolated": all(row["source_preserved"] for row in outcomes),
+        "total_probes": len(outcomes),
+        "oracle_available_probes": sum(
+            row["independent_local_oracle_available"] for row in outcomes),
+        "ungradable_probes": sum(
+            not row["independent_local_oracle_available"]
+            for row in outcomes),
+        "cases": outcomes,
+        "real_model_capability_tested": False,
+        "business_outcome_verified": False,
+        "whole_product_ready": False,
+    }
+
+
 def main() -> None:
+    if os.environ.get("COGNITION_EVAL_ORACLE_SCOPE_ONLY") == "1":
+        report = measure_offline_owner_oracle_scope()
+        OUTPUT.write_text(json.dumps(
+            report, ensure_ascii=False, indent=2, sort_keys=True) + "\\n",
+            encoding="utf-8")
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        return
     results = []
     for case in CASES:
         cases = {}
