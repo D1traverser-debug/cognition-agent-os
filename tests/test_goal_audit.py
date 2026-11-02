@@ -71,6 +71,20 @@ class GoalAuditTests(unittest.TestCase):
         self.assertFalse(result["authorizes_source_mutation"])
         self.assertIsNotNone(result["observed_artifact_sha256"])
 
+    def test_oversized_source_after_proposal_makes_audit_unverifiable(self):
+        """Real bounded source read fails closed instead of throwing."""
+        src = self.fx/"config.json"
+        src.write_text("{}")
+        tid = self.seed("json_keys", "config.json", {"owner": "ops"})
+        self.assertEqual(run_once(self.db, self.out, self.fx)["status"], "NEEDS_REVIEW")
+        src.write_bytes(b"X" * (1024 * 1024 + 1))
+        result = self.audit(tid)
+        self.assertEqual(result["status"], "AUDIT_UNVERIFIABLE")
+        self.assertFalse(result["mechanical_audit"])
+        self.assertFalse(result["semantic_goal_achieved"])
+        self.assertFalse(result["authorizes_source_mutation"])
+        self.assertIsNotNone(result["observed_artifact_sha256"])
+
     def test_post_proposal_source_change_rejected(self):
         src=self.fx/"config.json";src.write_text("{}")
         tid=self.seed("json_keys","config.json",{"owner":"ops"})
