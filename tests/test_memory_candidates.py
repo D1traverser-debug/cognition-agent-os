@@ -124,6 +124,62 @@ class CandidateMemoryTests(unittest.TestCase):
         self.assertIsNone(item["interpretation"])
         self.assertFalse(item["authorizes_action"])
 
+    def test_source_replaced_during_read_does_not_disclose_stale_quote(self):
+        """The SQLite snapshot cannot pin bytes of an external source."""
+        entry = self.add()
+        from cognition_agent_os.source import safe_fixture as original_read
+        swapped = []
+
+        def replace_after_read(root, relative):
+            raw = original_read(root, relative)
+            if relative == "evidence.md" and not swapped:
+                swapped.append(True)
+                self.note.write_text("Fact alpha replaced.\\n", encoding="utf-8")
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=replace_after_read):
+            result = self.snapshot()
+        self.assertTrue(swapped)
+        item = next(x for x in result["items"] if x["memory_id"] == entry["memory_id"])
+        self.assertEqual(item["status"], "SOURCE_CHANGED_OR_UNAVAILABLE", result)
+        self.assertIsNone(item["quote"])
+        self.assertIsNone(item["interpretation"])
+        self.assertFalse(item["authorizes_action"])
+
+    def test_source_replaced_during_read_invalidates_dependent_method(self):
+        """A page may contain a method while its ancestor changes mid-read."""
+        parent = self.add()
+        other = self.sources / "other.md"
+        other.write_text("Method note.\\n", encoding="utf-8")
+        child = record_candidate(
+            self.db, self.sources, root_task_id=self.root_id,
+            request_id="method-source-midread-001", kind="procedural",
+            source_rel="other.md",
+            expected_sha256=hashlib.sha256(other.read_bytes()).hexdigest(),
+            quote="Method note.", interpretation="Untrusted method candidate",
+            parent_ids=(parent["memory_id"],))
+        from cognition_agent_os.source import safe_fixture as original_read
+        swapped = []
+
+        def replace_after_parent_read(root, relative):
+            raw = original_read(root, relative)
+            if relative == "evidence.md" and not swapped:
+                swapped.append(True)
+                self.note.write_text("Fact alpha replaced.\\n", encoding="utf-8")
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=replace_after_parent_read):
+            result = self.snapshot()
+        self.assertTrue(swapped)
+        items = {x["memory_id"]: x for x in result["items"]}
+        self.assertEqual(items[parent["memory_id"]]["status"],
+                         "SOURCE_CHANGED_OR_UNAVAILABLE", result)
+        self.assertEqual(items[child["memory_id"]]["status"],
+                         "DEPENDENCY_INVALIDATED", result)
+        self.assertIsNone(items[child["memory_id"]]["interpretation"])
+
     def test_semantic_source_drift_invalidates_dependent_method(self):
         prior = self.add()
         child = self.add(kind="procedural", quote="Fact beta.",
