@@ -268,8 +268,6 @@ def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120)
         row = db.execute("SELECT * FROM tasks WHERE task_id=?",
                          (task["task_id"],)).fetchone()
         if (not live_claim_owner(row, task)
-            or row["goal_rev"] != task["goal_rev"]
-            or row["grant_rev"] != task["grant_rev"]
             or not current_guard(db, task, needs_write=True)[0]):
             db.commit()
             return False
@@ -410,7 +408,8 @@ def live_claim_owner(row: sqlite3.Row | None, task: dict) -> bool:
     check: current_guard must still independently validate grant and lineage.
     """
     required = {"state", "claim_token", "lease_until",
-                "goal_rev", "grant_rev", "parent_task"}
+                "goal_rev", "grant_rev", "parent_task",
+                "source_spec", "due_at", "interval_seconds"}
     # A partial SELECT cannot attest the claim's original scope. Fail closed
     # rather than raise IndexError or implicitly trust omitted columns.
     if row is None or not required.issubset(row.keys()) or row["state"] != "RUNNING":
@@ -427,6 +426,12 @@ def live_claim_owner(row: sqlite3.Row | None, task: dict) -> bool:
             and row["goal_rev"] == task.get("goal_rev")
             and row["grant_rev"] == task.get("grant_rev")
             and row["parent_task"] == task.get("parent_task")
+            # The token does not authorize a different task definition or
+            # schedule. A source-spec or due-time rewrite invalidates work
+            # derived from the claim snapshot, even if the token survives.
+            and row["source_spec"] == task.get("source_spec")
+            and row["due_at"] == task.get("due_at")
+            and row["interval_seconds"] == task.get("interval_seconds")
             and type(expiry) in (int, float)
             and math.isfinite(expiry)
             and expiry > time.time())
@@ -446,11 +451,6 @@ def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | 
         # Enforce the same live lease predicate as decomposition writers,
         # inside this lock and BEFORE any artifact_writer is invoked.
         if not live_claim_owner(row, task):
-            db.commit()
-            return False
-        # Cached task fields are not a license to finalize a changed schedule.
-        # Legacy corrupt recurrence must never generate an unclaimable child.
-        if row["interval_seconds"] != task["interval_seconds"]:
             db.commit()
             return False
         ok, reason = current_guard(db, task, needs_write=artifact_writer is not None)
