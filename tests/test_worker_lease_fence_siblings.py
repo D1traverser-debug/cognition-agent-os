@@ -211,6 +211,19 @@ class CrossEntrypointLeaseFenceTests(unittest.TestCase):
                 (child_id,)).fetchone()
             self.assertEqual(tuple(after), tuple(before))
 
+    def test_partial_claim_row_cannot_certify_owner_scope(self):
+        """Every caller must present task identity fields, not just token."""
+        db, claimed = self.claim(self.intent())
+        with closing(db):
+            partial = db.execute(
+                "SELECT state,claim_token,lease_until FROM tasks WHERE task_id=?",
+                (claimed["task_id"],)).fetchone()
+            self.assertFalse(live_claim_owner(partial, claimed))
+            complete = db.execute(
+                "SELECT * FROM tasks WHERE task_id=?",
+                (claimed["task_id"],)).fetchone()
+            self.assertTrue(live_claim_owner(complete, claimed))
+
     def test_nonfinite_lease_is_never_an_unbounded_grant(self):
         db, task = self.claim(self.intent())
         with closing(db):

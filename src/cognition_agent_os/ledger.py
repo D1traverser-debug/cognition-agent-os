@@ -353,7 +353,11 @@ def live_claim_owner(row: sqlite3.Row | None, task: dict) -> bool:
     not revive an expired, malformed or unlimited lease. This is NOT a grant
     check: current_guard must still independently validate grant and lineage.
     """
-    if row is None or row["state"] != "RUNNING":
+    required = {"state", "claim_token", "lease_until",
+                "goal_rev", "grant_rev", "parent_task"}
+    # A partial SELECT cannot attest the claim's original scope. Fail closed
+    # rather than raise IndexError or implicitly trust omitted columns.
+    if row is None or not required.issubset(row.keys()) or row["state"] != "RUNNING":
         return False
     expiry = row["lease_until"]
     token = row["claim_token"]
@@ -362,6 +366,11 @@ def live_claim_owner(row: sqlite3.Row | None, task: dict) -> bool:
     return (isinstance(token, str)
             and re.fullmatch(r"[0-9a-f]{32}", token) is not None
             and token == task.get("claim_token")
+            # Token equality is insufficient when the persisted owner scope
+            # changed after the worker cached its original claim snapshot.
+            and row["goal_rev"] == task.get("goal_rev")
+            and row["grant_rev"] == task.get("grant_rev")
+            and row["parent_task"] == task.get("parent_task")
             and type(expiry) in (int, float)
             and math.isfinite(expiry)
             and expiry > time.time())

@@ -175,6 +175,40 @@ class P1Test(unittest.TestCase):
             first_db.close()
             second_db.close()
 
+    def test_claim_row_identity_drift_never_finalizes_stale_snapshot(self):
+        """An old token cannot bless a different persisted goal/grant/parent."""
+        from cognition_agent_os.ledger import finalize_observed
+        tid = self.seed()
+        db = connect(self.dbpath)
+        try:
+            claimed = claim_one(db, only_task_id=tid)
+            for column, unexpected in (("goal_rev", claimed["goal_rev"] + 1),
+                                       ("grant_rev", claimed["grant_rev"] + 1),
+                                       ("parent_task", "a" * 32)):
+                with self.subTest(column=column):
+                    db.execute(f"UPDATE tasks SET {column}=? WHERE task_id=?",
+                               (unexpected, tid))
+                    db.commit()
+                    before = db.execute("SELECT COUNT(*) FROM events WHERE task_id=?",
+                                        (tid,)).fetchone()[0]
+                    result = finalize_observed(db, claimed, "VERIFIED",
+                                               decision="NO_CHANGE")
+                    self.assertEqual(result["status"], "STALE_WORKER")
+                    self.assertEqual(db.execute(
+                        "SELECT state FROM tasks WHERE task_id=?",(tid,)
+                    ).fetchone()[0], "RUNNING")
+                    self.assertEqual(db.execute(
+                        "SELECT COUNT(*) FROM events WHERE task_id=?",
+                        (tid,)).fetchone()[0], before)
+                    db.execute(f"UPDATE tasks SET {column}=? WHERE task_id=?",
+                               (claimed[column], tid))
+                    db.commit()
+            self.assertEqual(finalize_observed(
+                db, claimed, "VERIFIED", decision="NO_CHANGE")["status"],
+                "VERIFIED")
+        finally:
+            db.close()
+
     def test_existing_poisoned_running_lease_is_reclaimable_without_result(self):
         """Older SQLite with NULL/+inf expiry must not strand work forever.
 

@@ -317,7 +317,7 @@ def run_knowledge_intent(db:sqlite3.Connection,task:dict,fixtures:Path)->dict:
         return finalize_observed(db,task,"UNKNOWN",error_code="KNOWLEDGE_NOT_APPLICABLE")
     db.execute("BEGIN IMMEDIATE")
     try:
-        current=db.execute("SELECT state,claim_token,lease_until FROM tasks "
+        current=db.execute("SELECT * FROM tasks "
                            "WHERE task_id=?",(tid,)).fetchone()
         if not live_claim_owner(current,task):
             db.commit()
