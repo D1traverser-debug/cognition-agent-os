@@ -333,7 +333,14 @@ def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | 
     db.execute("BEGIN IMMEDIATE")
     try:
         row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task["task_id"],)).fetchone()
-        if not row or row["claim_token"] != task["claim_token"] or row["state"] != "RUNNING":
+        # Claim ownership expires at lease_until, even if no successor has
+        # reclaimed it yet. Token equality alone cannot revive an expired
+        # worker's authority to publish an artifact or a VERIFIED verdict.
+        # This check runs inside the same IMMEDIATE lock as the effect writer.
+        if (not row or row["claim_token"] != task["claim_token"]
+            or row["state"] != "RUNNING"
+            or row["lease_until"] is None
+            or row["lease_until"] <= time.time()):
             db.commit()
             return False
         ok, reason = current_guard(db, task, needs_write=artifact_writer is not None)
