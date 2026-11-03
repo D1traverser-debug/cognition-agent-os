@@ -175,6 +175,37 @@ class P1Test(unittest.TestCase):
             first_db.close()
             second_db.close()
 
+    def test_invalid_lease_creation_refused_without_durable_side_effect(self):
+        """Invalid lease parameters cannot mint an unrecoverable RUNNING task."""
+        tid = self.seed()
+        db = connect(self.dbpath)
+        try:
+            baseline = db.execute(
+                "SELECT state,lease_until,claim_token FROM tasks WHERE task_id=?",
+                (tid,)).fetchone()
+            event_count = db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=?", (tid,)).fetchone()[0]
+            for duration in (float("inf"), float("nan"), -1, True, "40", 3601):
+                with self.subTest(duration=duration):
+                    with self.assertRaises(ValueError):
+                        claim_one(db, lease_seconds=duration)
+            for now in (float("inf"), float("nan"), True, "now", -1):
+                with self.subTest(now=now):
+                    with self.assertRaises(ValueError):
+                        claim_one(db, now=now)
+            after = db.execute(
+                "SELECT state,lease_until,claim_token FROM tasks WHERE task_id=?",
+                (tid,)).fetchone()
+            self.assertEqual(tuple(after), tuple(baseline))
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=?",
+                (tid,)).fetchone()[0], event_count)
+            valid = claim_one(db, lease_seconds=90)
+            self.assertIsNotNone(valid)
+            self.assertEqual(valid["task_id"], tid)
+        finally:
+            db.close()
+
     def test_expired_lease_cannot_finalize_before_takeover(self):
         """Expiry alone fences effect and verdict, even without a new worker."""
         tid = self.seed()

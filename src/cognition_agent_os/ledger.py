@@ -134,7 +134,15 @@ def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0
 
 def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds: int = 40,
               only_task_id: str | None = None) -> dict | None:
+    # A non-finite or unbounded lease can leave a RUNNING task permanently
+    # unclaimable: SQLite stores +inf and the recovery predicate never wins.
+    # Zero duration is kept for deterministic lease-takeover probes.
+    if type(lease_seconds) is not int or not 0 <= lease_seconds <= 3600:
+        raise ValueError("INVALID_CLAIM_LEASE_DURATION")
     now = time.time() if now is None else now
+    if (type(now) not in (int, float) or not math.isfinite(now)
+        or now < 0 or not math.isfinite(now + lease_seconds)):
+        raise ValueError("INVALID_CLAIM_TIMESTAMP")
     db.execute("BEGIN IMMEDIATE")
     try:
         # Admit useful work first: stale-goal tasks are still eventually
