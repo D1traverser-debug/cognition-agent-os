@@ -197,12 +197,24 @@ def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120)
     This method grants no capability and checks the original current
     goal/grant and still-enabled authorization under one write lock.
     """
-    if (not isinstance(lease_seconds, int)
-        or not 1 <= lease_seconds <= 180):
+    if type(lease_seconds) is not int or not 1 <= lease_seconds <= 180:
         raise ValueError("Lease renewal interval out of bounds")
     now = time.time()
     db.execute("BEGIN IMMEDIATE")
     try:
+        # A renewal is also an ownership-sensitive mutation. Validate the
+        # exact DB row, authority and ancestor chain under the existing
+        # IMMEDIATE lock, just as the terminal effect path does. In particular,
+        # matching malformed tokens and changed row revisions must not extend
+        # a worker's control over a task.
+        row = db.execute("SELECT * FROM tasks WHERE task_id=?",
+                         (task["task_id"],)).fetchone()
+        if (not live_claim_owner(row, task)
+            or row["goal_rev"] != task["goal_rev"]
+            or row["grant_rev"] != task["grant_rev"]
+            or not current_guard(db, task, needs_write=True)[0]):
+            db.commit()
+            return False
         updated = db.execute(
             """UPDATE tasks
                SET lease_until=?,state_version=state_version+1

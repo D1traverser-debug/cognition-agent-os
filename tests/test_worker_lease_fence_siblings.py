@@ -9,11 +9,12 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
 from cognition_agent_os.ledger import (
-    claim_one, connect, create_task, initialize, live_claim_owner,
+    claim_one, connect, create_task, initialize, live_claim_owner, renew_claim,
 )
 from cognition_agent_os.intent_runtime import run_intent
 from cognition_agent_os.knowledge_routing import run_knowledge_intent
@@ -145,6 +146,70 @@ class CrossEntrypointLeaseFenceTests(unittest.TestCase):
                     result = run_intent(db, alleged)
                     self.assertEqual(result["status"], "STALE_WORKER")
                     self.assert_no_child_or_transition(db, alleged)
+
+    def test_renew_claim_rejects_matching_malformed_token_and_preserves_lease(self):
+        """A malformed but matching SQLite token cannot extend its authority."""
+        db, claimed = self.claim(self.intent())
+        with closing(db):
+            for bad in ("", "invalid-token"):
+                with self.subTest(token=bad):
+                    db.execute("UPDATE tasks SET claim_token=?,lease_until=? "
+                               "WHERE task_id=?", (bad, time.time() + 30,
+                                                   claimed["task_id"]))
+                    db.commit()
+                    alleged = {**claimed, "claim_token": bad}
+                    before = db.execute("SELECT lease_until,state_version FROM tasks "
+                                        "WHERE task_id=?", (claimed["task_id"],)).fetchone()
+                    self.assertFalse(renew_claim(db, alleged, lease_seconds=120))
+                    after = db.execute("SELECT lease_until,state_version FROM tasks "
+                                       "WHERE task_id=?", (claimed["task_id"],)).fetchone()
+                    self.assertEqual(tuple(after), tuple(before))
+
+    def test_renew_claim_fences_invalidated_parent_and_row_revision(self):
+        """Renewal must not keep a child alive after its original lineage dies."""
+        from cognition_agent_os.ledger import alter_authority
+        db, claimed = self.claim(self.intent())
+        with closing(db):
+            self.assertTrue(renew_claim(db, claimed, lease_seconds=120))
+            db.execute("UPDATE tasks SET goal_rev=goal_rev+1 WHERE task_id=?",
+                       (claimed["task_id"],))
+            db.commit()
+            before = db.execute("SELECT lease_until,state_version FROM tasks "
+                                "WHERE task_id=?", (claimed["task_id"],)).fetchone()
+            self.assertFalse(renew_claim(db, claimed, lease_seconds=120))
+            after = db.execute("SELECT lease_until,state_version FROM tasks "
+                               "WHERE task_id=?", (claimed["task_id"],)).fetchone()
+            self.assertEqual(tuple(after), tuple(before))
+            alter_authority(db, revoke=True)
+            self.assertFalse(renew_claim(db, claimed, lease_seconds=120))
+
+    def test_renew_claim_denies_revoked_ancestor_and_invalid_duration(self):
+        """The renewal guard preserves ancestor authority and type safety."""
+        db = connect(self.db_path)
+        with closing(db):
+            parent_id = create_task(db, self.intent())
+            db.execute("UPDATE tasks SET state='DECOMPOSED' WHERE task_id=?",
+                       (parent_id,))
+            db.commit()
+            child_id = create_task(db, self.intent(), parent=parent_id)
+            claimed = claim_one(db, only_task_id=child_id)
+            self.assertEqual(claimed["task_id"], child_id)
+            self.assertTrue(renew_claim(db, claimed, lease_seconds=120))
+            for bad in (True, 1.0, "120", 181):
+                with self.subTest(duration=bad):
+                    with self.assertRaises(ValueError):
+                        renew_claim(db, claimed, lease_seconds=bad)
+            db.execute("UPDATE tasks SET state='BLOCKED' WHERE task_id=?",
+                       (parent_id,))
+            db.commit()
+            before = db.execute(
+                "SELECT lease_until,state_version FROM tasks WHERE task_id=?",
+                (child_id,)).fetchone()
+            self.assertFalse(renew_claim(db, claimed, lease_seconds=120))
+            after = db.execute(
+                "SELECT lease_until,state_version FROM tasks WHERE task_id=?",
+                (child_id,)).fetchone()
+            self.assertEqual(tuple(after), tuple(before))
 
     def test_nonfinite_lease_is_never_an_unbounded_grant(self):
         db, task = self.claim(self.intent())
