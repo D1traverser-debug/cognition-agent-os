@@ -13,7 +13,7 @@ from pathlib import Path
 import sqlite3
 import time
 
-from .ledger import connect, create_task, event, current_guard
+from .ledger import connect, create_task, event, current_guard, _next_recurring_due
 from .goal_audit import audit_goal, _constraints
 from .diagnostics import record_audit_failure, reject_review_if_untrusted
 from .goal_loop import validate_goal
@@ -179,8 +179,20 @@ def stage_one(db_path: Path, workspace: Path, fixtures: Path, task_id: str,
             if attempts>=3:
                 db.execute("UPDATE tasks SET state=?,error_code=?,state_version=state_version+1 WHERE task_id=?", ("UNKNOWN","SANDBOX_EFFECT_RETRY_EXHAUSTED",task_id))
             else:
+                try:
+                    next_due = _next_recurring_due(60*attempts,now=time.time())
+                except (ValueError,TypeError,OverflowError):
+                    db.execute("UPDATE tasks SET state='UNKNOWN',"
+                               "error_code='INVALID_SANDBOX_RETRY_SCHEDULE',"
+                               "state_version=state_version+1 WHERE task_id=?",
+                               (task_id,))
+                    event(db,task_id,"SANDBOX_RETRY_SCHEDULE_REFUSED",
+                          {"reason":"RETRY_TIME_OUT_OF_RANGE","attempt":attempts})
+                    db.commit()
+                    return _result(task_id,"EFFECT_RETRY_NOT_ADMITTED",
+                                   reason="RETRY_TIME_OUT_OF_RANGE",attempt=attempts)
                 db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
-                           (time.time()+60*attempts,task_id))
+                           (next_due,task_id))
             db.commit()
             return _result(task_id,"EFFECT_RETRY_EXHAUSTED" if attempts>=3 else "EFFECT_UNKNOWN",reason="WRITE_OR_READBACK_UNCERTAIN",attempt=attempts)
         if fault_after_effect:

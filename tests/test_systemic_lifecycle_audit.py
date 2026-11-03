@@ -60,6 +60,32 @@ class SystemicLifecycleAuditTests(unittest.TestCase):
                               interval_seconds=86400)
             self.assertIsNotNone(tid)
 
+    def test_claim_observation_clock_cannot_mint_immortal_lease(self):
+        """Bound injected time by the same task/Watch scheduling domain.
+
+        A finite but absurd future `now` previously minted a virtually
+        immortal RUNNING claim. Rejection cannot change task or event rows.
+        """
+        from cognition_agent_os.ledger import _MAX_TIMESTAMP
+        with closing(connect(self.path)) as db:
+            tid = create_task(db, {'kind':'fixture','old':'a','new':'b'})
+            baseline = db.execute('SELECT state,lease_until,claim_token '
+                                  'FROM tasks WHERE task_id=?',(tid,)).fetchone()
+            n_events = db.execute('SELECT COUNT(*) FROM events WHERE task_id=?',
+                                  (tid,)).fetchone()[0]
+            for bogus_now in (1e30, 10**1000, _MAX_TIMESTAMP, float('inf')):
+                with self.subTest(bogus_now=str(bogus_now)[:30]):
+                    with self.assertRaises(ValueError):
+                        claim_one(db,now=bogus_now,lease_seconds=40,
+                                  only_task_id=tid)
+            row = db.execute('SELECT state,lease_until,claim_token '
+                             'FROM tasks WHERE task_id=?',(tid,)).fetchone()
+            self.assertEqual(tuple(baseline),tuple(row))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM events WHERE task_id=?',
+                               (tid,)).fetchone()[0],n_events)
+            claimed=claim_one(db,only_task_id=tid,lease_seconds=40)
+            self.assertEqual(claimed['task_id'],tid)
+
     def test_legacy_nonfinite_interval_cannot_commit_verified_plus_zombie(self):
         with closing(connect(self.path)) as db:
             tid = create_task(db, {'kind': 'fixture'})

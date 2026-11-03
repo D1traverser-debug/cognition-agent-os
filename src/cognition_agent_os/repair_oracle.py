@@ -22,7 +22,7 @@ from contextlib import closing
 
 from .source import safe_fixture
 from .repair_search import parse_function, validate_repair_spec, visible_cases, RepairError
-from .ledger import connect,event,current_guard
+from .ledger import connect,event,current_guard,_next_recurring_due
 
 CHECKS={
     ast.Lt:operator.lt,ast.LtE:operator.le,
@@ -252,8 +252,22 @@ def review_patch(db_path: Path,workspace: Path,fixtures: Path,task_id:str,
                     error_code='REPAIR_HOLDOUT_UNAVAILABLE_EXHAUSTED',
                     state_version=state_version+1 WHERE task_id=?""",(task_id,))
             else:
-                db.execute("UPDATE tasks SET due_at=due_at+900 WHERE task_id=?",
-                           (task_id,))
+                try:
+                    next_due = _next_recurring_due(900,now=row["due_at"])
+                except (ValueError,TypeError,OverflowError):
+                    # The evidence is still missing, but a task beyond the
+                    # shared time domain cannot truthfully be called queued.
+                    db.execute("UPDATE tasks SET state='UNKNOWN',"
+                               "error_code='INVALID_REPAIR_RETRY_SCHEDULE',"
+                               "state_version=state_version+1 WHERE task_id=?",
+                               (task_id,))
+                    event(db,task_id,"REPAIR_RETRY_SCHEDULE_REFUSED",
+                          {"reason":"RETRY_TIME_OUT_OF_RANGE","attempt":attempts})
+                    db.commit()
+                    return {"task_id":task_id,"status":"HOLDOUT_RETRY_NOT_ADMITTED",
+                            "attempts":attempts,"reason":"RETRY_TIME_OUT_OF_RANGE"}
+                db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
+                           (next_due,task_id))
             db.commit()
             return {"task_id":task_id,
                     "status":"HOLDOUT_RETRY_EXHAUSTED" if attempts>=3 else "HOLDOUT_UNVERIFIABLE",

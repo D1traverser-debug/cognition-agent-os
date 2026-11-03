@@ -196,10 +196,16 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
     # Zero duration is kept for deterministic lease-takeover probes.
     if type(lease_seconds) is not int or not 0 <= lease_seconds <= 3600:
         raise ValueError("INVALID_CLAIM_LEASE_DURATION")
-    now = time.time() if now is None else now
-    if (type(now) not in (int, float) or not math.isfinite(now)
-        or now < 0 or not math.isfinite(now + lease_seconds)):
-        raise ValueError("INVALID_CLAIM_TIMESTAMP")
+    # No caller-supplied observation clock may mint a lease outside the same
+    # bounded timestamp domain used by task creation and Watch. A finite but
+    # absurd future timestamp otherwise becomes a virtually immortal claim.
+    try:
+        now = _validated_due_at(time.time() if now is None else now)
+        if now < 0:
+            raise ValueError("CLAIM_CLOCK_BEFORE_UNIX_EPOCH")
+        _validated_due_at(now + lease_seconds)
+    except ValueError as exc:
+        raise ValueError("INVALID_CLAIM_TIMESTAMP") from exc
     db.execute("BEGIN IMMEDIATE")
     try:
         # Admit useful work first: stale-goal tasks are still eventually

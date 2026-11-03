@@ -155,6 +155,28 @@ class SandboxEffectTests(unittest.TestCase):
         self.assertEqual(self.task(tid)["state"],"NEEDS_REVIEW")
         self.assertEqual((dest/(tid+".candidate")).read_text(),"TAMPER")
 
+    def test_effect_retry_beyond_timestamp_domain_never_creates_zombie(self):
+        """Unusable retry clock makes an explicit UNKNOWN, not a fake schedule."""
+        import cognition_agent_os.sandbox_effect as sandbox_module
+        from cognition_agent_os.ledger import _MAX_TIMESTAMP
+        from types import SimpleNamespace
+        tid,_,_=self.make()
+        folder=self.out/'sandbox';folder.mkdir(exist_ok=True)
+        (folder/(tid+'.candidate')).write_text('TAMPER')
+        initial_due=self.task(tid)['due_at']
+        with patch.object(sandbox_module,'time',
+                          SimpleNamespace(time=lambda:_MAX_TIMESTAMP-10)):
+            result=stage_one(self.db,self.out,self.fx,tid)
+        self.assertEqual(result['status'],'EFFECT_RETRY_NOT_ADMITTED')
+        self.assertEqual(result['reason'],'RETRY_TIME_OUT_OF_RANGE')
+        current=self.task(tid)
+        self.assertEqual(current['state'],'UNKNOWN')
+        self.assertEqual(current['error_code'],'INVALID_SANDBOX_RETRY_SCHEDULE')
+        self.assertEqual(current['due_at'],initial_due)
+        self.assertEqual([e['kind'] for e in self.events(tid)].count(
+                         'SANDBOX_RETRY_SCHEDULE_REFUSED'),1)
+        self.assertEqual((folder/(tid+'.candidate')).read_text(),'TAMPER')
+
     def test_repeated_sandbox_failure_has_finite_retry_budget(self):
         tid,_,_=self.make()
         folder=self.out/"sandbox"
