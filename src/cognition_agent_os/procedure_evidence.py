@@ -139,6 +139,7 @@ def inspect_cross_root_procedure_trials(
             "AND goal_rev=? AND grant_rev=? AND task_id<>? "
             "AND json_valid(source_spec) "
             "AND json_extract(source_spec,'$.kind')='native_goal' "
+            "AND json_extract(source_spec,'$.goal')<>? "
             "AND task_id IN (SELECT task_id FROM events "
             "WHERE kind='NATIVE_GOAL_REGISTERED') "
             "AND task_id IN (SELECT e.task_id FROM events AS e "
@@ -155,7 +156,8 @@ def inspect_cross_root_procedure_trials(
             "('NEEDS_REVIEW','SANDBOX_VERIFIED','UNKNOWN')) "
         )
         candidate_args = (authority["goal_rev"], authority["grant_rev"],
-                          root_task_id, *relevant_objectives)
+                          root_task_id, current["original_goal"],
+                          *relevant_objectives)
         page_size = min(_MAX_ROOT_SCAN, _MAX_TOTAL_ROOT_SCAN)
         rows = db.execute(
             candidate_selector + "ORDER BY created_at DESC,task_id DESC LIMIT ?",
