@@ -12,7 +12,7 @@ from .continuity import register_goal, resume_goal, checkpoint_goal
 from .outcome_feedback import register_evidence_goal
 from .host import HostNotConfigured, _admit_existing_ledger, run_tick
 from .runner import run_once
-from .watch import create_watch
+from .watch import create_watch, rearm_legacy_watch
 from .evaluation import EvaluationError, public_inputs, evaluate
 from .reference_model import propose_reference_local
 from .local_model import LocalModelUnavailable
@@ -60,6 +60,11 @@ def main(argv=None) -> int:
     watch.add_argument("--path", required=True)
     watch.add_argument("--branch", default="main")
     watch.add_argument("--interval-seconds", type=int, default=1800)
+    rearm_watch = sub.add_parser("rearm-watch-schedule",
+        help="Explicitly rearm an invalid legacy Watch schedule after current grant check")
+    rearm_watch.add_argument("--watch-id", required=True)
+    rearm_watch.add_argument("--interval-seconds", type=int, default=None,
+        help="Required only if the existing Watch interval itself is invalid")
     reconcile = sub.add_parser("seed-reconciliation",
                               help="Identify discrepancies between two small CSV sources")
     reconcile.add_argument("--reference",required=True)
@@ -687,6 +692,9 @@ def main(argv=None) -> int:
         elif args.command == "seed-watch-github":
             result = {"watch_id":create_watch(db, args.repo, args.path, args.branch,
                         interval_seconds=args.interval_seconds), "state":"PENDING_BASELINE"}
+        elif args.command == "rearm-watch-schedule":
+            result = rearm_legacy_watch(
+                db, args.watch_id, interval_seconds=args.interval_seconds)
         elif args.command == "revoke-write":
             alter_authority(db, revoke=True)
             result = {"grant": "REVOKED"}

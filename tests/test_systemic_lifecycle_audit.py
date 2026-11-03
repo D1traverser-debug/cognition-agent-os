@@ -185,6 +185,172 @@ class SystemicLifecycleAuditTests(unittest.TestCase):
             self.assertEqual(row['state'], 'UNKNOWN')
             self.assertIsNone(row['artifact_hash'])
 
+    def test_observer_rejects_infinite_time_before_remote_or_durable_effect(self):
+        from cognition_agent_os.watch import observe_one
+        with closing(connect(self.path)) as db:
+            wid = create_watch(db, 'owner/repo', 'README.md')
+            db.execute('UPDATE watch_sources SET due_at=0 WHERE watch_id=?', (wid,))
+            db.commit()
+        with patch('cognition_agent_os.watch.github_public_branch_head',
+                   side_effect=AssertionError('INVALID_INPUT_MUST_NOT_FETCH')):
+            with self.assertRaises(ValueError):
+                observe_one(self.path, wid, now=float('inf'))
+        with closing(connect(self.path)) as db:
+            self.assertEqual(db.execute('SELECT due_at FROM watch_sources '
+                                        'WHERE watch_id=?', (wid,)).fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM watch_observations').fetchone()[0], 0)
+
+    def test_legacy_infinite_watcher_deadline_is_visible_but_not_auto_repaired(self):
+        from cognition_agent_os.watch import observe_one
+        with closing(connect(self.path)) as db:
+            wid = create_watch(db, 'owner/repo', 'README.md')
+            db.execute('UPDATE watch_sources SET due_at=? WHERE watch_id=?',
+                       (float('inf'), wid))
+            db.commit()
+        result = poll_due_watches(self.path)
+        self.assertEqual(result, [{'watch_id':wid, 'status':'INVALID_WATCH_SCHEDULE'}])
+        self.assertEqual(observe_one(self.path, wid)['status'], 'INVALID_WATCH_SCHEDULE')
+        with closing(connect(self.path)) as db:
+            self.assertTrue(math.isinf(db.execute('SELECT due_at FROM watch_sources '
+                                     'WHERE watch_id=?',(wid,)).fetchone()[0]))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM watch_observations').fetchone()[0], 0)
+
+    def test_observer_rejects_next_due_beyond_shared_time_bound(self):
+        from cognition_agent_os.watch import observe_one
+        from cognition_agent_os.ledger import _MAX_TIMESTAMP
+        with closing(connect(self.path)) as db:
+            wid = create_watch(db, 'owner/repo', 'README.md')
+            db.execute('UPDATE watch_sources SET due_at=0 WHERE watch_id=?', (wid,))
+            db.commit()
+        with patch('cognition_agent_os.watch.github_public_branch_head',return_value='a'*40), \
+             patch('cognition_agent_os.watch.github_public_snapshot',return_value=b'original'):
+            with self.assertRaises(ValueError):
+                observe_one(self.path,wid,now=_MAX_TIMESTAMP-1)
+        with closing(connect(self.path)) as db:
+            self.assertEqual(db.execute('SELECT cursor_epoch FROM watch_sources '
+                                        'WHERE watch_id=?',(wid,)).fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM watch_observations').fetchone()[0],0)
+
+    def test_legacy_invalid_watcher_interval_is_reported_without_remote_fetch(self):
+        with closing(connect(self.path)) as db:
+            wid = create_watch(db, 'owner/repo', 'README.md')
+            db.execute('UPDATE watch_sources SET due_at=0,interval_seconds=? '
+                       'WHERE watch_id=?', (float('inf'),wid))
+            db.commit()
+        with patch('cognition_agent_os.watch.github_public_branch_head',
+                   side_effect=AssertionError('CORRUPT_SCHEDULE_MUST_NOT_FETCH')):
+            got = poll_due_watches(self.path)
+        self.assertEqual(got, [{'watch_id':wid,'status':'INVALID_WATCH_SCHEDULE'}])
+        with closing(connect(self.path)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM watch_observations').fetchone()[0],0)
+
+    def test_explicit_rearm_legacy_watch_requires_grant_and_audits_no_remote_effect(self):
+        from cognition_agent_os.watch import rearm_legacy_watch
+        with closing(connect(self.path)) as db:
+            wid = create_watch(db, 'owner/repo', 'README.md')
+            db.execute('UPDATE watch_sources SET due_at=? WHERE watch_id=?',
+                       (float('inf'), wid))
+            db.commit()
+            got = rearm_legacy_watch(db, wid)
+            self.assertEqual(got['status'], 'SCHEDULE_REARMED_NOT_OBSERVED')
+            row = db.execute('SELECT * FROM watch_sources WHERE watch_id=?', (wid,)).fetchone()
+            self.assertTrue(math.isfinite(row['due_at']))
+            self.assertEqual(row['cursor_epoch'], 1)
+            self.assertEqual(db.execute('SELECT outcome FROM watch_observations '
+                                        'WHERE watch_id=?',(wid,)).fetchone()[0], 'SCHEDULE_REARMED')
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM tasks').fetchone()[0], 0)
+        with patch('cognition_agent_os.watch.github_public_branch_head',return_value='a'*40), \
+             patch('cognition_agent_os.watch.github_public_snapshot',return_value=b'v1'):
+            outcome=poll_due_watches(self.path)
+        self.assertEqual([x['status'] for x in outcome], ['BASELINED'])
+        with closing(connect(self.path)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM tasks').fetchone()[0],0)
+
+    def test_rearm_legacy_watch_denied_by_revoked_grant_without_mutation(self):
+        from cognition_agent_os.watch import rearm_legacy_watch
+        with closing(connect(self.path)) as db:
+            wid = create_watch(db, 'owner/repo', 'README.md')
+            db.execute('UPDATE watch_sources SET due_at=? WHERE watch_id=?',
+                       (float('inf'), wid))
+            db.commit()
+            alter_authority(db,revoke=True)
+            with self.assertRaises(PermissionError):
+                rearm_legacy_watch(db,wid)
+            row=db.execute('SELECT cursor_epoch,due_at FROM watch_sources '
+                           'WHERE watch_id=?',(wid,)).fetchone()
+            self.assertEqual(row['cursor_epoch'],0)
+            self.assertTrue(math.isinf(row['due_at']))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM watch_observations').fetchone()[0],0)
+
+    def test_rearm_legacy_watch_nested_transaction_is_caller_owned(self):
+        from cognition_agent_os.watch import rearm_legacy_watch
+        with closing(connect(self.path)) as db,closing(connect(self.path)) as observer:
+            wid=create_watch(db,'owner/repo','README.md')
+            db.execute('UPDATE watch_sources SET due_at=? WHERE watch_id=?',
+                       (float('inf'),wid))
+            db.commit()
+            event(db,'test','UNCOMMITTED_BEFORE_REARM')
+            result=rearm_legacy_watch(db,wid)
+            self.assertEqual(result['status'],'SCHEDULE_REARMED_NOT_OBSERVED')
+            self.assertEqual(observer.execute('SELECT COUNT(*) FROM events WHERE kind=?',
+                              ('UNCOMMITTED_BEFORE_REARM',)).fetchone()[0],0)
+            observer.execute('SELECT watch_id FROM watch_sources').fetchone()
+            db.rollback()
+            self.assertTrue(math.isinf(db.execute('SELECT due_at FROM watch_sources '
+                                 'WHERE watch_id=?',(wid,)).fetchone()[0]))
+            self.assertEqual(observer.execute('SELECT COUNT(*) FROM watch_observations').fetchone()[0],0)
+
+    def test_rearm_invalid_legacy_interval_requires_explicit_valid_replacement(self):
+        from cognition_agent_os.watch import rearm_legacy_watch
+        with closing(connect(self.path)) as db:
+            wid=create_watch(db,'owner/repo','README.md')
+            db.execute('UPDATE watch_sources SET interval_seconds=? WHERE watch_id=?',
+                       (float('inf'),wid))
+            db.commit()
+            with self.assertRaises(ValueError):
+                rearm_legacy_watch(db,wid)
+            got=rearm_legacy_watch(db,wid,interval_seconds=1800)
+            self.assertEqual(got['status'],'SCHEDULE_REARMED_NOT_OBSERVED')
+            self.assertEqual(db.execute('SELECT interval_seconds FROM watch_sources '
+                                        'WHERE watch_id=?',(wid,)).fetchone()[0],1800)
+
+    def test_explicit_cli_rearms_legacy_schedule_through_existing_ledger(self):
+        import io
+        import json
+        from contextlib import redirect_stdout
+        from cognition_agent_os.cli import main
+        with closing(connect(self.path)) as db:
+            wid=create_watch(db,'owner/repo','README.md')
+            db.execute('UPDATE watch_sources SET due_at=? WHERE watch_id=?',
+                       (float('inf'),wid))
+            db.commit()
+        output=io.StringIO()
+        with redirect_stdout(output):
+            code=main(['--db',str(self.path),'--workspace',str(self.workspace),
+                       '--fixtures',str(self.fixtures),
+                       'rearm-watch-schedule','--watch-id',wid])
+        self.assertEqual(code,0)
+        result=json.loads(output.getvalue())
+        self.assertEqual(result['watch_id'],wid)
+        self.assertEqual(result['status'],'SCHEDULE_REARMED_NOT_OBSERVED')
+        self.assertFalse(result['owner_outcome_verified'])
+        with closing(connect(self.path)) as db:
+            self.assertTrue(math.isfinite(db.execute('SELECT due_at FROM watch_sources '
+                                 'WHERE watch_id=?',(wid,)).fetchone()[0]))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM watch_observations '
+                                       'WHERE watch_id=?',(wid,)).fetchone()[0],1)
+
+    def test_diagnostic_retry_inputs_share_finite_time_contract(self):
+        from cognition_agent_os.diagnostics import recover_one_unknown,recover_research_transport
+        for bad in (float('inf'),float('nan'),True,'later'):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    recover_one_unknown(self.path,self.fixtures,'f'*32,now=bad)
+                with self.assertRaises(ValueError):
+                    recover_research_transport(self.path,now=bad)
+        with closing(connect(self.path)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM events').fetchone()[0],0)
+
     def test_watch_observe_without_schema_does_not_bootstrap(self):
         from cognition_agent_os.watch import observe_one
         with closing(connect(self.path)) as db:
