@@ -1,0 +1,39 @@
+name: Read-only pinned source snapshot for independent audit
+
+on:
+  push:
+    branches:
+      - audit/full-tree-source-snapshot-20261103
+
+permissions:
+  contents: read
+
+jobs:
+  source_snapshot:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9eaf683
+        with:
+          persist-credentials: false
+          ref: f8fdd9b60df9dabbadc952841109814e09e8f65a
+      - name: Capture exact unchanged target tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "f8fdd9b60df9dabbadc952841109814e09e8f65a"
+          git archive --format=tar --output=exact-source-tree.tar HEAD
+          git ls-tree -r HEAD > exact-source-tree-manifest.txt
+          printf 'source_sha=%s\nsource_tree=%s\narchive_sha256=' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^{tree})" > exact-source-provenance.txt
+          sha256sum exact-source-tree.tar | awk '{print $1}' >> exact-source-provenance.txt
+          wc -l exact-source-tree-manifest.txt
+      - name: Export read-only source evidence (not a semantic PASS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-exact-source-f8fdd9b60df9
+          path: |
+            exact-source-tree.tar
+            exact-source-tree-manifest.txt
+            exact-source-provenance.txt
+          if-no-files-found: error
