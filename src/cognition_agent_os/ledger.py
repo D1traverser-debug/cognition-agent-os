@@ -160,7 +160,9 @@ def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds
         row = db.execute("""SELECT t.* FROM tasks t
                        JOIN authority a ON a.singleton=1
                        WHERE t.due_at<=? AND
-                       (t.state='PENDING' OR (t.state='RUNNING' AND t.lease_until<=?))"""
+                       (t.state='PENDING' OR (t.state='RUNNING' AND
+                         (t.lease_until<=? OR t.lease_until IS NULL OR
+                          t.lease_until=1e309)))"""
                        +pending_gate+
                        (" AND t.task_id=?" if only_task_id is not None else "")+"""
                        ORDER BY CASE WHEN t.goal_rev=a.goal_rev THEN 0 ELSE 1 END,

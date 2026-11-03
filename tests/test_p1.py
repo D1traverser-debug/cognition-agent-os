@@ -175,6 +175,36 @@ class P1Test(unittest.TestCase):
             first_db.close()
             second_db.close()
 
+    def test_existing_poisoned_running_lease_is_reclaimable_without_result(self):
+        """Older SQLite with NULL/+inf expiry must not strand work forever.
+
+        These invalid leases cannot authorize a finalize; a fresh worker must
+        receive a NEW token through the regular exclusive claim transaction.
+        """
+        for poisoned in (None, float("inf")):
+            with self.subTest(lease_until=poisoned):
+                tid=self.seed()
+                db=connect(self.dbpath)
+                try:
+                    original=claim_one(db, only_task_id=tid)
+                    self.assertEqual(original["task_id"], tid)
+                    db.execute("UPDATE tasks SET lease_until=? WHERE task_id=?",
+                               (poisoned, tid))
+                    db.commit()
+                    replacement=claim_one(db, only_task_id=tid)
+                    self.assertIsNotNone(replacement)
+                    self.assertNotEqual(original["claim_token"],replacement["claim_token"])
+                    self.assertEqual(replacement["state"],"RUNNING")
+                    from cognition_agent_os.ledger import finalize
+                    self.assertFalse(finalize(db, original, "VERIFIED", decision="NO_CHANGE"))
+                    events=db.execute("SELECT kind FROM events WHERE task_id=? ",
+                                      (tid,)).fetchall()
+                    self.assertEqual([row[0] for row in events],
+                                     ["ENQUEUED", "CLAIMED", "CLAIMED"])
+                    self.assertTrue(finalize(db, replacement, "VERIFIED",decision="NO_CHANGE"))
+                finally:
+                    db.close()
+
     def test_invalid_lease_creation_refused_without_durable_side_effect(self):
         """Invalid lease parameters cannot mint an unrecoverable RUNNING task."""
         tid = self.seed()
