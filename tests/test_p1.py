@@ -175,6 +175,61 @@ class P1Test(unittest.TestCase):
             first_db.close()
             second_db.close()
 
+    def test_expired_lease_cannot_finalize_before_takeover(self):
+        """Expiry alone fences effect and verdict, even without a new worker."""
+        tid = self.seed()
+        db = connect(self.dbpath)
+        from cognition_agent_os.ledger import finalize_observed
+        try:
+            old_claim = claim_one(db)
+            self.assertEqual(old_claim["task_id"], tid)
+            db.execute("UPDATE tasks SET lease_until=0 WHERE task_id=?", (tid,))
+            db.commit()
+            calls = []
+            result = finalize_observed(
+                db, old_claim, "VERIFIED", decision="NO_CHANGE",
+                artifact_writer=lambda: calls.append("effect") or "fake_hash")
+            self.assertEqual(result, {"task_id": tid, "status": "STALE_WORKER"})
+            self.assertEqual(calls, [])
+            row = db.execute("SELECT state,claim_token,artifact_hash FROM tasks "
+                             "WHERE task_id=?", (tid,)).fetchone()
+            self.assertEqual(row["state"], "RUNNING")
+            self.assertEqual(row["claim_token"], old_claim["claim_token"])
+            self.assertIsNone(row["artifact_hash"])
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM events WHERE task_id=? "
+                "AND kind='FINALIZED'", (tid,)).fetchone()[0], 0)
+            # Recovery remains possible: a legitimate fresh worker obtains a
+            # new token; it is not blocked by the old expired claim.
+            new_claim = claim_one(db)
+            self.assertEqual(new_claim["task_id"], tid)
+            self.assertNotEqual(new_claim["claim_token"], old_claim["claim_token"])
+            success = finalize_observed(db, new_claim, "VERIFIED",
+                                        decision="NO_CHANGE")
+            self.assertEqual(success["status"], "VERIFIED")
+        finally:
+            db.close()
+
+    def test_live_lease_can_still_finalize_with_artifact(self):
+        """The expiry fence does not block a current grant and live token."""
+        tid = self.seed()
+        db = connect(self.dbpath)
+        from cognition_agent_os.ledger import finalize_observed
+        try:
+            claim = claim_one(db, lease_seconds=40)
+            calls = []
+            result = finalize_observed(
+                db, claim, "NEEDS_REVIEW", decision="CHANGE_REQUIRES_REVIEW",
+                artifact_writer=lambda: calls.append("effect") or "a" * 64)
+            self.assertEqual(result["status"], "NEEDS_REVIEW")
+            self.assertEqual(calls, ["effect"])
+            row = db.execute("SELECT state,artifact_hash FROM tasks "
+                             "WHERE task_id=?", (tid,)).fetchone()
+            self.assertEqual(row["state"], "NEEDS_REVIEW")
+            self.assertEqual(row["artifact_hash"], "a" * 64)
+        finally:
+            db.close()
+
     def test_claim_crash_then_recover_other_process(self):
         tid=self.seed()
         p=self.child(fail_at="after_claim")
