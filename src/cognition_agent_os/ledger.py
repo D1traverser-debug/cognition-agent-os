@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from contextlib import closing, contextmanager
 import time
@@ -322,6 +323,22 @@ def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> t
     return True, None
 
 
+def live_claim_owner(row: sqlite3.Row | None, task: dict) -> bool:
+    """Live lease/token predicate for every transaction-owned task transition.
+
+    Call only under the caller's BEGIN IMMEDIATE lock. A matching token does
+    not revive an expired, malformed or unlimited lease. This is NOT a grant
+    check: current_guard must still independently validate grant and lineage.
+    """
+    if row is None or row["state"] != "RUNNING":
+        return False
+    expiry = row["lease_until"]
+    return (row["claim_token"] == task["claim_token"]
+            and type(expiry) in (int, float)
+            and math.isfinite(expiry)
+            and expiry > time.time())
+
+
 def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | None = None,
              artifact_writer=None, error_code: str | None = None,
              _committed_receipt: dict | None = None) -> bool:
@@ -333,14 +350,9 @@ def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | 
     db.execute("BEGIN IMMEDIATE")
     try:
         row = db.execute("SELECT * FROM tasks WHERE task_id=?", (task["task_id"],)).fetchone()
-        # Claim ownership expires at lease_until, even if no successor has
-        # reclaimed it yet. Token equality alone cannot revive an expired
-        # worker's authority to publish an artifact or a VERIFIED verdict.
-        # This check runs inside the same IMMEDIATE lock as the effect writer.
-        if (not row or row["claim_token"] != task["claim_token"]
-            or row["state"] != "RUNNING"
-            or row["lease_until"] is None
-            or row["lease_until"] <= time.time()):
+        # Enforce the same live lease predicate as decomposition writers,
+        # inside this lock and BEFORE any artifact_writer is invoked.
+        if not live_claim_owner(row, task):
             db.commit()
             return False
         ok, reason = current_guard(db, task, needs_write=artifact_writer is not None)
