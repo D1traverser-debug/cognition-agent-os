@@ -135,12 +135,30 @@ def _snapshot_diff(c: CapabilityContext) -> dict:
                                      error_code="SOURCE_UNAVAILABLE")
         return ({**observed, "diagnostic": type(exc).__name__}
                 if observed["status"] == "UNKNOWN" else observed)
+    # Live local fixtures are not immutable Git commit objects. Re-read the
+    # same source tuple INSIDE the finalizer's SQLite write lock. The resulting
+    # verdict is still scoped to this observation, not guaranteed forever.
+    def source_unchanged_at_finalize():
+        if spec["kind"] != "fixture":
+            # Public GitHub evidence was fetched by pinned *commit* refs;
+            # refreshing a moving branch under the write lock is both wrong
+            # and unbounded. Recheck mutable local fixtures only.
+            return True
+        try:
+            reread = legacy.get_pair(spec, c.fixtures)
+        except (legacy.SourceUnavailable, FileNotFoundError, KeyError,
+                ValueError, OSError):
+            return False
+        return reread == (old, new, evidence)
+
     if proposal["decision"] == "NO_CHANGE":
-        return finalize_observed(c.db, task, "VERIFIED", decision="NO_CHANGE")
+        return finalize_observed(c.db, task, "VERIFIED", decision="NO_CHANGE",
+                                 precommit_validator=source_unchanged_at_finalize)
     data = _artifact_bytes(task, proposal)
     try:
         observed = finalize_observed(
             c.db, task, "NEEDS_REVIEW", decision=proposal["decision"],
+            precommit_validator=source_unchanged_at_finalize,
             artifact_writer=lambda: store_once(
                 c.workspace, tid, data,
                 crash_after_write=c.fail_at == "after_artifact_before_commit"))

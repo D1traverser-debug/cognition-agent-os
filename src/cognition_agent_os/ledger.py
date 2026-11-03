@@ -82,7 +82,34 @@ def require_initialized_ledger(path: Path) -> None:
         raise LedgerNotConfigured("Ledger is not initialized or configured") from exc
 
 
+def connect_existing(path: Path) -> sqlite3.Connection:
+    """Open an already-admitted ledger for operational writes, never bootstrap.
+
+    This is distinct from connect(), which is reserved for explicit provisioning
+    and already trusted connections. The SQLite mode=rw flag rejects a missing
+    file even if it disappears between the read-only admission and open.
+    """
+    require_initialized_ledger(path)
+    if not path.is_file() or path.is_symlink():
+        raise LedgerNotConfigured("Ledger disappeared after admission")
+    try:
+        db = sqlite3.connect(path.resolve(strict=True).as_uri() + "?mode=rw",
+                             uri=True, timeout=20)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA busy_timeout=20000")
+        return db
+    except (sqlite3.Error, OSError) as exc:
+        raise LedgerNotConfigured("Existing ledger could not be opened") from exc
+
+
 def initialize(db: sqlite3.Connection) -> None:
+    """Explicit standalone provisioning; never commit a caller's transaction.
+
+    This is the only intentional authority/database bootstrap operation.
+    Operational entrypoints must use existing-ledger admission instead.
+    """
+    if db.in_transaction:
+        raise RuntimeError("LEDGER_INITIALIZE_REQUIRES_STANDALONE_TRANSACTION")
     db.executescript("""
     CREATE TABLE IF NOT EXISTS authority (
       singleton INTEGER PRIMARY KEY CHECK(singleton=1), goal_rev INTEGER NOT NULL,
@@ -117,15 +144,44 @@ def event(db: sqlite3.Connection, task_id: str, kind: str, details: dict | None 
                (task_id, kind, json.dumps(details or {}, sort_keys=True), time.time()))
 
 
+# One scheduling contract shared by creation, renewal and recurring successors.
+# SQLite accepts NaN/+inf and coercible booleans. Such values can leave work
+# forever unclaimable without ever signaling a scheduling failure.
+_MAX_TIMESTAMP = 253402300799  # last second of Gregorian year 9999
+
+
+def _validated_due_at(value: float | int) -> float:
+    if type(value) not in (int, float):
+        raise ValueError("INVALID_TASK_DUE_AT")
+    # Range check before math.isfinite: converting a huge Python int to a
+    # float can otherwise overflow before returning the intended input error.
+    if not -_MAX_TIMESTAMP <= value <= _MAX_TIMESTAMP or not math.isfinite(value):
+        raise ValueError("TASK_DUE_AT_OUT_OF_RANGE")
+    return float(value)
+
+
+def _validated_interval(value: int) -> int:
+    if type(value) is not int or not 0 <= value <= _MAX_TIMESTAMP:
+        raise ValueError("INVALID_TASK_INTERVAL")
+    return value
+
+
+def _next_recurring_due(interval: int, *, now: float) -> float:
+    seconds = _validated_interval(interval)
+    due = now + seconds
+    return _validated_due_at(due)
+
+
 def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0, due_at: float | None = None,
                 parent: str | None = None, commit: bool = True) -> str:
-    if interval_seconds < 0:
-        raise ValueError("Negative recurrence interval")
+    # Input validation must precede every write, including ENQUEUED events.
+    interval_seconds = _validated_interval(interval_seconds)
+    due = _validated_due_at(time.time() if due_at is None else due_at)
     row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
     tid = uuid.uuid4().hex
     db.execute("""INSERT INTO tasks(task_id,state,state_version,goal_rev,grant_rev,due_at,interval_seconds,
               source_spec,created_at,parent_task) VALUES(?, 'PENDING',0,?,?,?,?,?,?,?)""",
-               (tid, row["goal_rev"], row["grant_rev"], time.time() if due_at is None else due_at,
+               (tid, row["goal_rev"], row["grant_rev"], due,
                 interval_seconds, json.dumps(spec, sort_keys=True), time.time(), parent))
     event(db, tid, "ENQUEUED", {"parent": parent})
     if commit:
@@ -227,7 +283,7 @@ def renew_claim(db: sqlite3.Connection, task: dict, *, lease_seconds: int = 120)
                      WHERE singleton=1 AND goal_rev=? AND grant_rev=?
                        AND write_allowed=1
                  )""",
-            (now + lease_seconds, task["task_id"], task["claim_token"], now,
+            (max(row["lease_until"], now + lease_seconds), task["task_id"], task["claim_token"], now,
              task["goal_rev"], task["grant_rev"]),
         ).rowcount
         db.commit()
@@ -378,7 +434,7 @@ def live_claim_owner(row: sqlite3.Row | None, task: dict) -> bool:
 
 def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | None = None,
              artifact_writer=None, error_code: str | None = None,
-             _committed_receipt: dict | None = None) -> bool:
+             precommit_validator=None, _committed_receipt: dict | None = None) -> bool:
     """Hold SQLite write lock over authorization and local file effect.
 
     A crash between file creation and DB commit is reconciled by O_EXCL + same-content
@@ -392,23 +448,45 @@ def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | 
         if not live_claim_owner(row, task):
             db.commit()
             return False
+        # Cached task fields are not a license to finalize a changed schedule.
+        # Legacy corrupt recurrence must never generate an unclaimable child.
+        if row["interval_seconds"] != task["interval_seconds"]:
+            db.commit()
+            return False
         ok, reason = current_guard(db, task, needs_write=artifact_writer is not None)
         artifact_hash = None
+        recurring_due = None
         if not ok:
             state, decision, error_code = "BLOCKED", None, reason
-        elif artifact_writer is not None:
-            artifact_hash = artifact_writer()
+        else:
+            try:
+                if state in ("VERIFIED", "NEEDS_REVIEW") and row["interval_seconds"]:
+                    recurring_due = _next_recurring_due(
+                        row["interval_seconds"], now=time.time())
+            except ValueError:
+                state, decision, error_code = "UNKNOWN", None, "INVALID_RECURRING_INTERVAL"
+            if error_code != "INVALID_RECURRING_INTERVAL" and precommit_validator is not None:
+                # Snapshot-based source outcomes must be re-attested at the
+                # effect/decision commit boundary, under this same DB lock.
+                # This is NOT a perpetual guarantee for mutable live sources.
+                if precommit_validator() is not True:
+                    state, decision, error_code = "UNKNOWN", None, "SOURCE_CHANGED_BEFORE_FINALIZE"
+                elif not live_claim_owner(row, task):
+                    db.commit()
+                    return False
+            if state not in ("BLOCKED", "UNKNOWN") and artifact_writer is not None:
+                artifact_hash = artifact_writer()
         db.execute("""UPDATE tasks SET state=?,decision=?,artifact_hash=?,error_code=?,lease_until=NULL,
                     claim_token=NULL,state_version=state_version+1 WHERE task_id=?""",
                    (state, decision, artifact_hash, error_code, task["task_id"]))
         event(db, task["task_id"], "FINALIZED", {"state": state, "decision": decision, "error_code": error_code})
-        if state in ("VERIFIED", "NEEDS_REVIEW") and task["interval_seconds"]:
+        if state in ("VERIFIED", "NEEDS_REVIEW") and recurring_due is not None:
             current = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
             new_task_id = uuid.uuid4().hex
             db.execute("""INSERT INTO tasks(task_id,state,state_version,goal_rev,grant_rev,due_at,
                 interval_seconds,source_spec,created_at,parent_task) VALUES(?,'PENDING',0,?,?,?,?,?,?,?)""",
-                (new_task_id, current["goal_rev"], current["grant_rev"], time.time()+task["interval_seconds"],
-                 task["interval_seconds"], task["source_spec"], time.time(), task["task_id"]))
+                (new_task_id, current["goal_rev"], current["grant_rev"], recurring_due,
+                 row["interval_seconds"], task["source_spec"], time.time(), task["task_id"]))
             event(db, new_task_id, "ENQUEUED", {"parent": task["task_id"]})
         db.commit()
         if _committed_receipt is not None:
@@ -428,7 +506,7 @@ def finalize(db: sqlite3.Connection, task: dict, state: str, *, decision: str | 
 
 def finalize_observed(db: sqlite3.Connection, task: dict, state: str, *,
                       decision: str | None = None, artifact_writer=None,
-                      error_code: str | None = None) -> dict:
+                      error_code: str | None = None, precommit_validator=None) -> dict:
     """Report only the finalization actually committed by this lease owner.
 
     The caller's intended state is never evidence. Goal changes and grant
@@ -439,6 +517,7 @@ def finalize_observed(db: sqlite3.Connection, task: dict, state: str, *,
     receipt={}
     committed=finalize(db,task,state,decision=decision,
                        artifact_writer=artifact_writer,error_code=error_code,
+                       precommit_validator=precommit_validator,
                        _committed_receipt=receipt)
     if not committed:
         return {"task_id":task["task_id"],"status":"STALE_WORKER"}

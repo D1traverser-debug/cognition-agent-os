@@ -11,7 +11,8 @@ import time
 import uuid
 from pathlib import Path
 
-from .ledger import connect, create_task
+from .ledger import (create_task, connect_existing, require_initialized_ledger,
+                     readonly_snapshot)
 from .source import (
     SourceUnavailable, git_blob_sha, github_public_branch_head,
     github_public_snapshot, _REPO_RE, _BRANCH_RE,
@@ -26,13 +27,24 @@ def _validate(repo: str, path: str, branch: str, interval: int) -> None:
         raise ValueError("Invalid public repo or single-segment branch")
     if not path or path.startswith("/") or "\\" in path or ".." in Path(path).parts or "//" in path:
         raise ValueError("Invalid watched path")
-    if not MIN_INTERVAL <= interval <= 86400:
-        raise ValueError("Watch interval must be 900..86400 seconds; public API is rate-limited")
+    if type(interval) is not int or not MIN_INTERVAL <= interval <= 86400:
+        raise ValueError("Watch interval must be integer 900..86400 seconds; public API is rate-limited")
 
 
 def initialize_watches(db: sqlite3.Connection) -> None:
-    db.executescript("""
-    CREATE TABLE IF NOT EXISTS watch_sources (
+    """Install watch schema ONLY inside an admitted caller-owned write transaction.
+
+    DDL in individual execute() statements is transactional in SQLite.
+    executescript() would *commit the caller's previous unrelated work*.
+    The guarded registration is the normal migration entrypoint; poll is
+    read-only even if the watch schema was never provisioned.
+    """
+    if not db.in_transaction:
+        raise RuntimeError("WATCH_SCHEMA_REQUIRES_OWNER_TRANSACTION")
+    authority = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+    if authority is None or authority["write_allowed"] != 1:
+        raise PermissionError("Write authority required before watcher schema migration")
+    db.execute("""CREATE TABLE IF NOT EXISTS watch_sources (
       watch_id TEXT PRIMARY KEY,
       repo TEXT NOT NULL, path TEXT NOT NULL, branch TEXT NOT NULL,
       goal_rev INTEGER NOT NULL, grant_rev INTEGER NOT NULL,
@@ -40,26 +52,32 @@ def initialize_watches(db: sqlite3.Connection) -> None:
       baseline_ref TEXT, baseline_blob TEXT, cursor_epoch INTEGER NOT NULL DEFAULT 0,
       last_outcome TEXT, last_error TEXT, last_checked_at REAL, created_at REAL NOT NULL,
       UNIQUE(repo,path,branch)
-    );
-    CREATE TABLE IF NOT EXISTS watch_observations (
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS watch_observations (
       observation_id INTEGER PRIMARY KEY AUTOINCREMENT,
       watch_id TEXT NOT NULL, outcome TEXT NOT NULL,
       previous_ref TEXT, current_ref TEXT, content_blob TEXT,
       created_task TEXT, happened_at REAL NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_watches_due ON watch_sources(due_at);
-    """)
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_watches_due ON watch_sources(due_at)")
 
 
 def create_watch(db: sqlite3.Connection, repo: str, path: str, branch: str = "main",
                  *, interval_seconds: int = 1800) -> str:
     _validate(repo, path, branch, interval_seconds)
-    initialize_watches(db)
-    db.execute("BEGIN IMMEDIATE")
+    # The connection may already belong to a larger caller-owned transaction.
+    # Nest a SAVEPOINT in that case; never commit or roll back other work.
+    outer = db.in_transaction
+    savepoint = "watch_register_" + uuid.uuid4().hex if outer else None
+    if outer:
+        db.execute("SAVEPOINT " + savepoint)
+    else:
+        db.execute("BEGIN IMMEDIATE")
     try:
         authority = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
-        if authority is None or not authority["write_allowed"]:
+        if authority is None or authority["write_allowed"] != 1:
             raise PermissionError("Explicit write authority required before registering watcher")
+        initialize_watches(db)
         if db.execute("SELECT COUNT(*) FROM watch_sources").fetchone()[0] >= MAX_WATCHES:
             raise ValueError("Watch cap exceeded (free public GitHub rate budget)")
         watch_id = uuid.uuid4().hex
@@ -68,10 +86,17 @@ def create_watch(db: sqlite3.Connection, repo: str, path: str, branch: str = "ma
           VALUES(?,?,?,?,?,?,?,?,?)""",
           (watch_id,repo,path,branch,authority["goal_rev"],authority["grant_rev"],
            interval_seconds,time.time(),time.time()))
-        db.commit()
+        if outer:
+            db.execute("RELEASE SAVEPOINT " + savepoint)
+        else:
+            db.commit()
         return watch_id
     except BaseException:
-        db.rollback()
+        if outer:
+            db.execute("ROLLBACK TO SAVEPOINT " + savepoint)
+            db.execute("RELEASE SAVEPOINT " + savepoint)
+        else:
+            db.rollback()
         raise
 
 
@@ -91,9 +116,14 @@ def _audit(db: sqlite3.Connection, watch: sqlite3.Row, outcome: str,
 
 def observe_one(db_path: Path, watch_id: str, *, now: float | None = None) -> dict:
     now = time.time() if now is None else now
-    db = connect(db_path)
+    # Existing-only admission/open: never bootstrap from a direct observer.
+    db = connect_existing(db_path)
     try:
-        # Host/tick initializes this schema before calling observe_one.
+        has_schema = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='watch_sources'"
+        ).fetchone() is not None
+        if not has_schema:
+            return {"watch_id": watch_id, "status": "NOT_DUE"}
         prior = db.execute("SELECT * FROM watch_sources WHERE watch_id=?", (watch_id,)).fetchone()
         if prior is None or prior["due_at"] > now:
             return {"watch_id": watch_id, "status": "NOT_DUE"}
@@ -156,15 +186,19 @@ def observe_one(db_path: Path, watch_id: str, *, now: float | None = None) -> di
 
 
 def poll_due_watches(db_path: Path, *, max_watches: int = MAX_WATCHES) -> list[dict]:
-    if not 1 <= max_watches <= MAX_WATCHES:
+    if type(max_watches) is not int or not 1 <= max_watches <= MAX_WATCHES:
         raise ValueError("Invalid watcher polling bound")
-    db = connect(db_path)
-    try:
-        initialize_watches(db)
+    # Polling is inherently observational. Schema migration belongs only to
+    # the registered authorized writer, not to the host's read-only probe.
+    require_initialized_ledger(db_path)
+    with readonly_snapshot(db_path) as db:
+        has_schema = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='watch_sources'"
+        ).fetchone() is not None
+        if not has_schema:
+            return []
         now = time.time()
         ids = [r["watch_id"] for r in db.execute(
             "SELECT watch_id FROM watch_sources WHERE due_at <= ? ORDER BY due_at LIMIT ?",
-            (now,max_watches))]
-    finally:
-        db.close()
+            (now, max_watches))]
     return [observe_one(db_path, watch_id) for watch_id in ids]
