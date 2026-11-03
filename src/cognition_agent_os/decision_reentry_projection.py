@@ -116,18 +116,29 @@ def project_reentry(decisions: tuple[Decision, ...], contradiction: Contradictio
         return found
 
     invalidated = descendants(targets, causal_children)
-    review_descendants = descendants(targets, review_children) - invalidated
-    # A review-descendant decision's own produced effects also need fresh
-    # readback. They are NOT causally invalidated by the ancestor's failure.
-    review_descendant_nodes = set(review_descendants)
-    pending_review_effects = list(review_descendants)
-    while pending_review_effects:
-        current = pending_review_effects.pop()
-        for child_id in causal_children[current]:
-            if (child_id not in targets and child_id not in invalidated
-                and child_id not in review_descendant_nodes):
+    # Review edges are *reconsideration* dependencies, never causal proof.
+    # A changed decision may invalidate a causal descendant whose review
+    # children also require reconsideration. Likewise, review -> causal ->
+    # review must keep traversing both edge types after the first review edge.
+    # A review path never turns its downstream effects into causal invalidation.
+    review_descendant_nodes: set[str] = set()
+    pending_review = list(targets | invalidated)
+    while pending_review:
+        current = pending_review.pop()
+        # Any contradicted or already-invalidated decision can affect later
+        # explicit review dependents. A node reached via review must also
+        # propagate reconsideration through its causal effect descendants.
+        edges = set(review_children[current])
+        if current in review_descendant_nodes:
+            edges.update(causal_children[current])
+        for child_id in edges:
+            if child_id not in targets and child_id not in review_descendant_nodes:
                 review_descendant_nodes.add(child_id)
-                pending_review_effects.append(child_id)
+                pending_review.append(child_id)
+    # Causal invalidation takes precedence over mere review. Traverse first,
+    # exclude afterward, so an invalidated node can still trigger review of
+    # its successors without falsely invalidating those successors.
+    review_descendant_nodes.difference_update(invalidated)
 
     ancestors: set[str] = set()
     pending = list(targets)
