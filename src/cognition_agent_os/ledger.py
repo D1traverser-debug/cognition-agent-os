@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sqlite3
 from contextlib import closing, contextmanager
 import time
@@ -341,7 +342,12 @@ def live_claim_owner(row: sqlite3.Row | None, task: dict) -> bool:
     if row is None or row["state"] != "RUNNING":
         return False
     expiry = row["lease_until"]
-    return (row["claim_token"] == task["claim_token"]
+    token = row["claim_token"]
+    # NULL == NULL (or empty == empty) is not a worker claim. Claim tokens
+    # must match the 32-hex identity minted by claim_one under the ledger lock.
+    return (isinstance(token, str)
+            and re.fullmatch(r"[0-9a-f]{32}", token) is not None
+            and token == task.get("claim_token")
             and type(expiry) in (int, float)
             and math.isfinite(expiry)
             and expiry > time.time())

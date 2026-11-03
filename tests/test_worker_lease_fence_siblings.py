@@ -127,6 +127,25 @@ class CrossEntrypointLeaseFenceTests(unittest.TestCase):
             self.assertEqual(result["status"], "STALE_WORKER")
             self.assert_no_child_or_transition(db, task)
 
+    def test_missing_or_malformed_claim_token_never_grants_ownership(self):
+        """Matching NULL/empty tokens cannot masquerade as a live worker."""
+        db, task = self.claim(self.intent())
+        with closing(db):
+            for bad in (None, "", "not-a-uuid"):
+                with self.subTest(token=bad):
+                    db.execute(
+                        "UPDATE tasks SET claim_token=? WHERE task_id=?",
+                        (bad, task["task_id"]))
+                    db.commit()
+                    alleged = {**task, "claim_token": bad}
+                    row = db.execute(
+                        "SELECT state,claim_token,lease_until FROM tasks WHERE task_id=?",
+                        (task["task_id"],)).fetchone()
+                    self.assertFalse(live_claim_owner(row, alleged))
+                    result = run_intent(db, alleged)
+                    self.assertEqual(result["status"], "STALE_WORKER")
+                    self.assert_no_child_or_transition(db, alleged)
+
     def test_nonfinite_lease_is_never_an_unbounded_grant(self):
         db, task = self.claim(self.intent())
         with closing(db):
