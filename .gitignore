@@ -12,3 +12,4 @@ artifacts/
 runtime/
 secrets/
 *.log
+*.egg-info/

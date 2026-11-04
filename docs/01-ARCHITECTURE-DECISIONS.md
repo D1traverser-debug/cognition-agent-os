@@ -1,5 +1,58 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-04: executable managed session experiment (conditional)
+
+The live integration baseline `cc22304c6ebae884aae95efbc19874e6b018498a`
+passes 1,179 standard-library tests, while the supplied owner-alignment probe
+still permits and executes all five explicitly forbidden proposals. Seven
+operational interfaces also create empty databases when invoked without a
+provisioned ledger. Reproduced locally before changing code. These observations
+separate semantic admission, operational provisioning and actual client
+connectivity; they do not justify blaming every failure on one cause.
+
+| Alternative | What it changes | Counterevidence / decision |
+| --- | --- | --- |
+| More Skill prose | Model guidance | Detailed rules already coexist with false admissions; no enforcement improvement demonstrated. |
+| Replace all state/execution with a graph SDK | Scheduling, checkpointing, interruption | Upstream mechanisms still require application-specific guards and outcomes. No measured semantic advantage or migration justification. |
+| Keep existing ledger/Worker, add executable evidence dependencies and operator-bound effects | Actual admission/write boundary, recovery and source invalidation | Selected as a bounded experiment. Cannot infer arbitrary owner intent or control unrelated connectors. |
+| Deny every unknown goal | Avoid effects | Prevents legitimate exploration; managed research/observations stay available while unbound effects are rejected. |
+
+First-hand code inspected: LangGraph `pregel/_loop.py` blob
+`579b8ae09d074e7aaabf6e643cc5fe554a1cdbc6` (`tick`, `_suppress_interrupt`),
+OpenAI Agents `tool_guardrails.py` blob `613d5dbcecb4bb0e71169e9f2cf81d331023473b`
+(allow/reject/raise behaviors), AutoGen `_base_group_chat.py` blob
+`60f222912387d37be37f457ad486d51060255966` (`save_state`, `load_state`, consistency
+warning during live runs). These implementations establish useful mechanisms,
+not a product superiority benchmark. No upstream code is copied into runtime.
+
+Source URLs:
+- https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/pregel/_loop.py
+- https://github.com/openai/openai-agents-python/blob/main/src/agents/tool_guardrails.py
+- https://github.com/microsoft/autogen/blob/main/python/packages/autogen-agentchat/src/autogen_agentchat/teams/_group_chat/_base_group_chat.py
+- https://learn.chatgpt.com/docs/extend/mcp
+
+Implementation: reuse native goal identity and the same event ledger; append
+immutable corrections/nodes and derive source/dependency status at read time.
+An operator contract is separate from model records and unavailable as an MCP
+grant tool. Admission and artifact-write guards both enforce it. Restored
+snapshots preserve IDs but require fresh operator binding. Legacy typed roots
+retain compatibility and are explicitly not covered by the new semantic policy.
+
+Falsifiers: stale source or reopened ancestor still executes; legal bound
+neighbor is blocked; source text can mint authority; cold recovery loses a
+correction; restored grants silently reactivate; method outcome changes without
+withdrawal. Real SQLite/Worker and official MCP subprocess tests exercise these
+conditions. A whole-framework replacement can be reopened if comparable native
+model trials demonstrate better owner outcomes/maintenance cost. Those trials
+have **not** been run; no claim of optimal architecture or product completion.
+
+Original M033 arbitrary-language understanding remains OPEN. Manually supplied
+operator policies are not evidence of automatic goal comprehension. This branch
+must not merge under the complete-product delegation until outstanding product
+gates and independent review are resolved. Operational entry and rollback:
+[`PRODUCT_OPERATION_AND_ACCEPTANCE.md`](PRODUCT_OPERATION_AND_ACCEPTANCE.md).
+
+
 > 状态：**DESIGN PROPOSAL / 未冻结** · 2026-10-20 · 对应 [00-PRODUCT-CONOPS.md](00-PRODUCT-CONOPS.md)。任何技术名称都是备选方案，不得误写成已经部署。
 
 ## A. 系统约束优先于框架

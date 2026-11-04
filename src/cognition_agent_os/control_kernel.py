@@ -10,7 +10,7 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from .ledger import connect, current_guard
+from .ledger import connect_existing as connect, current_guard
 
 # Fixed names, not strings read from an untrusted task or model.
 _FAMILIES = frozenset({

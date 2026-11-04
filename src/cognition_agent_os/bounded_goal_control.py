@@ -18,7 +18,7 @@ import time
 from .bounded_outcome_oracle import assess_local_record, record_from_bytes
 from .goal_audit import audit_goal
 from .goal_loop import validate_goal
-from .ledger import connect, create_task, current_guard, event
+from .ledger import connect_existing as connect, create_task, current_guard, event
 from .source import SourceUnavailable, safe_fixture
 
 _ID=re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")

@@ -158,6 +158,10 @@ jobs:
         env:
           PYTHONPATH: src
         run: python scripts/verify_native_mcp_transport.py
+      - name: Verify managed cognition through real MCP and a cold process restart
+        env:
+          PYTHONPATH: src
+        run: python scripts/verify_managed_cognition_transport.py
 
   windows_offline_regression:
     # Public-repository hosted Windows runner; tests host compatibility,

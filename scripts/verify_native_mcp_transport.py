@@ -603,8 +603,19 @@ async def run():
                     await client.call_tool("native_goal_list", {}))["goals"]
             }, "NEWER_GOAL_INVISIBLE_ON_FRESH_DISCOVERY"
             with closing(connect(db)) as ledger:
-                from cognition_agent_os.ledger import alter_authority
+                from cognition_agent_os.ledger import alter_authority, create_task
+                # Unrelated legacy rows are valid only BEFORE revocation.
+                # They still challenge native type filtering on cold discovery.
+                for ordinal in range(58):
+                    create_task(ledger, {"kind": "fixture", "ref": "unrelated-" + str(ordinal)}, commit=False)
+                ledger.commit()
                 alter_authority(ledger, revoke=True)
+                try:
+                    create_task(ledger, {"kind": "fixture", "ref": "revoked"})
+                except PermissionError:
+                    pass
+                else:
+                    raise AssertionError("REVOKED_LEGACY_ENQUEUE_WAS_ADMITTED")
             revoked = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": second_id}))
             assert revoked["status"] == "NATIVE_GRANT_REVOKED", revoked
@@ -612,19 +623,6 @@ async def run():
                 "native_goal_create",
                 {"owner_goal": "This cannot regrant revoked authority."})
             assert new_attempt.is_error, new_attempt
-
-        # Forty-plus unrelated legacy tasks can be generated between
-        # sessions. A page cut BEFORE native type filtering would silently
-        # hide all earlier genuine owner goals, causing irreversible drift.
-        # These rows are NOT native roots and must never enter the native list.
-        from cognition_agent_os.ledger import create_task
-        with closing(connect(db)) as ledger:
-            for ordinal in range(58):
-                create_task(ledger, {
-                    "kind": "fixture",
-                    "ref": "unrelated-" + str(ordinal),
-                }, commit=False)
-            ledger.commit()
 
         # A brand-new client knows NO root id. It rediscovers the original
         # user goals via real SQLite before selecting the one whose exact

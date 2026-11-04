@@ -1637,8 +1637,14 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             # never independent proof that the method matches owner intent.
             if not _selected_sources_present(parsed["selected"], source_hashes):
                 raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
+            from .effect_contract import enforce_admission, bind_action
+            from .ledger import _NATIVE_ADMISSION
+            binding = enforce_admission(db, fixtures, workspace, root_id,
+                                        parsed["selected"]["child_source_spec"])
             child = create_task(db, parsed["selected"]["child_source_spec"],
-                                parent=root_id, commit=False)
+                                parent=root_id, commit=False,
+                                admission_token=_NATIVE_ADMISSION)
+            bind_action(db, root_id, child, binding)
             previous = (observed["decisions"][-1]["task_id"]
                         if observed["decisions"] else None)
             event(db, root_id, "NATIVE_DECISION_ADMITTED", {
@@ -1682,6 +1688,12 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
         if (root["state"] != "DECOMPOSED"
             or not _valid_contract(contract)):
             return False
+        from .effect_contract import managed, verify_action_binding
+        if managed(db, root["task_id"]):
+            if workspace is None or not verify_action_binding(
+                    db, fixtures, workspace, root["task_id"], task_id,
+                    json.loads(task["source_spec"])):
+                return False
         receipts = db.execute(
             "SELECT event_id,details FROM events WHERE task_id=? "
             "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",

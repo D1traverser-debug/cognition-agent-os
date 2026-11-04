@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .ledger import connect, create_task, event
+from .ledger import connect_existing as connect, create_task, event
 from .goal_audit import audit_goal
 from .reconciliation_oracle import audit_stored_report
 

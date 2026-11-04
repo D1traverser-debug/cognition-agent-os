@@ -22,7 +22,7 @@ from contextlib import closing
 
 from .source import safe_fixture
 from .repair_search import parse_function, validate_repair_spec, visible_cases, RepairError
-from .ledger import connect,event,current_guard,_next_recurring_due
+from .ledger import connect_existing as connect,event,current_guard,_next_recurring_due
 
 CHECKS={
     ast.Lt:operator.lt,ast.LtE:operator.le,
