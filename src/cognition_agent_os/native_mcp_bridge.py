@@ -21,7 +21,7 @@ from .native_decision import _sources
 from .source import safe_fixture
 from .native_decision import (
     _registered_native_contract_matches,
-    admit_native_decision, capability_catalog, inspect_native_goal,
+    admit_native_decision, capability_catalog, inspect_native_goal, list_native_goals,
     record_native_hypothesis, record_native_open_research, register_native_goal,
 )
 from .owner_postcondition import inspect_owner_local_outcome
@@ -129,85 +129,8 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
 
     @mcp.tool()
     def native_goal_list(after_task_id: str | None = None) -> dict:
-        """Enumerate EVERY original root through stable native-only keyset pages.
-
-        A cold model client has no remembered root ID. A fixed LIMIT 50 without
-        an explicit continuation cursor silently hides old goals at scale.
-        The cursor is an EXISTING native root ID, not a caller-supplied SQL
-        offset/timestamp, execution grant, or implicitly selected goal.
-        """
-        with closing(_read_only_ledger(db_path)) as db:
-            native_root = (
-                "parent_task IS NULL AND ("
-                "(CASE WHEN json_valid(source_spec) "
-                "THEN json_extract(source_spec,'$.kind') "
-                "ELSE NULL END)='native_goal' "
-                "OR task_id IN (SELECT task_id FROM events "
-                "WHERE kind='NATIVE_GOAL_REGISTERED'))")
-            # The native source_spec and its registration receipt are two
-            # separate existing identity witnesses. Either one identifies a
-            # *candidate* root for a cold inventory, but only the independent
-            # audit can expose trusted original text or admit any work.
-            # IN builds a bounded membership lookup rather than an
-            # unindexed events scan for every task row.
-            args = []
-            where = native_root
-            if after_task_id is not None:
-                if (not isinstance(after_task_id, str)
-                    or len(after_task_id) != 32
-                    or any(c not in "0123456789abcdef"
-                           for c in after_task_id)):
-                    raise ValueError("INVALID_NATIVE_GOAL_CURSOR")
-                cursor = db.execute(
-                    "SELECT created_at,task_id FROM tasks WHERE "
-                    + native_root + " AND task_id=?", (after_task_id,)
-                ).fetchone()
-                if cursor is None:
-                    raise ValueError("INVALID_NATIVE_GOAL_CURSOR")
-                # SQLite keyset ordering, including ties on created_at.
-                # Newer concurrently added goals cannot shift old pages as
-                # with OFFSET. Prepared values prevent cursor SQL injection.
-                where += " AND (created_at,task_id) < (?,?)"
-                args.extend((cursor["created_at"], cursor["task_id"]))
-            rows = db.execute(
-                "SELECT task_id FROM tasks WHERE " + where
-                + " ORDER BY created_at DESC,task_id DESC LIMIT 51", args
-            ).fetchall()
-        more = len(rows) > 50
-        page = rows[:50]
-        recovered = []
-        for row in page:
-            state = inspect_native_goal(
-                db_path, workspace, fixtures, row["task_id"])
-            if (state.get("status") == "NATIVE_GOAL_UNVERIFIABLE"
-                or not isinstance(state.get("original_goal"), str)):
-                # An unverified registration is not a trustworthy owner goal,
-                # but silently removing its root hides an unfinished obligation
-                # and can make a cold multi-goal inventory appear unique.
-                # Return ONLY its opaque identity/status; never disclose
-                # unverified text, re-admit work, or infer a new grant.
-                recovered.append({
-                    "root_task_id": row["task_id"],
-                    "status": "NATIVE_GOAL_UNVERIFIABLE",
-                    "owner_outcome_verified": False,
-                })
-                continue
-            recovered.append({
-                "root_task_id": row["task_id"],
-                "original_goal": state["original_goal"],
-                "status": state["status"],
-                "decision_count": state.get("decision_count"),
-                "owner_outcome_verified": False,
-            })
-        return {"status": "NATIVE_GOAL_INVENTORY",
-                "goals": recovered, "truncated": more,
-                "next_after_task_id": page[-1]["task_id"] if more else None,
-                "ambiguous": len(recovered) > 1 or more
-                    or after_task_id is not None
-                    or any(item["status"] == "NATIVE_GOAL_UNVERIFIABLE"
-                           for item in recovered),
-                "selected_root_task_id": None,
-                "owner_outcome_verified": False}
+        """Discover original roots without selecting one; follow next_after_task_id."""
+        return list_native_goals(db_path, workspace, fixtures, after_task_id)
 
     @mcp.tool()
     def native_goal_inspect(

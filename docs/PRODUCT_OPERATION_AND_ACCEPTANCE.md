@@ -38,6 +38,12 @@ claiming a native MCP connection. ChatGPT web requires an authorized remote
 plugin/connection; local `config.toml` does not connect the web account.
 See the [official MCP connection guide](https://learn.chatgpt.com/docs/extend/mcp).
 
+After restarting Work, run `caos --state /absolute/private/caos-state list` to
+recover root IDs instead of relying on chat memory. Follow `next_after_task_id`
+with `list --after-task-id ID`. Read a selected root with `inspect --root ID`;
+follow `next_after_event_id` using `inspect --root ID --after-event-id NUMBER`.
+The command never chooses a goal merely because it is newest.
+
 ## Use in a connected session
 
 Ask the connected client to work on the registered goal. It can discover it with

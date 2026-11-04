@@ -9,7 +9,7 @@ import sys
 from zipfile import BadZipFile
 
 from .ledger import connect, initialize, event, readonly_snapshot
-from .native_decision import register_native_goal
+from .native_decision import register_native_goal, list_native_goals
 from .cognitive_session import inspect_session, record_node, amend_goal, reopen_node
 from .effect_contract import enable_managed_session, install_contract, inspect_contract_outcome
 
@@ -35,11 +35,17 @@ def main(argv=None):
                         help="Private local directory; never commit it to Git")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init", help="Create a new isolated managed ledger, never reinitialize")
+    listing = sub.add_parser("list", help="Recover original goals without assuming a selected root")
+    listing.add_argument("--after-task-id")
     create = sub.add_parser("goal", help="Register complete original owner text")
     create.add_argument("--file", type=Path, required=True)
     create.add_argument("--request-id", required=True)
     for name in ("inspect", "outcome"):
-        sub.add_parser(name).add_argument("--root", required=True)
+        cmd = sub.add_parser(name)
+        cmd.add_argument("--root", required=True)
+        if name == "inspect":
+            cmd.add_argument("--after-event-id", type=int, default=0)
+            cmd.add_argument("--limit", type=int, default=32)
     for name in ("record", "amend", "reopen"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--root", required=True)
@@ -70,7 +76,10 @@ def main(argv=None):
             enable_managed_session(db, root)
             result = inspect_session(db, sources, root)
         elif args.command == "inspect":
-            result = inspect_session(db, sources, args.root)
+            result = inspect_session(db, sources, args.root,
+                                     after_event_id=args.after_event_id, limit=args.limit)
+        elif args.command == "list":
+            result = list_native_goals(db, workspace, sources, args.after_task_id)
         elif args.command == "outcome":
             result = inspect_contract_outcome(db, sources, workspace, args.root)
         elif args.command == "authorize":
