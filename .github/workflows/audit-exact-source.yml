@@ -17,12 +17,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-          ref: f8fdd9b60df9dabbadc952841109814e09e8f65a
+          ref: b2b8fa5b99c960b09b302e97d3e5dc7e0dfc6aea
       - name: Capture exact unchanged target tree
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "f8fdd9b60df9dabbadc952841109814e09e8f65a"
+          test "$(git rev-parse HEAD)" = "b2b8fa5b99c960b09b302e97d3e5dc7e0dfc6aea"
           git archive --format=tar --output=exact-source-tree.tar HEAD
           git ls-tree -r HEAD > exact-source-tree-manifest.txt
           printf 'source_sha=%s\nsource_tree=%s\narchive_sha256=' "$(git rev-parse HEAD)" "$(git rev-parse HEAD^{tree})" > exact-source-provenance.txt
@@ -31,7 +31,7 @@ jobs:
       - name: Export read-only source evidence (not a semantic PASS)
         uses: actions/upload-artifact@v4
         with:
-          name: audit-exact-source-f8fdd9b60df9
+          name: audit-exact-source-b2b8fa5b99c9
           path: |
             exact-source-tree.tar
             exact-source-tree-manifest.txt
