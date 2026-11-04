@@ -222,6 +222,63 @@ Primary references studied:
 - https://claude.com/resources/articles/building-agents-when-to-fold-subagents-into-your-main-agent-loop
 - https://developer.nvidia.com/blog/how-to-evaluate-ai-agents-from-tool-calls-to-task-completion
 
+## 2026-11-02 independent owner-oracle and actual native-model comparison
+
+**Why this layer was reopened.** A model's decision-review prose, a local
+test pass, or a missing business oracle cannot be treated as equivalent
+evidence. Two failure hypotheses were compared: (A) the model chooses an
+incorrect plan; (B) the evaluator cannot score an otherwise plausible goal.
+The old scorer counted the latter as a model failure whenever it was labeled
+a requested positive, which prevented valid comparisons.
+
+**Code-level governance repair.** `score_trial_results` now keeps
+independently gradable positive goals, negative safety goals, and requested
+but independently ungradable outcomes separate. It also reports unsupported
+success claims against ungradable cases. Five temporary Host/SQLite
+owner-oracle probes include two recognized local contracts and three
+unrecognized or compound ones; they run without paid/cloud/LLM inference,
+and explicitly do **not** assign model quality to a missing verifier. New
+tests include false-positive grading, safe-refusal inflation and actual
+source-preserving Host execution. The first red run
+[`41470914688`](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/41470914688)
+reproduced one mislabeled denominator and one missing category.
+
+**Real inference, rather than self-rated reasoning.** Original artifacts for
+[`41474231808`](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/41474231808)
+used actual local Ollama 0.5B coder and 1.5B instruct models, plus the same
+real Host/Worker and independent local original-owner readback. Five trials:
+three recognized local goals (including a new CSV owner reference/observed
+order with untrusted instruction text and an irrelevant JSON capability),
+two negative owner-effect controls. In the THREE gradable positive cases:
+
+| Arm | Independently verified original local-owner goals |
+|---|---:|
+| Existing deterministic Host | 3/3 |
+| Adaptive Host (exact deterministic path; zero model calls) | 3/3 |
+| Qwen2.5 instruct 1.5B native model decision | 1/3 |
+| Qwen2.5 coder 0.5B native model decision | 0/3 |
+
+The 1.5B arm abstained on the new distracted authority-order case, and
+failed JSON intent validation; 0.5B had wrong role bindings and model
+transport/response limits. No external business result was independently
+verified in any arm; a clean refusal is NOT goal completion. This is one
+small, partially overlapping benchmark: do not infer population success
+rates, general model inferiority, prompt-injection exploit, or novel domain
+skill transfer. Exact parseable goals should retain the existing deterministic
+path until a challenger demonstrates a better independently verified result.
+Unrecognized goals require a domain-specific independent scorer or stay
+UNGRADABLE.
+
+**Research/architecture decision (conditional).** Compare (1) more
+self-critique prompt fields, (2) a second Graph/Host controller,
+(3) reuse existing exact-plan Host + typed abstention/error feedback, and
+(4) external reasoning only where an independent falsifier is available.
+The measured arm comparison favors (3) for recognized contracts; (1) and
+(2) have no comparable outcome evidence and add overhead/authority overlap.
+The semantic-cognition and first-turn ChatGPT activation goals remain OPEN.
+Existing opt-in real-model triggers were removed once traces were obtained,
+so subsequent routine engineering fixes do not silently rerun the experiment.
+
 ## Evidence and work order after 2026-10-25 review
 
 **Proven in narrow scope, not general proof:** the integrated Draft candidate
@@ -258,5 +315,4 @@ third-party execution without approval.
 **Stop measuring progress in new tests, agents, documents, PR numbers or
 completion of a research stage.** Tests prove contracts or discriminate
 causes; a completed owner-relevant vertical outcome advances product status.
-No approval to merge, release, deploy to user device, spend on models or write
-to real external services is given by this document. Keep interactive acceptance OPEN until its real client/outcome gates above pass. If the owner later opts into unattended deployment, evaluate the separate six deployment gates at the same code SHA; do not conflate the phases.
+**Merge authority correction (owner clarification, 2026-11-01):** The owner delegates engineering merge-readiness decisions to the assistant; no per-merge approval is required. The assistant may merge only after independently judging the COMPLETE owner goal, relevant independent review, exact-head CI, blocking findings, rollback and acceptance evidence. This does not lower the interactive product gate or authorize a merge while the gate remains OPEN. This document does not authorize release/publication, deployment to owner devices, metered model spend, or writes to real external/child services; those remain separately gated. Keep interactive acceptance OPEN until its real client/outcome gates above pass. If the owner later opts into unattended deployment, evaluate the separate six deployment gates at the same code SHA; do not conflate the phases.

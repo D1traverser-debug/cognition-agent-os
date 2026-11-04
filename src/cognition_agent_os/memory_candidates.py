@@ -15,7 +15,7 @@ import sqlite3
 import uuid
 
 from .ledger import connect, require_initialized_ledger, readonly_snapshot
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 
 _ID = re.compile(r"[0-9a-f]{32}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
@@ -307,8 +307,25 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
                     raw = safe_fixture(source_root, identity[0])
                     source_state[identity] = (
                         raw.decode("utf-8") if _sha(raw) == identity[1] else None)
-                except (OSError, ValueError, UnicodeDecodeError):
+                except (OSError, ValueError, UnicodeDecodeError, SourceUnavailable):
                     source_state[identity] = None
+        # SQLite pins ledger rows, not external fixture bytes. A source may
+        # change *after* the first read and before the candidate is disclosed.
+        # Re-observe every distinct, initially valid source once immediately
+        # before dependency evaluation; both reads stay inside existing bounds.
+        # This narrows the external-file TOCTOU window, but cannot make a
+        # mutable file atomic with SQLite or prove semantic truth.
+        for identity, first_text in tuple(source_state.items()):
+            if first_text is None:
+                continue
+            try:
+                refreshed = safe_fixture(source_root, identity[0])
+                if (_sha(refreshed) != identity[1]
+                    or refreshed.decode("utf-8") != first_text):
+                    source_state[identity] = None
+            except (OSError, ValueError, UnicodeDecodeError, SourceUnavailable):
+                source_state[identity] = None
+
         statuses = {}
         for key, row in all_rows.items():
             source = source_state[(row["source_rel"], row["source_sha256"])]
@@ -346,6 +363,38 @@ def inspect_candidates(db_path: Path, source_root: Path, *,
         if visited != len(all_rows):
             return {"status": "MEMORY_LINEAGE_CORRUPT", "items": [],
                     "any_semantic_truth_verified": False}
+        # The original reader owns a consistent SQLite snapshot, but that
+        # snapshot can predate a grant revocation committed during source I/O.
+        # Open a NEW read-only snapshot before releasing candidate words; the
+        # existing connection would only re-read its old authority version.
+        # This cannot eliminate a change after final readback, and never
+        # upgrades untrusted interpretations to semantic facts.
+        with readonly_snapshot(db_path) as live_db:
+            live_grant = live_db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed FROM authority "
+                "WHERE singleton=1").fetchone()
+            live_root = live_db.execute(
+                "SELECT goal_rev,grant_rev,state FROM tasks "
+                "WHERE task_id=? AND parent_task IS NULL",
+                (root_task_id,)).fetchone()
+            grant_still_current = bool(
+                live_grant is not None and live_root is not None
+                and (live_grant["goal_rev"], live_grant["grant_rev"],
+                     live_grant["write_allowed"])
+                    == (authority["goal_rev"], authority["grant_rev"],
+                        authority["write_allowed"])
+                and (live_root["goal_rev"], live_root["grant_rev"],
+                     live_root["state"])
+                    == (root["goal_rev"], root["grant_rev"], root["state"])
+                and live_grant["write_allowed"] == 1
+                and live_root["state"] in _MEMORY_ELIGIBLE_ROOT_STATES)
+        if not grant_still_current:
+            statuses = {
+                key: ("GRANT_OR_GOAL_REVISION_STALE"
+                      if value == "CANDIDATE_UNVERIFIED" else value)
+                for key, value in statuses.items()
+            }
+
         items = []
         for row in page:
             key = row["memory_id"]

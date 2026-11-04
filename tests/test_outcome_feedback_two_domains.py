@@ -144,6 +144,31 @@ class OutcomeFeedbackTwoDomains(unittest.TestCase):
         self.assertEqual(self.root(tid)["state"],"UNKNOWN")
 
 
+    def test_bounded_source_unavailability_fences_feedback_admission(self):
+        """A SourceUnavailable read cannot crash admission or create children."""
+        from unittest.mock import patch
+        from cognition_agent_os.source import SourceUnavailable
+        from cognition_agent_os.outcome_feedback import advance_evidence_goals
+
+        tid = self.seed(self.structure_methods())
+        with patch("cognition_agent_os.outcome_feedback.safe_fixture",
+                   side_effect=SourceUnavailable("Fixture too large")):
+            result = advance_evidence_goals(self.db, self.work, self.fx, limit=4)
+        self.assertEqual(self.root(tid)["state"], "FEEDBACK_UNVERIFIABLE", result)
+        self.assertEqual(self.children(tid), [])
+        self.assertFalse(result[0]["business_outcome_verified"])
+
+    def test_oversized_source_prevents_feedback_child_creation(self):
+        """Real safe_fixture size limit must not escape the controller."""
+        from cognition_agent_os.outcome_feedback import advance_evidence_goals
+
+        tid = self.seed(self.structure_methods())
+        (self.fx/"conflict.json").write_bytes(b"X" * (1024 * 1024 + 1))
+        result = advance_evidence_goals(self.db, self.work, self.fx, limit=4)
+        self.assertEqual(self.root(tid)["state"], "FEEDBACK_UNVERIFIABLE", result)
+        self.assertEqual(self.children(tid), [])
+        self.assertFalse(result[0]["business_outcome_verified"])
+
     def test_missing_first_source_does_not_crash_host_or_grant_new_action(self):
         tid=self.seed(self.structure_methods())
         (self.fx / "conflict.json").unlink()

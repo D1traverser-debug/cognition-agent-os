@@ -11,7 +11,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from .ledger import connect, create_task, event
+from .ledger import connect, create_task, event, _validated_due_at, _next_recurring_due
 from .goal_loop import plan_goal, validate_goal, GoalError
 from .source import safe_fixture
 from .goal_audit import audit_goal
@@ -133,7 +133,9 @@ def recover_one_unknown(db_path: Path, fixture_root: Path, task_id: str,
     Never rerun an invalid candidate blindly; re-derive a NEW immutable child
     after re-reading a currently valid local source. At most two child replans.
     """
-    now=time.time() if now is None else now
+    now = _validated_due_at(time.time() if now is None else now)
+    if now < 0:
+        raise ValueError("INVALID_DIAGNOSTIC_OBSERVATION_TIME")
     db=connect(db_path)
     try:
         db.execute("BEGIN IMMEDIATE")
@@ -157,14 +159,15 @@ def recover_one_unknown(db_path: Path, fixture_root: Path, task_id: str,
             if first!=second: raise GoalError("Unstable source")
             plan=plan_goal(spec,first)
         except (GoalError,ValueError,KeyError,TypeError,OSError) as exc:
+            next_due = _next_recurring_due(READ_RETRY_SECONDS, now=now)
             db.execute("UPDATE tasks SET due_at=? WHERE task_id=?",
-                       (now+READ_RETRY_SECONDS,task_id))
+                       (next_due,task_id))
             # Record one bounded diagnosis per tick, never a fabricated source.
             event(db,task_id,"DIAGNOSIS_EVIDENCE_STILL_MISSING",
                   {"evidence_kind":type(exc).__name__,"next_action":"RECHECK_AFTER_COOLDOWN"})
             db.commit()
             return {"task_id":task_id,"status":"EVIDENCE_PENDING",
-                    "next_check_at":now+READ_RETRY_SECONDS}
+                    "next_check_at":next_due}
         if plan["selection"] is None:
             db.execute("""UPDATE tasks SET state=?,error_code=?,state_version=state_version+1
                           WHERE task_id=?""",
@@ -229,7 +232,9 @@ def recover_research_transport(db_path: Path, *, now: float | None = None,
     """
     if not 1 <= max_cases <= 4:
         raise ValueError("Recovery batch out of bounds")
-    now = time.time() if now is None else now
+    now = _validated_due_at(time.time() if now is None else now)
+    if now < 0:
+        raise ValueError("INVALID_RESEARCH_RETRY_TIME")
     db = connect(db_path)
     outcomes = []
     try:
@@ -279,12 +284,13 @@ def recover_research_transport(db_path: Path, *, now: float | None = None,
                 outcomes.append({"task_id":tid,"status":"RETRY_NOT_ADMITTED"})
                 continue
             # No side effect in the failed attempt: no artifact, no provider write.
+            next_due = _next_recurring_due(RESEARCH_RETRY_SECONDS, now=now)
             db.execute("""UPDATE tasks SET state='PENDING',error_code=NULL,
                 due_at=?,state_version=state_version+1
                 WHERE task_id=? AND state='UNKNOWN'""",
-                (now+RESEARCH_RETRY_SECONDS,tid))
+                (next_due,tid))
             event(db,tid,"RESEARCH_TRANSPORT_RETRY_QUEUED",
-                  {"attempt":attempts+1,"next_check_at":now+RESEARCH_RETRY_SECONDS})
+                  {"attempt":attempts+1,"next_check_at":next_due})
             outcomes.append({"task_id":tid,"status":"RETRY_QUEUED",
                              "attempt":attempts+1})
         db.commit()

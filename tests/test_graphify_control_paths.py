@@ -33,6 +33,52 @@ class GraphifyEvidenceTests(unittest.TestCase):
     def test_valid_extracted_control_edges_pass(self):
         self.assertEqual(self.result()["status"],"PASS")
 
+    def test_every_registered_capability_has_source_located_route_proof(self):
+        """Independent contract reports every adapter, not just goal_intent."""
+        result = self.result()
+        self.assertEqual(result["status"], "PASS", result)
+        routes = result["capability_routes"]
+        self.assertEqual(len(routes), 15, result)
+        self.assertEqual(
+            {x["task_kind"] for x in routes},
+            set(checker.EXPECTED_CAPABILITY_ROUTES))
+        self.assertTrue(all(
+            x["source_file"] == "src/cognition_agent_os/capability_dispatch.py"
+            and x["source_location"].startswith("L")
+            and x["confidence"] == "SOURCE_AST_STATIC_ROUTE_NOT_RUNTIME_PROOF"
+            for x in routes))
+
+    def test_real_registered_module_targets_import_without_executing_tasks(self):
+        """Static mapping is also backed by importable native code modules."""
+        import importlib
+        for kind, (_, module, symbol) in checker.EXPECTED_CAPABILITY_ROUTES.items():
+            with self.subTest(kind=kind):
+                implementation = importlib.import_module(
+                    "cognition_agent_os." + module)
+                self.assertTrue(callable(getattr(implementation, symbol, None)))
+
+    def test_runtime_dispatch_reaches_all_registered_handlers_without_effect(self):
+        """Exercise the actual dispatcher; never grant or run business effects."""
+        from cognition_agent_os import capability_dispatch as dispatch
+        self.assertEqual(set(dispatch._HANDLERS),
+                         set(checker.EXPECTED_CAPABILITY_ROUTES))
+        context = dispatch.CapabilityContext(
+            db=None, task={"task_id": "test-only", "parent_task": None},
+            db_path=Path("not-connected.sqlite"), workspace=Path("no-output"),
+            fixtures=Path("no-sources"), planner_mode="deterministic",
+            local_model=None, fail_at=None)
+        for kind in checker.EXPECTED_CAPABILITY_ROUTES:
+            with self.subTest(kind=kind):
+                calls = []
+                def sentinel(observed, selected_kind=kind):
+                    calls.append(observed)
+                    return {"status": "SENTINEL_ROUTE", "selected": selected_kind}
+                with patch.dict(dispatch._HANDLERS, {kind: sentinel}):
+                    result = dispatch.dispatch_capability(context, {"kind": kind})
+                self.assertEqual(result, {"status": "SENTINEL_ROUTE",
+                                          "selected": kind})
+                self.assertEqual(calls, [context])
+
     def test_missing_shared_kernel_grant_gate_cannot_pass_old_path_checks(self):
         target=("src_cognition_agent_os_control_kernel_drive_active_controller",
                 "src_cognition_agent_os_ledger_current_guard")
@@ -72,9 +118,35 @@ class GraphifyEvidenceTests(unittest.TestCase):
         result=self.result()
         self.assertEqual(result["status"],"PASS",result)
         self.assertEqual(result["commit"],self.sha)
-        self.assertEqual(len(result["control_edges"]),len(checker.REQUIRED_PATHS))
-        self.assertTrue(all(e["confidence"]=="EXTRACTED"
-                            for e in result["control_edges"]))
+        extracted = [e for e in result["control_edges"]
+                     if e["confidence"] == "EXTRACTED"]
+        delegation = [e for e in result["control_edges"]
+                      if e["confidence"] == "SOURCE_AST_EXPLICIT_DEPENDENCY_WIRING"]
+        self.assertEqual(len(extracted), len(checker.REQUIRED_PATHS))
+        self.assertEqual(len(delegation), 1)
+        self.assertEqual(delegation[0]["callee"],
+                         "src_cognition_agent_os_runner_run_once")
+
+    def test_rewired_native_worker_dependency_is_not_mistaken_for_real_runner(self):
+        repo=Path(__file__).resolve().parents[1]
+        dest=Path(self.tmp.name)/"src"/"cognition_agent_os"
+        dest.mkdir(parents=True, exist_ok=True)
+        for filename in ("capability_dispatch.py", "native_mcp_bridge.py",
+                         "native_local_planner.py", "host.py", "native_tick_flow.py"):
+            content=(repo/"src"/"cognition_agent_os"/filename).read_text(
+                encoding="utf-8")
+            if filename=="host.py":
+                self.assertIn("run_one=run_once", content)
+                content=content.replace("run_one=run_once",
+                                        "run_one=unauthorized_runner")
+            (dest/filename).write_text(content, encoding="utf-8")
+        self.path.write_text(json.dumps(self.graph), encoding="utf-8")
+        with patch.object(checker.subprocess, "check_output",
+                          return_value=self.sha+"\\n"):
+            result=checker.check(self.path, Path(self.tmp.name))
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn("NATIVE_FEEDBACK_WORKER_DELEGATION_UNPROVEN",
+                      result["errors"])
 
     def test_registry_cannot_silently_change_goal_intent_destination(self):
         live = (Path(__file__).resolve().parents[1] /
@@ -90,6 +162,50 @@ class GraphifyEvidenceTests(unittest.TestCase):
         self.assertEqual(result["status"], "FAIL", result)
         self.assertIn("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN",
                       result["errors"])
+
+    def _audit_mutated_dispatch(self, old, new):
+        """Change only dispatch source; keep every other real graph probe."""
+        repo = Path(__file__).resolve().parents[1]
+        target = repo / "src/cognition_agent_os/capability_dispatch.py"
+        real_read = Path.read_text
+        original = real_read(target, encoding="utf-8")
+        self.assertIn(old, original)
+        mutated = original.replace(old, new, 1)
+        self.path.write_text(json.dumps(self.graph), encoding="utf-8")
+
+        def read_with_single_override(path, *args, **kwargs):
+            if path == target:
+                return mutated
+            return real_read(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", autospec=True,
+                          side_effect=read_with_single_override):
+            with patch.object(checker.subprocess, "check_output",
+                              return_value=self.sha):
+                return checker.check(self.path, repo)
+
+    def test_other_capability_misroute_detected_not_only_goal_intent(self):
+        result = self._audit_mutated_dispatch(
+            '"research_assessment": _assessment',
+            '"research_assessment": _gap')
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertIn("CAPABILITY_ROUTE_MISMATCH:research_assessment",
+                      result["errors"])
+
+    def test_capability_target_import_from_wrong_module_detected(self):
+        result = self._audit_mutated_dispatch(
+            "from .research_assessment import run_assessment",
+            "from .research_gap import run_assessment")
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertIn("CAPABILITY_TARGET_UNPROVEN:research_assessment",
+                      result["errors"])
+
+    def test_dispatcher_bypass_detected_despite_unchanged_registration(self):
+        result = self._audit_mutated_dispatch(
+            "return _HANDLERS[kind](context)",
+            "return _snapshot_diff(context)")
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertIn("CAPABILITY_DISPATCH_BYPASS", result["errors"])
 
     def test_current_mcp_research_path_cannot_be_cut_without_graph_notice(self):
         """A stale legacy graph must not pass when the ACTIVE MCP branch breaks."""
@@ -169,6 +285,42 @@ class GraphifyEvidenceTests(unittest.TestCase):
     def test_duplicate_node_is_rejected(self):
         self.graph["nodes"].append(dict(self.graph["nodes"][0]))
         self.assertIn("DUPLICATE_NODE",self.result()["errors"])
+
+    def test_module_import_cycle_is_rejected_even_when_function_graph_passes(self):
+        """Two newly linked modules must not become a dependency loop."""
+        for name in ("alpha", "beta"):
+            self.graph["nodes"].append({
+                "id": "src_cognition_agent_os_" + name,
+                "source_file": "src/cognition_agent_os/" + name + ".py"})
+        for source, target in (("alpha", "beta"), ("beta", "alpha")):
+            self.graph["links"].append({
+                "source": "src_cognition_agent_os_" + source,
+                "target": "src_cognition_agent_os_" + target,
+                "relation": "imports_from", "confidence": "EXTRACTED",
+                "source_file": "src/cognition_agent_os/" + source + ".py",
+                "source_location": "L1"})
+        result = self.result()
+        self.assertEqual(result["status"], "FAIL", result)
+        self.assertTrue(any(
+            x.startswith("MODULE_IMPORT_CYCLE:")
+            for x in result["errors"]), result)
+
+    def test_acyclic_module_imports_preserve_valid_routing(self):
+        """A→B→C without a back edge is not incorrectly called a cycle."""
+        for name in ("alpha", "beta", "gamma"):
+            self.graph["nodes"].append({
+                "id": "src_cognition_agent_os_" + name,
+                "source_file": "src/cognition_agent_os/" + name + ".py"})
+        for source, target in (("alpha", "beta"), ("beta", "gamma")):
+            self.graph["links"].append({
+                "source": "src_cognition_agent_os_" + source,
+                "target": "src_cognition_agent_os_" + target,
+                "relation": "imports_from", "confidence": "EXTRACTED",
+                "source_file": "src/cognition_agent_os/" + source + ".py",
+                "source_location": "L1"})
+        result = self.result()
+        self.assertEqual(result["status"], "PASS", result)
+        self.assertEqual(result["module_import_cycle_count"], 0)
 
     def test_dangling_internal_edge_is_rejected(self):
         self.graph["links"].append({"source":"src_nonexistent_node",

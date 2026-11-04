@@ -15,7 +15,7 @@ import sqlite3
 
 from .ledger import open_readonly_snapshot
 from .intent_planner import compile_intent, IntentError
-from .ledger import connect, create_task, current_guard, event, finalize_observed
+from .ledger import connect, create_task, current_guard, event, finalize_observed, live_claim_owner
 from .source import safe_fixture, SourceUnavailable
 
 _ID=re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
@@ -317,10 +317,9 @@ def run_knowledge_intent(db:sqlite3.Connection,task:dict,fixtures:Path)->dict:
         return finalize_observed(db,task,"UNKNOWN",error_code="KNOWLEDGE_NOT_APPLICABLE")
     db.execute("BEGIN IMMEDIATE")
     try:
-        current=db.execute("SELECT claim_token,state FROM tasks WHERE task_id=?",
-                           (tid,)).fetchone()
-        if (current is None or current["claim_token"]!=task["claim_token"]
-            or current["state"]!="RUNNING"):
+        current=db.execute("SELECT * FROM tasks "
+                           "WHERE task_id=?",(tid,)).fetchone()
+        if not live_claim_owner(current,task):
             db.commit()
             return {"task_id":tid,"status":"STALE_WORKER"}
         allowed,reason=current_guard(db,task,needs_write=True)

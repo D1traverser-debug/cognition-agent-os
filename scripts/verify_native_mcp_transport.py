@@ -37,6 +37,30 @@ def unwrap(result):
     raise AssertionError("No structured, verifiable MCP tool result")
 
 
+async def admit_with_current_procedure_evidence(client, root_task_id, proposal):
+    """Exercise the real MCP read-before-admit contract, not a hidden planner.
+
+    The proof is a snapshot/identity fence, not approval of a method's
+    semantic relevance. The server must recheck the digest on admission.
+    """
+    projection = unwrap(await client.call_tool(
+        "native_procedure_evidence", {"root_task_id": root_task_id}))
+    assert projection.get("status") not in (
+        "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+        "NO_REGISTERED_PROCEDURE_METHOD"), projection
+    current = projection.get("cross_root_procedure_evidence_sha256")
+    candidate = json.loads(json.dumps(proposal))
+    candidate["decision_basis"].pop(
+        "cross_root_procedure_evidence_sha256", None)
+    if current is not None:
+        assert len(current) == 64, projection
+        candidate["decision_basis"][
+            "cross_root_procedure_evidence_sha256"] = current
+    return unwrap(await client.call_tool(
+        "native_decision_admit", {
+            "root_task_id": root_task_id, "proposal": candidate}))
+
+
 async def run():
     with tempfile.TemporaryDirectory() as home:
         base = Path(home)
@@ -84,7 +108,8 @@ async def run():
             env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
         async with Client(default_params) as read_client:
             names = {tool.name for tool in (await read_client.list_tools()).tools}
-            assert {"native_goal_list", "native_goal_inspect"} <= names
+            assert {"native_goal_list", "native_goal_inspect",
+                    "native_procedure_evidence"} <= names
             assert not ({"native_goal_create", "native_decision_admit",
                          "native_hypothesis_record",
                          "native_open_research_record",
@@ -107,7 +132,8 @@ async def run():
             assert "native_source_read" not in tools, tools
             assert "native_local_model_plan" not in tools, tools
             assert {"native_goal_create", "native_goal_inspect",
-                    "native_decision_admit", "native_capabilities"} <= tools
+                    "native_decision_admit", "native_capabilities",
+                    "native_procedure_evidence"} <= tools
             goal = ("Reconcile original supplier evidence, prepare isolated "
                     "handoff after checking source truth, never alter originals.")
             stable_request = "mcp-native-create-lost-ack-0001"
@@ -378,9 +404,8 @@ async def run():
             still = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
             assert still["decision_count"] == 0, still
-            admitted = unwrap(await client.call_tool(
-                "native_decision_admit", {"root_task_id": root,
-                                          "proposal": proposal}))
+            admitted = await admit_with_current_procedure_evidence(
+                client, root, proposal)
             assert admitted["status"] == "NATIVE_METHOD_ENQUEUED", admitted
             queued = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
@@ -425,9 +450,8 @@ async def run():
                 "native_goal_inspect", {"root_task_id": local_id}))
             local_proposal = json.loads(json.dumps(proposal))
             local_proposal["observation_sha256"] = local_state["observation_sha256"]
-            local_queued = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": local_id, "proposal": local_proposal}))
+            local_queued = await admit_with_current_procedure_evidence(
+                client, local_id, local_proposal)
             local_tick = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": local_id}))
             assert local_tick["target_task_id"] == local_queued["child_task_id"]
@@ -481,9 +505,8 @@ async def run():
                         "A local handoff draft is not an external business effect."),
                 },
             }
-            queued_json = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": json_root, "proposal": json_proposal}))
+            queued_json = await admit_with_current_procedure_evidence(
+                client, json_root, json_proposal)
             observed_json = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": json_root}))
             assert observed_json["target_task_id"] == queued_json["child_task_id"]
@@ -513,9 +536,8 @@ async def run():
                 "native_goal_inspect", {"root_task_id": other_id}))
             other_proposal = json.loads(json.dumps(proposal))
             other_proposal["observation_sha256"] = other_snapshot["observation_sha256"]
-            other_queued = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": other_id, "proposal": other_proposal}))
+            other_queued = await admit_with_current_procedure_evidence(
+                client, other_id, other_proposal)
             second = unwrap(await client.call_tool(
                 "native_goal_create", {"owner_goal": (
                     "Independently reconcile a second supplier case "
@@ -525,9 +547,8 @@ async def run():
                 "native_goal_inspect", {"root_task_id": second_id}))
             second_proposal = json.loads(json.dumps(proposal))
             second_proposal["observation_sha256"] = new_state["observation_sha256"]
-            second_queued = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": second_id, "proposal": second_proposal}))
+            second_queued = await admit_with_current_procedure_evidence(
+                client, second_id, second_proposal)
             selected_tick = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": second_id}))
             assert selected_tick["status"] == "NATIVE_TICK_OBSERVED", selected_tick

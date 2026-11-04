@@ -11,7 +11,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .ledger import readonly_snapshot
-from .ledger import connect, create_task, current_guard, event, finalize_observed
+from .ledger import connect, create_task, current_guard, event, finalize_observed, live_claim_owner
 from .intent_planner import compile_intent, IntentError
 
 
@@ -26,8 +26,7 @@ def run_intent(db: sqlite3.Connection, task: dict) -> dict:
     db.execute("BEGIN IMMEDIATE")
     try:
         claimed=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
-        if (not claimed or claimed["state"]!="RUNNING"
-                or claimed["claim_token"]!=task["claim_token"]):
+        if not live_claim_owner(claimed,task):
             db.commit()
             return {"task_id":tid,"status":"STALE_WORKER"}
         allowed,reason=current_guard(db,task,needs_write=True)

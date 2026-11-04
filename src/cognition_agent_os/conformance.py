@@ -15,7 +15,7 @@ import re
 import sqlite3
 from contextlib import closing
 
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 from .goal_audit import audit_goal, _constraints
 from .reconciliation_oracle import audit_stored_report
 from .intent_runtime import audit_intent_plan
@@ -167,6 +167,8 @@ def _verify_staged(db, row: sqlite3.Row, workspace: Path, fixtures: Path) -> str
             receipt.get("effect_sha256")!=hashlib.sha256(staged).hexdigest()):
             return "FALSE_EFFECT_RECEIPT"
         return "MECHANICALLY_VALID"
+    except SourceUnavailable:
+        return "STAGED_SOURCE_UNAVAILABLE"
     except (OSError,ValueError,KeyError,TypeError,UnicodeError,sqlite3.Error):
         return "STAGED_EVIDENCE_UNAVAILABLE"
 
@@ -199,7 +201,8 @@ def _verify_consistent(row: sqlite3.Row, fixtures: Path) -> str:
         # Historical fixture/source diff VERIFIED requires a distinct origin
         # proof and is not automatically upgraded based on its state label.
         return "NO_INDEPENDENT_OUTCOME_RECHECK"
-    except (OSError,ValueError,TypeError,KeyError,sqlite3.Error):
+    except (OSError,ValueError,TypeError,KeyError,sqlite3.Error,
+            SourceUnavailable):
         return "SUCCESS_EVIDENCE_UNAVAILABLE"
 
 
@@ -377,17 +380,21 @@ def _check_one(db, row: sqlite3.Row, db_path: Path,
             proof=_verify_consistent(row,fixtures)
         else:
             proof="UNSUPPORTED_EVIDENCE_STATE"
-    except (ValueError,TypeError,KeyError,OSError,sqlite3.Error):
+    except (ValueError,TypeError,KeyError,OSError,sqlite3.Error,
+            SourceUnavailable):
         proof="EVIDENCE_RECHECK_UNAVAILABLE"
     if proof=="MECHANICALLY_VALID":
         try:
             dependency=_check_released_dependency(
                 db,row,db_path,workspace,fixtures)
-        except (sqlite3.Error,ValueError,TypeError,KeyError,OSError):
+        except (sqlite3.Error,ValueError,TypeError,KeyError,OSError,
+                SourceUnavailable):
             dependency="DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE"
         if dependency is not None:
             proof=dependency
     unproven={"NO_INDEPENDENT_OUTCOME_RECHECK","SUCCESS_EVIDENCE_UNAVAILABLE",
+              "STAGED_SOURCE_UNAVAILABLE","AUDIT_SOURCE_UNAVAILABLE",
+              "CONTROL_SOURCE_UNAVAILABLE",
               "HOLDOUT_UNVERIFIABLE","HOLDOUT_PIN_MISMATCH",
               "EVIDENCE_RECHECK_UNAVAILABLE",
               "DEPENDENCY_PREDECESSOR_EVIDENCE_UNVERIFIABLE",
@@ -670,7 +677,8 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             if preview is None:
                 return _blocked("CONCURRENT_CONFORMANCE_STATE_CHANGED",
                                 checked=0, findings=[])
-    except (sqlite3.Error, OSError, ValueError, TypeError, KeyError):
+    except (sqlite3.Error, OSError, ValueError, TypeError, KeyError,
+            SourceUnavailable):
         return _blocked("EVIDENCE_UNAVAILABLE", checked=0, findings=[])
     probe = preview[0] if preview is not None else None
     db = None
@@ -836,7 +844,7 @@ def inspect_conformance(db_path: Path, workspace: Path, fixtures: Path,
             "production_mutation_authorized":False,
             "release_gate":"BLOCKED_AWAITING_INDEPENDENT_OUTCOME_AND_HOST_PROOF"
         }
-    except (sqlite3.Error,OSError) as exc:
+    except (sqlite3.Error,OSError,SourceUnavailable) as exc:
         if enforce:db.rollback()
         return _blocked("EVIDENCE_UNAVAILABLE",checked=0,findings=[],
                         diagnostic=type(exc).__name__)

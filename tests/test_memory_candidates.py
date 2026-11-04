@@ -88,6 +88,98 @@ class CandidateMemoryTests(unittest.TestCase):
         with self.assertRaisesRegex(MemoryContractError, "QUOTE_NOT_IN_PINNED_SOURCE"):
             self.add(quote="Owner approved automatic financial transfers.")
 
+    def test_read_only_memory_fails_closed_when_safe_source_unavailable(self):
+        """Bounded source failures invalidate candidates, not the entire read."""
+        from cognition_agent_os.source import SourceUnavailable
+
+        entry = self.add()
+        for reason in ("Fixture too large", "Race-safe fixture opening unsupported"):
+            with self.subTest(reason=reason):
+                with patch(
+                    "cognition_agent_os.memory_candidates.safe_fixture",
+                    side_effect=SourceUnavailable(reason),
+                ):
+                    result = self.snapshot()
+                self.assertEqual(result["status"], "READ_ONLY_CANDIDATES")
+                self.assertFalse(result["any_semantic_truth_verified"])
+                self.assertEqual(len(result["items"]), 1)
+                self.assertEqual(result["items"][0]["memory_id"], entry["memory_id"])
+                self.assertEqual(
+                    result["items"][0]["status"], "SOURCE_CHANGED_OR_UNAVAILABLE"
+                )
+                self.assertIsNone(result["items"][0]["quote"])
+                self.assertIsNone(result["items"][0]["interpretation"])
+                self.assertFalse(result["items"][0]["authorizes_action"])
+
+    def test_oversized_source_after_registration_invalidates_memory(self):
+        """Exercise the real safe_fixture bounded-read error without mocks."""
+        entry = self.add()
+        self.note.write_bytes(b"X" * (1024 * 1024 + 1))
+        result = self.snapshot()
+        self.assertEqual(result["status"], "READ_ONLY_CANDIDATES")
+        item = next(row for row in result["items"]
+                    if row["memory_id"] == entry["memory_id"])
+        self.assertEqual(item["status"], "SOURCE_CHANGED_OR_UNAVAILABLE")
+        self.assertIsNone(item["quote"])
+        self.assertIsNone(item["interpretation"])
+        self.assertFalse(item["authorizes_action"])
+
+    def test_source_replaced_during_read_does_not_disclose_stale_quote(self):
+        """The SQLite snapshot cannot pin bytes of an external source."""
+        entry = self.add()
+        from cognition_agent_os.source import safe_fixture as original_read
+        swapped = []
+
+        def replace_after_read(root, relative):
+            raw = original_read(root, relative)
+            if relative == "evidence.md" and not swapped:
+                swapped.append(True)
+                self.note.write_text("Fact alpha replaced.\\n", encoding="utf-8")
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=replace_after_read):
+            result = self.snapshot()
+        self.assertTrue(swapped)
+        item = next(x for x in result["items"] if x["memory_id"] == entry["memory_id"])
+        self.assertEqual(item["status"], "SOURCE_CHANGED_OR_UNAVAILABLE", result)
+        self.assertIsNone(item["quote"])
+        self.assertIsNone(item["interpretation"])
+        self.assertFalse(item["authorizes_action"])
+
+    def test_source_replaced_during_read_invalidates_dependent_method(self):
+        """A page may contain a method while its ancestor changes mid-read."""
+        parent = self.add()
+        other = self.sources / "other.md"
+        other.write_text("Method note.\\n", encoding="utf-8")
+        child = record_candidate(
+            self.db, self.sources, root_task_id=self.root_id,
+            request_id="method-source-midread-001", kind="procedural",
+            source_rel="other.md",
+            expected_sha256=hashlib.sha256(other.read_bytes()).hexdigest(),
+            quote="Method note.", interpretation="Untrusted method candidate",
+            parent_ids=(parent["memory_id"],))
+        from cognition_agent_os.source import safe_fixture as original_read
+        swapped = []
+
+        def replace_after_parent_read(root, relative):
+            raw = original_read(root, relative)
+            if relative == "evidence.md" and not swapped:
+                swapped.append(True)
+                self.note.write_text("Fact alpha replaced.\\n", encoding="utf-8")
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=replace_after_parent_read):
+            result = self.snapshot()
+        self.assertTrue(swapped)
+        items = {x["memory_id"]: x for x in result["items"]}
+        self.assertEqual(items[parent["memory_id"]]["status"],
+                         "SOURCE_CHANGED_OR_UNAVAILABLE", result)
+        self.assertEqual(items[child["memory_id"]]["status"],
+                         "DEPENDENCY_INVALIDATED", result)
+        self.assertIsNone(items[child["memory_id"]]["interpretation"])
+
     def test_semantic_source_drift_invalidates_dependent_method(self):
         prior = self.add()
         child = self.add(kind="procedural", quote="Fact beta.",
@@ -122,6 +214,30 @@ class CandidateMemoryTests(unittest.TestCase):
         with self.assertRaisesRegex(MemoryContractError, "MEMORY_IDEMPOTENCY_CONFLICT"):
             self.add(request_id=req, interpretation="A modified claim")
         self.assertEqual(len(self.snapshot()["items"]), 1)
+
+    def test_revocation_during_source_read_hides_memory_words(self):
+        """Grant revocation during external I/O must fence disclosure."""
+        entry = self.add()
+        from cognition_agent_os.source import safe_fixture as original_read
+        revoked = []
+
+        def revoke_after_read(root, relative):
+            raw = original_read(root, relative)
+            if not revoked:
+                with closing(connect(self.db)) as db:
+                    alter_authority(db, revoke=True)
+                revoked.append(True)
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=revoke_after_read):
+            result = self.snapshot()
+        self.assertTrue(revoked)
+        item = next(x for x in result["items"] if x["memory_id"] == entry["memory_id"])
+        self.assertEqual(item["status"], "GRANT_OR_GOAL_REVISION_STALE", result)
+        self.assertIsNone(item["quote"])
+        self.assertIsNone(item["interpretation"])
+        self.assertFalse(item["authorizes_action"])
 
     def test_revoke_blocks_candidate_write_but_read_still_works(self):
         self.add()
@@ -247,8 +363,8 @@ class CandidateMemoryTests(unittest.TestCase):
     def test_read_page_uses_one_sqlite_snapshot_across_concurrent_root_change(self):
         """A page must not combine pre-revoke authority and post-revoke edges.
 
-        The in-flight read has the old consistent snapshot. A subsequent
-        independent read must see the BLOCKED root and hide candidate words.
+        The in-flight SQLite row scan uses one old consistent snapshot, but
+        a fresh live-grant readback before disclosure must observe BLOCKED.
         Pagination across *multiple* calls is not falsely called pinned.
         """
         entry = self.add()
@@ -305,7 +421,9 @@ class CandidateMemoryTests(unittest.TestCase):
             in_flight = self.snapshot()
         self.assertEqual(triggered, [True])
         self.assertEqual(in_flight["status"], "READ_ONLY_CANDIDATES")
-        self.assertEqual(in_flight["items"][0]["status"], "CANDIDATE_UNVERIFIED")
+        self.assertEqual(in_flight["items"][0]["status"], "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(in_flight["items"][0]["quote"])
+        self.assertIsNone(in_flight["items"][0]["interpretation"])
         self.assertFalse(in_flight["cross_page_snapshot_pinned"])
 
         fresh = self.snapshot()

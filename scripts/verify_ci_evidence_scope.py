@@ -20,6 +20,7 @@ CORE = (
 )
 OPTIONAL = (
     "architecture_ab_equivalence",
+    "native_feedback_seam_ab",
     "experimental_real_local_model",
     "experimental_public_feedback_model",
     "experimental_local_7b_capacity",

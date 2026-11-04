@@ -18,7 +18,7 @@ from pathlib import Path
 from .ledger import readonly_snapshot
 from . import local_model
 from .intent_planner import compile_intent, IntentError
-from .ledger import create_task, current_guard, event, finalize_observed, renew_claim
+from .ledger import create_task, current_guard, event, finalize_observed, renew_claim, live_claim_owner
 from .source import safe_fixture, SourceUnavailable
 
 _SOURCE_NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}\Z")
@@ -633,8 +633,7 @@ def run_open_goal(db: sqlite3.Connection, task: dict, fixtures: Path,
     try:
         row = db.execute("SELECT * FROM tasks WHERE task_id=?",
                          (task["task_id"],)).fetchone()
-        if (row is None or row["state"] != "RUNNING"
-            or row["claim_token"] != task["claim_token"]):
+        if not live_claim_owner(row, task):
             db.commit()
             return {"task_id": task["task_id"], "status": "STALE_WORKER"}
         allowed, reason = current_guard(db, dict(row), needs_write=True)

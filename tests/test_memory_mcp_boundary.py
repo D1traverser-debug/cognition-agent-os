@@ -73,6 +73,60 @@ class MemoryMcpToolTests(unittest.TestCase):
         self.assertEqual(inspected["status"], "READ_ONLY_CANDIDATES")
         self.assertFalse(inspected["any_semantic_truth_verified"])
 
+    def test_actual_mcp_memory_read_fences_midread_revoke(self):
+        """The exposed MCP tool must not leak a pre-revocation text snapshot."""
+        s = self.server(allow_source_read=True, allow_goal_writes=True)
+        s.tools["native_memory_candidate_record"](
+            self.goal, "mcp-memory-revoke-midread-001", "semantic",
+            "evidence.md", self.pin(), "A real observation.",
+            "Untrusted interpretation")
+        from cognition_agent_os.source import safe_fixture as original_read
+        revoked = []
+
+        def revoke_after_source_read(root, relative):
+            raw = original_read(root, relative)
+            if not revoked:
+                with closing(connect(self.db)) as db:
+                    alter_authority(db, revoke=True)
+                revoked.append(True)
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=revoke_after_source_read):
+            observed = s.tools["native_memory_candidates_inspect"](self.goal)
+        self.assertTrue(revoked)
+        self.assertEqual(observed["status"], "READ_ONLY_CANDIDATES")
+        self.assertEqual(observed["items"][0]["status"],
+                         "GRANT_OR_GOAL_REVISION_STALE")
+        self.assertIsNone(observed["items"][0]["quote"])
+        self.assertIsNone(observed["items"][0]["interpretation"])
+
+    def test_actual_mcp_memory_read_fences_midread_source_drift(self):
+        """The MCP boundary must not forward stale interpretation bytes."""
+        s = self.server(allow_source_read=True, allow_goal_writes=True)
+        s.tools["native_memory_candidate_record"](
+            self.goal, "mcp-memory-drift-midread-001", "procedural",
+            "evidence.md", self.pin(), "A real observation.",
+            "Untrusted procedure")
+        from cognition_agent_os.source import safe_fixture as original_read
+        changed = []
+
+        def alter_after_source_read(root, relative):
+            raw = original_read(root, relative)
+            if not changed:
+                self.source.write_text("Different evidence.\\n", encoding="utf-8")
+                changed.append(True)
+            return raw
+
+        with patch("cognition_agent_os.memory_candidates.safe_fixture",
+                   side_effect=alter_after_source_read):
+            observed = s.tools["native_memory_candidates_inspect"](self.goal)
+        self.assertTrue(changed)
+        self.assertEqual(observed["items"][0]["status"],
+                         "SOURCE_CHANGED_OR_UNAVAILABLE")
+        self.assertIsNone(observed["items"][0]["quote"])
+        self.assertIsNone(observed["items"][0]["interpretation"])
+
     def test_source_change_and_revocation_are_not_bypassable(self):
         s = self.server(allow_source_read=True, allow_goal_writes=True)
         original_sha = self.pin()

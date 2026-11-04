@@ -20,7 +20,7 @@ from .container_lab import (
     validate_task_spec,candidate_changes,cases_from_bytes,run_suite,
     ContainerUnavailable)
 from .runner import store_once,ArtifactConflict,read_audited_artifact
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 from .ledger import connect,finalize_observed,event,current_guard
 
 
@@ -255,7 +255,7 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
                 "hidden_seen":False}]
         data=(json.dumps(frozen,sort_keys=True,indent=2)+"\n").encode()
         if len(data)>65536:raise ValueError("Artifact too large")
-    except (OSError,ValueError,KeyError,TypeError,UnicodeError,LocalModelUnavailable) as exc:
+    except (OSError,ValueError,KeyError,TypeError,UnicodeError,LocalModelUnavailable,SourceUnavailable) as exc:
         if isinstance(exc,CompletedCompactModelValidationRejected):
             # The response completed BEFORE short-patch validation failed.
             # Previously this falsely reported model_called=False for P24.
@@ -296,7 +296,7 @@ def run_repo_candidate(db,task,workspace,fixtures,*,planner_mode,local_model):
         observed=finalize_observed(db,task,"NEEDS_REVIEW",
                            decision="UNTRUSTED_WHOLE_FILE_REPO_CANDIDATE",
                            artifact_writer=write)
-    except (OSError,ValueError,ArtifactConflict):
+    except (OSError,ValueError,ArtifactConflict,SourceUnavailable):
         return finalize_observed(db,task,"UNKNOWN",
                                  error_code="REPOSITORY_PROPOSAL_CONFLICT")
     if observed["status"]!="NEEDS_REVIEW":return observed
@@ -365,7 +365,7 @@ def audit_repo(db_path,workspace,fixtures,tid,*,require_staged=False):
                 # the earlier verified-state claim.
                 try:
                     sealed=safe_fixture(fixtures,spec["holdout"])
-                except (OSError,ValueError,UnicodeError):
+                except (OSError,ValueError,UnicodeError,SourceUnavailable):
                     return {**fail,"reason":"HOLDOUT_PIN_MISMATCH"}
                 if sha(sealed)!=spec["holdout_sha256"]:
                     return {**fail,"reason":"HOLDOUT_PIN_MISMATCH"}
@@ -388,7 +388,7 @@ def audit_repo(db_path,workspace,fixtures,tid,*,require_staged=False):
             return {**fail,"status":"REPO_BYTES_MECHANICALLY_VALID",
                     "changes":doc["change_sha256"],
                     "holdout_seen_by_planner":False}
-    except (OSError,sqlite3.Error,ValueError,TypeError,KeyError,UnicodeError):
+    except (OSError,sqlite3.Error,ValueError,TypeError,KeyError,UnicodeError,SourceUnavailable):
         return {**fail,"reason":"REPO_EVIDENCE_UNAVAILABLE"}
 
 
@@ -425,7 +425,7 @@ def review_repo(db_path,workspace,fixtures,tid):
     except ArtifactConflict:
         return {"task_id":tid,"status":"NOT_ADMITTED",
                 "reason":"ARTIFACT_CHANGED_AFTER_AUDIT"}
-    except (OSError,ValueError,KeyError,TypeError):
+    except (OSError,ValueError,KeyError,TypeError,SourceUnavailable):
         return {"task_id":tid,"status":"EXECUTION_EVIDENCE_UNAVAILABLE"}
     # A container runtime is a PRECONDITION, never a host-execution fallback.
     try:
@@ -455,7 +455,7 @@ def review_repo(db_path,workspace,fixtures,tid):
     except ContainerUnavailable as exc:
         return {"task_id":tid,"status":"ISOLATION_UNAVAILABLE",
                 "diagnostic":str(exc),"no_host_execution":True}
-    except (OSError,ValueError,KeyError,TypeError):
+    except (OSError,ValueError,KeyError,TypeError,SourceUnavailable):
         return {"task_id":tid,"status":"EXECUTION_EVIDENCE_UNAVAILABLE"}
     db=connect(db_path)
     try:
@@ -483,7 +483,7 @@ def review_repo(db_path,workspace,fixtures,tid):
         # sealed gold. Reattest exact bytes before staging or acceptance.
         try:
             current_hidden=safe_fixture(fixtures,spec["holdout"])
-        except (OSError,ValueError):
+        except (OSError,ValueError,SourceUnavailable):
             db.commit();return {"task_id":tid,"status":"HOLDOUT_PIN_MISMATCH"}
         if (sha(current_hidden)!=spec["holdout_sha256"]
             or current_hidden!=hidden):
@@ -499,7 +499,7 @@ def review_repo(db_path,workspace,fixtures,tid):
             return {"task_id":tid,"status":"HOLDOUT_REFUTED",
                     "passes":result["passes"],"total":result["total"]}
         try:_stage(workspace,tid,changes)
-        except (OSError,ValueError):
+        except (OSError,ValueError,SourceUnavailable):
             db.commit()
             return {"task_id":tid,"status":"STAGING_UNVERIFIABLE"}
         post=audit_repo(db_path,workspace,fixtures,tid)
@@ -510,7 +510,7 @@ def review_repo(db_path,workspace,fixtures,tid):
             post_hidden=safe_fixture(fixtures,spec["holdout"])
             holdout_still_pinned=(
                 sha(post_hidden)==spec["holdout_sha256"] and post_hidden==hidden)
-        except (OSError,ValueError):
+        except (OSError,ValueError,SourceUnavailable):
             holdout_still_pinned=False
         if (post["status"]!="REPO_BYTES_MECHANICALLY_VALID"
             or post.get("artifact_sha256")!=initial.get("artifact_sha256")

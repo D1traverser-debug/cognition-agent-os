@@ -20,6 +20,7 @@ from .ledger import require_initialized_ledger, open_readonly_snapshot
 from .native_decision import _sources
 from .source import safe_fixture
 from .native_decision import (
+    _registered_native_contract_matches,
     admit_native_decision, capability_catalog, inspect_native_goal,
     record_native_hypothesis, record_native_open_research, register_native_goal,
 )
@@ -31,6 +32,32 @@ def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
     """A model-visible read must never create or silently revive the ledger."""
     require_initialized_ledger(db_path)
     return open_readonly_snapshot(db_path)
+
+
+def _native_source_grant_is_current(db_path: Path, root_task_id: str) -> bool:
+    """Verify the original registered native root and its current disclosure grant."""
+    try:
+        with closing(_read_only_ledger(db_path)) as db:
+            root = db.execute(
+                "SELECT state,source_spec,goal_rev,grant_rev FROM tasks "
+                "WHERE task_id=? AND parent_task IS NULL",
+                (root_task_id,)).fetchone()
+            authority = db.execute(
+                "SELECT goal_rev,grant_rev,write_allowed FROM authority "
+                "WHERE singleton=1").fetchone()
+            if root is None or authority is None or root["state"] != "DECOMPOSED":
+                return False
+            spec = json.loads(root["source_spec"])
+            if (not isinstance(spec, dict) or spec.get("kind") != "native_goal"
+                or not _registered_native_contract_matches(db, root_task_id, spec)):
+                return False
+            return (
+                authority["write_allowed"] == 1
+                and (root["goal_rev"], root["grant_rev"])
+                    == (authority["goal_rev"], authority["grant_rev"]))
+    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error,
+            PermissionError):
+        return False
 
 
 def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
@@ -199,6 +226,58 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             research_before_event_id=research_before_event_id)
 
     @mcp.tool()
+    def native_procedure_evidence(root_task_id: str) -> dict:
+        """Read current independent cross-root trials and their CAS digest.
+
+        A direct MCP client must use this evidence *before* proposing a
+        material method; no undisclosed planner-only dependency, success
+        claim, automatic method transfer or new authorization is created.
+        A failed/truncated projection cannot be represented as empty history.
+        """
+        from .procedure_evidence import (
+            inspect_cross_root_procedure_trials,
+            validated_procedure_snapshot_digest,
+        )
+        observed = inspect_native_goal(
+            db_path, workspace, fixtures, root_task_id)
+        if observed.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+            return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                    "reason": observed.get("status"),
+                    "root_task_id": root_task_id,
+                    "owner_outcome_verified": False}
+        with closing(_read_only_ledger(db_path)) as db:
+            row = db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=? "
+                "AND parent_task IS NULL", (root_task_id,)).fetchone()
+            if row is None:
+                return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                        "root_task_id": root_task_id,
+                        "owner_outcome_verified": False}
+            contract = json.loads(row["source_spec"])
+        catalog = capability_catalog(
+            fixtures,
+            allow_public_discovery=contract["allow_public_discovery"])
+        eligible = tuple(sorted({method["objective"] for method in
+            catalog["methods"] if method["currently_eligible"]}))
+        if not eligible:
+            return {"status": "NO_REGISTERED_PROCEDURE_METHOD",
+                    "root_task_id": root_task_id,
+                    "owner_outcome_verified": False}
+        projection = inspect_cross_root_procedure_trials(
+            db_path, workspace, fixtures, root_task_id,
+            eligible_objectives=eligible)
+        try:
+            digest = validated_procedure_snapshot_digest(projection)
+        except ValueError:
+            return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                    "root_task_id": root_task_id,
+                    "owner_outcome_verified": False}
+        return {**projection,
+                "root_task_id": root_task_id,
+                "cross_root_procedure_evidence_sha256": digest,
+                "owner_outcome_verified": False}
+
+    @mcp.tool()
     def native_owner_outcome(root_task_id: str) -> dict:
         """Independently check the entire original owner LOCAL postcondition.
 
@@ -299,14 +378,20 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 db_path, workspace, fixtures, root_task_id)
             if observed["status"] == "NATIVE_GOAL_UNVERIFIABLE":
                 raise ValueError("NATIVE_ROOT_NOT_ADMITTED")
-            # Operator opt-in to expose local bytes is not a substitute for
-            # the current owner's grant. Match the public-source read fence.
+            # Operator opt-in is not a substitute for the current SQLite
+            # grant. Evidence/source failures may be investigated read-only;
+            # they never regain decision or action admission through this tool.
             readable = (
                 "NATIVE_NEXT_DECISION_ADMISSIBLE",
                 "NATIVE_AWAITING_WORKER",
                 "NATIVE_DECISION_BUDGET_EXHAUSTED",
             )
-            if observed["status"] not in readable:
+            investigable = readable + (
+                "NATIVE_SOURCE_CHANGED",
+                "NATIVE_EVIDENCE_UNVERIFIABLE",
+            )
+            if (observed["status"] not in investigable
+                or not _native_source_grant_is_current(db_path, root_task_id)):
                 raise PermissionError("LOCAL_SOURCE_READ_NOT_ADMISSIBLE")
             manifest = _sources(fixtures)
             if (not isinstance(file_name, str)
@@ -326,9 +411,15 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             # A revoked goal must not receive the bytes produced in between.
             post_read = inspect_native_goal(
                 db_path, workspace, fixtures, root_task_id)
-            if (post_read.get("status") not in readable
-                or post_read.get("original_goal") != observed.get("original_goal")):
+            if (post_read.get("status") not in investigable
+                or post_read.get("original_goal") != observed.get("original_goal")
+                or not _native_source_grant_is_current(db_path, root_task_id)):
                 raise PermissionError("LOCAL_SOURCE_GRANT_CHANGED_DURING_READ")
+            # A pinned manifest can change while the excerpt is in memory.
+            # Re-read the exact named source digest before returning bytes.
+            post_manifest = _sources(fixtures)
+            if post_manifest.get(file_name) != digest:
+                raise ValueError("SOURCE_CHANGED_DURING_READ")
             return {
                 "status": "NATIVE_SOURCE_EXCERPT",
                 "file_name": file_name, "source_sha256": digest,
