@@ -173,7 +173,7 @@ def _append(db_path, sources, root_id, request_id, expected_revision, kind, data
 def _validate_node(node, view, sources):
     required = {"id", "kind", "text", "depends_on", "source_refs", "supersedes", "goal_revision"}
     if (not isinstance(node, dict) or not required <= set(node)
-            or set(node) - required - {"action_spec"}
+            or set(node) - required - {"action_spec", "method_refs"}
             or not isinstance(node["id"], str) or not _ID.fullmatch(node["id"])
             or not isinstance(node["kind"], str) or node["kind"] not in KINDS
             or not isinstance(node["text"], str) or not 1 <= len(node["text"]) <= 12000
@@ -212,7 +212,15 @@ def _validate_node(node, view, sources):
             raise ValueError("COGNITION_DECISION_NEEDS_COMPETING_OPTIONS")
         if node.get("action_spec") is not None and not isinstance(node["action_spec"], dict):
             raise ValueError("COGNITION_INVALID_DECISION_ACTION")
-    elif "action_spec" in node:
+        refs = node.get("method_refs", [])
+        if (not isinstance(refs, list) or len(refs) > 8 or any(
+                not isinstance(ref, dict) or set(ref) != {"root_task_id", "node_id", "use"}
+                or not isinstance(ref["root_task_id"], str)
+                or not re.fullmatch(r"[0-9a-f]{32}", ref["root_task_id"])
+                or not isinstance(ref["node_id"], str) or not _ID.fullmatch(ref["node_id"])
+                or ref["use"] not in ("experiment", "reuse") for ref in refs)):
+            raise ValueError("COGNITION_INVALID_METHOD_REFERENCE")
+    elif "action_spec" in node or "method_refs" in node:
         raise ValueError("COGNITION_ACTION_BELONGS_TO_DECISION")
 
 

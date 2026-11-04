@@ -38,7 +38,7 @@ class CognitiveSessions(unittest.TestCase):
     def view(self, root=None):
         return inspect_session(self.db, self.sources, root or self.root)
 
-    def node(self, name, kind="hypothesis", deps=(), refs=(), supersedes=None, root=None, action_spec=None):
+    def node(self, name, kind="hypothesis", deps=(), refs=(), supersedes=None, root=None, action_spec=None, method_refs=None):
         root = root or self.root
         view = self.view(root)
         data = {"id": name, "kind": kind, "text": name, "depends_on": list(deps),
@@ -46,6 +46,8 @@ class CognitiveSessions(unittest.TestCase):
                 "goal_revision": view["goal_revision"]}
         if action_spec is not None:
             data["action_spec"] = action_spec
+        if method_refs is not None:
+            data["method_refs"] = method_refs
         return record_node(self.db, self.sources, root, data,
                            request_id=name, expected_revision=view["revision_token"])
 
@@ -335,6 +337,43 @@ class CognitiveSessions(unittest.TestCase):
         self.assertEqual(result["status"], "REQUIRES_REINVESTIGATION")
         self.assertEqual(result["trials"][0]["status"], "STALE")
         self.assertFalse(result["cross_domain_generalization_verified"])
+
+    def test_referenced_method_result_is_a_live_execution_dependency(self):
+        self.decision()
+        self.node("method-v1", "method")
+        trial = register_native_goal(self.db, "Independently check the delivered count")
+        enable_managed_session(self.db, trial)
+        self.contract(effects=[], root=trial, outcomes=[{
+            "space": "workspace", "path": "count.txt", "test": "text_contains", "value": "count=4"}])
+        (self.workspace / "count.txt").write_text("count=4")
+        record_trial(self.db, self.sources, self.workspace, self.root, "method-v1", trial, "trial-live")
+        self.node("reuse-method", "decision", deps=["compare", "inspect-first"],
+            action_spec=compile_intent(self.fixture.reconcile())["child_source_spec"],
+            method_refs=[{"root_task_id": self.root, "node_id": "method-v1", "use": "reuse"}])
+        self.contract()
+        child = self.admit()["child_task_id"]
+        with closing(connect(self.db)) as db:
+            task = dict(db.execute("SELECT * FROM tasks WHERE task_id=?", (child,)).fetchone())
+            self.assertTrue(current_guard(db, task, needs_write=True)[0])
+        (self.workspace / "count.txt").write_text("count=3")
+        with closing(connect(self.db)) as db:
+            self.assertFalse(current_guard(db, task, needs_write=True)[0])
+        run_once(self.db, self.workspace, self.sources, only_task_id=child)
+        self.assertFalse((self.workspace / "artifacts" / (child + ".json")).exists())
+
+    def test_untried_method_is_an_experiment_not_verified_reuse(self):
+        self.decision()
+        self.node("untried", "method")
+        spec = compile_intent(self.fixture.reconcile())["child_source_spec"]
+        ref = {"root_task_id": self.root, "node_id": "untried", "use": "reuse"}
+        self.node("reuse-untried", "decision", deps=["compare", "inspect-first"],
+                  action_spec=spec, method_refs=[ref])
+        self.contract()
+        with self.assertRaisesRegex(ValueError, "REUSE_REQUIRES_TRIAL"):
+            self.admit()
+        self.node("try-untried", "decision", deps=["compare", "inspect-first"],
+                  action_spec=spec, method_refs=[{**ref, "use": "experiment"}])
+        self.assertEqual(self.admit()["status"], "NATIVE_METHOD_ENQUEUED")
 
     def test_managed_ledger_has_no_typed_or_cli_enqueue_bypass(self):
         with closing(connect(self.db)) as db:

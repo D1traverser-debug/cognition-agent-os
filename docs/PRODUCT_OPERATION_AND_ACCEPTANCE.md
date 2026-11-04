@@ -129,6 +129,17 @@ method and result versions; changed/failed evidence returns
 prove the method caused success, generalize across domains, or automatically
 rewrite a Skill. Semantic evaluation and controlled promotion remain OPEN.
 
+An executing decision can cite `method_refs`, each with `root_task_id`,
+`node_id` and `use` (`experiment` or `reuse`). The same admission/write guard
+revalidates these references with the existing method-trial reader. A missing,
+withdrawn, changed, failed or incompletely scanned trial dependency blocks the
+effect. `reuse` requires at least one current passing scoped trial; `experiment`
+allows an untried method without declaring it proven. Changed observations
+invalidate queued bindings even if the new observation also passes: the model
+must inspect the new evidence before a fresh decision/operator rebind.
+This checks declared dependencies, not undisclosed copying of a method or its
+semantic applicability to a new domain. Passing associations do not prove cause.
+
 For a private cross-session snapshot:
 
 ```bash

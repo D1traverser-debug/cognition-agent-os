@@ -34,6 +34,14 @@ tasks, including interruption and failure. Measure missed obligations, wrong
 effects, owner corrections, elapsed/tool cost and maintained mechanisms. Do not
 replace this comparison with source-line counts or another orchestration layer.
 
+Memory consolidation keeps source candidates and method trials as different
+evidence types. It does not merge them into another trusted-memory table.
+Declared method references join the existing decision/action binding: the trial
+reader re-observes independent results at admission and execution. Untried
+experiments remain possible; a cited failed/stale method cannot silently remain
+the basis of a queued action. This is dependency enforcement, not an automatic
+claim of semantic applicability or causal improvement.
+
 Private Site-hosted MCP is an available platform alternative: authenticated
 requests, a Worker server and D1/R2 persistence are supported. It would require
 a tested adapter/migration for this Python runtime and explicit deployment/account
