@@ -172,6 +172,10 @@ def enforce_admission(db, sources: Path, workspace: Path, root_id: str, spec: di
     if not decisions or decisions[-1]["status"] != "CURRENT":
         raise ValueError("CURRENT_COGNITIVE_DECISION_REQUIRED")
     decision = decisions[-1]
+    # A research/architecture decision cannot be borrowed as evidence for an
+    # unrelated typed action. The same immutable decision names its exact action.
+    if decision.get("action_spec") is None or digest(decision["action_spec"]) != digest(spec):
+        raise ValueError("COGNITIVE_DECISION_ACTION_MISMATCH")
     return {"policy_sha256": policy["sha256"], "goal_sha256": view["goal_sha256"],
             "policy_event_id": policy["event_id"],
             "decision_id": decision["id"], "decision_event_id": decision["event_id"],

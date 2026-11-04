@@ -38,12 +38,14 @@ class CognitiveSessions(unittest.TestCase):
     def view(self, root=None):
         return inspect_session(self.db, self.sources, root or self.root)
 
-    def node(self, name, kind="hypothesis", deps=(), refs=(), supersedes=None, root=None):
+    def node(self, name, kind="hypothesis", deps=(), refs=(), supersedes=None, root=None, action_spec=None):
         root = root or self.root
         view = self.view(root)
         data = {"id": name, "kind": kind, "text": name, "depends_on": list(deps),
                 "source_refs": list(refs), "supersedes": supersedes,
                 "goal_revision": view["goal_revision"]}
+        if action_spec is not None:
+            data["action_spec"] = action_spec
         return record_node(self.db, self.sources, root, data,
                            request_id=name, expected_revision=view["revision_token"])
 
@@ -54,7 +56,22 @@ class CognitiveSessions(unittest.TestCase):
         self.node("hypothesis", deps=["evidence"])
         self.node("compare", "option", deps=["hypothesis"])
         self.node("inspect-first", "option", deps=["evidence"])
-        self.node("selected", "decision", deps=["compare", "inspect-first"])
+        self.node("selected", "decision", deps=["compare", "inspect-first"],
+                  action_spec=compile_intent(self.fixture.reconcile())["child_source_spec"])
+
+    def test_decision_and_execution_cannot_silently_select_different_actions(self):
+        self.decision()
+        self.contract()
+        self.node("research-only", "decision", deps=["compare", "inspect-first"])
+        with self.assertRaisesRegex(ValueError, "DECISION_ACTION_MISMATCH"):
+            self.admit()
+        different = {"kind": "unrelated-capability"}
+        self.node("wrong-action", "decision", deps=["compare", "inspect-first"], action_spec=different)
+        with self.assertRaisesRegex(ValueError, "DECISION_ACTION_MISMATCH"):
+            self.admit()
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM tasks WHERE parent_task=?",
+                                       (self.root,)).fetchone()[0], 0)
 
     def contract(self, effects=None, outcomes=None, root=None):
         root = root or self.root

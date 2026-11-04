@@ -63,6 +63,12 @@ use `cognition_goal_amend`; they preserve the original and invalidate previous
 derived decisions/contracts. A revision conflict requires a new read, not an
 unconditional retry. An identical request ID safely replays a lost response.
 
+A decision that proposes execution includes `action_spec`, exactly the typed
+child capability spec it selected. Admission rejects a different action even
+when that other action is operator-authorized. Decisions without `action_spec`
+remain available for investigation but cannot authorize execution. This binds
+the decision to the Worker action; it does not certify its semantic reasoning.
+
 ## Approve effects and independently check results
 
 Managed sessions cannot execute a model's proposal merely because it passes a

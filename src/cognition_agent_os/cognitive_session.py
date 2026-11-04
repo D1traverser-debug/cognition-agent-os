@@ -172,7 +172,8 @@ def _append(db_path, sources, root_id, request_id, expected_revision, kind, data
 
 def _validate_node(node, view, sources):
     required = {"id", "kind", "text", "depends_on", "source_refs", "supersedes", "goal_revision"}
-    if (not isinstance(node, dict) or set(node) != required
+    if (not isinstance(node, dict) or not required <= set(node)
+            or set(node) - required - {"action_spec"}
             or not isinstance(node["id"], str) or not _ID.fullmatch(node["id"])
             or not isinstance(node["kind"], str) or node["kind"] not in KINDS
             or not isinstance(node["text"], str) or not 1 <= len(node["text"]) <= 12000
@@ -181,6 +182,7 @@ def _validate_node(node, view, sources):
         raise ValueError("COGNITION_INVALID_NODE")
     if len(json.dumps(node, ensure_ascii=False)) > 32000:
         raise ValueError("COGNITION_NODE_TOO_LARGE")
+    digest(node)  # Action specs must be finite JSON before persistence.
     by_id = {n["id"]: n for n in view["nodes"]}
     if node["id"] in by_id or len(by_id) >= MAX_NODES:
         raise ValueError("COGNITION_DUPLICATE_NODE_OR_LIMIT")
@@ -208,6 +210,10 @@ def _validate_node(node, view, sources):
         # Structural minimum, explicitly NOT evidence the comparison is correct.
         if len([p for p in deps if by_id[p]["kind"] == "option"]) < 2:
             raise ValueError("COGNITION_DECISION_NEEDS_COMPETING_OPTIONS")
+        if node.get("action_spec") is not None and not isinstance(node["action_spec"], dict):
+            raise ValueError("COGNITION_INVALID_DECISION_ACTION")
+    elif "action_spec" in node:
+        raise ValueError("COGNITION_ACTION_BELONGS_TO_DECISION")
 
 
 def record_node(db_path: Path, sources: Path, root_id: str, node: dict, *,

@@ -49,6 +49,8 @@ async def run():
                     "sha256": hashlib.sha256((sources / "research.txt").read_bytes()).hexdigest()}] if kind == "source" else []
                 node = {"id": name, "kind": kind, "text": name, "depends_on": deps,
                         "source_refs": refs, "supersedes": None, "goal_revision": view["goal_revision"]}
+                if kind == "decision":
+                    node["action_spec"] = compile_intent(intent)["child_source_spec"]
                 unwrap(await client.call_tool("cognition_node_record", {
                     "root_task_id": root, "node": node, "request_id": name,
                     "expected_revision": view["revision_token"]}))

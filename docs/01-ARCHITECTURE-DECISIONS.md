@@ -1,5 +1,57 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## System boundary and consolidation direction
+
+The product has one reasoning loop: recover the original goal; investigate
+contradictions; compare methods; choose an action; observe its independent result;
+revise the earliest contradicted dependency; test whether the method transfers.
+This loop belongs to the calling model and its actual tools. The ledger provides
+durable identities, revisions and effect checks; recording the loop's fields does
+not implement its semantic reasoning.
+
+Keep these responsibilities separate without introducing another controller:
+
+| Responsibility | Shared implementation / boundary | Remaining acceptance |
+| --- | --- | --- |
+| Original goal and corrections | Existing native root and immutable correction events | Automatic faithful interpretation on unfamiliar tasks |
+| Evidence and decisions | Derived view of the same event ledger; local source hashes and explicit dependencies | Research relevance, completeness and current remote provenance |
+| Action | Same selected spec in immutable decision, native admission, binding and Worker | Meaningful mapping from the full owner goal to effects |
+| Result | Independent supported owner oracle or operator-defined byte checks | Domain validators beyond the supported local contracts |
+| Learning | Versioned method and separately reread cross-goal trials | Applicability discovery, causal benefit, negative transfer and controlled promotion |
+| ChatGPT / Codex entry | Existing private Skill, connected tools, Work CLI or opt-in local MCP | Fresh-session activation, recovery and correction-burden comparison |
+
+Do not create separate task, permission or completion truth for each interface.
+An adapter translates transport only. The cognition graph is a derived evidence
+view, not another scheduler. A reasoning decision used for execution must name
+its exact `action_spec`; a separately permitted action cannot borrow an unrelated
+decision. Research-only decisions remain possible without executing anything.
+
+The current managed-mode experiment adds code and manual contract burden. It
+must earn retention through owner-task results; it is not the final architecture
+merely because its tests pass. Compare a thin interactive path using existing
+private continuity and connected tools against the managed path on the SAME
+tasks, including interruption and failure. Measure missed obligations, wrong
+effects, owner corrections, elapsed/tool cost and maintained mechanisms. Do not
+replace this comparison with source-line counts or another orchestration layer.
+
+Private Site-hosted MCP is an available platform alternative: authenticated
+requests, a Worker server and D1/R2 persistence are supported. It would require
+a tested adapter/migration for this Python runtime and explicit deployment/account
+authorization. This is an engineering tradeoff, not proof that ChatGPT cannot
+connect. No such service has been built or deployed in this branch. The current
+interactive work may proceed through already authorized tools while that option
+is evaluated; hosting is not a prerequisite for useful reasoning.
+
+Reusable problem-solving method: recover the complete outcome and exclusions;
+trace the smallest observable failure through shared callers; distinguish
+competing causes with a counterexample; compare reuse, consolidation and
+replacement against lifetime cost; attack the selected plan before expanding it;
+execute and read the result independently. Preserve the failed assumption and
+its scope with the successful method. A later contradictory result withdraws
+dependent advice; a successful association alone does not establish causation
+or justify automatic method promotion. Apply this method to the architecture
+itself rather than adding a new rule for every observed symptom.
+
 ## 2026-11-04: executable managed session experiment (conditional)
 
 The live integration baseline `cc22304c6ebae884aae95efbc19874e6b018498a`
