@@ -474,16 +474,14 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
         cross_root_trials = inspect_cross_root_procedure_trials(
             db_path, workspace, fixtures, root_id,
             eligible_objectives=tuple(sorted(m["objective"] for m in eligible)))
-    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
-        cross_root_trials = {
-            "status": "PROCEDURE_TRIAL_EVIDENCE_UNAVAILABLE",
-            "items": [], "failure_items": [], "authorizes_action": False,
-        }
-    cross_root_procedure_evidence_sha256 = None
-    if cross_root_trials.get("items") or cross_root_trials.get("failure_items"):
-        from .procedure_evidence import procedure_evidence_sha256
-        cross_root_procedure_evidence_sha256 = procedure_evidence_sha256(
-            cross_root_trials)
+    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error) as exc:
+        # Unknown prior evidence is not an empty history. An unavailable
+        # snapshot must not produce a model choice that can be admitted after
+        # the source recovers: this creates a missing-evidence TOCTOU bypass.
+        raise ValueError("NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_UNAVAILABLE") from exc
+    from .procedure_evidence import validated_procedure_snapshot_digest
+    cross_root_procedure_evidence_sha256 = validated_procedure_snapshot_digest(
+        cross_root_trials)
 
     # The bounded model view is NOT a new method authority. Keep the original
     # independently validated cross-root projection for admission-time CAS.
@@ -1041,9 +1039,15 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                 "owner_outcome_verified": False}
     except (ValueError, TypeError, KeyError, OSError, sqlite3.Error,
             SourceUnavailable, PermissionError) as exc:
-        _record_no_progress(
-            db_path,workspace,fixtures,root_id,fingerprint,model,
-            type(exc).__name__ + ":" + str(exc)[:95])
+        # A transient failure to read the independent prior-evidence snapshot
+        # is NOT a failed cognitive attempt. Two such outages must not poison
+        # durable no-progress limits and suppress a valid plan after recovery.
+        if str(exc) not in (
+                "NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                "NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_UNVERIFIABLE"):
+            _record_no_progress(
+                db_path,workspace,fixtures,root_id,fingerprint,model,
+                type(exc).__name__ + ":" + str(exc)[:95])
         return {"status": "NATIVE_LOCAL_PLAN_REFUSED",
                 "root_task_id": root_id, "reason": str(exc)[:120],
                 "owner_outcome_verified": False}
@@ -1123,6 +1127,20 @@ def advance_native_adaptive_once(db_path: Path, workspace: Path,
                             "external business success or general cognition."),
                     },
                 }
+                # Program-derived exact owner methods bypass model inference,
+                # not the cross-root evidence snapshot required by admission.
+                from .procedure_evidence import (
+                    inspect_cross_root_procedure_trials,
+                    validated_procedure_snapshot_digest,
+                )
+                current_trials = inspect_cross_root_procedure_trials(
+                    db_path, workspace, fixtures, root_id,
+                    eligible_objectives=(exact["objective"],))
+                cross_root_digest = validated_procedure_snapshot_digest(
+                    current_trials)
+                if cross_root_digest is not None:
+                    proposal["decision_basis"]["cross_root_procedure_evidence_sha256"] = (
+                        cross_root_digest)
                 result = admit_native_decision(
                     db_path, workspace, fixtures, root_id, proposal)
                 return {**result, "planner": "EXACT_OWNER_PROGRAM_GROUNDED",

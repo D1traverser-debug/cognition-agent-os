@@ -226,6 +226,58 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             research_before_event_id=research_before_event_id)
 
     @mcp.tool()
+    def native_procedure_evidence(root_task_id: str) -> dict:
+        """Read current independent cross-root trials and their CAS digest.
+
+        A direct MCP client must use this evidence *before* proposing a
+        material method; no undisclosed planner-only dependency, success
+        claim, automatic method transfer or new authorization is created.
+        A failed/truncated projection cannot be represented as empty history.
+        """
+        from .procedure_evidence import (
+            inspect_cross_root_procedure_trials,
+            validated_procedure_snapshot_digest,
+        )
+        observed = inspect_native_goal(
+            db_path, workspace, fixtures, root_task_id)
+        if observed.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+            return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                    "reason": observed.get("status"),
+                    "root_task_id": root_task_id,
+                    "owner_outcome_verified": False}
+        with closing(_read_only_ledger(db_path)) as db:
+            row = db.execute(
+                "SELECT source_spec FROM tasks WHERE task_id=? "
+                "AND parent_task IS NULL", (root_task_id,)).fetchone()
+            if row is None:
+                return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                        "root_task_id": root_task_id,
+                        "owner_outcome_verified": False}
+            contract = json.loads(row["source_spec"])
+        catalog = capability_catalog(
+            fixtures,
+            allow_public_discovery=contract["allow_public_discovery"])
+        eligible = tuple(sorted({method["objective"] for method in
+            catalog["methods"] if method["currently_eligible"]}))
+        if not eligible:
+            return {"status": "NO_REGISTERED_PROCEDURE_METHOD",
+                    "root_task_id": root_task_id,
+                    "owner_outcome_verified": False}
+        projection = inspect_cross_root_procedure_trials(
+            db_path, workspace, fixtures, root_task_id,
+            eligible_objectives=eligible)
+        try:
+            digest = validated_procedure_snapshot_digest(projection)
+        except ValueError:
+            return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                    "root_task_id": root_task_id,
+                    "owner_outcome_verified": False}
+        return {**projection,
+                "root_task_id": root_task_id,
+                "cross_root_procedure_evidence_sha256": digest,
+                "owner_outcome_verified": False}
+
+    @mcp.tool()
     def native_owner_outcome(root_task_id: str) -> dict:
         """Independently check the entire original owner LOCAL postcondition.
 

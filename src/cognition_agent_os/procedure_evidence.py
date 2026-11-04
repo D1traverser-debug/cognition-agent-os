@@ -41,6 +41,36 @@ def procedure_evidence_sha256(evidence: dict) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+# A single shared evidence-completeness contract for planning, deterministic
+# exact-owner choices, direct MCP admission and read-only client inspection.
+_COMPLETE_PROCEDURE_SNAPSHOT_STATUSES = frozenset({
+    "NO_APPLICABLE_PROCEDURE_TRIALS",
+    "NO_VERIFIED_CROSS_ROOT_PROCEDURE_TRIALS",
+    "CROSS_ROOT_PROCEDURE_TRIALS_AVAILABLE",
+    "CROSS_ROOT_PROCEDURE_FAILURE_EVIDENCE_AVAILABLE",
+    "PROCEDURE_TRIAL_SEARCH_INCOMPLETE",
+})
+
+
+def validated_procedure_snapshot_digest(evidence: dict) -> str | None:
+    """Reject missing/invalid observations; bind both prior successes and failures.
+
+    None means a successfully observed empty projection. It must NEVER mean
+    a transport error, changing snapshot, invalid grant or unavailable root.
+    """
+    if (not isinstance(evidence, dict)
+        or evidence.get("status") not in _COMPLETE_PROCEDURE_SNAPSHOT_STATUSES
+        or not isinstance(evidence.get("items", []), list)
+        or not isinstance(evidence.get("failure_items", []), list)):
+        raise ValueError("NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_UNVERIFIABLE")
+    return (procedure_evidence_sha256(evidence)
+            if (evidence.get("items") or evidence.get("failure_items")
+                # A truncated search is not proof of an empty history; bind
+                # its incompleteness as a real decision dependency.
+                or evidence["status"] == "PROCEDURE_TRIAL_SEARCH_INCOMPLETE")
+            else None)
+
+
 def _procedure_identity(intent: dict) -> dict:
     """Fingerprint the registered procedure family, excluding task bindings."""
     from .intent_planner import compile_intent

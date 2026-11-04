@@ -1508,7 +1508,7 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             # A prior result changed during inference must not ground a child.
             from .procedure_evidence import (
                 inspect_cross_root_procedure_trials,
-                procedure_evidence_sha256,
+                validated_procedure_snapshot_digest,
             )
             catalog = capability_catalog(
                 fixtures,
@@ -1525,19 +1525,20 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             )
             supplied_cross_root_digest = candidate["decision_basis"].get(
                 "cross_root_procedure_evidence_sha256")
-            # Direct MCP clients do not receive this private local-planner
-            # projection. Only a candidate that declares it used the
-            # projection must bind it; the local planner separately enforces
-            # that it cannot omit a digest after seeing non-empty evidence.
-            if supplied_cross_root_digest is not None:
-                if not (cross_root_trials.get("items")
-                        or cross_root_trials.get("failure_items")):
-                    raise ValueError(
-                        "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
-                if supplied_cross_root_digest != procedure_evidence_sha256(
-                        cross_root_trials):
-                    raise ValueError(
-                        "NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
+            # An empty/unavailable projection is NOT evidence that prior
+            # trials do not exist. Every method client (including direct MCP)
+            # must bind a nonempty prior-evidence snapshot, never only the
+            # optional local-model caller. Without this the scan could fail
+            # during inference and recover before admission, silently adding
+            # unreviewed positive or negative trials to the decision context.
+            current_cross_root_digest = validated_procedure_snapshot_digest(
+                cross_root_trials)
+            if (current_cross_root_digest is not None
+                and supplied_cross_root_digest is None):
+                raise ValueError("NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_NOT_BOUND")
+            if (supplied_cross_root_digest is not None and
+                supplied_cross_root_digest != current_cross_root_digest):
+                raise ValueError("NATIVE_STALE_CROSS_ROOT_PROCEDURE_EVIDENCE")
             _ground_decision(
                 candidate, parsed, source_hashes,
                 observed["decisions"][-1]["task_id"] if observed["decisions"] else None)

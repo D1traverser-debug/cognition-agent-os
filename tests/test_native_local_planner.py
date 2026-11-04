@@ -1975,5 +1975,125 @@ class NativeLocalModelLoop(unittest.TestCase):
             ).fetchone()[0],0)
 
 
+    def _setup_verified_prior_for_cross_root_admission(self):
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        prior = register_native_goal(
+            self.db, 'Compare reference.csv with observed.csv and report the differences.')
+        planned = advance_native_adaptive_once(
+            self.db, self.workspace, self.fixtures, prior, model=None)
+        self.assertEqual(planned['status'], 'NATIVE_METHOD_ENQUEUED', planned)
+        worker = run_tick(self.db, self.workspace, self.fixtures, max_jobs=1)
+        self.assertEqual(worker['tasks'][0]['status'], 'NEEDS_REVIEW', worker)
+        target = register_native_goal(self.db, self.goal)
+        return prior, target
+
+    def _unbound_cross_root_candidate(self, target):
+        state = inspect_native_goal(self.db, self.workspace, self.fixtures, target)
+        return {
+            'selected_intent': self.compare(), 'alternative_intent': None,
+            'decision_reason': 'Compare the named original source records for a local hypothesis.',
+            'alternative_reason': 'Other methods do not produce this particular local comparison.',
+            'expected_evidence': 'Independent re-read of actual source-bound discrepancy output.',
+            'observation_sha256': state['observation_sha256'],
+            'decision_basis': self.basis_for_root(target),
+        }
+
+    def test_direct_native_admission_cannot_omit_nonempty_prior_snapshot(self):
+        from cognition_agent_os.native_decision import admit_native_decision
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials, procedure_evidence_sha256)
+        _, target = self._setup_verified_prior_for_cross_root_admission()
+        candidate = self._unbound_cross_root_candidate(target)
+        with self.assertRaisesRegex(
+                ValueError, 'NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_NOT_BOUND'):
+            admit_native_decision(
+                self.db, self.workspace, self.fixtures, target, candidate)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='NATIVE_DECISION_ADMITTED'", (target,)).fetchone()[0], 0)
+        # A client that independently read and accepted the *current* record
+        # can bind it, while the original grant, decision and Worker still apply.
+        current = inspect_cross_root_procedure_trials(
+            self.db, self.workspace, self.fixtures, target,
+            eligible_objectives=('compare_records', 'ensure_structure',
+                                 'investigate_evidence'))
+        self.assertEqual(len(current['items']), 1, current)
+        candidate['decision_basis']['cross_root_procedure_evidence_sha256'] = (
+            procedure_evidence_sha256(current))
+        result = admit_native_decision(
+            self.db, self.workspace, self.fixtures, target, candidate)
+        self.assertEqual(result['status'], 'NATIVE_METHOD_ENQUEUED', result)
+
+    def test_procedure_read_outage_never_turns_into_empty_model_history(self):
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+        _, target = self._setup_verified_prior_for_cross_root_admission()
+        calls = {'model': 0, 'scan': 0}
+        original = inspect_cross_root_procedure_trials
+        def flaky(*args, **kwargs):
+            calls['scan'] += 1
+            if calls['scan'] == 1:
+                raise OSError('transient read outage')
+            return original(*args, **kwargs)
+        def model(*args, **kwargs):
+            calls['model'] += 1
+            raise AssertionError('Model should not be called without evidence')
+        with patch('cognition_agent_os.procedure_evidence.inspect_cross_root_procedure_trials',
+                   side_effect=flaky), patch(
+                   'cognition_agent_os.local_model._request', side_effect=model):
+            result = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, target, model='installed:test')
+        self.assertEqual(result['status'], 'NATIVE_LOCAL_PLAN_REFUSED', result)
+        self.assertIn('NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_UNAVAILABLE',
+                      result['reason'])
+        self.assertEqual(calls['scan'], 1)
+        self.assertEqual(calls['model'], 0)
+        self.assertEqual(inspect_native_goal(
+            self.db, self.workspace, self.fixtures, target)['decision_count'], 0)
+
+    def test_evidence_outage_retries_after_recovery_without_poisoning_model_budget(self):
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials)
+        _prior, target = self._setup_verified_prior_for_cross_root_admission()
+        with patch("cognition_agent_os.procedure_evidence.inspect_cross_root_procedure_trials",
+                   side_effect=OSError("temporary evidence backend outage")):
+            for _ in range(2):
+                result = advance_native_local_once(
+                    self.db, self.workspace, self.fixtures, target,
+                    model="installed:test")
+                self.assertEqual(result["status"], "NATIVE_LOCAL_PLAN_REFUSED")
+                self.assertIn("NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                              result["reason"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM events WHERE task_id=? AND "
+                "kind='NATIVE_LOCAL_NO_PROGRESS'", (target,)).fetchone()[0], 0)
+        model_calls = []
+        def model(method, path, payload, timeout):
+            model_calls.append(method)
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            return {"done": True, "response": json.dumps({"abstain": True})}
+        with patch("cognition_agent_os.local_model._request", side_effect=model):
+            after = advance_native_local_once(
+                self.db, self.workspace, self.fixtures, target,
+                model="installed:test")
+        self.assertEqual(after["status"], "NATIVE_LOCAL_MODEL_ABSTAINED", after)
+        self.assertIn("POST", model_calls)
+
+    def test_snapshot_changed_status_without_trials_is_not_empty_evidence(self):
+        from cognition_agent_os.native_decision import admit_native_decision
+        _, target = self._setup_verified_prior_for_cross_root_admission()
+        candidate = self._unbound_cross_root_candidate(target)
+        fake = {'status': 'PROCEDURE_TRIAL_SNAPSHOT_CHANGED',
+                'items': [], 'failure_items': [], 'authorizes_action': False}
+        with patch('cognition_agent_os.procedure_evidence.inspect_cross_root_procedure_trials',
+                   return_value=fake):
+            with self.assertRaisesRegex(
+                    ValueError, 'NATIVE_CROSS_ROOT_PROCEDURE_EVIDENCE_UNVERIFIABLE'):
+                admit_native_decision(
+                    self.db, self.workspace, self.fixtures, target, candidate)
+
 if __name__ == "__main__":
     unittest.main()

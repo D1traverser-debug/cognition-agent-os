@@ -130,7 +130,7 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
         exposed = set(reader.tools)
         self.assertTrue({
             "native_goal_list", "native_goal_inspect", "native_capabilities",
-            "native_owner_outcome",
+            "native_owner_outcome", "native_procedure_evidence",
         } <= exposed)
         self.assertFalse({
             "native_goal_create", "native_hypothesis_record",
@@ -150,6 +150,43 @@ class NativeMcpPublicPrimaryEvidenceTests(unittest.TestCase):
                 db.execute("SELECT COUNT(*) FROM events").fetchone()[0],
             )
         self.assertEqual(after, before)
+
+    def test_direct_mcp_read_can_bind_nonempty_prior_trial_snapshot(self):
+        """No model-visible implicit history and no new grant or action."""
+        from cognition_agent_os.native_local_planner import advance_native_adaptive_once
+        from cognition_agent_os.procedure_evidence import (
+            inspect_cross_root_procedure_trials, procedure_evidence_sha256)
+        (self.fx / "expected.csv").write_text(
+            "item,expected\nA,7\n", encoding="utf-8")
+        (self.fx / "observed.csv").write_text(
+            "item,expected\nA,5\n", encoding="utf-8")
+        prior = register_native_goal(
+            self.db, "Compare expected.csv with observed.csv and report the differences.")
+        first = advance_native_adaptive_once(
+            self.db, self.ws, self.fx, prior, model=None)
+        self.assertEqual(first["status"], "NATIVE_METHOD_ENQUEUED")
+        run_tick(self.db, self.ws, self.fx, max_jobs=1)
+        (self.fx / "expected_b.csv").write_text(
+            "item,expected\nB,4\n", encoding="utf-8")
+        (self.fx / "observed_b.csv").write_text(
+            "item,expected\nB,2\n", encoding="utf-8")
+        current = register_native_goal(
+            self.db,
+            "Compare expected_b.csv with observed_b.csv and report the differences.")
+        with closing(connect(self.db)) as db:
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        evidence = self.server().tools["native_procedure_evidence"](current)
+        self.assertEqual(len(evidence["items"]), 1, evidence)
+        self.assertEqual(evidence["items"][0]["source_root_id"], prior)
+        projection = inspect_cross_root_procedure_trials(
+            self.db, self.ws, self.fx, current,
+            eligible_objectives=("compare_records",))
+        self.assertEqual(evidence["cross_root_procedure_evidence_sha256"],
+                         procedure_evidence_sha256(projection))
+        self.assertFalse(evidence["owner_outcome_verified"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events").fetchone()[0], before)
 
     def test_observation_only_profile_rejects_mixed_write_flags(self):
         for flag in ("allow_host_tick", "allow_local_model_plan"):
