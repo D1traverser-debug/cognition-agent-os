@@ -46,6 +46,24 @@ with `list --after-task-id ID`. Read a selected root with `inspect --root ID`;
 follow `next_after_event_id` using `inspect --root ID --after-event-id NUMBER`.
 The command never chooses a goal merely because it is newest.
 
+The existing Codex recovery hook can also read this same state when its
+`COGNITION_AGENT_OS_DB`, `COGNITION_AGENT_OS_WORKSPACE` and
+`COGNITION_AGENT_OS_FIXTURES` environment settings point to `ledger.sqlite`,
+`workspace` and `sources` respectively. It now includes cognitive revision,
+amendment/input/node counts and versioned readback locators. Startup output
+does not embed correction/message/source text. Explicit state readback includes
+corrections; `--readback-cognition ROOT REVISION nodes|inputs CURSOR` pages
+original messages or derived nodes. Follow `next_after_event_id`; changed
+state/source bytes reject stale locators. Conflicting roots remain separate.
+
+This is tested script wiring, not proof that a client loaded the hook. Local
+hooks require supported execution and trust. Cloud-orchestrated ChatGPT Work
+does not support local/plugin command hooks, even when some tools run locally;
+ChatGPT web does not read local Codex config. In this Work environment the
+explicit CLI route remains available. See the official
+[MCP support boundaries](https://learn.chatgpt.com/docs/extend/mcp) and
+[plugin support](https://learn.chatgpt.com/docs/plugins).
+
 ## Use in a connected session
 
 Ask the connected client to work on the registered goal. It can discover it with

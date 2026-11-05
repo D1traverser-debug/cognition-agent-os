@@ -1,5 +1,41 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-05: recover cognitive state through the existing client entry
+
+After the public-boundary commit's CI passed, a direct read of the real private
+session through `codex_session_context.py` still returned only the original
+goal/legacy decision state: no cognitive corrections, input counts or graph
+revision. Two fresh-process tests reproduced the omission for a single root
+and competing roots before implementation. Storage existed, but the entry's
+read path did not expose it. A successful SQLite snapshot alone therefore did
+not establish complete conversational recovery.
+
+Alternatives: more intake wording cannot reveal omitted state; a separate hook
+cache duplicates identity and becomes stale; replacing the entire store loses
+tested lineage without addressing the missing reader. Reuse the existing
+`cognitive_session._project` in the existing continuity snapshot instead. Root
+identity remains unchanged; original goals and corrections stay distinct.
+Automatic hook output carries only counts/version/locators. Explicit readback
+recovers corrections and pages nodes/messages with the same revision token.
+Changed source bytes, corrections and input-only updates reject old locators;
+multiple roots retain separate amendments and no automatic selection. No
+execution grant, second queue, account setting or Skill is added.
+
+Acceptance: real Python subprocesses, raw-private-text non-disclosure in startup
+output, exact correction/message recovery, multi-root separation, paginated
+messages, source invalidation and stale locator rejection. These prove the
+reader wiring, not actual native client invocation or semantic understanding.
+The next unresolved client test must observe invocation in a supported client.
+
+Official platform evidence was also checked directly: [MCP](https://learn.chatgpt.com/docs/extend/mcp)
+and [Plugins](https://learn.chatgpt.com/docs/plugins) state that cloud-orchestrated
+Work does not support local/plugin command hooks; local Codex config does not
+connect ChatGPT web. [Packaging](https://developers.openai.com/plugins/build/plugins)
+describes local plugin hook resources/trust, but is not account installation
+evidence. Use supported local Codex entry when available, or explicit scoped
+CLI readback in this Work environment. Do not promise a cloud hook by packaging
+local scripts. Remote service/account integration remains a distinct boundary.
+
 ## 2026-11-05: one public execution boundary and reproducible delivery evidence
 
 The full parent goal and download-and-use requirement remain OPEN. Reviewing
