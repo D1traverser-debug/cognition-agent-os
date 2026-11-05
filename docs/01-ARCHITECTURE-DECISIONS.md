@@ -1,5 +1,24 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-06: new input invalidates an older action decision
+
+Real MCP reproduction showed that a new user message arriving after action
+admission left the old decision admissible. Prompt-only routing and relying on
+the user to call reopen do not cover that path. A new queue/controller would
+duplicate the existing ledger. Reuse the shared admission and effect-time
+guard: any uninterpreted input, or input newer than the current decision,
+requires a fresh decision. The existing action-binding identity prevents an old
+queued action silently inheriting a new decision. This is conservative: benign
+late messages also pause work. A new decision must follow the input; merely
+recording an interpretation cannot revive the old decision.
+
+The MCP integration probe exercises late input, interpretation without a new
+decision, and a new decision alongside a pre-existing authorized positive case.
+This is an ordering invariant, not proof of semantic understanding: a model
+can still record an incorrect new decision. Nor does it interrupt an effect
+already in flight or govern client tools outside this ledger. Full outcome,
+native client integration and cross-domain evaluation remain open.
+
 ## 2026-11-05: recover cognitive state through the existing client entry
 
 After the public-boundary commit's CI passed, a direct read of the real private

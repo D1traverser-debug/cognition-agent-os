@@ -189,6 +189,12 @@ def enforce_admission(db, sources: Path, workspace: Path, root_id: str, spec: di
     if not decisions or decisions[-1]["status"] != "CURRENT":
         raise ValueError("CURRENT_COGNITIVE_DECISION_REQUIRED")
     decision = decisions[-1]
+    # Any later input may change the goal or invalidate its evidence. Merely
+    # recording an interpretation is not a decision to continue the action.
+    # Recheck inside the same existing admission/effect-time transaction.
+    if (view["uninterpreted_input_count"] or
+            any(item["event_id"] > decision["event_id"] for item in view["inputs"])):
+        raise PermissionError("COGNITIVE_INPUT_REQUIRES_REDECISION")
     # A research/architecture decision cannot be borrowed as evidence for an
     # unrelated typed action. The same immutable decision names its exact action.
     if decision.get("action_spec") is None or digest(decision["action_spec"]) != digest(spec):

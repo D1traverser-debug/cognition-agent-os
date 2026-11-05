@@ -14,7 +14,8 @@ import sys
 import tempfile
 
 from mcp import Client, StdioServerParameters
-from cognition_agent_os.effect_contract import install_contract
+from cognition_agent_os.effect_contract import install_contract, enforce_admission
+from cognition_agent_os.ledger import readonly_snapshot
 from cognition_agent_os.intent_planner import compile_intent
 from cognition_agent_os.session_cli import provision
 from verify_native_mcp_transport import unwrap, admit_with_current_procedure_evidence
@@ -122,6 +123,52 @@ async def run():
                     "spec": compile_intent(intent)["child_source_spec"], "prerequisites": []}],
                 "outcomes": []})
             queued2 = await admit_with_current_procedure_evidence(client, root2, await proposal(client, root2))
+            after_admission = await inspect(client, root2)
+            unwrap(await client.call_tool("cognition_input_record", {
+                "root_task_id": root2, "text": "Please reconsider the comparison before continuing.",
+                "origin": "client_user", "locator": "late correction test",
+                "request_id": "late-correction-001",
+                "expected_revision": after_admission["revision_token"]}))
+            with readonly_snapshot(db) as connection:
+                try:
+                    enforce_admission(connection, sources, workspace, root2,
+                                      compile_intent(intent)["child_source_spec"])
+                except PermissionError as exc:
+                    assert str(exc) == "COGNITIVE_INPUT_REQUIRES_REDECISION"
+                else:
+                    raise AssertionError("New user message did not invalidate the queued decision")
+            late_view = unwrap(await client.call_tool("cognition_inputs_inspect", {"root_task_id": root2}))
+            late = late_view["inputs"][-1]
+            late_reading = {"id": "late-reading", "kind": "interpretation",
+                "text": "The new request must be considered before execution.",
+                "depends_on": [], "source_refs": [], "supersedes": None,
+                "goal_revision": view2["goal_revision"],
+                "input_refs": [{"request_id": late["request_id"], "sha256": late["sha256"]}],
+                "claims": [{"input_id": late["request_id"], "quote": late["text"],
+                    "category": "correction", "basis": "explicit", "meaning": "Reconsider the old action."}]}
+            unwrap(await client.call_tool("cognition_node_record", {"root_task_id": root2,
+                "node": late_reading, "request_id": "late-reading-001",
+                "expected_revision": late_view["revision_token"]}))
+            with readonly_snapshot(db) as connection:
+                try:
+                    enforce_admission(connection, sources, workspace, root2,
+                                      compile_intent(intent)["child_source_spec"])
+                except PermissionError as exc:
+                    assert str(exc) == "COGNITIVE_INPUT_REQUIRES_REDECISION"
+                else:
+                    raise AssertionError("Interpretation alone revived an older decision")
+            reviewed = await inspect(client, root2)
+            new_decision = {"id": "decision-after-input", "kind": "decision",
+                "text": "Reconsidered after the new input for this positive control.",
+                "depends_on": ["compare", "defer", "late-reading"], "source_refs": [],
+                "supersedes": "decision", "goal_revision": reviewed["goal_revision"],
+                "action_spec": compile_intent(intent)["child_source_spec"]}
+            unwrap(await client.call_tool("cognition_node_record", {"root_task_id": root2,
+                "node": new_decision, "request_id": "decision-after-input-001",
+                "expected_revision": reviewed["revision_token"]}))
+            with readonly_snapshot(db) as connection:
+                assert enforce_admission(connection, sources, workspace, root2,
+                    compile_intent(intent)["child_source_spec"])["decision_id"] == "decision-after-input"
 
         # New OS process: no first client's in-memory state survives.
         async with Client(params) as client:
@@ -139,11 +186,13 @@ async def run():
             blocked = unwrap(await client.call_tool("native_local_tick", {"root_task_id": root2}))
             assert not (workspace / "artifacts" / (queued2["child_task_id"] + ".json")).exists(), blocked
             changed = await inspect(client, root2)
-            assert changed["reopen_count"] == 4, changed
+            assert changed["reopen_count"] == 5, changed
             print(json.dumps({"real_mcp_stdio": True, "cold_process_resume": True,
                 "missing_operator_contract_rejected": True, "granted_local_owner_outcome": True,
                 "ancestor_reopen_blocks_queued_effect": True, "operator_grant_tool_exposed": False,
                 "input_and_tentative_reading_survive_cold_restart": True,
+                "late_input_and_interpretation_require_new_decision": True,
+                "reviewed_new_decision_can_be_admitted": True,
                 "suggestion_does_not_replace_goal": True,
                 "actual_chatgpt_or_codex_session_connected": False,
                 "nl_alignment_benchmark": "NOT_RUN", "product_ready": False}, indent=2))

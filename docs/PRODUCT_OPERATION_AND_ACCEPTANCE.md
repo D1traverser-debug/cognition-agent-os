@@ -99,8 +99,13 @@ none means verified. One mixed message can have multiple claims. Link downstream
 hypotheses/options via `depends_on`; supersede a wrong reading to invalidate its
 dependent work. Two unsuperseded readings stay visible. No category automatically
 edits a goal, grants tools, or promotes a method. A genuine correction still uses
-the explicit amendment/reopen paths above. An unhandled input alone does not
-block a queued effect; correct interpretation and client routing remain open.
+the explicit amendment/reopen paths above. Correct interpretation and client
+routing remain open.
+For managed actions, later input now blocks the old decision at the shared
+admission/effect check. Recording an interpretation alone does not reactivate
+it; a new decision and valid action binding are required. This ordering check
+cannot determine whether a model understood or obeyed a user's correction,
+and it cannot control unrelated client tools or effects already in flight.
 
 Work CLI equivalents: `receive --root ID --file message.json` accepts the same
 body, and `inputs --root ID` pages original text. `record` saves the interpretation.
