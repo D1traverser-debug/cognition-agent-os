@@ -746,6 +746,7 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
 def register_native_goal(db_path: Path, goal: str, *,
                          allow_public_discovery: bool = False,
                          allow_public_source_read: bool = False,
+                         managed_session: bool = False,
                          client_request_id: str | None = None) -> str:
     """Register a durable owner goal with optional lost-ACK retry identity.
 
@@ -753,7 +754,12 @@ def register_native_goal(db_path: Path, goal: str, *,
     The old no-key API keeps its existing distinct-registration semantics.
     The same key with different owner intent is a hard conflict, never a
     silent switch of source/scope or privilege.
+
+    Public CLI/MCP callers require managed_session=True. The default retains
+    the historical low-level research API, not a safe public execution profile.
     """
+    if type(managed_session) is not bool:
+        raise ValueError("INVALID_NATIVE_MANAGED_PROFILE")
     contract = _contract(
         goal, allow_public_discovery=allow_public_discovery,
         allow_public_source_read=allow_public_source_read)
@@ -791,6 +797,9 @@ def register_native_goal(db_path: Path, goal: str, *,
                     if ((original["goal_rev"], original["grant_rev"]) !=
                         (auth["goal_rev"], auth["grant_rev"])):
                         raise ValueError("NATIVE_GOAL_IDEMPOTENCY_STALE_GRANT")
+                    if managed_session:
+                        from .effect_contract import _enable_managed
+                        _enable_managed(db, original["task_id"])
                     db.commit()
                     return original["task_id"]
             root = create_task(db, contract, commit=False)
@@ -805,6 +814,9 @@ def register_native_goal(db_path: Path, goal: str, *,
             if client_request_id is not None:
                 receipt["client_request_id"] = client_request_id
             event(db, root, "NATIVE_GOAL_REGISTERED", receipt)
+            if managed_session:
+                from .effect_contract import _enable_managed
+                _enable_managed(db, root)
             db.commit()
             return root
         except BaseException:

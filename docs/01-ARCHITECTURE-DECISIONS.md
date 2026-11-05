@@ -1,5 +1,45 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-05: one public execution boundary and reproducible delivery evidence
+
+The full parent goal and download-and-use requirement remain OPEN. Reviewing
+the original forbidden-goal probe against the current source still produced
+five forbidden local effects through the unmanaged low-level research API.
+Tracing the same path found that MCP `allow_goal_writes` exposed admission
+without requiring a managed root. The shared cause is incompatible public
+entry profiles: recording a goal could implicitly expose legacy execution.
+
+Considered routes: a natural-language keyword filter misses paraphrases and
+legitimate neighbors; disabling every effect falsely passes denial tests while
+breaking useful work; rewriting the entire ledger breaks tested recovery and
+does not establish semantic understanding. Selected: reuse the existing
+managed root, contract and transactional effect guard for ALL public MCP effect
+entries. New CLI/MCP goal registration and its managed marker commit atomically.
+Legacy reads remain available, but admission, tick and local-model paths reject
+unmanaged roots. An unused keyed root may be restricted without changing ID;
+a root with existing children cannot be silently adopted. Low-level Python
+compatibility remains explicit and is not a safe agent-facing execution profile.
+
+Countertests cover rollback on registration failure, keyed retries, pending
+legacy work, rejection before each effect call, missing-contract denial and
+real authorized positive effects through official MCP subprocesses. Operator
+fixture contracts are outside MCP and do not masquerade as model-derived user
+authorization. This closes a reachable execution bypass, NOT the arbitrary
+natural-language interpretation problem or shell/SQL/other-connector authority.
+Rollback must retain managed enforcement; using an older runtime on this state
+is not a safe rollback.
+
+Repeated manual checks also hid evidence scope and consumed context. Reuse the
+existing probes through `verify_delivery.py`: no new evaluator/controller or
+test database, no network/model call. Its receipt binds source content and log
+hashes, runs installed-wheel acceptance in isolation, and reports each profile
+separately. The same transport command runs in CI on both OSes. Existing
+`plan_incremental_audit.py` handles structural deltas. Neither source hashes nor
+test orchestration can certify cognitive quality. Unseen model tasks, native
+entry traces, correction burden, method transfer and independent owner outcomes
+still determine product readiness; passing this receipt cannot authorize merge
+or a ready-for-use claim by itself.
+
 ## 2026-11-05: external research enters as evidence, not replacement authority
 
 Scope: continue the complete parent product below. New research does not reset

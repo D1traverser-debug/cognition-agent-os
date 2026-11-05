@@ -12,7 +12,7 @@ from .ledger import connect, initialize, event, readonly_snapshot
 from .native_decision import register_native_goal, list_native_goals
 from .cognitive_session import (
     inspect_session, record_node, amend_goal, reopen_node, record_input, inspect_inputs)
-from .effect_contract import enable_managed_session, install_contract, inspect_contract_outcome
+from .effect_contract import install_contract, inspect_contract_outcome
 
 
 def provision(directory: Path):
@@ -73,8 +73,8 @@ def main(argv=None):
                       else restore_session(args.file, state))
         elif args.command == "goal":
             root = register_native_goal(db, args.file.read_text(encoding="utf-8"),
+                                        managed_session=True,
                                         client_request_id=args.request_id)
-            enable_managed_session(db, root)
             result = inspect_session(db, sources, root)
         elif args.command in ("inspect", "inputs"):
             reader = inspect_session if args.command == "inspect" else inspect_inputs

@@ -17,6 +17,9 @@ import tempfile
 from mcp import Client, StdioServerParameters
 
 from cognition_agent_os.ledger import connect, initialize
+from cognition_agent_os.cognitive_session import inspect_session, record_node
+from cognition_agent_os.effect_contract import install_contract
+from cognition_agent_os.intent_planner import compile_intent
 
 
 def unwrap(result):
@@ -78,6 +81,28 @@ async def run():
         original = {f.name: f.read_bytes() for f in sources.iterdir()}
         with closing(connect(db)) as ledger:
             initialize(ledger)
+
+        def authorize_fixture(root_id, intent):
+            """Explicit test-operator authorization, never an agent-visible tool.
+
+            These five fixed fixture cases are scoped by this test author.
+            This is NOT automatic NL approval or a default admission helper.
+            """
+            spec = compile_intent(intent)["child_source_spec"]
+            for name, kind, deps in [("fixture-action", "option", []),
+                    ("fixture-read-only", "option", []),
+                    ("fixture-decision", "decision", ["fixture-action", "fixture-read-only"])]:
+                view = inspect_session(db, sources, root_id)
+                node = {"id": name, "kind": kind, "text": name, "depends_on": deps,
+                    "source_refs": [], "supersedes": None, "goal_revision": view["goal_revision"]}
+                if kind == "decision":
+                    node["action_spec"] = spec
+                record_node(db, sources, root_id, node, request_id=name,
+                    expected_revision=view["revision_token"])
+            view = inspect_session(db, sources, root_id)
+            install_contract(db, sources, root_id, {"version": 1,
+                "goal_sha256": view["goal_sha256"],
+                "effects": [{"spec": spec, "prerequisites": []}], "outcomes": []})
 
         def server(*, allow_tick, allow_source_read=False,
                    allow_model_plan=False, public_goal=None):
@@ -404,6 +429,11 @@ async def run():
             still = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
             assert still["decision_count"] == 0, still
+            # Goal/ledger write permission alone is no effect permission.
+            no_contract = await client.call_tool("native_decision_admit", {
+                "root_task_id": root, "proposal": proposal})
+            assert no_contract.is_error
+            authorize_fixture(root, proposal["selected_intent"])
             admitted = await admit_with_current_procedure_evidence(
                 client, root, proposal)
             assert admitted["status"] == "NATIVE_METHOD_ENQUEUED", admitted
@@ -450,6 +480,7 @@ async def run():
                 "native_goal_inspect", {"root_task_id": local_id}))
             local_proposal = json.loads(json.dumps(proposal))
             local_proposal["observation_sha256"] = local_state["observation_sha256"]
+            authorize_fixture(local_id, local_proposal["selected_intent"])
             local_queued = await admit_with_current_procedure_evidence(
                 client, local_id, local_proposal)
             local_tick = unwrap(await client.call_tool(
@@ -505,6 +536,7 @@ async def run():
                         "A local handoff draft is not an external business effect."),
                 },
             }
+            authorize_fixture(json_root, json_proposal["selected_intent"])
             queued_json = await admit_with_current_procedure_evidence(
                 client, json_root, json_proposal)
             observed_json = unwrap(await client.call_tool(
@@ -536,6 +568,7 @@ async def run():
                 "native_goal_inspect", {"root_task_id": other_id}))
             other_proposal = json.loads(json.dumps(proposal))
             other_proposal["observation_sha256"] = other_snapshot["observation_sha256"]
+            authorize_fixture(other_id, other_proposal["selected_intent"])
             other_queued = await admit_with_current_procedure_evidence(
                 client, other_id, other_proposal)
             second = unwrap(await client.call_tool(
@@ -547,6 +580,7 @@ async def run():
                 "native_goal_inspect", {"root_task_id": second_id}))
             second_proposal = json.loads(json.dumps(proposal))
             second_proposal["observation_sha256"] = new_state["observation_sha256"]
+            authorize_fixture(second_id, second_proposal["selected_intent"])
             second_queued = await admit_with_current_procedure_evidence(
                 client, second_id, second_proposal)
             selected_tick = unwrap(await client.call_tool(

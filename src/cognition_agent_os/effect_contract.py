@@ -27,16 +27,33 @@ def enable_managed_session(db_path: Path, root_id: str):
     with closing(connect_existing(db_path)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
-            _identity(db, root_id, write=True)
-            if not managed(db, root_id):
-                if db.execute("SELECT 1 FROM tasks WHERE parent_task=? LIMIT 1",
-                              (root_id,)).fetchone():
-                    raise ValueError("MANAGED_SESSION_REQUIRES_NO_PRIOR_EFFECTS")
-                event(db, root_id, "COGNITION_MANAGED", {"version": 1})
+            _enable_managed(db, root_id)
             db.commit()
         except BaseException:
             db.rollback()
             raise
+
+
+def _enable_managed(db, root_id):
+    """Also used inside registration so a new client root is never unguarded."""
+    _identity(db, root_id, write=True)
+    if not managed(db, root_id):
+        if db.execute("SELECT 1 FROM tasks WHERE parent_task=? LIMIT 1",
+                      (root_id,)).fetchone():
+            raise ValueError("MANAGED_SESSION_REQUIRES_NO_PRIOR_EFFECTS")
+        event(db, root_id, "COGNITION_MANAGED", {"version": 1})
+
+
+def require_managed_session(db_path: Path, root_id: str):
+    """Public client effect entry: never fall through to legacy unbound mode.
+
+    Reads/research remain available for old roots. The later admission/Worker
+    guards still check the actual contract and evidence under their own lock.
+    """
+    with readonly_snapshot(db_path) as db:
+        _identity(db, root_id, write=True)
+        if not managed(db, root_id):
+            raise PermissionError("UNMANAGED_NATIVE_EFFECTS_DISABLED")
 
 
 def _check_shape(check):

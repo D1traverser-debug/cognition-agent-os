@@ -3,8 +3,10 @@
 Status: **NOT_READY for the complete cognition product**. The managed local
 runtime below is executable and tested. It is not an installed ChatGPT app,
 an account-wide hook, a universal natural-language judge or an autonomous
-cross-domain learner. Existing unmanaged entrypoints retain their compatibility
-contract, including the known arbitrary-goal semantic admission limitation.
+cross-domain learner. New CLI/MCP goals are atomically managed. MCP admission,
+Worker tick and local-model execution reject unmanaged historical roots; their
+read/research paths remain available. The trusted low-level Python API retains
+legacy compatibility, including its arbitrary-goal semantic admission limitation.
 
 ## Install and start locally
 
@@ -193,6 +195,29 @@ reviewed. No main merge, production deployment, account change or private
 plugin release is implied by these commands.
 
 ## Reproduce engineering evidence
+
+With pip/setuptools and the MCP extra already installed, a single offline run
+builds a wheel, installs it into a fresh disposable environment, tests the actual
+CLI, runs regression/static checks and both real MCP transports:
+
+```bash
+python scripts/verify_delivery.py --output /absolute/private/new-acceptance-run
+```
+
+Use `--build-python /path/to/python` if setuptools lives in a different existing
+interpreter, or `--mcp-python /path/to/python` for the installed MCP environment.
+No dependency or model download is attempted. Output must be a new
+directory outside the checkout. `receipt.json` binds each exit status and raw
+log hash to the actual source fingerprint before/after execution (including
+uncommitted files); source changes during a run fail the aggregate verdict.
+`--profile core` or `--profile transport` scopes a run explicitly. A scoped PASS
+never means all checks or the complete product passed. CI uses the same
+transport command on Linux and Windows. Review raw failure logs on demand;
+reuse `plan_incremental_audit.py` for exact-blob source inventory, not semantic
+acceptance. These commands do not merge, install on the owner device or connect
+an account.
+
+Individual probes remain directly usable:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v

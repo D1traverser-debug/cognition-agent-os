@@ -26,6 +26,7 @@ from .native_decision import (
 )
 from .owner_postcondition import inspect_owner_local_outcome
 from .memory_candidates import record_candidate, inspect_candidates
+from .effect_contract import require_managed_session
 
 
 def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
@@ -123,6 +124,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             db_path, owner_goal,
             allow_public_discovery=pinned_public_scope,
             allow_public_source_read=pinned_source_scope,
+            managed_session=True,
             client_request_id=client_request_id)
         return {"status": "NATIVE_GOAL_REGISTERED", "root_task_id": root,
                 "owner_outcome_verified": False}
@@ -458,6 +460,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         checks provenance and queues ONE registered local child, never raw code,
         unrestricted shell commands, external effects or self-declared success.
         """
+        require_managed_session(db_path, root_task_id)
         return admit_native_decision(
             db_path, workspace, fixtures, root_task_id, proposal)
 
@@ -472,6 +475,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             downloads or autonomous permission escalation is available.
             A model proposal is NEVER an independently verified outcome.
             """
+            require_managed_session(db_path, root_task_id)
             from .native_local_planner import advance_native_local_once
             return advance_native_local_once(
                 db_path, workspace, fixtures, root_task_id, model=model)
@@ -486,6 +490,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             run generic Host scheduling, create a second authority, or grant
             broader local/remote effects. Caller still needs explicit opt-in.
             """
+            require_managed_session(db_path, root_task_id)
             observed = inspect_native_goal(
                 db_path, workspace, fixtures, root_task_id)
             if observed["status"] != "NATIVE_AWAITING_WORKER":
