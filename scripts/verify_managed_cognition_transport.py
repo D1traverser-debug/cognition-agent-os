@@ -18,6 +18,7 @@ from cognition_agent_os.effect_contract import install_contract, enforce_admissi
 from cognition_agent_os.ledger import readonly_snapshot
 from cognition_agent_os.intent_planner import compile_intent
 from cognition_agent_os.session_cli import provision
+from cognition_agent_os.client_launch import prepare_launch, probe_transport
 from verify_native_mcp_transport import unwrap, admit_with_current_procedure_evidence
 
 
@@ -170,6 +171,18 @@ async def run():
                 assert enforce_admission(connection, sources, workspace, root2,
                     compile_intent(intent)["child_source_spec"])["decision_id"] == "decision-after-input"
 
+        # Exercise the production launcher preflight, not a test-only server
+        # configuration. It must work without inherited PYTHONPATH and must
+        # neither mutate the ledger nor disclose the private goal in its receipt.
+        with readonly_snapshot(db) as connection:
+            event_count = connection.execute("SELECT count(*) FROM events").fetchone()[0]
+        prepared = prepare_launch(state, root=root, executable=sys.executable)
+        preflight = await asyncio.to_thread(probe_transport, prepared)
+        assert preflight["status"] == "MCP_TRANSPORT_VERIFIED", preflight
+        assert goal not in json.dumps(preflight)
+        with readonly_snapshot(db) as connection:
+            assert event_count == connection.execute("SELECT count(*) FROM events").fetchone()[0]
+
         # New OS process: no first client's in-memory state survives.
         async with Client(params) as client:
             restored = await inspect(client, root)
@@ -193,6 +206,7 @@ async def run():
                 "input_and_tentative_reading_survive_cold_restart": True,
                 "late_input_and_interpretation_require_new_decision": True,
                 "reviewed_new_decision_can_be_admitted": True,
+                "production_launcher_preflight_readonly": True,
                 "suggestion_does_not_replace_goal": True,
                 "actual_chatgpt_or_codex_session_connected": False,
                 "nl_alignment_benchmark": "NOT_RUN", "product_ready": False}, indent=2))

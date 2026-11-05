@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import asyncio
 import json
 from pathlib import Path
 import shutil
@@ -10,6 +11,45 @@ import sys
 
 from .ledger import readonly_snapshot
 from .cognitive_session import inspect_session
+
+
+def probe_transport(plan: dict, *, timeout: float = 20) -> dict:
+    """Read-only MCP preflight through the exact configured interpreter/state.
+
+    No model request, task creation, grants, client login or account edits.
+    Original goal text is read only when a root was explicitly selected and
+    is not included in the returned diagnostic receipt.
+    """
+    from mcp import Client, StdioServerParameters
+
+    async def check():
+        settings = dict(arg.split("=", 1) for arg in plan["argv"][2:-1:2])
+        params = StdioServerParameters(
+            command=json.loads(settings["mcp_servers.caos.command"]),
+            args=json.loads(settings["mcp_servers.caos.args"]))
+        async with Client(params) as client:
+            names = {t.name for t in (await client.list_tools()).tools}
+            required = {"native_goal_list", "cognition_session_inspect",
+                        "cognition_input_record", "native_local_tick"}
+            if not required <= names:
+                raise ValueError("MCP_REQUIRED_TOOLS_MISSING")
+            root = plan["root_task_id"]
+            result = await client.call_tool("cognition_session_inspect" if root else "native_goal_list",
+                                           {"root_task_id": root} if root else {})
+            if result.is_error:
+                raise ValueError("MCP_STATE_READ_REJECTED")
+            return {"status": "MCP_TRANSPORT_VERIFIED", "tool_count": len(names),
+                    "selected_root_read": root is not None,
+                    "model_authenticated": "NOT_TESTED", "product_ready": False}
+
+    try:
+        return asyncio.run(asyncio.wait_for(check(), timeout=timeout))
+    except TimeoutError as exc:
+        raise ValueError("MCP_PREFLIGHT_TIMEOUT") from exc
+    except Exception as exc:
+        # Tool errors may contain private goal/source bytes. Keep the public
+        # diagnostic bounded; don't serialize an arbitrary exception tree.
+        raise ValueError("MCP_PREFLIGHT_FAILED:" + type(exc).__name__) from exc
 
 
 def prepare_launch(state: Path, *, root: str | None = None,
@@ -28,7 +68,13 @@ def prepare_launch(state: Path, *, root: str | None = None,
     # JSON string/array literals are also valid TOML here; subprocess receives
     # an argv list, never a shell command. Absolute paths survive spaces and
     # switching the client's working directory.
-    server_args = ["-m", "cognition_agent_os.session_cli", "--state", str(state), "serve"]
+    # The SDK may discard PYTHONPATH; a developer checkout and an older wheel
+    # can coexist in one interpreter. Bind the server to this package, without
+    # trusting the user's working directory or inherited Python search paths.
+    bootstrap = ("import runpy,sys;sys.path.insert(0,sys.argv.pop(1));"
+                 "runpy.run_module('cognition_agent_os.session_cli',run_name='__main__')")
+    server_args = ["-I", "-c", bootstrap, str(Path(__file__).resolve().parent.parent),
+                   "--state", str(state), "serve"]
     settings = {
         "mcp_servers.caos.command": sys.executable,
         "mcp_servers.caos.args": server_args,
@@ -61,7 +107,7 @@ def launch(state: Path, *, root: str | None = None,
            executable: str = "codex", check: bool = False) -> dict:
     plan = prepare_launch(state, root=root, executable=executable)
     if check:
-        return plan
+        return {**plan, "transport": probe_transport(plan)}
     # Inherit the operator's interactive terminal and native client policy.
     # No automatic login, provider switch, API key capture or sandbox bypass.
     completed = subprocess.run(plan["argv"], check=False)

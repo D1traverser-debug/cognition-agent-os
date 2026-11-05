@@ -84,8 +84,13 @@ not write account settings, capture credentials, log in, change the model or
 relax the client's sandbox. Existing client provider/billing settings apply.
 Missing state, root, client or MCP dependency fails before starting the client.
 
-`--check` proves preparation only. A successful client exit is also not evidence
-of authentication, MCP invocation or goal achievement. The current Work
+`--check` now starts the configured MCP child, verifies required tools, and
+performs a read-only state call with a 20-second timeout. Its diagnostic receipt
+does not include the goal text. The child is bound to this CAOS installation
+and uses isolated Python startup, so working-directory modules and inherited
+PYTHONPATH cannot silently substitute another package. This proves the local
+MCP transport, not model authentication or goal achievement. A successful
+native-client exit also does not establish those outcomes. The current Work
 environment's isolated client probe still times out with a plugin-authentication
 401; this launcher does not repair account credentials. MCP guards apply to
 MCP actions, not every tool available in the native client.

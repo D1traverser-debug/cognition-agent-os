@@ -16,7 +16,7 @@ class ClientLaunch(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.state = provision(Path(self.temp.name) / 'private state "with quotes"')
+        self.state = provision(Path(self.temp.name) / 'private state & (中文)')
         self.root = register_native_goal(self.state / "ledger.sqlite", "Preserve this original goal",
             managed_session=True, client_request_id="client-launch-test-0001")
 
@@ -24,9 +24,11 @@ class ClientLaunch(unittest.TestCase):
         return patch("cognition_agent_os.client_launch.importlib.util.find_spec", return_value=object())
 
     def test_paths_are_separate_arguments_and_check_does_not_launch(self):
-        with self.available(), patch("cognition_agent_os.client_launch.subprocess.run") as run:
+        with self.available(), patch("cognition_agent_os.client_launch.subprocess.run") as run, \
+                patch("cognition_agent_os.client_launch.probe_transport", return_value={"status": "test-double"}) as probe:
             plan = launch(self.state, root=self.root, executable=sys.executable, check=True)
         run.assert_not_called()
+        probe.assert_called_once()
         args = plan["argv"]
         settings = dict(x.split("=", 1) for x in args[2:-1:2])
         server = json.loads(settings["mcp_servers.caos.args"])

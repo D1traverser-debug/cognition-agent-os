@@ -1,5 +1,20 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-06: preflight the actual installed transport
+
+Windows CI on fb17a89 failed because the launcher test created a directory
+containing quotes, which Windows forbids. The portable fixture now retains
+spaces, Unicode and shell metacharacters without using an illegal filename.
+Inspection also found that preparation alone did not prove a working server:
+the MCP SDK can discard PYTHONPATH and load an older wheel from the same Python.
+Bind startup to the current package path with isolated Python and an argv-only
+bootstrap. The production --check now performs real MCP discovery and a
+read-only state call; it has a bounded timeout and omits private text from its
+receipt. The existing cross-platform MCP integration exercises this exact
+path and checks event-count invariance. No model/provider, account setting,
+permission, scheduler or second state store is added. Native model invocation
+and owner-outcome acceptance remain separate obligations.
+
 ## 2026-11-06: executable native-client entry, conditional integration
 
 The package had an MCP server and instructions but no executable client entry.
