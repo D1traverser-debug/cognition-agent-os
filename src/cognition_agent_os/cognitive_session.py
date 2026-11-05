@@ -17,7 +17,9 @@ from .native_decision import _registered_native_contract_matches
 from .source import safe_fixture, SourceUnavailable
 
 KINDS = frozenset({"obligation", "hypothesis", "source", "option", "decision",
-                   "observation", "method"})
+                   "observation", "method", "interpretation"})
+CLAIM_CATEGORIES = frozenset({"goal", "constraint", "preference", "correction",
+    "implementation_suggestion", "action_request", "reference", "assumption"})
 _ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,95}\Z")
 MAX_NODES = 512
 MAX_EVENTS = 4096
@@ -108,11 +110,26 @@ def _project(db, sources: Path, root_id: str):
     for node_id, node in nodes.items():
         node["status"] = invalid.get(node_id, "CURRENT")
         node["semantic_truth_verified"] = False
+    inputs = []
+    for e in history:
+        if e["kind"] != "COGNITION_INPUT":
+            continue
+        data = e["data"]
+        interpretations = [n["id"] for n in nodes.values()
+            if n["kind"] == "interpretation" and n["status"] == "CURRENT"
+            and any(r["request_id"] == data["request_id"] for r in n["input_refs"])]
+        inputs.append({**data, "event_id": e["event_id"], "sha256": digest(data),
+            "interpretation_ids": interpretations,
+            "multiple_interpretations": len(interpretations) > 1,
+            "origin_authenticated": False, "semantic_understanding_verified": False,
+            "authorizes_effects": False})
     goal = {"original": spec["goal"],
             "amendments": [e["data"]["text"] for e in amendments]}
     result = {"root_task_id": root_id, "goal": goal, "goal_revision": revision,
               "goal_sha256": digest(goal), "grant_current": current,
               "nodes": list(nodes.values()),
+              "inputs": inputs, "input_count": len(inputs),
+              "uninterpreted_input_count": sum(not i["interpretation_ids"] for i in inputs),
               "reopen": [{"node_id": key, "reason": value}
                          for key, value in invalid.items()],
               "authorizes_external_tools": False, "owner_outcome_verified": False}
@@ -127,6 +144,7 @@ def inspect_session(db_path: Path, sources: Path, root_id: str, *,
         raise ValueError("INVALID_COGNITION_PAGE")
     with readonly_snapshot(db_path) as db:
         view = _project(db, sources, root_id)
+    view.pop("inputs")  # Raw messages are fetched separately, never repeated per node page.
     remaining = [n for n in view["nodes"] if n["event_id"] > after_event_id]
     page = remaining[:limit]
     visible = {n["id"] for n in page}
@@ -134,6 +152,37 @@ def inspect_session(db_path: Path, sources: Path, root_id: str, *,
             "reopen": [r for r in view["reopen"] if r["node_id"] in visible],
             "reopen_count": len(view["reopen"]),
             "next_after_event_id": page[-1]["event_id"] if len(remaining) > len(page) else None}
+
+
+def inspect_inputs(db_path: Path, sources: Path, root_id: str, *,
+                   after_event_id: int = 0, limit: int = 4) -> dict:
+    """Bounded raw-message readback. A recorded reading is not verified intent."""
+    if type(after_event_id) is not int or after_event_id < 0 or type(limit) is not int or not 1 <= limit <= 16:
+        raise ValueError("INVALID_COGNITION_INPUT_PAGE")
+    with readonly_snapshot(db_path) as db:
+        view = _project(db, sources, root_id)
+    remaining = [i for i in view["inputs"] if i["event_id"] > after_event_id]
+    page = remaining[:limit]
+    return {"root_task_id": root_id, "revision_token": view["revision_token"],
+            "goal_sha256": view["goal_sha256"], "inputs": page,
+            "input_count": view["input_count"],
+            "uninterpreted_input_count": view["uninterpreted_input_count"],
+            "next_after_event_id": page[-1]["event_id"] if len(remaining) > len(page) else None}
+
+
+def record_input(db_path: Path, sources: Path, root_id: str, text: str, *,
+                 origin: str, locator: str, request_id: str, expected_revision: str) -> dict:
+    """Preserve a message/material without amending goals, granting or executing.
+
+    Origin/locator are client assertions, not authenticated platform metadata.
+    Interpretations are separately versioned nodes; no keyword classifier runs.
+    """
+    if (not isinstance(text, str) or not text.strip() or len(text) > 32000
+            or not isinstance(origin, str) or origin not in {"client_user", "external"}
+            or not isinstance(locator, str) or not 1 <= len(locator.strip()) <= 2000):
+        raise ValueError("COGNITION_INVALID_INPUT")
+    return _append(db_path, sources, root_id, request_id, expected_revision,
+                   "COGNITION_INPUT", {"text": text, "origin": origin, "locator": locator})
 
 
 def _append(db_path, sources, root_id, request_id, expected_revision, kind, data):
@@ -173,7 +222,7 @@ def _append(db_path, sources, root_id, request_id, expected_revision, kind, data
 def _validate_node(node, view, sources):
     required = {"id", "kind", "text", "depends_on", "source_refs", "supersedes", "goal_revision"}
     if (not isinstance(node, dict) or not required <= set(node)
-            or set(node) - required - {"action_spec", "method_refs"}
+            or set(node) - required - {"action_spec", "method_refs", "input_refs", "claims"}
             or not isinstance(node["id"], str) or not _ID.fullmatch(node["id"])
             or not isinstance(node["kind"], str) or node["kind"] not in KINDS
             or not isinstance(node["text"], str) or not 1 <= len(node["text"]) <= 12000
@@ -200,6 +249,10 @@ def _validate_node(node, view, sources):
         raise ValueError("COGNITION_INVALID_SOURCE_REFS")
     for ref in refs:
         _source_check(sources, ref)
+    if node["kind"] == "interpretation":
+        _validate_interpretation(node, view)
+    elif "input_refs" in node or "claims" in node:
+        raise ValueError("COGNITION_INPUT_CLAIMS_BELONG_TO_INTERPRETATION")
     if node["kind"] == "source" and not refs:
         raise ValueError("COGNITION_SOURCE_BYTES_REQUIRED")
     if node["kind"] == "obligation":
@@ -222,6 +275,40 @@ def _validate_node(node, view, sources):
             raise ValueError("COGNITION_INVALID_METHOD_REFERENCE")
     elif "action_spec" in node or "method_refs" in node:
         raise ValueError("COGNITION_ACTION_BELONGS_TO_DECISION")
+
+
+def _validate_interpretation(node, view):
+    inputs = {i["request_id"]: i for i in view["inputs"]}
+    refs = node.get("input_refs")
+    claims = node.get("claims")
+    if not isinstance(refs, list) or not 1 <= len(refs) <= 8:
+        raise ValueError("COGNITION_INTERPRETATION_INPUT_REQUIRED")
+    referenced = set()
+    for ref in refs:
+        if (not isinstance(ref, dict) or set(ref) != {"request_id", "sha256"}
+                or not isinstance(ref["request_id"], str) or ref["request_id"] not in inputs
+                or ref["request_id"] in referenced
+                or ref["sha256"] != inputs[ref["request_id"]]["sha256"]):
+            raise ValueError("COGNITION_INTERPRETATION_INPUT_MISMATCH")
+        referenced.add(ref["request_id"])
+    if not isinstance(claims, list) or not 1 <= len(claims) <= 32:
+        raise ValueError("COGNITION_INTERPRETATION_CLAIMS_REQUIRED")
+    covered = set()
+    for claim in claims:
+        if (not isinstance(claim, dict)
+                or set(claim) != {"input_id", "quote", "category", "meaning", "basis"}
+                or not all(isinstance(v, str) for v in claim.values())
+                or claim["input_id"] not in referenced
+                or claim["category"] not in CLAIM_CATEGORIES
+                or claim["basis"] not in {"explicit", "inferred", "uncertain"}
+                or not 1 <= len(claim["meaning"].strip()) <= 4000):
+            raise ValueError("COGNITION_INTERPRETATION_INVALID_CLAIM")
+        if (not 1 <= len(claim["quote"].strip()) <= 4000
+                or claim["quote"] not in inputs[claim["input_id"]]["text"]):
+            raise ValueError("COGNITION_INTERPRETATION_QUOTE_NOT_FOUND")
+        covered.add(claim["input_id"])
+    if covered != referenced:
+        raise ValueError("COGNITION_INTERPRETATION_UNEXPLAINED_INPUT")
 
 
 def record_node(db_path: Path, sources: Path, root_id: str, node: dict, *,

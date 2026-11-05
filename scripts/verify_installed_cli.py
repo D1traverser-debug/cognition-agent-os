@@ -49,11 +49,20 @@ def main() -> None:
         assert session(state, "list")["goals"][0]["original_goal"] == original
         assert session(state, "list")["selected_root_task_id"] is None
         assert session(state, "inspect", "--root", root)["goal"]["original"] == original
+        message = "可以参考 Graph；这只是候选方案，不要替换完整目标。"
+        request = base / "message.json"
+        request.write_text(json.dumps({"text": message, "origin": "client_user",
+            "locator": "installed CLI smoke", "request_id": "installed-message-001",
+            "expected_revision": created["revision_token"]}, ensure_ascii=False), encoding="utf-8")
+        session(state, "receive", "--root", root, "--file", str(request))
+        assert session(state, "inputs", "--root", root)["inputs"][0]["text"] == message
+        assert session(state, "inspect", "--root", root)["goal"] == created["goal"]
         archive = base / "snapshot.zip"
         session(state, "snapshot", "--file", str(archive))
         restored = base / "restored"
         session(restored, "restore", "--file", str(archive))
         assert session(restored, "list")["goals"][0]["root_task_id"] == root
+        assert session(restored, "inputs", "--root", root)["inputs"][0]["text"] == message
         assert session(restored, "outcome", "--root", root)["contract_outcome_verified"] is False
 
     with tempfile.TemporaryDirectory(prefix="cognition-installed-smoke-") as root:

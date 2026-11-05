@@ -63,6 +63,32 @@ use `cognition_goal_amend`; they preserve the original and invalidate previous
 derived decisions/contracts. A revision conflict requires a new read, not an
 unconditional retry. An identical request ID safely replays a lost response.
 
+New conversation messages and external research first use
+`cognition_input_record` (`text`, `origin`: `client_user` or `external`, `locator`,
+`request_id`, `expected_revision`). This preserves wording without amending the
+goal. Origin/locator are caller assertions, never authenticated owner identity.
+Read full messages with `cognition_inputs_inspect`; follow its cursor. `inspect`
+reports input/uninterpreted counts without repeating full raw messages.
+
+Record a tentative reading with the existing `cognition_node_record`, kind
+`interpretation`, plus `input_refs` (`request_id`, `sha256` from input readback)
+and `claims` (`input_id`, exact `quote`, `category`, `meaning`, `basis`). Categories
+are goal, constraint, preference, correction, implementation_suggestion,
+action_request, reference, assumption. Basis is explicit, inferred or uncertain;
+none means verified. One mixed message can have multiple claims. Link downstream
+hypotheses/options via `depends_on`; supersede a wrong reading to invalidate its
+dependent work. Two unsuperseded readings stay visible. No category automatically
+edits a goal, grants tools, or promotes a method. A genuine correction still uses
+the explicit amendment/reopen paths above. An unhandled input alone does not
+block a queued effect; correct interpretation and client routing remain open.
+
+Work CLI equivalents: `receive --root ID --file message.json` accepts the same
+body, and `inputs --root ID` pages original text. `record` saves the interpretation.
+The client prepares these records; the user need not author JSON. MCP graph and
+input readers require `allow_source_read`, because derived copies may contain
+source quotes. `serve` enables it for the selected private local state; a custom
+read-only MCP profile must opt in explicitly.
+
 A decision that proposes execution includes `action_spec`, exactly the typed
 child capability spec it selected. Admission rejects a different action even
 when that other action is operator-authorized. Decisions without `action_spec`

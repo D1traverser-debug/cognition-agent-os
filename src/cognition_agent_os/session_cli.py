@@ -10,7 +10,8 @@ from zipfile import BadZipFile
 
 from .ledger import connect, initialize, event, readonly_snapshot
 from .native_decision import register_native_goal, list_native_goals
-from .cognitive_session import inspect_session, record_node, amend_goal, reopen_node
+from .cognitive_session import (
+    inspect_session, record_node, amend_goal, reopen_node, record_input, inspect_inputs)
 from .effect_contract import enable_managed_session, install_contract, inspect_contract_outcome
 
 
@@ -40,13 +41,13 @@ def main(argv=None):
     create = sub.add_parser("goal", help="Register complete original owner text")
     create.add_argument("--file", type=Path, required=True)
     create.add_argument("--request-id", required=True)
-    for name in ("inspect", "outcome"):
+    for name in ("inspect", "outcome", "inputs"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--root", required=True)
-        if name == "inspect":
+        if name in ("inspect", "inputs"):
             cmd.add_argument("--after-event-id", type=int, default=0)
-            cmd.add_argument("--limit", type=int, default=32)
-    for name in ("record", "amend", "reopen"):
+            cmd.add_argument("--limit", type=int, default=4 if name == "inputs" else 32)
+    for name in ("record", "amend", "reopen", "receive"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--root", required=True)
         cmd.add_argument("--file", type=Path, required=True, help="JSON request body")
@@ -75,8 +76,9 @@ def main(argv=None):
                                         client_request_id=args.request_id)
             enable_managed_session(db, root)
             result = inspect_session(db, sources, root)
-        elif args.command == "inspect":
-            result = inspect_session(db, sources, args.root,
+        elif args.command in ("inspect", "inputs"):
+            reader = inspect_session if args.command == "inspect" else inspect_inputs
+            result = reader(db, sources, args.root,
                                      after_event_id=args.after_event_id, limit=args.limit)
         elif args.command == "list":
             result = list_native_goals(db, workspace, sources, args.after_task_id)
@@ -86,9 +88,10 @@ def main(argv=None):
             result = install_contract(db, sources, args.root,
                                       json.loads(args.file.read_text(encoding="utf-8")),
                                       workspace=workspace, rebind_pending=args.rebind_pending)
-        elif args.command in ("record", "amend", "reopen"):
+        elif args.command in ("record", "amend", "reopen", "receive"):
             data = json.loads(args.file.read_text(encoding="utf-8"))
-            functions = {"record": record_node, "amend": amend_goal, "reopen": reopen_node}
+            functions = {"record": record_node, "amend": amend_goal, "reopen": reopen_node,
+                         "receive": record_input}
             result = functions[args.command](db, sources, args.root, **data)
         elif args.command == "doctor":
             with readonly_snapshot(db) as conn:

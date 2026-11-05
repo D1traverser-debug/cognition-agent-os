@@ -77,6 +77,25 @@ async def run():
             created = unwrap(await client.call_tool("native_goal_create", {
                 "owner_goal": goal, "client_request_id": "managed-transport-001"}))
             root = created["root_task_id"]
+            original_view = await inspect(client, root)
+            raw_input = "Maybe use a graph. This is a suggestion, not a replacement goal."
+            unwrap(await client.call_tool("cognition_input_record", {
+                "root_task_id": root, "text": raw_input, "origin": "client_user",
+                "locator": "MCP transport test", "request_id": "transport-message-001",
+                "expected_revision": original_view["revision_token"]}))
+            input_view = unwrap(await client.call_tool("cognition_inputs_inspect", {"root_task_id": root}))
+            item = input_view["inputs"][0]
+            interpretation = {"id": "reading", "kind": "interpretation",
+                "text": "A suggested technique still requires comparison.",
+                "depends_on": [], "source_refs": [], "supersedes": None, "goal_revision": 0,
+                "input_refs": [{"request_id": item["request_id"], "sha256": item["sha256"]}],
+                "claims": [{"input_id": item["request_id"], "quote": "Maybe use a graph.",
+                    "category": "implementation_suggestion", "basis": "explicit",
+                    "meaning": "Consider the graph as a candidate, not as a mandate."}]}
+            unwrap(await client.call_tool("cognition_node_record", {
+                "root_task_id": root, "node": interpretation, "request_id": "transport-reading-001",
+                "expected_revision": input_view["revision_token"]}))
+            assert (await inspect(client, root))["goal"] == original_view["goal"]
             await prepare(client, root)
             request = await proposal(client, root)
             denied = await client.call_tool("native_decision_admit", {
@@ -108,7 +127,11 @@ async def run():
         async with Client(params) as client:
             restored = await inspect(client, root)
             assert restored["goal"]["original"] == goal
-            assert restored["node_count"] == 4
+            assert restored["node_count"] == 5
+            recovered_input = unwrap(await client.call_tool("cognition_inputs_inspect", {"root_task_id": root}))
+            assert recovered_input["inputs"][0]["text"] == raw_input
+            assert recovered_input["inputs"][0]["interpretation_ids"] == ["reading"]
+            assert not recovered_input["inputs"][0]["semantic_understanding_verified"]
             before = await inspect(client, root2)
             unwrap(await client.call_tool("cognition_reopen", {"root_task_id": root2,
                 "node_id": "source", "reason": "New experiment contradicts the baseline choice.",
@@ -120,6 +143,8 @@ async def run():
             print(json.dumps({"real_mcp_stdio": True, "cold_process_resume": True,
                 "missing_operator_contract_rejected": True, "granted_local_owner_outcome": True,
                 "ancestor_reopen_blocks_queued_effect": True, "operator_grant_tool_exposed": False,
+                "input_and_tentative_reading_survive_cold_restart": True,
+                "suggestion_does_not_replace_goal": True,
                 "actual_chatgpt_or_codex_session_connected": False,
                 "nl_alignment_benchmark": "NOT_RUN", "product_ready": False}, indent=2))
 

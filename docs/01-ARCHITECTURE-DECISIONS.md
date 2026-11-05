@@ -1,5 +1,77 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-05: external research enters as evidence, not replacement authority
+
+Scope: continue the complete parent product below. New research does not reset
+the project, install a new System Prompt, or select a framework by popularity.
+
+### Findings and competing causes
+
+- **Missing instruction alone is not an adequate explanation.** Existing AGENTS
+  and the installed intake already distinguish goals, research and effects.
+  More wording does not demonstrate that the client selected or obeyed it.
+- **Input/interpretation lifecycle is incomplete.** Before this change the
+  cognitive API retained amendments and derived nodes, but no separate raw
+  conversation input. `amend_goal` deliberately invalidates every prior node
+  and effect contract. Sending a suggestion/research bundle there therefore
+  changes goal identity and invalidates unrelated work. Sending it only as a
+  hypothesis loses its distinct provenance and tentative intent categories.
+- **Activation and semantic quality remain separate open causes.** Persisting a
+  message cannot prove the model understood it, read every constraint, selected
+  the best architecture, or used the entry in a fresh ordinary conversation.
+  The original forbidden-proposal baseline remains relevant; this change is
+  not a general natural-language authorization fix.
+- **Read permissions need to cover derived copies.** Cognitive graph nodes can
+  contain source quotes. Their MCP reader previously omitted `allow_source_read`.
+  The input and graph readers now both enforce that existing disclosure setting.
+
+### Actual external mechanisms inspected
+
+| Source and observed blob | Applicable mechanism | Counterexample / transfer boundary |
+| --- | --- | --- |
+| [GSD execution](https://github.com/open-gsd/gsd-core/blob/main/gsd-core/workflows/execute-phase.md), `72722e6eb4853f76c7e76feb3eda2f4b92b6a337`; [verifier](https://github.com/open-gsd/gsd-core/blob/main/agents/gsd-verifier.md), `860c6f833806441adb51c70dd1df2ba3c69a9dc1` | Resume reconciles reachable commits with summaries; outcome requirements cannot shrink to plan tasks; behavior-dependent claims need runtime evidence | These are workflow/agent instructions, not evidence CAOS has a native hook. Referenced `verify.cjs`/`verification.cjs` paths returned 404 during this review, so their runtime enforcement was not validated. Verifier overrides also mean a status alone is insufficient evidence. |
+| [Atlas hook](https://github.com/code-yeongyu/oh-my-openagent/blob/dev/packages/omo-opencode/src/hooks/atlas/atlas-hook.ts), `6e7969ccfaf0020f0047a169fbbc33ba30ef6701`; [idle handler](https://github.com/code-yeongyu/oh-my-openagent/blob/dev/packages/omo-opencode/src/hooks/atlas/idle-event.ts), `72a86bc0cfa4d7bbb9dda3f1363f3e493d10fe46`; [continuation](https://github.com/code-yeongyu/oh-my-openagent/blob/dev/packages/omo-opencode/src/hooks/atlas/idle-continuation.ts), `850dc94020159da35cf37b84c72dc20126547e1b` | Runtime events, active-session identity, no-progress detection, cooldown, bounded retries, stop and background-task checks | Depends on OpenCode PluginInput/session events and continuation injection. It is not portable by copying its prompt into ChatGPT. Counted tasks and tool activity still do not establish owner-goal achievement. No runtime installation or efficacy trial performed here. |
+| [prompts.chat schema](https://github.com/f/prompts.chat/blob/main/prisma/schema.prisma), `97f36369649ad5c4565df2c9673274bb3d2b4fc6`; [team changes](https://github.com/f/prompts.chat/blob/main/src/lib/bots/team-changes.ts), `6482330766f5e6a95d7cf9acccfb5920f7bf082b` | Stable assets, separate proposed/original snapshots, versioned application, reviewer permissions, preservation of members hidden from a proposer | The inspected approval function applies the proposed snapshot; it does not itself compare the saved original with live state. Version history alone cannot prove conflict safety or effectiveness. Reuse CAOS CAS/dependency invalidation rather than importing this application/database. |
+| [ReAct original paper](https://arxiv.org/abs/2210.03629), v3; [GraphPrompt original paper](https://arxiv.org/abs/2302.08043), v3, followed from Prompt Engineering Guide | ReAct interleaves information-gathering actions with revisable planning; task-specific method choice | GraphPrompt is a GNN pretraining/downstream-task method, not an Agent Workflow Graph implementation. Neither paper proves CAOS's current client, intent recovery or authorization. |
+
+Third-party leaked prompt collections are unverified implementation references,
+not official runtime contracts. No copied leak, new dependency, new Agent or
+automatic core-rule update is introduced. This review does not certify a current
+top-ten Stars ranking or claim all ten repositories were exhaustively executed.
+
+### Alternatives and second challenge
+
+| Route | Coverage/reliability | Complexity, cost and compatibility | Failure mode / choice |
+| --- | --- | --- | --- |
+| Keep only chat/Skill wording | No durable distinction between new material and goal changes | Lowest code change, repeated recovery/correction burden | Reject as sole solution: same failure remains after interruption |
+| Separate intent agent plus vector store/controller | Could improve retrieval/interpretation with measured model evaluation | New model calls, identity/store synchronization and migration; still needs existing grants and outcomes | Defer: no measured accuracy benefit; another agent can misclassify the same message |
+| Replace the stack with GSD/OmO | Useful supported-client coordination and recovery mechanisms | Different clients/state conventions; significant migration and activation work | Not justified by these input-lifecycle failures; client comparison remains open |
+| Extend existing event ledger and dependency nodes | Exact raw input, tentative interpretations, CAS, supersession and cold recovery | No new service/table/scheduler/dependency; testable via current CLI/MCP | Selected for this boundary, not asserted globally optimal or semantically sufficient |
+
+Strong counterexamples: a quoted instruction can call itself an owner goal; a
+model can confidently misread a suggestion; a later correction can invalidate
+an earlier interpretation; two readings can disagree; an input may arrive after
+an action is queued. Accordingly, origin is explicitly unauthenticated, every
+reading remains unverified, category labels never amend goals/grant effects,
+competing readings stay visible, and amended/reopened/superseded readings use
+the existing dependency invalidation. Raw inputs survive these changes.
+
+Implementation uses `COGNITION_INPUT` events and `interpretation` nodes in the
+same root/ledger. Claims quote exact input bytes and distinguish explicit,
+inferred and uncertain readings. Graph readback reports counts; raw input is
+paged separately. Rollback is a forward correction/reopen, preserving originals;
+do not run an older binary against a snapshot containing unfamiliar node kinds.
+
+Acceptance covers input retention, unchanged goal identity, false-quote and
+false-confirmation rejection, dependent-plan invalidation, competing readings,
+idempotency/CAS, actual MCP subprocess recovery and installed CLI snapshot
+roundtrip. It does NOT certify NLP accuracy or independent semantic review.
+Uninterpreted counts are advisory: receiving a message alone does not cancel an
+already-authorized task. The caller must apply a genuine correction/reopen and
+link decision dependencies; the current tools cannot authenticate owner intent
+or intercept unrelated connectors. Automatic correct routing, held-out model
+evaluation, native client activation and cross-domain transfer remain OPEN.
+
 ## Product architecture correction: cognition before Host mechanics
 
 The complete product is an opt-in interactive parent that can investigate and

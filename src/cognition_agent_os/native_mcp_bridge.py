@@ -521,7 +521,8 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
 
     # Durable cognition shares the existing native roots/events, not a new
     # scheduler. Effect-contract installation is deliberately NOT exposed.
-    from .cognitive_session import inspect_session, record_node, amend_goal, reopen_node
+    from .cognitive_session import (
+        inspect_session, record_node, amend_goal, reopen_node, record_input, inspect_inputs)
     from .effect_contract import inspect_contract_outcome
     from .method_learning import record_trial, inspect_trials
 
@@ -533,8 +534,30 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         CURRENT means dependency freshness, not semantic truth. Reopened/stale
         ancestors must be reinvestigated before a managed action can execute.
         """
+        if not allow_source_read:
+            raise PermissionError("SOURCE_DISCLOSURE_NOT_ENABLED")
         return inspect_session(db_path, fixtures, root_task_id,
                                after_event_id=after_event_id, limit=limit)
+
+    @write_tool()
+    def cognition_input_record(root_task_id: str, text: str, origin: str, locator: str,
+                               request_id: str, expected_revision: str) -> dict:
+        """Preserve user wording or external material without changing the goal.
+
+        origin is client_user or external, a caller assertion, not authentication.
+        Do not turn research or a tentative suggestion into a goal amendment.
+        """
+        return record_input(db_path, fixtures, root_task_id, text, origin=origin,
+                            locator=locator, request_id=request_id, expected_revision=expected_revision)
+
+    @mcp.tool()
+    def cognition_inputs_inspect(root_task_id: str, after_event_id: int = 0,
+                                 limit: int = 4) -> dict:
+        """Page exact input text and tentative interpretation IDs; never grants."""
+        if not allow_source_read:
+            raise PermissionError("SOURCE_DISCLOSURE_NOT_ENABLED")
+        return inspect_inputs(db_path, fixtures, root_task_id,
+                              after_event_id=after_event_id, limit=limit)
 
     @write_tool()
     def cognition_node_record(root_task_id: str, node: dict, request_id: str,
@@ -545,8 +568,14 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         fields: id, kind, text, depends_on, source_refs, supersedes,
         goal_revision. A source_ref is path/sha256/quote of actual local bytes.
         Nodes are proposals, never approval. A decision needs two option links.
+        For kind=interpretation also supply input_refs (request_id/sha256) and
+        claims (input_id, quote, category, meaning, basis). category is goal,
+        constraint, preference, correction, implementation_suggestion,
+        action_request, reference or assumption; basis explicit/inferred/uncertain.
+        These are tentative readings, not confirmed owner requirements. Link
+        dependent hypotheses/options using depends_on; supersede a wrong reading.
         """
-        if node.get("source_refs") and not allow_source_read:
+        if (node.get("source_refs") or node.get("input_refs")) and not allow_source_read:
             raise PermissionError("SOURCE_DISCLOSURE_NOT_ENABLED")
         return record_node(db_path, fixtures, root_task_id, node,
                            request_id=request_id, expected_revision=expected_revision)
