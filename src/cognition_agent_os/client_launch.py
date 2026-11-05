@@ -73,7 +73,9 @@ def prepare_launch(state: Path, *, root: str | None = None,
     # trusting the user's working directory or inherited Python search paths.
     bootstrap = ("import runpy,sys;sys.path.insert(0,sys.argv.pop(1));"
                  "runpy.run_module('cognition_agent_os.session_cli',run_name='__main__')")
-    server_args = ["-I", "-c", bootstrap, str(Path(__file__).resolve().parent.parent),
+    # -I also hides legitimate user-site MCP installs. -E/-P exclude Python
+    # environment overrides and cwd, retaining normal installed dependencies.
+    server_args = ["-E", "-P", "-c", bootstrap, str(Path(__file__).resolve().parent.parent),
                    "--state", str(state), "serve"]
     settings = {
         "mcp_servers.caos.command": sys.executable,

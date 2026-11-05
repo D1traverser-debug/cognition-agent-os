@@ -2,12 +2,21 @@
 
 ## 2026-11-06: preflight the actual installed transport
 
+The first CI run exposed a Linux user-site installation failure: the actual
+artifact log showed `ModuleNotFoundError: mcp` under `-I`, while Windows passed.
+Use `-E -P` instead: retain normal user/system dependency directories while
+excluding environment overrides and unsafe working-directory insertion. This
+is a compatibility correction based on the failed real transport, not a
+waiver of the connection test.
+
+
+
 Windows CI on fb17a89 failed because the launcher test created a directory
 containing quotes, which Windows forbids. The portable fixture now retains
 spaces, Unicode and shell metacharacters without using an illegal filename.
 Inspection also found that preparation alone did not prove a working server:
 the MCP SDK can discard PYTHONPATH and load an older wheel from the same Python.
-Bind startup to the current package path with isolated Python and an argv-only
+Bind startup to the current package path with controlled Python startup and an argv-only
 bootstrap. The production --check now performs real MCP discovery and a
 read-only state call; it has a bounded timeout and omits private text from its
 receipt. The existing cross-platform MCP integration exercises this exact
