@@ -1,5 +1,26 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-06: executable native-client entry, conditional integration
+
+The package had an MCP server and instructions but no executable client entry.
+Choose a session-scoped local Codex launcher first: it reuses the existing
+model/tool runtime and the same private ledger without another server, queue,
+state authority or model subscription. A standalone web application introduces
+another runtime before the current model/action boundary has been verified;
+OpenCode/WorkBuddy remain replacement candidates if real client results favor
+them. This is a bounded integration choice, not evidence of an optimal whole
+architecture or a completed cognition system.
+
+The launcher validates state/root/client/dependency, passes argv without a shell,
+requires its MCP connection, propagates native failure and never edits account
+configuration. It inherits native policy and does not claim to intercept other
+tools. Explicit preparation was exercised against the private active session;
+path quoting, missing dependencies, wrong root and failure propagation are
+tested. Authentication and native model outcomes remain unverified: a fresh
+45-second no-tool probe with closed stdin still times out and reports a plugin
+catalogue 401. No credentials were read or rewritten. Do not infer a model
+endpoint diagnosis from that plugin error, and do not call --check a connection.
+
 ## 2026-11-06: new input invalidates an older action decision
 
 Real MCP reproduction showed that a new user message arriving after action

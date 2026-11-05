@@ -60,6 +60,10 @@ def main(argv=None):
         sub.add_parser(name).add_argument("--file", type=Path, required=True)
     sub.add_parser("doctor", help="Read local readiness; never claim client installation")
     sub.add_parser("serve", help="Serve MCP for this managed ledger; no account installation")
+    client = sub.add_parser("launch", help="Open local Codex with session-scoped CAOS MCP wiring")
+    client.add_argument("--root")
+    client.add_argument("--client", default="codex", help="Installed Codex executable")
+    client.add_argument("--check", action="store_true", help="Validate and print wiring without starting a model")
     args = parser.parse_args(argv)
     state = args.state.absolute()
     db, sources, workspace = state / "ledger.sqlite", state / "sources", state / "workspace"
@@ -93,6 +97,11 @@ def main(argv=None):
             functions = {"record": record_node, "amend": amend_goal, "reopen": reopen_node,
                          "receive": record_input}
             result = functions[args.command](db, sources, args.root, **data)
+        elif args.command == "launch":
+            from .client_launch import launch
+            result = launch(state, root=args.root, executable=args.client, check=args.check)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return result.get("exit_code", 0)
         elif args.command == "doctor":
             with readonly_snapshot(db) as conn:
                 authority = dict(conn.execute("SELECT * FROM authority WHERE singleton=1").fetchone())

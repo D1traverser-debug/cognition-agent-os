@@ -66,6 +66,30 @@ explicit CLI route remains available. See the official
 
 ## Use in a connected session
 
+### Session-scoped local Codex launch
+
+After installing this package with its MCP extra and installing/signing in to
+the supported local Codex client, start an interactive session with:
+
+```bash
+caos --state /absolute/private/caos-state launch --check
+caos --state /absolute/private/caos-state launch
+```
+
+Use `--root ROOT_ID` to select an existing goal, or leave it out to discover
+goals without assuming the newest is correct. `--client /path/to/codex` selects
+an already installed executable. The launcher passes the same interpreter,
+state path and required MCP server through per-session configuration. It does
+not write account settings, capture credentials, log in, change the model or
+relax the client's sandbox. Existing client provider/billing settings apply.
+Missing state, root, client or MCP dependency fails before starting the client.
+
+`--check` proves preparation only. A successful client exit is also not evidence
+of authentication, MCP invocation or goal achievement. The current Work
+environment's isolated client probe still times out with a plugin-authentication
+401; this launcher does not repair account credentials. MCP guards apply to
+MCP actions, not every tool available in the native client.
+
 Ask the connected client to work on the registered goal. It can discover it with
 `native_goal_list` (follow every cursor), then `cognition_session_inspect`.
 The response contains the original wording, corrections, source freshness,
