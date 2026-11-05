@@ -1,64 +1,91 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
-## System boundary and consolidation direction
+## Product architecture correction: cognition before Host mechanics
 
-The product has one reasoning loop: recover the original goal; investigate
-contradictions; compare methods; choose an action; observe its independent result;
-revise the earliest contradicted dependency; test whether the method transfers.
-This loop belongs to the calling model and its actual tools. The ledger provides
-durable identities, revisions and effect checks; recording the loop's fields does
-not implement its semantic reasoning.
+The complete product is an opt-in interactive parent that can investigate and
+solve its own failures, then guide independent child systems. The managed
+ledger/Worker experiment below covers only part of this product. Its green CI
+does not validate the calling model's investigation, research, architectural
+judgment or sustained execution. Do not keep selecting easy Host defects while
+these parent-level outcomes remain untested.
 
-Keep these responsibilities separate without introducing another controller:
+### One parent with distinct responsibilities
 
-| Responsibility | Shared implementation / boundary | Remaining acceptance |
+| Component | Required behavior | Evidence needed before calling it working |
 | --- | --- | --- |
-| Original goal and corrections | Existing native root and immutable correction events | Automatic faithful interpretation on unfamiliar tasks |
-| Evidence and decisions | Derived view of the same event ledger; local source hashes and explicit dependencies | Research relevance, completeness and current remote provenance |
-| Action | Same selected spec in immutable decision, native admission, binding and Worker | Meaningful mapping from the full owner goal to effects |
-| Result | Independent supported owner oracle or operator-defined byte checks | Domain validators beyond the supported local contracts |
-| Learning | Versioned method and separately reread cross-goal trials | Applicability discovery, causal benefit, negative transfer and controlled promotion |
-| ChatGPT / Codex entry | Existing private Skill, connected tools, Work CLI or opt-in local MCP | Fresh-session activation, recovery and correction-burden comparison |
+| Entry and goal recovery | On an explicit wake, identify the selected project, recover original requirements/corrections, current state and grants; avoid unrelated chats | Actual related/unrelated client traces, cold and interrupted resumes, full-clause fidelity |
+| Cognitive decision loop | Challenge the symptom, diagnosis, research strategy and proposed fix; reopen earlier assumptions when new evidence contradicts them | Competing causal explanations distinguished by observations, including failure of the chosen explanation |
+| Research and solution design | Discover materially different approaches; study primary implementations, tests and failures; compare adaptation, consolidation, replacement and reconstruction | Versioned source/experiment receipts tied to unresolved questions; design comparison and a second challenge before execution |
+| Working context and knowledge | Keep raw authority, task state, evidence claims and reusable procedures distinct; retrieve only needed detail | Original clauses survive compression; source conflicts are visible; changed evidence withdraws dependent advice |
+| Controlled execution and result | Bind the chosen goal/method/action to lawful tools and independently read the meaningful outcome | Legal/forbidden/prerequisite neighbors, interruption reconciliation and genuine domain validators |
+| Method evolution and child interface | Derive scoped methods from results, test transfer and regressions, promote or roll back versions; guide child work without taking its business authority | Held-out tasks and negative transfer controls; child-native result readback and fewer owner corrections |
 
-Do not create separate task, permission or completion truth for each interface.
-An adapter translates transport only. The cognition graph is a derived evidence
-view, not another scheduler. A reasoning decision used for execution must name
-its exact `action_spec`; a separately permitted action cannot borrow an unrelated
-decision. Research-only decisions remain possible without executing anything.
+The calling ChatGPT/Codex model remains the reasoning actor. The existing private
+Skill is guidance, not an enforced loop or account-wide hook. GitHub, private
+files and optional Host state must expose current facts to that actor; no one
+surface may silently substitute its summary for the original goal. A supported
+controlled client can enforce its own tool/stop boundaries; the present ChatGPT
+surface cannot claim interception of every other connector's operation.
 
-The current managed-mode experiment adds code and manual contract burden. It
-must earn retention through owner-task results; it is not the final architecture
-merely because its tests pass. Compare a thin interactive path using existing
-private continuity and connected tools against the managed path on the SAME
-tasks, including interruption and failure. Measure missed obligations, wrong
-effects, owner corrections, elapsed/tool cost and maintained mechanisms. Do not
-replace this comparison with source-line counts or another orchestration layer.
+### Nonlinear control and stop semantics
 
-Memory consolidation keeps source candidates and method trials as different
-evidence types. It does not merge them into another trusted-memory table.
-Declared method references join the existing decision/action binding: the trial
-reader re-observes independent results at admission and execution. Untried
-experiments remain possible; a cited failed/stale method cannot silently remain
-the basis of a queued action. This is dependency enforcement, not an automatic
-claim of semantic applicability or causal improvement.
+Diagnosis is provisional, not a single question followed by a patch. A knowledge
+gap opens research. Research may disprove the diagnosis or reveal a missing
+requirement. Competing designs must be compared under relevant owner tasks and
+lifetime maintenance cost, including reconstruction when its long-term result
+is better. Before acting, challenge the preferred design and its assumptions
+again. Execution failure may reopen requirements, evidence, method, architecture
+or the validator itself. Preserve independent branches that remain legitimate.
 
-Private Site-hosted MCP is an available platform alternative: authenticated
-requests, a Worker server and D1/R2 persistence are supported. It would require
-a tested adapter/migration for this Python runtime and explicit deployment/account
-authorization. This is an engineering tradeoff, not proof that ChatGPT cannot
-connect. No such service has been built or deployed in this branch. The current
-interactive work may proceed through already authorized tools while that option
-is evaluated; hosting is not a prerequisite for useful reasoning.
+Research depth is established by resolving material uncertainty with source
+and experimental evidence, not by counting links, reflection rounds or model
+statements. Several genuinely different candidates must be studied for an
+uncertain consequential design; that is not a rule to fetch three arbitrary
+README files on every task. Budget exhaustion yields incomplete research with
+explicit remaining uncertainty, never successful research by default.
 
-Reusable problem-solving method: recover the complete outcome and exclusions;
-trace the smallest observable failure through shared callers; distinguish
-competing causes with a counterexample; compare reuse, consolidation and
-replacement against lifetime cost; attack the selected plan before expanding it;
-execute and read the result independently. Preserve the failed assumption and
-its scope with the successful method. A later contradictory result withdraws
-dependent advice; a successful association alone does not establish causation
-or justify automatic method promotion. Apply this method to the architecture
-itself rather than adding a new rule for every observed symptom.
+There are separate decisions to stop a tool attempt, suspend an unresolved
+investigation, accept an implementation, and declare the whole owner goal met.
+The last requires the complete outcome and its independent evidence. A local
+test or a completed method card cannot authorize that transition. Current
+ordinary chat cannot guarantee automatic continuation after a final answer;
+this is a platform boundary to test with supported client integration, not a
+reason to defer other interactive work to a future always-on server.
+
+### Reuse research; do not restart the bibliography
+
+The existing source atlas and research cards already study many Hub projects.
+Live rechecks found identical Open Deep Research and SkillOpt blobs below;
+retain those conclusions rather than claiming another novel full study.
+
+| Actual source inspected | Mechanism worth adapting | Strongest limitation for CAOS |
+| --- | --- | --- |
+| Open Deep Research `deep_researcher.py`, blob `279dbffd9e49e07962fb4e1cfeff79e45adc43e9` | Research brief, follow-up tool loop, raw notes retained alongside compression | Supervisor can stop on no tools, completion signal or iteration limit; that is not independent proof of sufficient research |
+| STORM `knowledge_curation.py`, blob `d6b892957e5ef2c68d659c294bf64a02c9135b2e` | Perspective-guided question generation and retrieved source conversations | Bounded conversation and model answers do not establish an engineering root cause or permitted business effect |
+| SkillOpt `docs/guide/training-loop.md`, blob `3ba0d524d36a5dc4774f918931d22732670e4006` | Trajectories, candidate aggregation, controlled edits, selection validation and regression comparison | Ungated configurations can force acceptance; a validation improvement is scoped to its evaluator/data |
+| Hello-Agents `Extra-Chapter/Extra10-Agent自进化.md`, blob `07dcc30d07d6508ab55a290dc135f916148a0a9e` | Separate context, skill, shared-experience and strategy/code evolution loops | Tutorial mechanisms do not prove runtime activation, transfer or permission in the present client |
+
+Sources: [research loop](https://github.com/langchain-ai/open_deep_research/blob/main/src/open_deep_research/deep_researcher.py),
+[questioning implementation](https://github.com/stanford-oval/storm/blob/main/knowledge_storm/storm_wiki/modules/knowledge_curation.py),
+[evolution gate](https://github.com/microsoft/SkillOpt/blob/main/docs/guide/training-loop.md),
+[four evolution loops](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra10-Agent%E8%87%AA%E8%BF%9B%E5%8C%96.md).
+
+### Consolidation and acceptance direction
+
+Retain reliable transaction/effect/recovery components as optional supporting
+infrastructure. Do not equate their typed action catalog with general cognition.
+Keep research/knowledge provenance and actual result evaluators; consolidate
+overlapping interface responsibilities only after checking their distinct
+contracts. Do not add another scheduler or a permanent repository-wide prompt.
+
+The next product comparison is the actual interactive parent versus the managed
+client path on equal tasks: an unfamiliar architecture problem requiring deep
+research, an interrupted task with a late correction, a misleading-source or
+invalid-experience case, and an independently governed child task. Observe
+missed clauses, unsupported claims, wrong effects, recovery, owner interventions,
+tool/context cost and final outcomes. No model trials, deployment, native fresh
+chat trace or child-business result is fabricated by this architectural revision.
+The entire product remains NOT_READY; the correction is not a release gate pass.
 
 ## 2026-11-04: executable managed session experiment (conditional)
 
