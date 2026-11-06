@@ -45,6 +45,19 @@ and cross-task learning remain NOT_TESTED. Roll back the adapter independently
 while retaining saved inputs and delivery evidence; never automatically resend
 an unknown delivery or discard original messages.
 
+The first exact-head cross-platform run (`ad123ed`, run `42165581798`)
+passed Linux but failed three Windows protocol-peer tests involving Chinese
+input. A `PYTHONIOENCODING=cp1252` reproduction failed before the peer's delivery
+marker; explicitly setting the peer's stdin/stdout to protocol UTF-8 makes all
+12 tests pass under that same setting. Production already uses UTF-8. Keep the
+Chinese fixtures; this correction does not establish native-client integration.
+To discriminate client incompatibility from Work's read-only runtime, the
+existing disposable Windows/Linux transport jobs now also start checksum-pinned
+official Codex `rust-v0.167.0`, read back a real CAOS goal through its MCP client,
+and require a broken mandatory MCP server to reject thread startup. No model
+turn or owner account is used. Its receipt separates wiring from inference and
+owner-outcome acceptance; native success is pending actual execution.
+
 ## 2026-11-06: preflight the actual installed transport
 
 The first CI run exposed a Linux user-site installation failure: the actual

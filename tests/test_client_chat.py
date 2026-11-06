@@ -15,6 +15,9 @@ from cognition_agent_os.session_cli import provision
 PEER = r'''
 import json, sys, sqlite3
 from pathlib import Path
+# JSON-RPC is UTF-8 even when the Windows console uses a legacy code page.
+sys.stdin.reconfigure(encoding='utf-8')
+sys.stdout.reconfigure(encoding='utf-8')
 state, mode, root = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 def emit(value):
     print(json.dumps(value), flush=True)

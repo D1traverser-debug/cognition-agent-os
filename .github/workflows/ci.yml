@@ -156,6 +156,8 @@ jobs:
         run: python -m pip install --disable-pip-version-check ".[mcp]"
       - name: Verify both real MCP transports with one source-bound receipt
         run: python scripts/verify_delivery.py --profile transport --output "${{ runner.temp }}/caos-transport-receipt"
+      - name: Connect checksum-pinned official Codex to CAOS without model inference
+        run: python scripts/verify_codex_app_server.py --download --output "${{ runner.temp }}/caos-transport-receipt/native-codex.json"
       - name: Preserve compact receipt and raw transport logs
         if: always()
         uses: actions/upload-artifact@v4
