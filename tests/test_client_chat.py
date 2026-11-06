@@ -111,7 +111,15 @@ for line in sys.stdin:
             continue
         notify('item/agentMessage/delta',{'threadId':'thread-1','turnId':'turn-1','delta':'peer response'})
         notify('item/completed',{'threadId':'thread-1','turnId':'turn-1','item':{'id':'a','type':'agentMessage','text':'Unverified proposal'}})
+        if mode=='partial_disconnect':
+            emit({'id':102,'method':'item/commandExecution/requestApproval','params':{'threadId':'thread-1'}})
+            continue
         notify('turn/completed',{'threadId':'thread-1','turn':{'id':'turn-1','status':'failed' if mode=='failed' else 'completed'}})
+    elif msg.get('id')==102:
+        with sqlite3.connect(state/'ledger.sqlite') as db:
+            saved=[json.loads(r[0]) for r in db.execute("SELECT details FROM events WHERE task_id=? AND kind='CLIENT_TURN'",(root,))]
+            assert any(x.get('assistant_text')=='Unverified proposal' for x in saved)
+        sys.exit(9)
     elif msg.get('id')==101:
         with sqlite3.connect(state/'ledger.sqlite') as db:
             rows=db.execute("SELECT details FROM events WHERE task_id=? AND kind='COGNITION_INPUT'",(root,)).fetchall()
@@ -161,8 +169,9 @@ class ClientChat(unittest.TestCase):
         self.assertEqual(saved["inputs"][0]["text"], text)
         self.assertEqual(inspect_session(self.state / "ledger.sqlite", self.state / "sources", self.root)["goal_revision"], 0)
         turns = client_chat.history(self.state / "ledger.sqlite", self.root)["turns"]
-        self.assertEqual([t["status"] for t in turns], ["DISPATCHING", "COMPLETED"])
-        self.assertFalse(turns[-1]["assistant_text_trusted"])
+        self.assertEqual([t["status"] for t in turns], ["DISPATCHING", "ASSISTANT_ITEM", "COMPLETED"])
+        self.assertFalse(turns[1]["assistant_text_trusted"])
+        self.assertEqual(turns[-1]["assistant_item_event_ids"], [turns[1]["event_id"]])
 
     def test_lost_ack_cannot_automatically_resend_same_request(self):
         chat, mock = self.chat("lost_ack")
@@ -190,7 +199,7 @@ class ClientChat(unittest.TestCase):
             result = chat.submit("original", request_id="early-1")
         self.assertEqual(result["status"], "CLIENT_TURN_COMPLETED")
         self.assertNotIn("assistant_text", client_chat.history(self.state / "ledger.sqlite", self.root)["turns"][-1])
-        self.assertEqual(client_chat.history(self.state / "ledger.sqlite", self.root, include_text=True)["turns"][-1]["assistant_text"], "Early reply")
+        self.assertEqual(client_chat.history(self.state / "ledger.sqlite", self.root, include_text=True)["turns"][1]["assistant_text"], "Early reply")
 
     def test_failed_turn_is_not_success(self):
         chat, mock = self.chat("failed")
@@ -267,8 +276,9 @@ class ClientChat(unittest.TestCase):
         self.assertFalse(result["product_ready"])
         events = client_chat.history(self.state / "ledger.sqlite", self.root, limit=20, include_text=True)["turns"]
         self.assertEqual([e["status"] for e in events],
-                         ["DISPATCHING", "NATIVE_TURN_ENDED", "NATIVE_TURN_ENDED", "GOAL_COMPLETE"])
-        self.assertEqual(events[-1]["assistant_text"], "native step 1\nnative step 2")
+                         ["DISPATCHING", "ASSISTANT_ITEM", "NATIVE_TURN_ENDED", "ASSISTANT_ITEM", "NATIVE_TURN_ENDED", "GOAL_COMPLETE"])
+        self.assertEqual([e["assistant_text"] for e in events if "assistant_text" in e], ["native step 1", "native step 2"])
+        self.assertEqual(events[-1]["assistant_item_event_ids"], [events[1]["event_id"], events[3]["event_id"]])
         self.assertEqual((self.state / "dispatch-count").read_text().splitlines(), ["1"])
         with self.assertRaisesRegex(ValueError, "INVOCATION_ALREADY_USED"):
             chat.submit("Continue again", request_id="loop-2")
@@ -379,6 +389,16 @@ class ClientChat(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "EXISTING_GOAL"):
             client_chat.run_chat(self.state, new=True, resume_client="auto", goal_budget=8000,
                                  ask=lambda _: self.fail("Must reject before asking for a new task"))
+
+    def test_completed_reply_is_durable_before_the_turn_disconnects(self):
+        chat, peer = self.chat("partial_disconnect")
+        with peer, self.assertRaisesRegex(RuntimeError, "CLIENT_PROCESS_CLOSED"):
+            chat.submit("Preserve completed work", request_id="partial-1")
+        events = client_chat.history(self.state / "ledger.sqlite", self.root, include_text=True)["turns"]
+        self.assertEqual(events[-1]["status"], "DELIVERY_UNKNOWN")
+        replies = [e for e in events if e.get("assistant_text")]
+        self.assertEqual([e["assistant_text"] for e in replies], ["Unverified proposal"])
+        self.assertFalse(replies[0]["assistant_text_trusted"])
 
 
 if __name__ == "__main__":

@@ -328,7 +328,8 @@ class ChatSession:
         self.display("消息已保存：" + request_id)
         dispatched = False
         terminal_recorded = False
-        final = []
+        reply_events = []
+        response_chars = 0
         terminal = []
         seen_items = set()
         early = []
@@ -338,7 +339,7 @@ class ChatSession:
         goal_terminal = {"paused", "blocked", "usageLimited", "budgetLimited", "complete"}
 
         def handle(message):
-            nonlocal turn_id
+            nonlocal turn_id, response_chars
             method, params = message.get("method"), message.get("params", {})
             if self.goal_budget is not None and params.get("threadId") == self.thread:
                 if method == "thread/goal/updated":
@@ -393,11 +394,17 @@ class ChatSession:
                 self.display(terminal_text(params.get("delta", "")))
             elif method == "item/completed":
                 item = params.get("item", {})
-                if item.get("type") == "agentMessage" and item.get("id") not in seen_items:
-                    seen_items.add(item.get("id"))
-                    final.append(item.get("text", ""))
-                    if sum(map(len, final)) > 128000:
+                identity = (candidate, item.get("id"))
+                if item.get("type") == "agentMessage" and identity not in seen_items:
+                    text = item.get("text", "")
+                    response_chars += len(text)
+                    if response_chars > 128000:
                         raise RuntimeError("CLIENT_RESPONSE_TOO_LARGE")
+                    saved_reply = journal(self.state, self.root, request_id, "ASSISTANT_ITEM",
+                        turn_id=candidate, item_id=item.get("id"), assistant_text=text,
+                        assistant_text_trusted=False)
+                    seen_items.add(identity)
+                    reply_events.append(saved_reply)
             else:
                 terminal.append(params["turn"]["status"])
                 active_turns.discard(candidate)
@@ -451,8 +458,7 @@ class ChatSession:
             if self.goal_budget is None and status not in {"completed", "failed", "interrupted"}:
                 raise RuntimeError("CLIENT_UNKNOWN_TURN_STATUS")
             journal(self.state, self.root, request_id, status.upper(),
-                    turn_id=turn_id, assistant_text="\n".join(final),
-                    assistant_text_trusted=False)
+                    turn_id=turn_id, assistant_item_event_ids=reply_events)
             terminal_recorded = True
             outcome = inspect_contract_outcome(self.state / "ledger.sqlite", self.state / "sources",
                                                self.state / "workspace", self.root)

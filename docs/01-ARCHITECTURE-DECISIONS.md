@@ -1,5 +1,45 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-07: commit completed replies at their observation boundary
+
+A subprocess counterexample emitted a completed assistant item and then lost
+the connection before the turn ended. The previous turn-level write discarded
+that useful reply: 1 of 26 focused tests failed. Keeping a larger final buffer
+or retrying the model would not correct this durability boundary. Commit each
+completed item to the existing event ledger immediately, deduplicate by native
+turn/item identity, and let terminal receipts reference those events. A peer
+independently reads SQLite before disconnecting, proving persistence precedes
+exception handling. All 26 focused cases then passed, including legacy console
+encoding. Unfinished streaming deltas remain best-effort display; completed
+items are untrusted observations, never verified outcomes or new instructions.
+
+## 2026-11-07: measure the actual native model seam without owner credentials
+
+Native control-only CI proves wiring and cold resume, not inference. Existing
+small-model experiments exercised a different fixed-schema Host planner; their
+results cannot answer whether the production app-server entry retrieves goals.
+Compare (a) repeating those experiments, (b) a metered remote provider, (c) one
+bounded, disposable public-CI local-model probe. Choose (c) for this seam only:
+reuse the production ChatSession and pinned official Codex, add a session-only
+loopback Ollama provider, and observe unmodified native notifications. A random
+goal marker exists only in the CAOS ledger; the continuation message omits it.
+Acceptance requires a successful real MCP read, a matching final reply, positive
+model token usage and unchanged original goal/workspace/task inventory. Record
+failed output too. This is a retrieval/inference seam check, not evidence of
+architecture reasoning, unseen-task success, owner-device usability or evolution.
+
+Primary evidence: [Ollama Codex integration](https://docs.ollama.com/integrations/codex)
+documents Responses wire format and a 64K minimum context recommendation;
+[`openai/responses.go` at v0.40.15](https://github.com/ollama/ollama/blob/v0.40.15/openai/responses.go)
+implements function-call replay and streaming conversion. The official model
+registry lists `qwen3.5:4b-q4_K_M` (Apache-2.0, tools, 3.3 GB), selected to fit
+the disposable CPU runner, not as a production quality recommendation. Runtime
+and model digest are recorded; the Ollama binary and Codex release are checksum
+pinned. Cloud use/web search are disabled. No account config or private goal is
+copied. One source-scoped CI attempt, bounded downloads and inference deadline
+prevent repeating a failed comparison without a changed hypothesis. Failure
+keeps this seam OPEN; no provider fallback or success-shaped fixture is allowed.
+
 ## 2026-11-07: preserve native history and accounting on explicit resume
 
 The bounded native loop still started a new native thread for each invocation.

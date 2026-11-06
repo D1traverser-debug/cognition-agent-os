@@ -100,6 +100,12 @@ through `history --root ID` and `cognition_client_history`. Metadata is returned
 by default; `--include-text` (MCP `include_text=true`) reads exact replies and
 questions. Follow `next_after_event_id` to page older records.
 
+Each completed assistant item is saved immediately, before the enclosing turn
+ends. A later disconnect therefore preserves that completed content. Streaming
+deltas that have not reached item completion are display-only and may be lost.
+Turn receipts reference saved item event IDs; older turn-level histories remain
+readable through the same interface.
+
 If a connection dies after dispatch, the delivery is UNKNOWN and the same
 request ID cannot automatically execute again. Read the input/history and actual
 effect state before deciding what to do next. A new request ID must not be used
