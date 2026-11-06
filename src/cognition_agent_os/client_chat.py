@@ -189,14 +189,20 @@ class AppServer:
 
 class ChatSession:
     def __init__(self, state: Path, root: str, *, executable="codex", timeout=600,
-                 display=print, ask=input):
+                 display=print, ask=input, goal_budget: int | None = None):
         if not 1 <= timeout <= 86400:
             raise ValueError("CLIENT_TIMEOUT_OUT_OF_RANGE")
+        if goal_budget is not None and (type(goal_budget) is not int or not 1 <= goal_budget <= 1000000):
+            raise ValueError("CLIENT_GOAL_BUDGET_OUT_OF_RANGE")
         self.state, self.root = state.resolve(), root
         self.plan = prepare_launch(self.state, root=root, executable=executable)
         self.timeout, self.display, self.ask = timeout, display, ask
         self.server = None
         self.thread = None
+        self.goal_budget = goal_budget
+        self.goal_status = None
+        self.goal_consumed = False
+        self.native_objective = None
 
     def _save(self, text, request_id, *, locator="caos chat"):
         view = inspect_session(self.state / "ledger.sqlite", self.state / "sources", self.root)
@@ -209,12 +215,14 @@ class ChatSession:
             return
         # Reuse the production MCP settings; the native client owns inference.
         argv = [self.plan["argv"][0], "app-server", "--listen", "stdio://", *self.plan["argv"][1:-1]]
+        if self.goal_budget is not None:
+            argv.extend(["-c", "features.goals=true", "-c", "max_goal_token_budget=" + str(self.goal_budget)])
         self.server = AppServer(argv, self.state / "workspace", timeout=self.timeout)
         self.server.request("initialize", {"clientInfo": {
             "name": "cognition_agent_os", "title": "CAOS", "version": "0.0.1"}})
         self.server.send({"method": "initialized", "params": {}})
         result = self.server.request("thread/start", {
-            "cwd": str(self.state / "workspace"), "ephemeral": True,
+            "cwd": str(self.state / "workspace"), "ephemeral": self.goal_budget is None,
             "sandbox": "read-only", "approvalPolicy": "never",
             "developerInstructions": self.plan["argv"][-1] +
                 " User messages from this entry are already durably recorded by the client. "
@@ -225,8 +233,30 @@ class ChatSession:
                 "Record consequential findings and decisions in the existing cognitive graph. "
                 "The shell is read-only; permitted effects use the existing MCP contracts."})
         self.thread = result["thread"]["id"]
+        if self.goal_budget is not None:
+            existing = self.server.request("thread/goal/get", {"threadId": self.thread})
+            if existing.get("goal") is not None:
+                raise RuntimeError("NEW_CLIENT_THREAD_HAS_EXISTING_GOAL")
+            # Native goals have a 4,000-character limit. Keep the COMPLETE
+            # owner source in CAOS; bind the native continuation to its locator.
+            objective = ("Continue CAOS root " + self.root + ". Recover the complete original goal, "
+                "all amendments and new user inputs from its MCP ledger before acting. "
+                "Investigate, compare methods, execute permitted actions, independently verify "
+                "the complete outcome and reconsider failures. Preserve unresolved obligations. "
+                "Stop when genuinely complete or blocked by missing authority/capability; "
+                "do not infer success from a finished turn, test or tool call.")
+            self.native_objective = objective
+            goal = self.server.request("thread/goal/set", {"threadId": self.thread,
+                "objective": objective, "status": "paused", "origin": "user",
+                "tokenBudget": self.goal_budget})["goal"]
+            if (goal["status"] != "paused" or goal["tokenBudget"] != self.goal_budget
+                    or goal.get("objective") != objective):
+                raise RuntimeError("CLIENT_GOAL_PREPARATION_MISMATCH")
+            self.goal_status = "paused"
 
     def submit(self, text: str, *, request_id: str | None = None):
+        if self.goal_consumed:
+            raise ValueError("CLIENT_GOAL_INVOCATION_ALREADY_USED")
         request_id = request_id or "chat-" + uuid.uuid4().hex
         saved = self._save(text, request_id)  # Durable BEFORE model dispatch.
         self.display("消息已保存：" + request_id)
@@ -237,10 +267,30 @@ class ChatSession:
         seen_items = set()
         early = []
         turn_id = None
+        active_turns = set()
+        known_turns = set()
+        goal_terminal = {"paused", "blocked", "usageLimited", "budgetLimited", "complete"}
 
         def handle(message):
             nonlocal turn_id
             method, params = message.get("method"), message.get("params", {})
+            if self.goal_budget is not None and params.get("threadId") == self.thread:
+                if method == "thread/goal/updated":
+                    if (params["goal"].get("objective") != self.native_objective
+                            or params["goal"].get("tokenBudget") != self.goal_budget):
+                        raise RuntimeError("CLIENT_NATIVE_GOAL_BINDING_CHANGED")
+                    status = params["goal"]["status"]
+                    if status not in goal_terminal | {"active"}:
+                        raise RuntimeError("CLIENT_UNKNOWN_GOAL_STATUS")
+                    self.goal_status = status
+                    return
+                if method == "thread/goal/cleared":
+                    raise RuntimeError("CLIENT_GOAL_CLEARED_DURING_EXECUTION")
+                if method == "turn/started":
+                    native_turn = params["turn"]["id"]
+                    known_turns.add(native_turn)
+                    active_turns.add(native_turn)
+                    return
             if "id" in message and method:
                 if method == "item/tool/requestUserInput" and params.get("threadId") == self.thread:
                     answers = {}
@@ -264,13 +314,14 @@ class ChatSession:
                 return
             if params.get("threadId") != self.thread:
                 return
-            if turn_id is None:
+            if self.goal_budget is None and turn_id is None:
                 early.append(message)
                 if len(early) > 1024:
                     raise RuntimeError("CLIENT_NOTIFICATION_BACKLOG")
                 return
             candidate = params.get("turnId") or params.get("turn", {}).get("id")
-            if candidate != turn_id:
+            if (self.goal_budget is None and candidate != turn_id) or (
+                    self.goal_budget is not None and candidate not in known_turns):
                 return
             if method == "item/agentMessage/delta":
                 self.display(terminal_text(params.get("delta", "")))
@@ -283,23 +334,45 @@ class ChatSession:
                         raise RuntimeError("CLIENT_RESPONSE_TOO_LARGE")
             else:
                 terminal.append(params["turn"]["status"])
+                active_turns.discard(candidate)
+                if self.goal_budget is not None:
+                    journal(self.state, self.root, request_id, "NATIVE_TURN_ENDED",
+                            turn_id=candidate, native_status=terminal[-1])
 
         try:
             self._start()
             journal(self.state, self.root, request_id, "DISPATCHING",
-                    input_event_id=saved["event_id"], thread_id=self.thread)
+                    input_event_id=saved["event_id"], thread_id=self.thread,
+                    goal_budget=self.goal_budget)
             dispatched = True
-            result = self.server.request("turn/start", {"threadId": self.thread,
-                "input": [{"type": "text", "text": text}]}, handler=handle)
-            turn_id = result["turn"]["id"]
+            self.server.pending.clear()  # Only preparation notifications exist here.
+            if self.goal_budget is not None:
+                self.goal_consumed = True
+                self.goal_status = "active"
+                # Activation can itself start a turn; never also send turn/start.
+                self.server.request("thread/goal/set", {"threadId": self.thread,
+                    "status": "active", "origin": "user"}, handler=handle)
+                # A delayed preparation notification may still say 'paused'.
+                # Read back activation before accepting a terminal state.
+                observed = self.server.request("thread/goal/get", {
+                    "threadId": self.thread}, handler=handle)["goal"]
+                if (observed is None or observed["status"] not in goal_terminal | {"active"}
+                        or observed.get("objective") != self.native_objective
+                        or observed.get("tokenBudget") != self.goal_budget):
+                    raise RuntimeError("CLIENT_GOAL_ACTIVATION_UNVERIFIED")
+                self.goal_status = observed["status"]
+            else:
+                result = self.server.request("turn/start", {"threadId": self.thread,
+                    "input": [{"type": "text", "text": text}]}, handler=handle)
+                turn_id = result["turn"]["id"]
             for message in early:
                 handle(message)
-            self.server.pending.clear()  # Startup-only notifications; no turn existed yet.
             deadline = time.monotonic() + self.timeout
-            while not terminal:
+            while (not terminal if self.goal_budget is None else
+                   self.goal_status not in goal_terminal or bool(active_turns)):
                 handle(self.server.receive(deadline))
-            status = terminal[-1]
-            if status not in {"completed", "failed", "interrupted"}:
+            status = terminal[-1] if self.goal_budget is None else "goal_" + self.goal_status
+            if self.goal_budget is None and status not in {"completed", "failed", "interrupted"}:
                 raise RuntimeError("CLIENT_UNKNOWN_TURN_STATUS")
             journal(self.state, self.root, request_id, status.upper(),
                     turn_id=turn_id, assistant_text="\n".join(final),
@@ -307,7 +380,7 @@ class ChatSession:
             terminal_recorded = True
             outcome = inspect_contract_outcome(self.state / "ledger.sqlite", self.state / "sources",
                                                self.state / "workspace", self.root)
-            return {"status": "CLIENT_TURN_" + status.upper(), "request_id": request_id,
+            return {"status": "CLIENT_" + ("TURN_" if self.goal_budget is None else "") + status.upper(), "request_id": request_id,
                     "input_saved": True,
                     "contract_outcome_verified": outcome["contract_outcome_verified"],
                     "product_ready": False}
@@ -322,6 +395,12 @@ class ChatSession:
 
     def close(self):
         if self.server:
+            if self.goal_budget is not None and self.thread and self.goal_status == "active":
+                try:
+                    self.server.request("thread/goal/set", {"threadId": self.thread,
+                        "status": "paused", "origin": "automatic"}, timeout=5)
+                except (RuntimeError, TimeoutError, OSError):
+                    pass  # Delivery remains UNKNOWN; closing is not rollback.
             self.server.close()
         self.server = None
         self.thread = None
@@ -329,7 +408,7 @@ class ChatSession:
 
 def run_chat(state: Path, *, root=None, executable="codex", timeout=600,
              message_file: Path | None = None, request_id=None, new=False,
-             ask=input, display=print):
+             ask=input, display=print, goal_budget=None):
     """Human text entry; internal JSON and root IDs need not be user-authored."""
     from .native_decision import register_native_goal, list_native_goals
     if root and new:
@@ -379,10 +458,10 @@ def run_chat(state: Path, *, root=None, executable="codex", timeout=600,
             if chat is None:
                 display("当前目标：" + root)
                 chat = ChatSession(state, root, executable=executable, timeout=timeout,
-                                   ask=ask, display=display)
+                                   ask=ask, display=display, goal_budget=goal_budget)
             result = chat.submit(text, request_id=request_id)
             display(json.dumps(result, ensure_ascii=False))
-            if message_file or result["status"] != "CLIENT_TURN_COMPLETED":
+            if goal_budget is not None or message_file or result["status"] != "CLIENT_TURN_COMPLETED":
                 break
     finally:
         if chat:

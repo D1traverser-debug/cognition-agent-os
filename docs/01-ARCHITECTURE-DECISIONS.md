@@ -1,5 +1,51 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-06: reuse native goal continuation instead of a second loop
+
+`5f1ccc8` native transport jobs on Linux and Windows (run `42197902683`)
+successfully used official Codex 0.167.0 to discover 23 CAOS tools, read the
+original goal, and reject a missing required server. This is real wiring;
+no inference or owner-account acceptance was performed.
+
+The next architectural counterexample is lifecycle: the initial chat adapter
+uses ephemeral threads and stops at `turn/completed`. Official app-server
+documentation and release `rust-v0.167.0`'s
+[`thread_goal_processor.rs`](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/app-server/src/request_processors/thread_goal_processor.rs)
+(blob `82aeaf7f46f92244e59279012bc1033934fbe25a`) explicitly reject goals on
+ephemeral threads; activating a goal can itself start inference. A second
+Python retry/scheduling loop would duplicate native continuation and risk
+double dispatch. Merely adding a continuation prompt cannot fix this lifecycle.
+
+Choose opt-in `chat --goal-budget N`: use one native persistent thread and its
+existing goal engine for a bounded invocation; ordinary chat remains ephemeral.
+Prepare the native goal PAUSED, persist original input and dispatch intent,
+then activate it once (never also call `turn/start`). Keep listening across
+completed native turns until goal pause/block/budget/usage/completion or timeout.
+Use native accounting plus the existing wall-clock deadline, not a new queue.
+Goal objectives have a 4,000-character limit: bind a stable root locator rather
+than truncate or replace the full original, amendments and inputs in CAOS.
+Reject native objective/budget replacement. Native completion still cannot
+set the CAOS independent outcome to true.
+
+Each explicit invocation has its own requested budget; no automatic restart,
+background service, account configuration edit or transparent budget reset.
+Native conversation/goal state is kept by the native client in its normal local
+storage; CAOS delivery events retain the thread ID. A failed/unknown dispatch
+requires effect inspection before another invocation. Timeout/close requests a
+native pause when possible; process exit is not proof of cancellation/rollback.
+Same-process invocation reuse is rejected. Cross-process native-thread resume
+and actual model-driven goal continuation remain unverified/open, not silently
+implemented by retrying the saved owner message.
+
+Protocol-peer counterexamples cover two completed turns before native completion,
+late paused notifications, budget exhaustion, missing ACK, timeout/pause,
+unexpected existing goal, cleared goal and objective drift. The real native CI
+probe additionally prepares and rereads a paused goal with zero tokens used;
+this validates the control path without calling a provider. Native-loop outcome
+quality, cost reduction and cross-task learning require separate real inference
+and independent result evidence. Rollback: omit the goal option while retaining
+the owner ledger, input and delivery history.
+
 ## 2026-11-06: make input persistence an entry responsibility
 
 The preceding launcher proves MCP preparation/transport, but hands subsequent

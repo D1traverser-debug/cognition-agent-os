@@ -108,11 +108,44 @@ client is not rollback. Failed/interrupted turns do not return a successful turn
 status. Even a completed turn is separate from the independent contract outcome.
 
 **Validation boundary:** real subprocess protocol peers and cold MCP readback
-are tested. Actual successful native inference through this entry remains
+are tested. Official Codex 0.167.0 also passed real CAOS discovery/goal readback
+and required-server failure rejection on Linux and Windows (commit `5f1ccc8`,
+run `42197902683`). Actual successful native inference through this entry remains
 unverified in Work: the installed client's read-only runtime directory prevents
 startup. This is an engineering entry under validation, not a download-ready
 product release or a claim that all ChatGPT messages are intercepted. Ordinary
 ChatGPT and the native `launch` UI still have their own message paths.
+
+### Bounded native goal loop
+
+For a task you explicitly want continued across model turns:
+
+```bash
+caos --state /absolute/private/caos-state chat --goal-budget 40000 --timeout 1800
+```
+
+Select the existing goal and type the continuation request, or use `--new` for
+a distinct goal. This opts in to the installed Codex client's native goal loop
+for this invocation, with its token accounting and a wall-clock timeout. Existing
+provider/account usage terms apply; the command does not purchase or configure
+a model. Ordinary chat does not activate the native goal engine.
+
+The complete goal stays in CAOS. Its native continuation points to that root,
+then reads original wording, amendments and inputs through MCP. Native goals
+require persistent native threads: this mode retains conversation state in
+the client's normal local storage and records the thread ID in CAOS delivery
+events. It creates the native goal paused, saves input, then activates once.
+A completed model turn does not end the loop; native block, pause, usage/budget
+limit or completion does. `CLIENT_GOAL_COMPLETE` means the native engine stopped
+as complete; the separately reported contract outcome may still be false.
+
+On timeout/disconnect, input and unknown delivery remain recoverable. The adapter
+requests a native pause when possible, then closes; this is not rollback or
+proof all effects stopped. It does not automatically restart, replay an unknown
+delivery, resume a native thread or replenish budget. A later explicit invocation
+has its own budget: inspect delivery/effect history first. The runtime uses the
+same MCP contracts and shell restrictions as ordinary chat. Real model-driven
+continuation and full owner-outcome quality remain open acceptance work.
 
 ### Session-scoped local Codex launch
 

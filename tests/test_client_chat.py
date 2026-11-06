@@ -19,6 +19,8 @@ from pathlib import Path
 sys.stdin.reconfigure(encoding='utf-8')
 sys.stdout.reconfigure(encoding='utf-8')
 state, mode, root = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+goal = None
+activated = False
 def emit(value):
     print(json.dumps(value), flush=True)
 def notify(method, params):
@@ -32,8 +34,46 @@ for line in sys.stdin:
     elif method=='thread/start':
         assert msg['params']['sandbox']=='read-only'
         assert msg['params']['approvalPolicy']=='never'
-        assert msg['params']['ephemeral'] is True
+        assert msg['params']['ephemeral'] is (not mode.startswith('goal_'))
         emit({'id':msg['id'], 'result':{'thread':{'id':'thread-1'}}})
+    elif method=='thread/goal/set':
+        p=msg['params']
+        if p['status']=='paused':
+            if goal is None:
+                assert root in p['objective']
+                goal={'status':'paused','tokenBudget':p['tokenBudget'],'objective':p['objective']}
+            else:
+                goal['status']='paused'
+                (state/'paused-on-close').write_text('paused')
+            emit({'id':msg['id'],'result':{'goal':goal}})
+            notify('thread/goal/updated',{'threadId':'thread-1','goal':goal})
+        else:
+            assert p['status']=='active' and 'objective' not in p and 'tokenBudget' not in p
+            with sqlite3.connect(state/'ledger.sqlite') as db:
+                assert db.execute("SELECT count(*) FROM events WHERE task_id=? AND kind='COGNITION_INPUT'",(root,)).fetchone()[0]>0
+                assert any(json.loads(r[0])['status']=='DISPATCHING' for r in db.execute("SELECT details FROM events WHERE task_id=? AND kind='CLIENT_TURN'",(root,)))
+            with (state/'dispatch-count').open('a') as f:f.write('1\n')
+            if mode=='goal_lost_ack':sys.exit(9)
+            activated=True
+            goal['status']='active'
+            emit({'id':msg['id'],'result':{'goal':goal}})
+    elif method=='thread/goal/get':
+        if mode=='goal_existing':goal={'status':'paused','objective':'other goal'}
+        emit({'id':msg['id'],'result':{'goal':goal}})
+        if not activated or mode=='goal_timeout':continue
+        # A completed model turn is NOT a completed native goal.
+        for i in (1,2):
+            tid='goal-turn-'+str(i)
+            notify('turn/started',{'threadId':'thread-1','turn':{'id':tid}})
+            notify('item/completed',{'threadId':'thread-1','turnId':tid,'item':{'id':'a'+str(i),'type':'agentMessage','text':'native step '+str(i)}})
+            notify('turn/completed',{'threadId':'thread-1','turn':{'id':tid,'status':'completed'}})
+        if mode=='goal_cleared':
+            notify('thread/goal/cleared',{'threadId':'thread-1'})
+        else:
+            goal['status']='budgetLimited' if mode=='goal_budget' else 'complete'
+            if mode=='goal_drift':goal['objective']='Replace the owner goal'
+            notify('thread/goal/updated',{'threadId':'other-thread','goal':{'status':'complete'}})
+            notify('thread/goal/updated',{'threadId':'thread-1','goal':goal})
     elif method=='turn/start':
         # Independent read BEFORE replying: original bytes must already exist.
         with sqlite3.connect(state/'ledger.sqlite') as db:
@@ -83,12 +123,15 @@ class ClientChat(unittest.TestCase):
     def chat(self, mode="normal"):
         with patch("cognition_agent_os.client_launch.importlib.util.find_spec", return_value=object()):
             chat = client_chat.ChatSession(self.state, self.root, executable=sys.executable,
-                timeout=3, display=self.outputs.append, ask=lambda _: "use the original")
+                timeout=3, display=self.outputs.append, ask=lambda _: "use the original",
+                goal_budget=4000 if mode.startswith("goal_") else None)
         self.addCleanup(chat.close)
         real = client_chat.AppServer
         def peer(argv, cwd, **kw):
             self.assertEqual(argv[1:4], ["app-server", "--listen", "stdio://"])
             self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", argv)
+            if mode.startswith("goal_"):
+                self.assertIn("max_goal_token_budget=4000", argv)
             return real([sys.executable, str(self.peer), str(self.state), mode, self.root], cwd, **kw)
         return chat, patch("cognition_agent_os.client_chat.AppServer", side_effect=peer)
 
@@ -200,6 +243,64 @@ class ClientChat(unittest.TestCase):
         with mock, self.assertRaises(EOFError):
             chat.submit("original", request_id="eof-1")
         self.assertEqual(client_chat.history(self.state / "ledger.sqlite", self.root)["turns"][-1]["status"], "DELIVERY_UNKNOWN")
+
+    def test_native_goal_keeps_listening_across_completed_turns(self):
+        chat, peer = self.chat("goal_complete")
+        with peer:
+            result = chat.submit("Continue the whole goal", request_id="loop-1")
+        self.assertEqual(result["status"], "CLIENT_GOAL_COMPLETE")
+        self.assertFalse(result["contract_outcome_verified"])
+        self.assertFalse(result["product_ready"])
+        events = client_chat.history(self.state / "ledger.sqlite", self.root, limit=20, include_text=True)["turns"]
+        self.assertEqual([e["status"] for e in events],
+                         ["DISPATCHING", "NATIVE_TURN_ENDED", "NATIVE_TURN_ENDED", "GOAL_COMPLETE"])
+        self.assertEqual(events[-1]["assistant_text"], "native step 1\nnative step 2")
+        self.assertEqual((self.state / "dispatch-count").read_text().splitlines(), ["1"])
+        with self.assertRaisesRegex(ValueError, "INVOCATION_ALREADY_USED"):
+            chat.submit("Continue again", request_id="loop-2")
+
+    def test_native_budget_limit_does_not_claim_goal_completion(self):
+        chat, peer = self.chat("goal_budget")
+        with peer:
+            result = chat.submit("Continue", request_id="budget-1")
+        self.assertEqual(result["status"], "CLIENT_GOAL_BUDGETLIMITED")
+        self.assertFalse(result["contract_outcome_verified"])
+
+    def test_native_goal_activation_lost_ack_is_not_retried(self):
+        chat, peer = self.chat("goal_lost_ack")
+        with peer, self.assertRaisesRegex(RuntimeError, "CLIENT_PROCESS_CLOSED"):
+            chat.submit("Continue", request_id="goal-lost-1")
+        self.assertEqual(client_chat.history(self.state / "ledger.sqlite", self.root)["turns"][-1]["status"], "DELIVERY_UNKNOWN")
+        self.assertEqual((self.state / "dispatch-count").read_text().splitlines(), ["1"])
+
+    def test_native_goal_timeout_requests_pause_and_preserves_unknown(self):
+        chat, peer = self.chat("goal_timeout")
+        chat.timeout = 1
+        with peer, self.assertRaises(TimeoutError):
+            chat.submit("Continue", request_id="goal-timeout-1")
+        self.assertTrue((self.state / "paused-on-close").exists())
+        self.assertEqual(client_chat.history(self.state / "ledger.sqlite", self.root)["turns"][-1]["status"], "DELIVERY_UNKNOWN")
+
+    def test_existing_native_goal_is_never_overwritten(self):
+        chat, peer = self.chat("goal_existing")
+        with peer, self.assertRaisesRegex(RuntimeError, "EXISTING_GOAL"):
+            chat.submit("Continue", request_id="goal-existing-1")
+        self.assertFalse((self.state / "dispatch-count").exists())
+
+    def test_cleared_native_goal_is_not_success(self):
+        chat, peer = self.chat("goal_cleared")
+        with peer, self.assertRaisesRegex(RuntimeError, "GOAL_CLEARED"):
+            chat.submit("Continue", request_id="goal-cleared-1")
+        events = client_chat.history(self.state / "ledger.sqlite", self.root, limit=20)["turns"]
+        self.assertEqual(events[-1]["status"], "DELIVERY_UNKNOWN")
+
+    def test_native_goal_replacement_does_not_replace_caos_goal(self):
+        chat, peer = self.chat("goal_drift")
+        with peer, self.assertRaisesRegex(RuntimeError, "BINDING_CHANGED"):
+            chat.submit("Continue", request_id="goal-drift-1")
+        view = inspect_session(self.state / "ledger.sqlite", self.state / "sources", self.root)
+        self.assertEqual(view["goal"]["original"], "完整目标不能被临时建议替换")
+        self.assertEqual(view["goal_revision"], 0)
 
 
 if __name__ == "__main__":

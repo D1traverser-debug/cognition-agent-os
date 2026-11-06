@@ -74,6 +74,8 @@ def main(argv=None):
     chat.add_argument("--timeout", type=float, default=600)
     chat.add_argument("--message-file", type=Path, help="One UTF-8 message, no JSON; omit for interactive text")
     chat.add_argument("--request-id", help="Stable delivery ID for a one-message invocation")
+    chat.add_argument("--goal-budget", type=int,
+                      help="Opt in to the native goal loop with this invocation's token budget")
     args = parser.parse_args(argv)
     state = args.state.absolute()
     db, sources, workspace = state / "ledger.sqlite", state / "sources", state / "workspace"
@@ -115,8 +117,10 @@ def main(argv=None):
         elif args.command == "chat":
             from .client_chat import run_chat
             result = run_chat(state, root=args.root, new=args.new, executable=args.client,
-                timeout=args.timeout, message_file=args.message_file, request_id=args.request_id)
-            return 0 if result["status"] in {"CLIENT_CLOSED", "CLIENT_TURN_COMPLETED"} else 2
+                timeout=args.timeout, message_file=args.message_file, request_id=args.request_id,
+                goal_budget=args.goal_budget)
+            return 0 if result["status"] in {"CLIENT_CLOSED", "CLIENT_TURN_COMPLETED",
+                                            "CLIENT_GOAL_COMPLETE"} else 2
         elif args.command == "history":
             from .client_chat import history
             result = history(db, args.root, after_event_id=args.after_event_id, limit=args.limit,

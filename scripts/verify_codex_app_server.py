@@ -104,10 +104,22 @@ def verify(client: str, base: Path):
     finally:
         broken.close()
     assert rejected, "REQUIRED_MCP_FAILURE_DID_NOT_REJECT_THREAD"
+    # Paused native goal setup uses the production path but starts NO model turn.
+    persistent = ChatSession(state, root, executable=client, goal_budget=4000,
+                             display=lambda _: None)
+    try:
+        persistent._start()
+        goal = persistent.server.request("thread/goal/get", {
+            "threadId": persistent.thread})["goal"]
+        assert goal["status"] == "paused" and goal["tokenBudget"] == 4000
+        assert root in goal["objective"] and goal["tokensUsed"] == 0
+    finally:
+        persistent.close()
     with readonly_snapshot(state / "ledger.sqlite") as db:
         assert before == db.execute("SELECT count(*) FROM events").fetchone()[0]
     return {"native_thread_started": True, "native_mcp_goal_readback": True,
             "missing_required_mcp_rejected": True, "ledger_unchanged": True,
+            "native_paused_goal_readback": True,
             "tool_count": len(names)}
 
 
