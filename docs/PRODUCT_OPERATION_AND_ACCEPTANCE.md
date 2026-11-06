@@ -142,10 +142,32 @@ as complete; the separately reported contract outcome may still be false.
 On timeout/disconnect, input and unknown delivery remain recoverable. The adapter
 requests a native pause when possible, then closes; this is not rollback or
 proof all effects stopped. It does not automatically restart, replay an unknown
-delivery, resume a native thread or replenish budget. A later explicit invocation
+delivery or replenish budget. A later explicit fresh invocation
 has its own budget: inspect delivery/effect history first. The runtime uses the
 same MCP contracts and shell restrictions as ordinary chat. Real model-driven
 continuation and full owner-outcome quality remain open acceptance work.
+
+To continue a cleanly stopped native session with its history and usage:
+
+```bash
+caos --state /absolute/private/caos-state chat --resume-client --goal-budget 80000
+```
+
+The budget on resume is the **total**, including tokens already used. Omitting
+the thread ID works only when the selected CAOS root has exactly one recorded
+native goal thread. If several exist, use `--resume-client THREAD_ID` from that
+root's delivery history; the newest is never chosen automatically. The adapter
+verifies the recorded root binding, actual native thread ID/workspace, objective,
+stopped status and usage before resuming the same thread. It omits the objective
+when updating the budget, preserving the original native creation time and usage.
+No automatic new-thread fallback occurs on mismatch or unavailable native state.
+
+Unknown/in-flight deliveries are not resume candidates: inspect real effects
+before another deliberate invocation. Snapshots moved to a different workspace
+cannot silently resume a native thread bound to the old path. The complete CAOS
+goal and sources remain independently recoverable even if native history is
+unavailable. Model-level recovery quality is not established by a paused-thread
+control test.
 
 ### Session-scoped local Codex launch
 

@@ -1,5 +1,39 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-07: preserve native history and accounting on explicit resume
+
+The bounded native loop still started a new native thread for each invocation.
+CAOS could recover original inputs, but this needlessly discarded native working
+context and created new budget accounting. Reuse `thread/read`, `thread/goal/get`
+and `thread/resume`, not a second conversation store or replay of earlier turns.
+An explicit `--resume-client [THREAD_ID]` requires a clean terminal delivery
+record bound to the selected CAOS root, then checks actual native identity,
+workspace, objective, quiescence and spent tokens. Multiple candidates are not
+resolved by recency. Missing/moved/wrong/unknown state fails without creating a
+replacement thread. Persist new input before native access, record dispatch
+before resume, and preserve native creation time and usage when changing the
+explicit total budget without an objective replacement.
+
+Alternative review included the official Python SDK at `rust-v0.167.0`:
+`sdk/python/src/openai_codex/client.py` blob
+`5b38538c541aa17e807aecfa3d5a58c9ee76d0ff`, `_goal.py` blob
+`37a63fc28f4c618a4dbc77e9e408e3f4a7ae24b4`, and `pyproject.toml` blob
+`3d920e43d21448ce081b4dd68a93f11fd66da4b3`. It is a serious future replacement
+candidate, with existing goal-event routing and typed protocol support. At this
+revision synchronous response/notification waits have no per-call deadline,
+stdout uses unbounded `readline`, the simple goal setter lacks budget/origin
+arguments, and packaging pins a different CLI runtime (0.153.4). A drop-in
+migration would still need boundary adapters and actual version validation;
+retain the tested bounded transport for now, not a claim of universal superiority.
+Reopen this choice if measured maintenance or compatible SDK behavior favors it.
+
+Falsifiers include preserved nonzero usage across separate protocol processes,
+exhausted total budget, wrong workspace/root, ambiguous threads and unknown
+dispatch. The pinned native CI probe also reopens the same paused thread in a
+new process, verifies unchanged creation/usage, and changes only its explicit
+total budget without inference. Real model recovery and reduction in owner
+corrections remain open; no private account or production outcome is inferred.
+
 ## 2026-11-06: reuse native goal continuation instead of a second loop
 
 `5f1ccc8` native transport jobs on Linux and Windows (run `42197902683`)
@@ -33,9 +67,10 @@ Native conversation/goal state is kept by the native client in its normal local
 storage; CAOS delivery events retain the thread ID. A failed/unknown dispatch
 requires effect inspection before another invocation. Timeout/close requests a
 native pause when possible; process exit is not proof of cancellation/rollback.
-Same-process invocation reuse is rejected. Cross-process native-thread resume
-and actual model-driven goal continuation remain unverified/open, not silently
-implemented by retrying the saved owner message.
+Same-process invocation reuse is rejected. At this initial checkpoint,
+cross-process native-thread resume was unimplemented (superseded by the explicit
+resume decision above). Actual model-driven goal continuation remains unverified;
+retrying the saved owner message is not its implementation.
 
 Protocol-peer counterexamples cover two completed turns before native completion,
 late paused notifications, budget exhaustion, missing ACK, timeout/pause,

@@ -76,6 +76,8 @@ def main(argv=None):
     chat.add_argument("--request-id", help="Stable delivery ID for a one-message invocation")
     chat.add_argument("--goal-budget", type=int,
                       help="Opt in to the native goal loop with this invocation's token budget")
+    chat.add_argument("--resume-client", nargs="?", const="auto", metavar="THREAD_ID",
+                      help="Resume a cleanly stopped bound native thread; budget is cumulative")
     args = parser.parse_args(argv)
     state = args.state.absolute()
     db, sources, workspace = state / "ledger.sqlite", state / "sources", state / "workspace"
@@ -118,7 +120,7 @@ def main(argv=None):
             from .client_chat import run_chat
             result = run_chat(state, root=args.root, new=args.new, executable=args.client,
                 timeout=args.timeout, message_file=args.message_file, request_id=args.request_id,
-                goal_budget=args.goal_budget)
+                goal_budget=args.goal_budget, resume_client=args.resume_client)
             return 0 if result["status"] in {"CLIENT_CLOSED", "CLIENT_TURN_COMPLETED",
                                             "CLIENT_GOAL_COMPLETE"} else 2
         elif args.command == "history":

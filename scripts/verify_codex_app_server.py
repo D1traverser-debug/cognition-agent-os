@@ -113,13 +113,28 @@ def verify(client: str, base: Path):
             "threadId": persistent.thread})["goal"]
         assert goal["status"] == "paused" and goal["tokenBudget"] == 4000
         assert root in goal["objective"] and goal["tokensUsed"] == 0
+        old_thread_id = persistent.thread
+        old_created_at = goal["createdAt"]
     finally:
         persistent.close()
+    # Cold native process, same paused thread. No activation/model dispatch.
+    resumed = ChatSession(state, root, executable=client, goal_budget=8000,
+                          resume_client=old_thread_id, display=lambda _: None)
+    resumed.resume_thread = old_thread_id
+    try:
+        resumed._start(on_resume=lambda: None)  # Control-path probe only.
+        goal = resumed.server.request("thread/goal/get", {"threadId": resumed.thread})["goal"]
+        assert resumed.thread == old_thread_id and goal["status"] == "paused"
+        assert goal["createdAt"] == old_created_at and goal["tokensUsed"] == 0
+        assert goal["tokenBudget"] == 8000
+    finally:
+        resumed.close()
     with readonly_snapshot(state / "ledger.sqlite") as db:
         assert before == db.execute("SELECT count(*) FROM events").fetchone()[0]
     return {"native_thread_started": True, "native_mcp_goal_readback": True,
             "missing_required_mcp_rejected": True, "ledger_unchanged": True,
             "native_paused_goal_readback": True,
+            "native_cold_paused_resume_readback": True,
             "tool_count": len(names)}
 
 

@@ -19,7 +19,7 @@ from pathlib import Path
 sys.stdin.reconfigure(encoding='utf-8')
 sys.stdout.reconfigure(encoding='utf-8')
 state, mode, root = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-goal = None
+goal = json.loads((state/'native-goal.json').read_text()) if mode.startswith('goal_resume') else None
 activated = False
 def emit(value):
     print(json.dumps(value), flush=True)
@@ -36,14 +36,25 @@ for line in sys.stdin:
         assert msg['params']['approvalPolicy']=='never'
         assert msg['params']['ephemeral'] is (not mode.startswith('goal_'))
         emit({'id':msg['id'], 'result':{'thread':{'id':'thread-1'}}})
+    elif method=='thread/read':
+        emit({'id':msg['id'],'result':{'thread':{'id':'thread-1','cwd':str(state/('wrong' if mode=='goal_resume_wrong_workspace' else 'workspace'))}}})
+    elif method=='thread/resume':
+        assert goal['status']=='paused'
+        with sqlite3.connect(state/'ledger.sqlite') as db:
+            deliveries=[json.loads(r[0]) for r in db.execute("SELECT details FROM events WHERE task_id=? AND kind='CLIENT_TURN'",(root,))]
+            assert deliveries[-1]['status']=='DISPATCHING' and deliveries[-1]['native_resume']
+        assert goal['tokensUsed']==4000
+        (state/'resume-observed.json').write_text(json.dumps(goal))
+        emit({'id':msg['id'],'result':{'thread':{'id':'thread-1'}}})
     elif method=='thread/goal/set':
         p=msg['params']
         if p['status']=='paused':
             if goal is None:
                 assert root in p['objective']
-                goal={'status':'paused','tokenBudget':p['tokenBudget'],'objective':p['objective']}
+                goal={'status':'paused','tokenBudget':p['tokenBudget'],'objective':p['objective'],'tokensUsed':0,'createdAt':123}
             else:
                 goal['status']='paused'
+                if 'tokenBudget' in p:goal['tokenBudget']=p['tokenBudget']
                 (state/'paused-on-close').write_text('paused')
             emit({'id':msg['id'],'result':{'goal':goal}})
             notify('thread/goal/updated',{'threadId':'thread-1','goal':goal})
@@ -71,7 +82,9 @@ for line in sys.stdin:
             notify('thread/goal/cleared',{'threadId':'thread-1'})
         else:
             goal['status']='budgetLimited' if mode=='goal_budget' else 'complete'
+            goal['tokensUsed']=4000
             if mode=='goal_drift':goal['objective']='Replace the owner goal'
+            (state/'native-goal.json').write_text(json.dumps(goal))
             notify('thread/goal/updated',{'threadId':'other-thread','goal':{'status':'complete'}})
             notify('thread/goal/updated',{'threadId':'thread-1','goal':goal})
     elif method=='turn/start':
@@ -120,18 +133,19 @@ class ClientChat(unittest.TestCase):
         self.peer.write_text(PEER, encoding="utf-8")
         self.outputs = []
 
-    def chat(self, mode="normal"):
+    def chat(self, mode="normal", *, goal_budget=None, resume_client=None):
         with patch("cognition_agent_os.client_launch.importlib.util.find_spec", return_value=object()):
             chat = client_chat.ChatSession(self.state, self.root, executable=sys.executable,
                 timeout=3, display=self.outputs.append, ask=lambda _: "use the original",
-                goal_budget=4000 if mode.startswith("goal_") else None)
+                goal_budget=goal_budget or (4000 if mode.startswith("goal_") else None),
+                resume_client=resume_client)
         self.addCleanup(chat.close)
         real = client_chat.AppServer
         def peer(argv, cwd, **kw):
             self.assertEqual(argv[1:4], ["app-server", "--listen", "stdio://"])
             self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", argv)
             if mode.startswith("goal_"):
-                self.assertIn("max_goal_token_budget=4000", argv)
+                self.assertIn("max_goal_token_budget=" + str(goal_budget or 4000), argv)
             return real([sys.executable, str(self.peer), str(self.state), mode, self.root], cwd, **kw)
         return chat, patch("cognition_agent_os.client_chat.AppServer", side_effect=peer)
 
@@ -301,6 +315,70 @@ class ClientChat(unittest.TestCase):
         view = inspect_session(self.state / "ledger.sqlite", self.state / "sources", self.root)
         self.assertEqual(view["goal"]["original"], "完整目标不能被临时建议替换")
         self.assertEqual(view["goal_revision"], 0)
+
+    def test_cold_native_resume_preserves_thread_objective_and_used_budget(self):
+        first, peer = self.chat("goal_budget")
+        with peer:
+            first.submit("Start", request_id="resume-first")
+        first.close()
+        second, peer = self.chat("goal_resume", goal_budget=8000, resume_client="auto")
+        with peer:
+            result = second.submit("Continue existing work", request_id="resume-second")
+        self.assertEqual(result["status"], "CLIENT_GOAL_COMPLETE")
+        observed = json.loads((self.state / "resume-observed.json").read_text())
+        self.assertEqual(observed["tokensUsed"], 4000)
+        self.assertEqual(observed["tokenBudget"], 8000)
+        self.assertEqual(observed["createdAt"], 123)
+        self.assertEqual((self.state / "dispatch-count").read_text().splitlines(), ["1", "1"])
+        self.assertEqual(client_chat.resumable_thread(self.state, self.root, "auto"), "thread-1")
+
+    def test_used_budget_refuses_activation_without_destroying_resumability(self):
+        first, peer = self.chat("goal_budget")
+        with peer:
+            first.submit("Start", request_id="budget-first")
+        first.close()
+        second, peer = self.chat("goal_resume", goal_budget=4000, resume_client="auto")
+        with peer, self.assertRaisesRegex(ValueError, "BUDGET_ALREADY_USED"):
+            second.submit("Continue", request_id="budget-second")
+        self.assertEqual(client_chat.resumable_thread(self.state, self.root, "auto"), "thread-1")
+        self.assertFalse((self.state / "resume-observed.json").exists())
+        self.assertEqual(inspect_inputs(self.state / "ledger.sqlite", self.state / "sources", self.root)["input_count"], 2)
+
+    def test_resume_rejects_wrong_workspace_before_native_mutation(self):
+        first, peer = self.chat("goal_budget")
+        with peer:
+            first.submit("Start", request_id="workspace-first")
+        first.close()
+        before = (self.state / "native-goal.json").read_bytes()
+        second, peer = self.chat("goal_resume_wrong_workspace", goal_budget=8000, resume_client="thread-1")
+        with peer, self.assertRaisesRegex(RuntimeError, "WORKSPACE_MISMATCH"):
+            second.submit("Continue", request_id="workspace-second")
+        self.assertEqual((self.state / "native-goal.json").read_bytes(), before)
+        self.assertFalse((self.state / "resume-observed.json").exists())
+
+    def test_unknown_delivery_and_other_root_are_not_native_resume_candidates(self):
+        first, peer = self.chat("goal_lost_ack")
+        with peer, self.assertRaises(RuntimeError):
+            first.submit("Start", request_id="unknown-resume")
+        with self.assertRaisesRegex(ValueError, "RECONCILIATION"):
+            client_chat.resumable_thread(self.state, self.root, "thread-1")
+        other = register_native_goal(self.state / "ledger.sqlite", "Different goal", managed_session=True,
+                                     client_request_id="resume-other-goal-0001")
+        with self.assertRaisesRegex(ValueError, "NOT_BOUND"):
+            client_chat.resumable_thread(self.state, other, "thread-1")
+
+    def test_resume_does_not_choose_the_latest_of_multiple_native_threads(self):
+        for i in (1,2):
+            client_chat.journal(self.state, self.root, str(i), "DISPATCHING", thread_id="thread-"+str(i), goal_budget=4000)
+            client_chat.journal(self.state, self.root, str(i), "GOAL_PAUSED")
+        with self.assertRaisesRegex(ValueError, "SELECT_ONE"):
+            client_chat.resumable_thread(self.state, self.root, "auto")
+        self.assertEqual(client_chat.resumable_thread(self.state, self.root, "thread-1"), "thread-1")
+
+    def test_resume_cannot_create_a_parallel_new_goal(self):
+        with self.assertRaisesRegex(ValueError, "EXISTING_GOAL"):
+            client_chat.run_chat(self.state, new=True, resume_client="auto", goal_budget=8000,
+                                 ask=lambda _: self.fail("Must reject before asking for a new task"))
 
 
 if __name__ == "__main__":

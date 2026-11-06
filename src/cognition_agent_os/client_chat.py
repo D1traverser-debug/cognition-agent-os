@@ -77,6 +77,29 @@ def terminal_text(value: str) -> str:
     return "".join(c for c in value if c in "\n\t" or (ord(c) >= 32 and not 127 <= ord(c) <= 159))
 
 
+def resumable_thread(state: Path, root: str, selected: str) -> str:
+    """Resume only a recorded, cleanly ended native invocation of this root."""
+    with readonly_snapshot(state / "ledger.sqlite") as db:
+        _identity(db, root)
+        events = [json.loads(r[0]) for r in db.execute(
+            "SELECT details FROM events WHERE task_id=? AND kind='CLIENT_TURN' ORDER BY event_id", (root,))]
+    bindings = {}
+    for item in events:
+        if item["status"] == "DISPATCHING" and item.get("goal_budget") is not None:
+            bindings[item["thread_id"]] = item["request_id"]
+    if selected == "auto":
+        if len(bindings) != 1:
+            raise ValueError("SELECT_ONE_RECORDED_NATIVE_THREAD")
+        selected = next(iter(bindings))
+    if selected not in bindings:
+        raise ValueError("NATIVE_THREAD_NOT_BOUND_TO_SELECTED_ROOT")
+    last = [e for e in events if e["request_id"] == bindings[selected]][-1]
+    if last["status"] not in {"GOAL_PAUSED", "GOAL_BLOCKED", "GOAL_BUDGETLIMITED",
+                              "GOAL_USAGELIMITED", "GOAL_COMPLETE"}:
+        raise ValueError("NATIVE_DELIVERY_REQUIRES_EFFECT_RECONCILIATION")
+    return selected
+
+
 class AppServer:
     """Bounded newline JSON-RPC connection; never resends a turn on failure."""
     def __init__(self, argv, cwd: Path, *, timeout: float = 600):
@@ -189,11 +212,14 @@ class AppServer:
 
 class ChatSession:
     def __init__(self, state: Path, root: str, *, executable="codex", timeout=600,
-                 display=print, ask=input, goal_budget: int | None = None):
+                 display=print, ask=input, goal_budget: int | None = None,
+                 resume_client: str | None = None):
         if not 1 <= timeout <= 86400:
             raise ValueError("CLIENT_TIMEOUT_OUT_OF_RANGE")
         if goal_budget is not None and (type(goal_budget) is not int or not 1 <= goal_budget <= 1000000):
             raise ValueError("CLIENT_GOAL_BUDGET_OUT_OF_RANGE")
+        if resume_client is not None and (goal_budget is None or not isinstance(resume_client, str) or not resume_client):
+            raise ValueError("CLIENT_RESUME_REQUIRES_GOAL_BUDGET")
         self.state, self.root = state.resolve(), root
         self.plan = prepare_launch(self.state, root=root, executable=executable)
         self.timeout, self.display, self.ask = timeout, display, ask
@@ -203,6 +229,8 @@ class ChatSession:
         self.goal_status = None
         self.goal_consumed = False
         self.native_objective = None
+        self.resume_client = resume_client
+        self.resume_thread = None
 
     def _save(self, text, request_id, *, locator="caos chat"):
         view = inspect_session(self.state / "ledger.sqlite", self.state / "sources", self.root)
@@ -210,7 +238,7 @@ class ChatSession:
             text, origin="client_user", locator=locator, request_id=request_id,
             expected_revision=view["revision_token"])
 
-    def _start(self):
+    def _start(self, *, on_resume=None):
         if self.server is not None:
             return
         # Reuse the production MCP settings; the native client owns inference.
@@ -221,8 +249,8 @@ class ChatSession:
         self.server.request("initialize", {"clientInfo": {
             "name": "cognition_agent_os", "title": "CAOS", "version": "0.0.1"}})
         self.server.send({"method": "initialized", "params": {}})
-        result = self.server.request("thread/start", {
-            "cwd": str(self.state / "workspace"), "ephemeral": self.goal_budget is None,
+        parameters = {
+            "cwd": str(self.state / "workspace"),
             "sandbox": "read-only", "approvalPolicy": "never",
             "developerInstructions": self.plan["argv"][-1] +
                 " User messages from this entry are already durably recorded by the client. "
@@ -231,21 +259,59 @@ class ChatSession:
                 "only for relevant untrusted replies. "
                 "Do not automatically repeat a delivery whose outcome is unknown. "
                 "Record consequential findings and decisions in the existing cognitive graph. "
-                "The shell is read-only; permitted effects use the existing MCP contracts."})
+                "The shell is read-only; permitted effects use the existing MCP contracts."}
+        objective = ("Continue CAOS root " + self.root + ". Recover the complete original goal, "
+            "all amendments and new user inputs from its MCP ledger before acting. "
+            "Investigate, compare methods, execute permitted actions, independently verify "
+            "the complete outcome and reconsider failures. Preserve unresolved obligations. "
+            "Stop when genuinely complete or blocked by missing authority/capability; "
+            "do not infer success from a finished turn, test or tool call.")
+        self.native_objective = objective if self.goal_budget is not None else None
+        if self.resume_client is not None:
+            if self.resume_thread is None:
+                raise RuntimeError("CLIENT_RESUME_DISPATCH_NOT_RECORDED")
+            if on_resume is None:
+                raise RuntimeError("CLIENT_RESUME_REQUIRES_DELIVERY_BOUNDARY")
+            old_thread = self.server.request("thread/read", {
+                "threadId": self.resume_thread, "includeTurns": False})["thread"]
+            if (old_thread["id"] != self.resume_thread or
+                    Path(old_thread["cwd"]).resolve() != self.state / "workspace"):
+                raise RuntimeError("CLIENT_RESUME_WORKSPACE_MISMATCH")
+            old_goal = self.server.request("thread/goal/get", {"threadId": self.resume_thread})["goal"]
+            if (old_goal is None or old_goal["objective"] != objective or
+                    old_goal["status"] not in {"paused", "blocked", "usageLimited", "budgetLimited", "complete"}):
+                raise RuntimeError("CLIENT_RESUME_GOAL_NOT_QUIESCENT_OR_BOUND")
+            if old_goal["tokensUsed"] >= self.goal_budget:
+                raise ValueError("NATIVE_TOTAL_BUDGET_ALREADY_USED")
+            # Omit objective: updating budget/status must preserve native usage.
+            paused = self.server.request("thread/goal/set", {"threadId": self.resume_thread,
+                "status": "paused", "tokenBudget": self.goal_budget, "origin": "user"})["goal"]
+            if (paused["objective"] != objective or paused["status"] != "paused" or
+                    paused["tokensUsed"] != old_goal["tokensUsed"] or
+                    paused["createdAt"] != old_goal["createdAt"]):
+                raise RuntimeError("CLIENT_RESUME_USAGE_NOT_PRESERVED")
+            on_resume()
+            result = self.server.request("thread/resume", {**parameters,
+                "threadId": self.resume_thread, "excludeTurns": True})
+            if result["thread"]["id"] != self.resume_thread:
+                raise RuntimeError("CLIENT_RESUME_THREAD_CHANGED")
+        else:
+            result = self.server.request("thread/start", {**parameters,
+                "ephemeral": self.goal_budget is None})
         self.thread = result["thread"]["id"]
         if self.goal_budget is not None:
             existing = self.server.request("thread/goal/get", {"threadId": self.thread})
+            if self.resume_thread is not None:
+                goal = existing["goal"]
+                if (goal is None or goal["status"] != "paused" or goal["objective"] != objective
+                        or goal["tokenBudget"] != self.goal_budget or goal["tokensUsed"] != old_goal["tokensUsed"]):
+                    raise RuntimeError("CLIENT_RESUME_READBACK_MISMATCH")
+                self.goal_status = "paused"
+                return
             if existing.get("goal") is not None:
                 raise RuntimeError("NEW_CLIENT_THREAD_HAS_EXISTING_GOAL")
             # Native goals have a 4,000-character limit. Keep the COMPLETE
             # owner source in CAOS; bind the native continuation to its locator.
-            objective = ("Continue CAOS root " + self.root + ". Recover the complete original goal, "
-                "all amendments and new user inputs from its MCP ledger before acting. "
-                "Investigate, compare methods, execute permitted actions, independently verify "
-                "the complete outcome and reconsider failures. Preserve unresolved obligations. "
-                "Stop when genuinely complete or blocked by missing authority/capability; "
-                "do not infer success from a finished turn, test or tool call.")
-            self.native_objective = objective
             goal = self.server.request("thread/goal/set", {"threadId": self.thread,
                 "objective": objective, "status": "paused", "origin": "user",
                 "tokenBudget": self.goal_budget})["goal"]
@@ -340,10 +406,20 @@ class ChatSession:
                             turn_id=candidate, native_status=terminal[-1])
 
         try:
-            self._start()
-            journal(self.state, self.root, request_id, "DISPATCHING",
-                    input_event_id=saved["event_id"], thread_id=self.thread,
-                    goal_budget=self.goal_budget)
+            if self.resume_client is not None:
+                self.resume_thread = resumable_thread(self.state, self.root, self.resume_client)
+            def record_resume_dispatch():
+                nonlocal dispatched
+                # Resume can restore native activity; capture intent before it.
+                journal(self.state, self.root, request_id, "DISPATCHING",
+                        input_event_id=saved["event_id"], thread_id=self.resume_thread,
+                        goal_budget=self.goal_budget, native_resume=True)
+                dispatched = True
+            self._start(on_resume=record_resume_dispatch)
+            if not dispatched:
+                journal(self.state, self.root, request_id, "DISPATCHING",
+                        input_event_id=saved["event_id"], thread_id=self.thread,
+                        goal_budget=self.goal_budget)
             dispatched = True
             self.server.pending.clear()  # Only preparation notifications exist here.
             if self.goal_budget is not None:
@@ -408,11 +484,13 @@ class ChatSession:
 
 def run_chat(state: Path, *, root=None, executable="codex", timeout=600,
              message_file: Path | None = None, request_id=None, new=False,
-             ask=input, display=print, goal_budget=None):
+             ask=input, display=print, goal_budget=None, resume_client=None):
     """Human text entry; internal JSON and root IDs need not be user-authored."""
     from .native_decision import register_native_goal, list_native_goals
     if root and new:
         raise ValueError("SELECT_EXISTING_ROOT_OR_NEW_GOAL")
+    if resume_client is not None and (new or goal_budget is None):
+        raise ValueError("CLIENT_RESUME_REQUIRES_EXISTING_GOAL_AND_TOTAL_BUDGET")
     if request_id and message_file is None:
         raise ValueError("REQUEST_ID_REQUIRES_MESSAGE_FILE")
     # This reads existing authority; chat never implicitly initializes/grants.
@@ -437,6 +515,8 @@ def run_chat(state: Path, *, root=None, executable="codex", timeout=600,
             root = goals[int(choice)-1]["root_task_id"]
         else:
             raise ValueError("GOAL_SELECTION_REQUIRED")
+    if resume_client is not None and root is None:
+        raise ValueError("CLIENT_RESUME_REQUIRES_EXISTING_GOAL")
     chat = None
     result = {"status": "CLIENT_CLOSED", "product_ready": False}
     try:
@@ -458,7 +538,8 @@ def run_chat(state: Path, *, root=None, executable="codex", timeout=600,
             if chat is None:
                 display("当前目标：" + root)
                 chat = ChatSession(state, root, executable=executable, timeout=timeout,
-                                   ask=ask, display=display, goal_budget=goal_budget)
+                                   ask=ask, display=display, goal_budget=goal_budget,
+                                   resume_client=resume_client)
             result = chat.submit(text, request_id=request_id)
             display(json.dumps(result, ensure_ascii=False))
             if goal_budget is not None or message_file or result["status"] != "CLIENT_TURN_COMPLETED":
