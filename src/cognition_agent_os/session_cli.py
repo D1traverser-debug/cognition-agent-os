@@ -41,12 +41,14 @@ def main(argv=None):
     create = sub.add_parser("goal", help="Register complete original owner text")
     create.add_argument("--file", type=Path, required=True)
     create.add_argument("--request-id", required=True)
-    for name in ("inspect", "outcome", "inputs"):
+    for name in ("inspect", "outcome", "inputs", "history"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--root", required=True)
-        if name in ("inspect", "inputs"):
+        if name in ("inspect", "inputs", "history"):
             cmd.add_argument("--after-event-id", type=int, default=0)
-            cmd.add_argument("--limit", type=int, default=4 if name == "inputs" else 32)
+            cmd.add_argument("--limit", type=int, default=32 if name == "inspect" else 4)
+        if name == "history":
+            cmd.add_argument("--include-text", action="store_true", help="Read exact untrusted assistant replies")
     for name in ("record", "amend", "reopen", "receive"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--root", required=True)
@@ -64,6 +66,14 @@ def main(argv=None):
     client.add_argument("--root")
     client.add_argument("--client", default="codex", help="Installed Codex executable")
     client.add_argument("--check", action="store_true", help="Validate and print wiring without starting a model")
+    chat = sub.add_parser("chat", help="Save plain-language messages before sending them to local Codex")
+    selection = chat.add_mutually_exclusive_group()
+    selection.add_argument("--root")
+    selection.add_argument("--new", action="store_true", help="Start a distinct goal from the first message")
+    chat.add_argument("--client", default="codex")
+    chat.add_argument("--timeout", type=float, default=600)
+    chat.add_argument("--message-file", type=Path, help="One UTF-8 message, no JSON; omit for interactive text")
+    chat.add_argument("--request-id", help="Stable delivery ID for a one-message invocation")
     args = parser.parse_args(argv)
     state = args.state.absolute()
     db, sources, workspace = state / "ledger.sqlite", state / "sources", state / "workspace"
@@ -102,6 +112,15 @@ def main(argv=None):
             result = launch(state, root=args.root, executable=args.client, check=args.check)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return result.get("exit_code", 0)
+        elif args.command == "chat":
+            from .client_chat import run_chat
+            result = run_chat(state, root=args.root, new=args.new, executable=args.client,
+                timeout=args.timeout, message_file=args.message_file, request_id=args.request_id)
+            return 0 if result["status"] in {"CLIENT_CLOSED", "CLIENT_TURN_COMPLETED"} else 2
+        elif args.command == "history":
+            from .client_chat import history
+            result = history(db, args.root, after_event_id=args.after_event_id, limit=args.limit,
+                             include_text=args.include_text)
         elif args.command == "doctor":
             with readonly_snapshot(db) as conn:
                 authority = dict(conn.execute("SELECT * FROM authority WHERE singleton=1").fetchone())
@@ -129,7 +148,10 @@ def main(argv=None):
             return 0
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    except (OSError, ValueError, RuntimeError, BadZipFile) as exc:
+    except KeyboardInterrupt:
+        print(json.dumps({"status": "INTERRUPTED", "reason": "CHECK_SAVED_INPUT_AND_DELIVERY_HISTORY"}), file=sys.stderr)
+        return 130
+    except (OSError, ValueError, RuntimeError, BadZipFile, EOFError) as exc:
         print(json.dumps({"status": "BLOCKED", "reason": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2
 

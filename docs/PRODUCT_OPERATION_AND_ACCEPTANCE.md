@@ -66,6 +66,54 @@ explicit CLI route remains available. See the official
 
 ## Use in a connected session
 
+### Plain-language terminal entry
+
+After explicit `init` and installation/sign-in of a compatible Codex client:
+
+```bash
+caos --state /absolute/private/caos-state chat
+```
+
+Type your task directly. With no existing goal, the first message creates it;
+with one existing goal, that goal is resumed. Several goals are shown for
+selection. `--new` starts a distinct task; `--root ID` selects an existing one.
+Use `/exit` to close. For a multiline UTF-8 message without authoring JSON:
+
+```bash
+caos --state /absolute/private/caos-state chat --message-file message.txt --request-id message-001
+```
+
+When several goals exist, file mode requires `--root ID` or `--new`.
+`--client /path/to/codex` selects the installed client and `--timeout SECONDS`
+bounds a model turn (default 600). This entry requires app-server support and
+uses the existing native provider/account settings; it does not log in, extract
+credentials or change the provider. The local native shell is read-only and
+permission escalation requests are declined. Existing CAOS MCP effect contracts
+still govern CAOS actions. Other operator-configured connectors retain their
+own authority boundaries.
+
+Messages are saved before inference, including answers to clarifying questions.
+Temporary native threads recover prior work through the same MCP ledger; there
+is no parallel conversation database. Assistant replies are untrusted history,
+not approved goals, rules or verified outcomes. The delivery history is available
+through `history --root ID` and `cognition_client_history`. Metadata is returned
+by default; `--include-text` (MCP `include_text=true`) reads exact replies and
+questions. Follow `next_after_event_id` to page older records.
+
+If a connection dies after dispatch, the delivery is UNKNOWN and the same
+request ID cannot automatically execute again. Read the input/history and actual
+effect state before deciding what to do next. A new request ID must not be used
+as a blind retry. An already-running effect may have completed; terminating the
+client is not rollback. Failed/interrupted turns do not return a successful turn
+status. Even a completed turn is separate from the independent contract outcome.
+
+**Validation boundary:** real subprocess protocol peers and cold MCP readback
+are tested. Actual successful native inference through this entry remains
+unverified in Work: the installed client's read-only runtime directory prevents
+startup. This is an engineering entry under validation, not a download-ready
+product release or a claim that all ChatGPT messages are intercepted. Ordinary
+ChatGPT and the native `launch` UI still have their own message paths.
+
 ### Session-scoped local Codex launch
 
 After installing this package with its MCP extra and installing/signing in to

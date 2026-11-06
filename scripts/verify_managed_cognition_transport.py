@@ -19,6 +19,7 @@ from cognition_agent_os.ledger import readonly_snapshot
 from cognition_agent_os.intent_planner import compile_intent
 from cognition_agent_os.session_cli import provision
 from cognition_agent_os.client_launch import prepare_launch, probe_transport
+from cognition_agent_os.client_chat import journal
 from verify_native_mcp_transport import unwrap, admit_with_current_procedure_evidence
 
 
@@ -183,6 +184,11 @@ async def run():
         with readonly_snapshot(db) as connection:
             assert event_count == connection.execute("SELECT count(*) FROM events").fetchone()[0]
 
+        # Delivery bookkeeping stays in the same ledger and is independently
+        # recovered through the real MCP server after a process restart.
+        journal(state, root, "delivery-probe", "DISPATCHING")
+        journal(state, root, "delivery-probe", "DELIVERY_UNKNOWN")
+
         # New OS process: no first client's in-memory state survives.
         async with Client(params) as client:
             restored = await inspect(client, root)
@@ -192,6 +198,13 @@ async def run():
             assert recovered_input["inputs"][0]["text"] == raw_input
             assert recovered_input["inputs"][0]["interpretation_ids"] == ["reading"]
             assert not recovered_input["inputs"][0]["semantic_understanding_verified"]
+            delivery = unwrap(await client.call_tool("cognition_client_history", {
+                "root_task_id": root, "limit": 1}))
+            assert delivery["turns"][0]["status"] == "DISPATCHING"
+            delivery = unwrap(await client.call_tool("cognition_client_history", {
+                "root_task_id": root, "after_event_id": delivery["next_after_event_id"]}))
+            assert delivery["turns"][0]["status"] == "DELIVERY_UNKNOWN"
+            assert not delivery["owner_outcome_verified"]
             before = await inspect(client, root2)
             unwrap(await client.call_tool("cognition_reopen", {"root_task_id": root2,
                 "node_id": "source", "reason": "New experiment contradicts the baseline choice.",
@@ -207,6 +220,7 @@ async def run():
                 "late_input_and_interpretation_require_new_decision": True,
                 "reviewed_new_decision_can_be_admitted": True,
                 "production_launcher_preflight_readonly": True,
+                "client_delivery_history_cold_mcp_readback": True,
                 "suggestion_does_not_replace_goal": True,
                 "actual_chatgpt_or_codex_session_connected": False,
                 "nl_alignment_benchmark": "NOT_RUN", "product_ready": False}, indent=2))

@@ -1,5 +1,50 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-06: make input persistence an entry responsibility
+
+The preceding launcher proves MCP preparation/transport, but hands subsequent
+messages straight to the native UI. Saving every correction therefore still
+depends on the model remembering a tool call. This is a missing observation
+boundary; adding another instruction cannot make omitted input durable.
+
+Compared: retain the TUI (least code, no deterministic input capture); rebuild
+a standalone model/tool runtime (duplicates permissions, scheduling and recovery);
+adapt Codex app-server (adds a protocol adapter while retaining its harness).
+Choose the adapter for an opt-in `caos chat` entry, keeping `launch` available.
+No browser service, account config edit, second database, scheduler or automatic
+model-retry loop is introduced. The first plain-text message can create a goal;
+existing goals are discovered and ambiguous choices remain explicit.
+
+Official [app-server protocol](https://learn.chatgpt.com/docs/app-server) and
+the installed 0.167.0-alpha.4 generated schemas were checked for initialization,
+thread/turn startup and approval replies. Actual upstream `turn_admission.rs`
+(blob `552875473b9929a02317a892f0e7d02d9a7dfe7a`) and its tests
+(`d36f15eea6de0b274ffb39410c2c46b39db5bf4e`) demonstrate shutdown admission
+tracking, not exactly-once business effects. `transport.rs`
+(`4aef6998354c67a009b113f8103a83fdacea1e8b`) can drop messages for disconnected
+clients. Thus a missing ACK must remain UNKNOWN, not trigger automatic replay.
+
+User messages and clarification answers are committed to the existing ledger
+before forwarding. Delivery markers, questions and untrusted assistant replies
+also use existing events; metadata-first paginated readback avoids rereading
+every reply. The existing later-input fence now sees input before inference.
+Native shell policy is read-only with escalation denied; CAOS MCP contracts
+remain responsible for admitted effects. This does not fence every other
+connector the operator may have configured. No model reply promotes a method,
+changes the goal or certifies an owner outcome by itself.
+
+Falsifiers: process failure before delivery, lost ACK, early/out-of-thread
+completion, replay, clarification EOF, conflicting goals and cold source-gated
+MCP readback. Real subprocess protocol-peer tests cover these transport facts;
+they are explicitly not a model evaluation. The real installed Codex app-server
+currently exits during startup because its Work runtime home is read-only.
+An isolated SQLite-directory override did not resolve the remaining read-only
+startup failure. No account configuration/credentials were rewritten. The
+adapter's native successful inference, full semantic workflow, correction burden
+and cross-task learning remain NOT_TESTED. Roll back the adapter independently
+while retaining saved inputs and delivery evidence; never automatically resend
+an unknown delivery or discard original messages.
+
 ## 2026-11-06: preflight the actual installed transport
 
 The first CI run exposed a Linux user-site installation failure: the actual

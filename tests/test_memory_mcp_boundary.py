@@ -76,7 +76,7 @@ class MemoryMcpToolTests(unittest.TestCase):
     def test_conversation_and_graph_quotes_require_source_disclosure(self):
         default = self.server()
         self.assertNotIn("cognition_input_record", default.tools)
-        for name in ("cognition_inputs_inspect", "cognition_session_inspect"):
+        for name in ("cognition_inputs_inspect", "cognition_session_inspect", "cognition_client_history"):
             with self.assertRaisesRegex(PermissionError, "SOURCE_DISCLOSURE_NOT_ENABLED"):
                 default.tools[name](self.goal)
         writable = self.server(allow_goal_writes=True)
