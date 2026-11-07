@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
+from functools import wraps
 import json
 import hashlib
 from pathlib import Path
@@ -27,6 +28,21 @@ from .native_decision import (
 from .owner_postcondition import inspect_owner_local_outcome
 from .memory_candidates import record_candidate, inspect_candidates
 from .effect_contract import require_managed_session
+
+
+# Only fixed, reviewed messages cross the SDK's crash-masking boundary. Never
+# expose exception text, file paths, raw inputs or a suggested permission bypass.
+_TOOL_REJECTIONS = {
+    "COGNITION_ROOT_NOT_FOUND": "Read native_goal_list and select an actual root_task_id; do not invent an ID.",
+    "COGNITION_STALE_REVISION": "Read cognition_session_inspect again and reconsider the proposal. Copy its complete revision_token into expected_revision; goal_revision is a different field.",
+    "COGNITION_INVALID_NODE": "Read cognition_session_inspect. Supply id, kind, text, depends_on, source_refs, supersedes and integer goal_revision. Use actual current dependencies and goal_revision; supersedes may be null.",
+    "COGNITION_REQUEST_ID_CONFLICT": "Inspect existing state before deciding whether a different operation is needed; do not blindly retry with a new ID.",
+    "COGNITION_DEPENDENCY_NOT_CURRENT": "Inspect the current graph and investigate changed dependencies before making a new decision.",
+    "COGNITION_SOURCE_CHANGED": "Re-read the original source and reconsider dependent claims; do not substitute an invented hash.",
+    "COGNITION_QUOTE_NOT_FOUND": "Read the actual source bytes and use an exact supported quotation, or withdraw the claim.",
+    "COGNITION_GRANT_REVOKED": "Stop writes. Current operator authority is required; a model cannot grant it.",
+    "CURRENT_OPERATOR_EFFECT_CONTRACT_REQUIRED": "Stop execution. An operator-bound effect contract is required; recording a decision does not authorize it.",
+}
 
 
 def _read_only_ledger(db_path: Path) -> sqlite3.Connection:
@@ -90,13 +106,31 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     if not allow_goal_writes and (allow_host_tick or allow_local_model_plan):
         raise ValueError("READ_ONLY_MCP_CANNOT_ENABLE_WORKER_OR_MODEL_WRITES")
     mcp = MCPServer("cognition-agent-os-local")
+
+    def exposed_tool(**metadata):
+        def register(fn):
+            @wraps(fn)
+            def call(*args, **kwargs):
+                try:
+                    return fn(*args, **kwargs)
+                except (ValueError, PermissionError) as exc:
+                    # Unrecognized failures keep the SDK's normal private crash
+                    # handling. Known validation failures remain isError=true.
+                    recovery = _TOOL_REJECTIONS.get(str(exc))
+                    if recovery is None:
+                        raise
+                    from mcp.server.mcpserver.exceptions import ToolError
+                    raise ToolError(str(exc) + ": " + recovery) from exc
+            return mcp.tool(**metadata)(call)
+        return register
+
     # Registration is the actual server-side permission boundary. A caller
     # without a write profile must not even discover queueing/ledger tools.
-    write_tool = mcp.tool if allow_goal_writes else (lambda: (lambda fn: fn))
+    write_tool = exposed_tool if allow_goal_writes else (lambda: (lambda fn: fn))
     # Hints describe actual behavior to native model-call approval routing.
     # They do not replace source disclosure grants or effect-time checks.
     def read_tool():
-        return mcp.tool(annotations={"readOnlyHint": True, "destructiveHint": False,
+        return exposed_tool(annotations={"readOnlyHint": True, "destructiveHint": False,
                                      "openWorldHint": False})
 
     def record_tool():
@@ -105,7 +139,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         # authorize a queued effect. Research with live sources is NOT closed-world.
         if not allow_goal_writes:
             return lambda fn: fn
-        return mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False,
+        return exposed_tool(annotations={"readOnlyHint": False, "destructiveHint": False,
                                      "openWorldHint": False})
 
     @write_tool()
@@ -271,7 +305,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 after_memory_id=after_memory_id, limit=limit)
 
         if allow_goal_writes:
-            @mcp.tool()
+            @exposed_tool()
             def native_memory_candidate_record(
                     root_task_id: str, request_id: str, kind: str,
                     file_name: str, source_sha256: str,
@@ -372,7 +406,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             }
 
     if public_source_goal_sha256 is not None:
-        @mcp.tool()
+        @exposed_tool()
         def native_public_primary_source_read(
                 root_task_id: str, repository: str, file_path: str,
                 commit_sha: str, offset_chars: int = 0) -> dict:
@@ -479,7 +513,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             db_path, workspace, fixtures, root_task_id, proposal)
 
     if allow_local_model_plan:
-        @mcp.tool()
+        @exposed_tool()
         def native_local_model_plan(root_task_id: str, model: str) -> dict:
             """Explicit opt-in to existing installed local Ollama cognition.
 
@@ -495,7 +529,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 db_path, workspace, fixtures, root_task_id, model=model)
 
     if allow_host_tick:
-        @mcp.tool()
+        @exposed_tool()
         def native_local_tick(root_task_id: str) -> dict:
             """OPT-IN: run EXACTLY the pending child of the requested owner root.
 

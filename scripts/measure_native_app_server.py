@@ -24,7 +24,7 @@ from cognition_agent_os.session_cli import provision
 from verify_codex_app_server import download
 
 MODEL = "qwen3.5:4b-q4_K_M"
-EXPERIMENT_PARENT = "b79cb83aa1bfe64cf67b7638193d1581b142677f"
+EXPERIMENT_PARENT = "1a26cd80d8da44ccf9bba5f78b8e45f3ac11b518"
 
 
 def preflight():

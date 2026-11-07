@@ -1,5 +1,37 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-07: distinguish recoverable tool rejection from a private crash
+
+The real additive-record trial at `1a26cd8` / Actions `42347815709` FAILED at
+the 900-second deadline, with 55,286 cumulative native tokens. Goal recovery
+succeeded; the ledger contained no observation. The actual model submitted
+`expected_revision: "0.0"` and omitted required node fields. The result exposed
+only `Error executing tool cognition_node_record`. Artifact `13564702806`
+(SHA256 `2f7621238b8099c3176f994d65121c50169230c7ea6bf784c20d77e572c19887`)
+retains the trace. All mandatory engineering jobs passed; this model trial did not.
+
+Reproducing those arguments through the real MCP 2.3 transport confirms a stale
+revision rejection before node validation. Its SDK `tools/base.py` intentionally
+masks arbitrary ValueError as UnexpectedToolError; documented ToolError instead
+returns an anticipated failure to the model with isError=true. This separates
+a correct state guard from a missing feedback path. Do not infer lack of write
+permission, automatically fill a fresh CAS token, or claim the narration was a write.
+
+Compare more prompt reminders, globally exposing exception text, and a bounded
+transport error adapter. Choose the adapter: map only exact reviewed codes to
+static recovery instructions; preserve original checks, isError, grant refusals,
+and SDK masking for all unknown failures. No generic retry, authority grant,
+input echo, path disclosure or automatic token replacement is introduced.
+The same boundary covers missing roots, stale revisions, malformed graph nodes,
+changed sources and revoked grants, without changing core APIs.
+
+Actual MCP tests failed before repair, then passed for the observed stale-version
+and missing-field cases plus wrong-root recovery. Unknown unsafe-source errors
+remain private, and all failed calls leave the graph/revision unchanged. The
+same model, original task class, oracle and deadline are retained for one new-source
+trial. A failed retest must reopen model/schema/context suitability; green
+transport or an assistant promise is not successful cognitive persistence.
+
 ## 2026-11-07: additive cognition records are writes, not external execution
 
 First-use source `b79cb83` passed all mandatory jobs in Actions `42347242615`.

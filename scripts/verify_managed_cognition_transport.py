@@ -81,6 +81,31 @@ async def run():
                 "owner_goal": goal, "client_request_id": "managed-transport-001"}))
             root = created["root_task_id"]
             original_view = await inspect(client, root)
+            # Real failed model trace: invented version and incomplete node.
+            # The client needs a bounded recovery reason, not a masked crash.
+            for bad_root, revision, code, hint in [
+                    (root, "0.0", "COGNITION_STALE_REVISION", "revision_token"),
+                    (root, original_view["revision_token"], "COGNITION_INVALID_NODE", "goal_revision"),
+                    ("0" * 32, "0.0", "COGNITION_ROOT_NOT_FOUND", "native_goal_list")]:
+                rejected = await client.call_tool("cognition_node_record", {
+                    "root_task_id": bad_root, "node": {"text": "PRIVATE_ERROR_INPUT_SENTINEL"},
+                    "request_id": "invalid-record", "expected_revision": revision})
+                assert rejected.is_error
+                message = " ".join(getattr(p, "text", "") for p in rejected.content)
+                assert code in message and hint in message, message
+                assert "PRIVATE_ERROR_INPUT_SENTINEL" not in message
+            unknown = await client.call_tool("cognition_node_record", {
+                "root_task_id": root, "request_id": "unknown-source-error",
+                "expected_revision": original_view["revision_token"],
+                "node": {"id": "unsafe-source", "kind": "source", "text": "Untrusted source",
+                    "depends_on": [], "supersedes": None, "goal_revision": 0,
+                    "source_refs": [{"path": "/PRIVATE_ERROR_INPUT_SENTINEL", "sha256": "0" * 64,
+                                     "quote": "PRIVATE_SOURCE_CONTENT_SENTINEL"}]}})
+            assert unknown.is_error
+            message = " ".join(getattr(p, "text", "") for p in unknown.content)
+            assert "PRIVATE_ERROR_INPUT_SENTINEL" not in message
+            assert "PRIVATE_SOURCE_CONTENT_SENTINEL" not in message
+            assert (await inspect(client, root))["revision_token"] == original_view["revision_token"]
             raw_input = "Maybe use a graph. This is a suggestion, not a replacement goal."
             unwrap(await client.call_tool("cognition_input_record", {
                 "root_task_id": root, "text": raw_input, "origin": "client_user",
