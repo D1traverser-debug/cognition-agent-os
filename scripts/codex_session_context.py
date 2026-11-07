@@ -291,6 +291,7 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
             "native_next_action_authorized",
             "local_owner_outcome_verified", "local_outcome_evidence",
             "business_outcome_verified", "real_external_outcome_verified",
+            "cognition",
             "reason", "pinned_head_sha", "observed_head_sha",
         ):
             if key in state:
@@ -299,6 +300,19 @@ def build_context(payload: dict, *, include_full_original: bool = False) -> dict
             isinstance(state.get("original_goal"), str)
             and state.get("source_of_truth") == "ORIGINAL_SQLITE_TASK"
         )
+        if isinstance(context.get("cognition"), dict):
+            cognitive = dict(context["cognition"])
+            token, root = cognitive.get("revision_token"), context.get("root_task_id")
+            if isinstance(token, str) and isinstance(root, str):
+                for kind in ("nodes", "inputs"):
+                    cognitive[kind + "_readback"] = {
+                        "entrypoint": "scripts/codex_session_context.py",
+                        "arguments": ["--readback-cognition", root, token, kind, "0"],
+                        "source_role": "READ_ONLY_VERSIONED_COGNITION_PAGE",
+                    }
+            if not include_full_original:
+                cognitive.pop("amendments", None)
+            context["cognition"] = cognitive
         # A direct, read-only path to the SAME immutable SQLite source.
         # This survives loss of a native hook spill preview without a second
         # memory index, and the caller must recheck both identity and digest.
@@ -430,12 +444,37 @@ def _readback_state(expected_digest: str) -> dict:
             "readback": state, "scheduling_or_effects_performed": False}
 
 
+def _readback_cognition(root: str, expected_revision: str, kind: str, cursor: str) -> dict:
+    """Explicit paged dereference; no second store or remembered goal selection."""
+    if (not re.fullmatch(r"[0-9a-f]{32}", root)
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_revision)
+        or kind not in ("nodes", "inputs") or not re.fullmatch(r"[0-9]{1,18}", cursor)):
+        return {"status": "INVALID_COGNITION_READBACK"}
+    db_path, _ = _existing_database()
+    try:
+        sources = _optional_existing_directory(FIXTURES_ENV, "fixtures")
+        if db_path is None or sources is None:
+            return {"status": "COGNITION_READBACK_UNAVAILABLE"}
+        sys.path.insert(0, str(ROOT / "src"))
+        from cognition_agent_os.cognitive_session import inspect_session, inspect_inputs
+        reader = inspect_session if kind == "nodes" else inspect_inputs
+        page = reader(db_path, sources, root, after_event_id=int(cursor))
+        if page["revision_token"] != expected_revision:
+            return {"status": "COGNITION_READBACK_STALE"}
+        return {"status": "COGNITION_READBACK_MATCHED", "readback": page,
+                "scheduling_or_effects_performed": False}
+    except (OSError, ValueError, TypeError) as exc:
+        return {"status": "COGNITION_READBACK_UNAVAILABLE", "error_class": type(exc).__name__}
+
+
 def main(argv: tuple[str, ...] = ()) -> int:
     # Explicit argv decouples the callable hook from embedding processes
     # (unittest/pytest/Codex hosts may have unrelated sys.argv flags).
     # The executable script still receives its real CLI argv at __main__.
     if argv:
-        if len(argv) == 2 and argv[0] == "--readback-state":
+        if len(argv) == 5 and argv[0] == "--readback-cognition":
+            result = _readback_cognition(*argv[1:])
+        elif len(argv) == 2 and argv[0] == "--readback-state":
             result = _readback_state(argv[1])
         elif len(argv) == 3 and argv[0] == "--readback-original":
             result = _readback_original(argv[1], argv[2])

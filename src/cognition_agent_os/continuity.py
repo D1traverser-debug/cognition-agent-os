@@ -310,7 +310,8 @@ def _all_open_goal_roots(db: sqlite3.Connection) -> list[sqlite3.Row] | None:
 
 
 def _attested_owner_root(
-        db: sqlite3.Connection, root: sqlite3.Row) -> dict | None:
+        db: sqlite3.Connection, root: sqlite3.Row,
+        fixtures: Path | None = None) -> dict | None:
     """Recover intact owner words across both existing goal types.
 
     This is a read-only identity projection, not a selectable runnable task.
@@ -331,7 +332,32 @@ def _attested_owner_root(
             original = spec["goal"]
         else:
             return None
-        return {"root_task_id": root["task_id"], "original_goal": original}
+        result = {"root_task_id": root["task_id"], "original_goal": original}
+        if spec.get("kind") == "native_goal" and db.execute(
+                "SELECT 1 FROM events WHERE task_id=? AND kind LIKE 'COGNITION_%' LIMIT 1",
+                (root["task_id"],)).fetchone():
+            # Reuse the SAME event projection and SQLite snapshot. Do not keep
+            # a separate hook summary that silently omits later corrections.
+            if fixtures is None:
+                result["cognition"] = {"status": "COGNITION_SOURCES_NOT_CONFIGURED"}
+            else:
+                from .cognitive_session import _project
+                try:
+                    view = _project(db, fixtures, root["task_id"])
+                    result["cognition"] = {
+                        "status": "COGNITION_STATE_OBSERVED",
+                        **{key: view[key] for key in (
+                            "goal_revision", "goal_sha256", "revision_token",
+                            "input_count", "uninterpreted_input_count", "grant_current")},
+                        "amendments": view["goal"]["amendments"],
+                        "node_count": len(view["nodes"]),
+                        "reopen_count": len(view["reopen"]),
+                        "semantic_understanding_verified": False,
+                    }
+                except (OSError, ValueError, TypeError, KeyError) as exc:
+                    result["cognition"] = {"status": "COGNITION_STATE_UNVERIFIABLE",
+                                           "error_class": type(exc).__name__}
+        return result
     except (ValueError, TypeError, KeyError, AttributeError):
         return None
 
@@ -465,7 +491,7 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
         return _no_action("STALE_GOAL_REVISION",
                           root_task_ids=[r["task_id"] for r in roots])
     if len(active) != 1:
-        originals = [_attested_owner_root(db, r) for r in active]
+        originals = [_attested_owner_root(db, r, fixtures) for r in active]
         if any(x is None for x in originals):
             return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
         return _no_action(
@@ -481,7 +507,8 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
         return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
     if isinstance(raw_spec, dict) and raw_spec.get("kind") == "native_goal":
         from .native_decision import inspect_native_goal
-        if _attested_owner_root(db, root) is None:
+        attested = _attested_owner_root(db, root, fixtures)
+        if attested is None:
             return _no_action("ORIGINAL_GOAL_UNVERIFIABLE", root_task_id=root_id)
         base = {
             "root_task_id": root_id, "original_goal": raw_spec["goal"],
@@ -493,6 +520,8 @@ def _resume_existing_open_goal(db_path: Path, db: sqlite3.Connection,
             "business_outcome_verified": False,
             "real_external_outcome_verified": False,
         }
+        if "cognition" in attested:
+            base["cognition"] = attested["cognition"]
         if (not authority["write_allowed"] or
             root["grant_rev"] != authority["grant_rev"]):
             return {"status": "AUTHORITY_REVOKED", **base,
@@ -694,7 +723,7 @@ def _resume_goal_local(db_path: Path, *,
                     if (root["goal_rev"] == authority["goal_rev"]
                         and root["task_id"] not in registered_root_ids)
                 ]
-                other_originals = [_attested_owner_root(db, root)
+                other_originals = [_attested_owner_root(db, root, fixtures)
                                    for root in others]
                 if any(item is None for item in other_originals):
                     return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")
@@ -740,7 +769,7 @@ def _resume_goal_local(db_path: Path, *,
                 and r["task_id"] != selected_root
             ]
             if other_roots:
-                originals = [_attested_owner_root(db, root)
+                originals = [_attested_owner_root(db, root, fixtures)
                              for root in other_roots]
                 if any(x is None for x in originals):
                     return _no_action("OWNER_GOAL_LEDGER_UNVERIFIABLE")

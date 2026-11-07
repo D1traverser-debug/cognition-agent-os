@@ -154,10 +154,17 @@ jobs:
         run: python scripts/verify_ci_checkout_source.py
       - name: Install optional official local MCP transport (CI only)
         run: python -m pip install --disable-pip-version-check ".[mcp]"
-      - name: Verify real stdio -> Host -> independent readback -> cold restart
-        env:
-          PYTHONPATH: src
-        run: python scripts/verify_native_mcp_transport.py
+      - name: Verify both real MCP transports with one source-bound receipt
+        run: python scripts/verify_delivery.py --profile transport --output "${{ runner.temp }}/caos-transport-receipt"
+      - name: Connect checksum-pinned official Codex to CAOS without model inference
+        run: python scripts/verify_codex_app_server.py --download --output "${{ runner.temp }}/caos-transport-receipt/native-codex.json"
+      - name: Preserve compact receipt and raw transport logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-transport-${{ matrix.os }}
+          path: ${{ runner.temp }}/caos-transport-receipt
+          if-no-files-found: error
 
   windows_offline_regression:
     # Public-repository hosted Windows runner; tests host compatibility,
@@ -701,6 +708,67 @@ jobs:
           path: cognition-chatgpt-plugin-overlay.zip
           if-no-files-found: error
 
+  experimental_native_app_server:
+    # One source-scoped real model seam probe, not the previous Host benchmark.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-native-app-server]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
+      - name: Enforce one reviewed source and attempt before downloads
+        env:
+          PYTHONPATH: src
+        run: python scripts/measure_native_app_server.py --preflight-only
+      - name: Install MCP in the disposable runner
+        run: python -m pip install '.[mcp]'
+      - name: Fetch and verify the pinned local inference runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-time 300 https://github.com/ollama/ollama/releases/download/v0.40.15/ollama-linux-amd64.tar.zst --output "$RUNNER_TEMP/ollama.tar.zst"
+          printf '%s  %s\n' '628c018404a4206493efd38e46251c154ede5141b8b8dc85c659b3b027c47379' "$RUNNER_TEMP/ollama.tar.zst" | sha256sum --check
+          mkdir "$RUNNER_TEMP/caos-ollama"
+          tar --zstd -xf "$RUNNER_TEMP/ollama.tar.zst" -C "$RUNNER_TEMP/caos-ollama"
+          echo "$RUNNER_TEMP/caos-ollama/bin" >> "$GITHUB_PATH"
+      - name: Start loopback-only inference and fetch one local model
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          OLLAMA_CONTEXT_LENGTH: '65536'
+          OLLAMA_NUM_PARALLEL: '1'
+        run: |
+          set -euo pipefail
+          ollama --version
+          (ollama serve > "$RUNNER_TEMP/caos-native-model.log" 2>&1 &)
+          ready=0
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          timeout 420 ollama pull qwen3.5:4b-q4_K_M
+      - name: Run production ChatSession through native inference and real MCP
+        env:
+          PYTHONPATH: src
+          OLLAMA_NO_CLOUD: '1'
+        run: timeout 1020 python scripts/measure_native_app_server.py --output native-app-server-model-evidence.json
+      - name: Preserve synthetic observations including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-app-server-model-evidence
+          path: |
+            native-app-server-model-evidence.json
+            ${{ runner.temp }}/caos-native-model.log
+          if-no-files-found: warn
+
   experimental_real_native_cognition:
     # Opt-in real Ollama inference on an ephemeral public CI runner.
     # Synthetic independent owner-acceptance labels and actual Host artifacts.
@@ -968,7 +1036,7 @@ jobs:
     # Always runs after other jobs. A green PR cannot hide a skipped core gate.
     # Opt-in model/child experiments remain explicitly UNTESTED when skipped.
     if: ${{ always() }}
-    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, native_feedback_seam_ab, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout]
+    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, native_feedback_seam_ab, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout, experimental_native_app_server]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

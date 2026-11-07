@@ -1189,7 +1189,7 @@ class NativeDecisionLoop(unittest.TestCase):
         class _McpShim:
             def __init__(self, name):
                 self.tools = {}
-            def tool(self):
+            def tool(self, **metadata):
                 def register(func):
                     self.tools[func.__name__] = func
                     return func

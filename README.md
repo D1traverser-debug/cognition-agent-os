@@ -25,7 +25,26 @@ The six `docs/` paths above are the **default specification starting set**, not 
 
 Complete engineering provenance belongs in Git commit history, diffs, current code/tests and exact-head CI. Dated audit snapshots and obsolete root P1 instructions are archived; other technical reports retain their original paths until separately classified with link and dependency verification. Directory arrangement alone cannot prove a model selected correct context.
 
-## Local prototype smoke
+## Managed interactive entry
+
+With Python 3.11+ installed, Windows users can open `Start-CAOS.cmd` from the
+downloaded checkout; Linux users run `python3 start_caos.py`. First use prepares
+an isolated runtime and a private session outside the repository, reuses an
+installed Codex or downloads the checksum-pinned official client, then opens
+the existing natural-language chat entry. It does not sign in or configure a
+model account. Use `python start_caos.py --setup-only` to prepare without inference;
+use `--restore PRIVATE_SNAPSHOT.zip --state NEW_PRIVATE_DIRECTORY` to recover
+existing work instead of creating a parallel goal. Existing state is never reset.
+First setup requires network access for dependencies; inference needs a working
+Codex account/provider. This simplifies startup, not the product-readiness claim.
+
+The executable `caos` entry preserves original goals, sourced dependencies,
+corrections and private snapshots in the existing ledger. See
+[operation and acceptance](docs/PRODUCT_OPERATION_AND_ACCEPTANCE.md) for local
+Codex MCP setup, effect contracts and the tested boundaries. It requires Python
+3.11+ with the MCP extra. The complete cognition product remains NOT_READY.
+
+## Legacy local prototype smoke
 
 Python 3.10+:
 
