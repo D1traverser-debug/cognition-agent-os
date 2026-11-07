@@ -1,5 +1,35 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-07: publish the actual cognitive-node input contract
+
+The `d20c6b8` / Actions `42371600946` retest again FAILED at 900 seconds;
+all mandatory checks passed. Artifact `13574622181`, SHA256
+`cf2956241fbbf3c3754526bd7178e90f15f329b8969a9f6199b84553b6e6cb1e`,
+shows 45,547 cumulative native tokens and no persisted observation. The model
+used the actual revision token, received the new missing-field explanation and
+added those fields, but invented a string element in source_refs. Thus feedback
+did reach the model, while an underspecified nested argument still blocked it.
+This is not evidence that the adapter alone completes cognitive persistence.
+
+The same failed model trace also omitted required fields. Runtime recovery
+messages are necessary but do not replace a truthful machine-readable interface:
+the exposed node parameter was just `dict`, with mandatory fields only in prose.
+An actual tools/list assertion reproduced the absent required-field contract.
+
+Use shared TypedDict declarations for the node and its source/method/input/claim
+references, consumed by both the existing
+core field validator and the MCP schema generator. This keeps ordinary dict
+values and all semantic/grant/CAS checks; no second validator authority or
+framework dependency enters the stdlib core. The optional MCP environment
+already supplies typing_extensions where its schema library needs that backport.
+Strict schema configuration rejects unknown fields and scalar coercion instead
+of silently deleting or changing caller data. Missing-field guidance comes from
+the SDK's anticipated argument-validation error, while domain rejections use
+the bounded adapter described below. Real MCP tests verify the published required
+fields, incomplete/extra/coerced-input rejection, legal neighboring records and
+unchanged ledger after failures. This improves the tool contract; it does not
+prove that a model will make sound decisions or transfer knowledge.
+
 ## 2026-11-07: distinguish recoverable tool rejection from a private crash
 
 The real additive-record trial at `1a26cd8` / Actions `42347815709` FAILED at

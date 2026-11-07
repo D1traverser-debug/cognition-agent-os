@@ -74,13 +74,48 @@ async def run():
                     "uncertainty": "Fixture result is not an external business outcome."}}
 
         async with Client(params) as client:
-            names = {t.name for t in (await client.list_tools()).tools}
+            inventory = (await client.list_tools()).tools
+            names = {t.name for t in inventory}
             assert "cognition_node_record" in names
+            schema = next(t.input_schema for t in inventory if t.name == "cognition_node_record")
+            node_schema = schema["properties"]["node"]
+            if "$ref" in node_schema:
+                node_schema = schema["$defs"][node_schema["$ref"].rsplit("/", 1)[-1]]
+            assert set(node_schema.get("required", [])) == {
+                "id", "kind", "text", "depends_on", "source_refs", "supersedes", "goal_revision"}
+            assert node_schema.get("additionalProperties") is False
+            for field, required in {
+                    "source_refs": {"path", "sha256", "quote"},
+                    "method_refs": {"root_task_id", "node_id", "use"},
+                    "input_refs": {"request_id", "sha256"},
+                    "claims": {"input_id", "quote", "category", "meaning", "basis"}}.items():
+                item_schema = node_schema["properties"][field]["items"]
+                if "$ref" in item_schema:
+                    item_schema = schema["$defs"][item_schema["$ref"].rsplit("/", 1)[-1]]
+                assert set(item_schema.get("required", [])) == required
+                assert item_schema.get("additionalProperties") is False
             assert not any("authorize" in n or "install_contract" in n for n in names)
             created = unwrap(await client.call_tool("native_goal_create", {
                 "owner_goal": goal, "client_request_id": "managed-transport-001"}))
             root = created["root_task_id"]
             original_view = await inspect(client, root)
+            malformed = await client.call_tool("cognition_node_record", {
+                "root_task_id": root, "node": {}, "request_id": "missing-fields",
+                "expected_revision": original_view["revision_token"]})
+            assert malformed.is_error
+            assert "depends_on" in " ".join(getattr(p, "text", "") for p in malformed.content)
+            valid_shape = {"id": "schema-neighbor", "kind": "observation", "text": "test",
+                "depends_on": [], "source_refs": [], "supersedes": None, "goal_revision": 0}
+            for change in ({"goal_revision": "0"}, {"undeclared_action": "must not be dropped"},
+                           {"source_refs": ["goal/original/sha256/null"]},
+                           {"source_refs": [{"path": "research.txt"}]},
+                           {"method_refs": [{"root_task_id": root}]},
+                           {"input_refs": [{"request_id": "missing-digest"}]},
+                           {"claims": [{"meaning": "unsupported"}]}):
+                refused = await client.call_tool("cognition_node_record", {
+                    "root_task_id": root, "node": valid_shape | change,
+                    "request_id": "schema-neighbor", "expected_revision": original_view["revision_token"]})
+                assert refused.is_error, "Schema silently coerced/dropped input"
             # Real failed model trace: invented version and incomplete node.
             # The client needs a bounded recovery reason, not a masked crash.
             for bad_root, revision, code, hint in [
@@ -88,7 +123,9 @@ async def run():
                     (root, original_view["revision_token"], "COGNITION_INVALID_NODE", "goal_revision"),
                     ("0" * 32, "0.0", "COGNITION_ROOT_NOT_FOUND", "native_goal_list")]:
                 rejected = await client.call_tool("cognition_node_record", {
-                    "root_task_id": bad_root, "node": {"text": "PRIVATE_ERROR_INPUT_SENTINEL"},
+                    "root_task_id": bad_root, "node": {"id": "invalid-record",
+                        "kind": "invalid-kind", "text": "PRIVATE_ERROR_INPUT_SENTINEL",
+                        "depends_on": [], "source_refs": [], "supersedes": None, "goal_revision": 0},
                     "request_id": "invalid-record", "expected_revision": revision})
                 assert rejected.is_error
                 message = " ".join(getattr(p, "text", "") for p in rejected.content)

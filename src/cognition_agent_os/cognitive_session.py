@@ -11,6 +11,12 @@ import hashlib
 import json
 from pathlib import Path
 import re
+try:
+    # Pydantic requires this backport on Python 3.11; it arrives with the MCP
+    # extra. The core remains usable without optional dependencies.
+    from typing_extensions import TypedDict
+except ImportError:
+    from typing import TypedDict
 
 from .ledger import connect_existing, readonly_snapshot, event
 from .native_decision import _registered_native_contract_matches
@@ -23,6 +29,54 @@ CLAIM_CATEGORIES = frozenset({"goal", "constraint", "preference", "correction",
 _ID = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,95}\Z")
 MAX_NODES = 512
 MAX_EVENTS = 4096
+
+
+class SourceReference(TypedDict):
+    path: str
+    sha256: str
+    quote: str
+
+
+class MethodReference(TypedDict):
+    root_task_id: str
+    node_id: str
+    use: str
+
+
+class InputReference(TypedDict):
+    request_id: str
+    sha256: str
+
+
+class InterpretationClaim(TypedDict):
+    input_id: str
+    quote: str
+    category: str
+    meaning: str
+    basis: str
+
+
+class _RequiredNode(TypedDict):
+    id: str
+    kind: str
+    text: str
+    depends_on: list[str]
+    source_refs: list[SourceReference]
+    supersedes: str | None
+    goal_revision: int
+
+
+class CognitiveNode(_RequiredNode, total=False):
+    action_spec: dict
+    method_refs: list[MethodReference]
+    input_refs: list[InputReference]
+    claims: list[InterpretationClaim]
+
+
+# Schema consumers must neither drop unknown fields nor coerce a supplied
+# revision into a different type. The authoritative semantic checks stay below.
+for _shape in (CognitiveNode, SourceReference, MethodReference, InputReference, InterpretationClaim):
+    _shape.__pydantic_config__ = {"extra": "forbid", "strict": True}
 
 
 def digest(value) -> str:
@@ -57,7 +111,7 @@ def _events(db, root_id):
 
 
 def _source_check(sources: Path, ref: dict):
-    if (not isinstance(ref, dict) or set(ref) != {"path", "sha256", "quote"}
+    if (not isinstance(ref, dict) or set(ref) != SourceReference.__required_keys__
             or not all(isinstance(v, str) for v in ref.values())
             or not 1 <= len(ref["quote"]) <= 4000):
         raise ValueError("COGNITION_INVALID_SOURCE_REF")
@@ -220,9 +274,9 @@ def _append(db_path, sources, root_id, request_id, expected_revision, kind, data
 
 
 def _validate_node(node, view, sources):
-    required = {"id", "kind", "text", "depends_on", "source_refs", "supersedes", "goal_revision"}
+    required = CognitiveNode.__required_keys__
     if (not isinstance(node, dict) or not required <= set(node)
-            or set(node) - required - {"action_spec", "method_refs", "input_refs", "claims"}
+            or set(node) - required - CognitiveNode.__optional_keys__
             or not isinstance(node["id"], str) or not _ID.fullmatch(node["id"])
             or not isinstance(node["kind"], str) or node["kind"] not in KINDS
             or not isinstance(node["text"], str) or not 1 <= len(node["text"]) <= 12000
@@ -267,7 +321,7 @@ def _validate_node(node, view, sources):
             raise ValueError("COGNITION_INVALID_DECISION_ACTION")
         refs = node.get("method_refs", [])
         if (not isinstance(refs, list) or len(refs) > 8 or any(
-                not isinstance(ref, dict) or set(ref) != {"root_task_id", "node_id", "use"}
+                not isinstance(ref, dict) or set(ref) != MethodReference.__required_keys__
                 or not isinstance(ref["root_task_id"], str)
                 or not re.fullmatch(r"[0-9a-f]{32}", ref["root_task_id"])
                 or not isinstance(ref["node_id"], str) or not _ID.fullmatch(ref["node_id"])
@@ -285,7 +339,7 @@ def _validate_interpretation(node, view):
         raise ValueError("COGNITION_INTERPRETATION_INPUT_REQUIRED")
     referenced = set()
     for ref in refs:
-        if (not isinstance(ref, dict) or set(ref) != {"request_id", "sha256"}
+        if (not isinstance(ref, dict) or set(ref) != InputReference.__required_keys__
                 or not isinstance(ref["request_id"], str) or ref["request_id"] not in inputs
                 or ref["request_id"] in referenced
                 or ref["sha256"] != inputs[ref["request_id"]]["sha256"]):
@@ -296,7 +350,7 @@ def _validate_interpretation(node, view):
     covered = set()
     for claim in claims:
         if (not isinstance(claim, dict)
-                or set(claim) != {"input_id", "quote", "category", "meaning", "basis"}
+                or set(claim) != InterpretationClaim.__required_keys__
                 or not all(isinstance(v, str) for v in claim.values())
                 or claim["input_id"] not in referenced
                 or claim["category"] not in CLAIM_CATEGORIES

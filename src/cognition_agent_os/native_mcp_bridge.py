@@ -28,6 +28,7 @@ from .native_decision import (
 from .owner_postcondition import inspect_owner_local_outcome
 from .memory_candidates import record_candidate, inspect_candidates
 from .effect_contract import require_managed_session
+from .cognitive_session import CognitiveNode
 
 
 # Only fixed, reviewed messages cross the SDK's crash-masking boundary. Never
@@ -628,7 +629,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                        include_text=include_text)
 
     @record_tool()
-    def cognition_node_record(root_task_id: str, node: dict, request_id: str,
+    def cognition_node_record(root_task_id: str, node: CognitiveNode, request_id: str,
                               expected_revision: str) -> dict:
         """Persist an evidence dependency, option, hypothesis or method.
 
