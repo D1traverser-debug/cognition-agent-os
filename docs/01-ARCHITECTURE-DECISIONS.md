@@ -1,5 +1,40 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-07: additive cognition records are writes, not external execution
+
+First-use source `b79cb83` passed all mandatory jobs in Actions `42347242615`.
+Both Windows/Linux real native-client receipts include setup/reuse, cold resume
+and unchanged existing ledger. This closes the tested entry-preparation seam,
+not owner-device setup or complete goal achievement.
+
+The read-annotation repair exposed the next shared boundary: the native model
+also needs to persist investigation and candidate knowledge. Compare leaving
+all writes blocked (loses the required memory loop), approving the whole server
+(also admits execution prompts), and describing each audited effect accurately.
+Choose the third, preserving the single server/ledger and all effect contracts.
+
+The MCP 2025-11-25 `ToolAnnotations` source (blob
+`850a083fa228bf40af6feca42e23fd26342d3c59`) defines destructive=false as additive
+updates, distinct from readOnly=true. Pinned Codex 0.167.0 Auto mode permits
+closed-world additive tools without prompting; Writes/Prompt mode can still ask.
+Audit the transitive implementations: hypothesis, input, cognitive-node and
+method-trial recording append local events after existing grant/source/revision
+checks; records never independently certify truth, authorize effects or delete
+history. Give exactly those four readOnly=false/destructive=false/openWorld=false.
+Do not generalize from a tool name: `native_open_research_record` can fetch live
+GitHub references, so it remains outside this class. Goal changes, decision
+admission and Worker execution retain their prior client/server controls.
+
+The actual MCP inventory test failed on the unannotated hypothesis tool, then
+passed after the repair, with read-profile exclusion and neighboring effect
+tools still guarded. This only verifies the metadata/transport. One new-source
+native-model trial requires a real model-originated record and a fresh CLI
+process independently reading exactly one observation with the recovered random
+marker/constraint. Goal (including amendments), workspace and task inventory
+must remain unchanged. False success labels, absent/wrong/duplicate records,
+changed goals and invented marker variants fail the oracle. Actual model result
+remains OPEN until read back; even PASS would not prove method generalization.
+
 ## 2026-11-07: first-use setup reuses the proven entry
 
 Changed-source model test `ba103cf` / Actions `42324264770` passed the real native

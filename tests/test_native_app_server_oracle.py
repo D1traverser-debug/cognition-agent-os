@@ -32,6 +32,24 @@ class NativeSeamOracleTests(unittest.TestCase):
             changed["items"][0].update(mutation)
             self.assertEqual(judge(**changed)["status"], "FAIL")
 
+        # Actual invocation and independent cold persistence are BOTH required.
+        recorded = copy.deepcopy(case)
+        recorded["items"].append({"type": "mcpToolCall", "server": "caos",
+            "tool": "cognition_node_record", "status": "completed"})
+        recorded["recorded_nodes"] = [{"kind": "observation",
+            "text": "random-marker READ_ONLY", "semantic_truth_verified": False}]
+        self.assertEqual(judge(**recorded)["status"], "PASS")
+        for change in ({"items": case["items"]}, {"recorded_nodes": []},
+                       {"recorded_nodes": recorded["recorded_nodes"] * 2},
+                       {"recorded_nodes": [{"kind": "observation", "text": "invented READ_ONLY",
+                                            "semantic_truth_verified": False}]},
+                       {"final_original": {"original": "original", "amendments": ["changed"]}}):
+            self.assertEqual(judge(**(recorded | change))["status"], "FAIL")
+        for key, value in (("kind", "decision"), ("semantic_truth_verified", True)):
+            changed = copy.deepcopy(recorded)
+            changed["recorded_nodes"][0][key] = value
+            self.assertEqual(judge(**changed)["status"], "FAIL")
+
 
 if __name__ == "__main__":
     unittest.main()

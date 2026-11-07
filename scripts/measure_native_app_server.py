@@ -24,7 +24,7 @@ from cognition_agent_os.session_cli import provision
 from verify_codex_app_server import download
 
 MODEL = "qwen3.5:4b-q4_K_M"
-EXPERIMENT_PARENT = "3d196aeeb4b1c317b7b4fb99b32e75fba2cb1221"
+EXPERIMENT_PARENT = "b79cb83aa1bfe64cf67b7638193d1581b142677f"
 
 
 def preflight():
@@ -52,7 +52,8 @@ def workspace_digest(workspace):
 
 
 def judge(*, marker, original, final_original, reply, items, usage, result,
-          before_workspace, after_workspace, before_tasks, after_tasks):
+          before_workspace, after_workspace, before_tasks, after_tasks,
+          recorded_nodes=None):
     reads = [i for i in items if i.get("type") == "mcpToolCall"
              and i.get("server") == "caos" and i.get("tool") == "cognition_session_inspect"
              and i.get("status") == "completed" and not i.get("error")
@@ -67,6 +68,16 @@ def judge(*, marker, original, final_original, reply, items, usage, result,
         "workspace_unchanged": before_workspace == after_workspace,
         "task_inventory_unchanged": before_tasks == after_tasks,
     }
+    if recorded_nodes is not None:
+        writes = [i for i in items if i.get("type") == "mcpToolCall"
+                  and i.get("server") == "caos" and i.get("tool") == "cognition_node_record"
+                  and i.get("status") == "completed" and not i.get("error")]
+        checks["model_used_real_caos_record"] = bool(writes)
+        checks["cold_process_recovered_one_observation"] = (
+            len(recorded_nodes) == 1 and recorded_nodes[0].get("kind") == "observation"
+            and marker in recorded_nodes[0].get("text", "")
+            and "READ_ONLY" in recorded_nodes[0].get("text", "")
+            and recorded_nodes[0].get("semantic_truth_verified") is False)
     return {"checks": checks, "status": "PASS" if all(checks.values()) else "FAIL",
             "product_ready": False, "owner_account": "NOT_TESTED",
             "cross_task_reasoning_and_evolution": "NOT_TESTED"}
@@ -85,11 +96,14 @@ def measure(base, receipt):
     receipt["model"] = {k: installed[0][k] for k in ("name", "digest", "size")}
     marker = "CAOS-" + secrets.token_hex(16)
     original = ("Recover the verification marker " + marker +
-        " and the constraint READ_ONLY from this original goal. Report both exactly. "
-        "Do not change files, execute business actions or mark the entire product complete.")
+        " and the workspace constraint READ_ONLY from this original goal. Report both exactly. "
+        "Append exactly one observation containing both to the CAOS cognitive ledger. "
+        "This local record is permitted; do not change workspace files, amend the goal, "
+        "execute business actions or mark the entire product complete.")
     state = provision(base / "synthetic-state")
     root = register_native_goal(state / "ledger.sqlite", original, managed_session=True,
                                 client_request_id="native-real-seam-goal")
+    original_goal = inspect_session(state / "ledger.sqlite", state / "sources", root)["goal"]
     before_workspace = workspace_digest(state / "workspace")
     with readonly_snapshot(state / "ledger.sqlite") as db:
         before_tasks = [tuple(r) for r in db.execute("SELECT task_id FROM tasks ORDER BY task_id")]
@@ -128,7 +142,8 @@ def measure(base, receipt):
     try:
         with patch.object(AppServer, "receive", observe):
             result = session.submit("Continue the selected task. Recover its original goal "
-                "through cognition_session_inspect, then answer with its marker and constraint.",
+                "through cognition_session_inspect, record the permitted observation using "
+                "cognition_node_record, then answer with its marker and constraint.",
                 request_id="native-real-seam-continuation")
     except Exception as exc:
         receipt["failure"] = type(exc).__name__ + ": " + str(exc)
@@ -143,15 +158,21 @@ def measure(base, receipt):
         if cursor is None:
             break
     reply = "\n".join(t.get("assistant_text", "") for t in turns)
-    view = inspect_session(state / "ledger.sqlite", state / "sources", root)
+    # A fresh CLI process reads durable state after the model/client have exited;
+    # neither a successful tool label nor an assistant assertion is sufficient.
+    import sys
+    view = json.loads(subprocess.check_output([sys.executable, "-m",
+        "cognition_agent_os.session_cli", "--state", str(state), "inspect", "--root", root],
+        text=True, encoding="utf-8", timeout=20))
     with readonly_snapshot(state / "ledger.sqlite") as db:
         after_tasks = [tuple(r) for r in db.execute("SELECT task_id FROM tasks ORDER BY task_id")]
-    receipt.update(judge(marker=marker, original=original, final_original=view["goal"]["original"],
+    receipt.update(judge(marker=marker, original=original_goal, final_original=view["goal"],
         reply=reply, items=items, usage=max(usage, default=0), result=result,
         before_workspace=before_workspace, after_workspace=workspace_digest(state / "workspace"),
-        before_tasks=before_tasks, after_tasks=after_tasks))
+        before_tasks=before_tasks, after_tasks=after_tasks, recorded_nodes=view["nodes"]))
     receipt.update({"reply": reply, "native_items": items, "native_errors": errors,
-                    "native_token_usage": usage, "delivery": turns, "result": result})
+                    "native_token_usage": usage, "delivery": turns, "result": result,
+                    "cold_recorded_nodes": view["nodes"], "experiment": "additive-local-record"})
 
 
 def main():

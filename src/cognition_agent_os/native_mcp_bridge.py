@@ -99,6 +99,15 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return mcp.tool(annotations={"readOnlyHint": True, "destructiveHint": False,
                                      "openWorldHint": False})
 
+    def record_tool():
+        # Only audited additive local ledger records. Keep write-profile gating,
+        # source/grant/CAS checks and historical evidence; never attest truth or
+        # authorize a queued effect. Research with live sources is NOT closed-world.
+        if not allow_goal_writes:
+            return lambda fn: fn
+        return mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False,
+                                     "openWorldHint": False})
+
     @write_tool()
     def native_goal_create(owner_goal: str,
                            client_request_id: str | None = None) -> dict:
@@ -429,7 +438,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 "new_tool_execution_authorized": False,
             }
 
-    @write_tool()
+    @record_tool()
     def native_hypothesis_record(root_task_id: str, origin: str, idea: str,
                                  observation_sha256: str) -> dict:
         """Record a falsifiable method idea, even after source invalidation.
@@ -549,7 +558,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return inspect_session(db_path, fixtures, root_task_id,
                                after_event_id=after_event_id, limit=limit)
 
-    @write_tool()
+    @record_tool()
     def cognition_input_record(root_task_id: str, text: str, origin: str, locator: str,
                                request_id: str, expected_revision: str) -> dict:
         """Preserve user wording or external material without changing the goal.
@@ -584,7 +593,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return history(db_path, root_task_id, after_event_id=after_event_id, limit=limit,
                        include_text=include_text)
 
-    @write_tool()
+    @record_tool()
     def cognition_node_record(root_task_id: str, node: dict, request_id: str,
                               expected_revision: str) -> dict:
         """Persist an evidence dependency, option, hypothesis or method.
@@ -632,7 +641,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         """
         return inspect_contract_outcome(db_path, fixtures, workspace, root_task_id)
 
-    @write_tool()
+    @record_tool()
     def cognition_method_trial(method_root: str, method_node: str,
                                trial_root: str, request_id: str) -> dict:
         """Record a different goal's actual contract result; not a method self-rating."""

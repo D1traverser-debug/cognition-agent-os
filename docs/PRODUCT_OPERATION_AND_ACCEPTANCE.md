@@ -8,6 +8,14 @@ Worker tick and local-model execution reject unmanaged historical roots; their
 read/research paths remain available. The trusted low-level Python API retains
 legacy compatibility, including its arbitrary-goal semantic admission limitation.
 
+In native Auto approval mode, four audited additive local record tools can
+persist hypotheses, inputs, graph nodes and trial observations. They are
+explicitly described as writes, remain absent from a read-only server profile,
+and retain existing grant/source/revision checks. Records do not grant effects
+or verify their own truth. Goal amendment, research with external fetching,
+decision admission and Worker execution retain separate controls; a successful
+memory record is not proof that the full action loop is available.
+
 ## Install and start locally
 
 The first-use launcher runs the existing entry without user-authored JSON or

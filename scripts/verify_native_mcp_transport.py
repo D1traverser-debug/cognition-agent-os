@@ -138,6 +138,8 @@ async def run():
             assert not ({"native_goal_create", "native_decision_admit",
                          "native_hypothesis_record",
                          "native_open_research_record",
+                         "cognition_input_record", "cognition_node_record",
+                         "cognition_method_trial",
                          "native_local_tick", "native_local_model_plan"} & names)
             blocked = await read_client.call_tool(
                 "native_goal_create", {"owner_goal": "must never register"})
@@ -156,15 +158,20 @@ async def run():
                      "cognition_session_inspect", "cognition_inputs_inspect",
                      "cognition_client_history", "cognition_contract_outcome",
                      "cognition_method_trials"}
+            records = {"native_hypothesis_record", "cognition_input_record",
+                       "cognition_node_record", "cognition_method_trial"}
             for tool in registered:
-                if tool.name in reads:
+                if tool.name in reads | records:
                     assert tool.annotations is not None, tool.name
                     hints = tool.annotations.model_dump(by_alias=True)
-                    assert hints["readOnlyHint"] is True, tool.name
+                    assert hints["readOnlyHint"] is (tool.name in reads), tool.name
                     assert hints["destructiveHint"] is False, tool.name
                     assert hints["openWorldHint"] is False, tool.name
                 else:
                     assert tool.annotations is None or tool.annotations.read_only_hint is not True, tool.name
+                    assert (tool.annotations is None or
+                            tool.annotations.destructive_hint is not False or
+                            tool.annotations.open_world_hint is not False), tool.name
             tools = {x.name for x in registered}
             create_spec = next(x for x in registered if x.name == "native_goal_create")
             assert "allow_public_discovery" not in (
