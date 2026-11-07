@@ -1,5 +1,32 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-07: first-use setup reuses the proven entry
+
+Changed-source model test `ba103cf` / Actions `42324264770` passed the real native
+MCP/random-marker oracle; all mandatory Windows/Linux checks passed. Artifact
+`13555131081` retains the unchanged model digest and actual tool trace. Cumulative
+tokens were 43,542 versus the failed attempt's 118,037; this pair is not a general
+efficiency benchmark. Full cognition/owner acceptance remains open.
+
+The next usability gap is independently observable: a source download still
+requires manual environment, package, native client and state commands before
+typing a task. Compare a new browser service/controller, a platform-specific
+bundled executable, and a thin cross-platform setup launcher. Choose the launcher
+for the current terminal entry: reuse Python venv/pip already used by delivery CI,
+the checksum-pinned official-client downloader, and existing init/restore/doctor/
+chat commands. This adds no scheduler, goal store or account-login implementation.
+Bundled executables remain a candidate if Python installation is a measured barrier;
+a web service would not repair missing inference/account access or goal quality.
+
+Setup owns only a marked runtime, verifies cached client identity, isolates Python
+search paths, reinstalls changed source and keeps private state outside Git and
+outside disposable software. Existing/unowned state is never reset. `--check` is
+read-only; setup-only never calls a model. Native CI now runs the actual setup and
+reuse with a pinned client and an already-populated goal, then checks the same
+MCP/control behavior and unchanged ledger. This must pass on both platforms before
+claiming launcher wiring; owner-machine convenience and full product quality are
+separate, still-open checks. No one-click claim can remove model login requirements.
+
 ## 2026-11-07: validate model-originated permission routing, not only direct RPC
 
 Real inference at `3d196ae` / Actions `42265984438` failed after 900 seconds:

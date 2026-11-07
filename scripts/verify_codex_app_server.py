@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import urllib.request
@@ -76,6 +77,19 @@ def verify(client: str, base: Path):
                                 client_request_id="native-protocol-ci-0001")
     with readonly_snapshot(state / "ledger.sqlite") as db:
         before = db.execute("SELECT count(*) FROM events").fetchone()[0]
+    # Actual first-use setup with the pinned client, no account or model call.
+    # Reuse an existing goal: the launcher must never reinitialize this state.
+    launcher = Path(__file__).resolve().parents[1] / "start_caos.py"
+    runtime = base / "first use runtime"
+    startup = [sys.executable, str(launcher), "--state", str(state),
+               "--runtime-dir", str(runtime), "--client", client]
+    setup = subprocess.run([*startup, "--setup-only"], capture_output=True,
+                           text=True, encoding="utf-8", timeout=180)
+    assert setup.returncode == 0, setup.stderr[-3000:]
+    assert json.loads(setup.stdout.splitlines()[-1])["status"] == "LOCAL_ENTRY_PREPARED"
+    check = subprocess.check_output([*startup, "--check"], text=True,
+                                    encoding="utf-8", timeout=20)
+    assert json.loads(check)["runtime_current"] is True
     session = ChatSession(state, root, executable=client, display=lambda _: None)
     try:
         session._start()  # Same production initialization/MCP settings as caos chat.
@@ -135,6 +149,7 @@ def verify(client: str, base: Path):
             "missing_required_mcp_rejected": True, "ledger_unchanged": True,
             "native_paused_goal_readback": True,
             "native_cold_paused_resume_readback": True,
+            "first_use_setup_and_reuse": True,
             "tool_count": len(names)}
 
 

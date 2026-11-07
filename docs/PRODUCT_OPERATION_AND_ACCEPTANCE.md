@@ -10,6 +10,27 @@ legacy compatibility, including its arbitrary-goal semantic admission limitation
 
 ## Install and start locally
 
+The first-use launcher runs the existing entry without user-authored JSON or
+environment-variable setup. With Python 3.11+ installed, double-click
+`Start-CAOS.cmd` on Windows, or run `python3 start_caos.py` on Linux. It reuses an
+installed Codex; otherwise it downloads the same checksum-pinned official client
+used by CI. It installs this checkout plus MCP into its owned `runtime/bootstrap`
+environment, reinstalls when Python source/package metadata changes, and keeps
+private session data outside the checkout (`LOCALAPPDATA/CAOS/session` on Windows,
+`XDG_DATA_HOME/CAOS/session` or `~/.local/share/CAOS/session` on Linux).
+
+It never logs in, changes provider/account settings or buys inference. An existing
+working Codex provider/account remains necessary. `--setup-only` prepares without
+inference; `--check` only inspects setup. An explicit `--client PATH` never silently
+falls back. Unowned runtime directories and changed cached binaries are rejected.
+To inherit existing work, use `--restore PRIVATE_SNAPSHOT.zip --state NEW_PATH`;
+restoration rejects existing destinations and retains the normal effect fence.
+Subsequent starts read existing state and never initialize it again. The removable
+runtime contains software, while the selected private state contains your work.
+Neither startup nor a restored backup authorizes business actions.
+
+For manual installation:
+
 Requires Python 3.11+ for MCP. Run from the reviewed repository checkout:
 
 ```bash
