@@ -1,5 +1,34 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-07: validate model-originated permission routing, not only direct RPC
+
+Real inference at `3d196ae` / Actions `42265984438` failed after 900 seconds:
+positive model usage (118,037 cumulative tokens), no successful CAOS read and
+no recovered marker. All mandatory engineering jobs passed. The retained
+artifact `13528556356` shows every attempted CAOS read rejected with
+`MCP tool call requires approval, but approval policy is never`. This is not
+absence of inference or merely model incapacity: earlier direct native RPC
+calls bypassed the model-originated approval route.
+
+Pinned Codex `rust-v0.167.0`, `codex-rs/core/src/mcp_tool_call.rs`,
+`requires_mcp_tool_approval` defaults missing hints to possible destructive/open
+world action; known read-only, non-destructive tools need no approval in Auto
+mode. The CAOS server supplied no annotations. Select truthful read-only,
+non-destructive, closed-world annotations for the 12 audited local read tools.
+Do not globally approve the server, label writers as reads, weaken source grants,
+or swap models to conceal the integration defect. Other client approval policy
+may still require explicit approval. Writers remain subject to their existing
+client and server controls; this repair does not make them unattended actions.
+
+The real MCP metadata assertion failed on `native_goal_list` before repair and
+passed afterward, alongside the existing permission/effect negative cases.
+An exact native approval-configuration refusal is now durably identified and
+stops the chat invocation; repeating it cannot repair configuration. Unknown
+in-flight effects remain unknown, and ordinary correctable tool errors remain
+available to the native reasoning loop. A changed-source second local-model
+probe uses the same model/case class and oracle to test the permission hypothesis.
+Its outcome remains pending until actual readback; passing metadata is not enough.
+
 ## 2026-11-07: commit completed replies at their observation boundary
 
 A subprocess counterexample emitted a completed assistant item and then lost

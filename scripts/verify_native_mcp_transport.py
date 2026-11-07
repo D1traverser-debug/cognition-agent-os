@@ -149,6 +149,22 @@ async def run():
         # Real negotiated MCP transport, not a direct Python function test.
         async with Client(server(allow_tick=False)) as client:
             registered = (await client.list_tools()).tools
+            # Model-originated native calls consult annotations; direct RPC calls do not.
+            reads = {"native_goal_list", "native_goal_inspect", "native_capabilities",
+                     "native_procedure_evidence", "native_owner_outcome",
+                     "native_memory_candidates_inspect", "native_source_read",
+                     "cognition_session_inspect", "cognition_inputs_inspect",
+                     "cognition_client_history", "cognition_contract_outcome",
+                     "cognition_method_trials"}
+            for tool in registered:
+                if tool.name in reads:
+                    assert tool.annotations is not None, tool.name
+                    hints = tool.annotations.model_dump(by_alias=True)
+                    assert hints["readOnlyHint"] is True, tool.name
+                    assert hints["destructiveHint"] is False, tool.name
+                    assert hints["openWorldHint"] is False, tool.name
+                else:
+                    assert tool.annotations is None or tool.annotations.read_only_hint is not True, tool.name
             tools = {x.name for x in registered}
             create_spec = next(x for x in registered if x.name == "native_goal_create")
             assert "allow_public_discovery" not in (

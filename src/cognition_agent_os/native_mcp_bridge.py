@@ -93,6 +93,11 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     # Registration is the actual server-side permission boundary. A caller
     # without a write profile must not even discover queueing/ledger tools.
     write_tool = mcp.tool if allow_goal_writes else (lambda: (lambda fn: fn))
+    # Hints describe actual behavior to native model-call approval routing.
+    # They do not replace source disclosure grants or effect-time checks.
+    def read_tool():
+        return mcp.tool(annotations={"readOnlyHint": True, "destructiveHint": False,
+                                     "openWorldHint": False})
 
     @write_tool()
     def native_goal_create(owner_goal: str,
@@ -129,12 +134,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return {"status": "NATIVE_GOAL_REGISTERED", "root_task_id": root,
                 "owner_outcome_verified": False}
 
-    @mcp.tool()
+    @read_tool()
     def native_goal_list(after_task_id: str | None = None) -> dict:
         """Discover original roots without selecting one; follow next_after_task_id."""
         return list_native_goals(db_path, workspace, fixtures, after_task_id)
 
-    @mcp.tool()
+    @read_tool()
     def native_goal_inspect(
             root_task_id: str,
             research_before_event_id: int | None = None) -> dict:
@@ -150,7 +155,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             db_path, workspace, fixtures, root_task_id,
             research_before_event_id=research_before_event_id)
 
-    @mcp.tool()
+    @read_tool()
     def native_procedure_evidence(root_task_id: str) -> dict:
         """Read current independent cross-root trials and their CAS digest.
 
@@ -202,7 +207,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 "cross_root_procedure_evidence_sha256": digest,
                 "owner_outcome_verified": False}
 
-    @mcp.tool()
+    @read_tool()
     def native_owner_outcome(root_task_id: str) -> dict:
         """Independently check the entire original owner LOCAL postcondition.
 
@@ -213,7 +218,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return inspect_owner_local_outcome(
             db_path, workspace, fixtures, root_task_id)
 
-    @mcp.tool()
+    @read_tool()
     def native_capabilities(root_task_id: str) -> dict:
         """Discover live registered tools, current sources, and bounded effects."""
         observed = inspect_native_goal(
@@ -243,7 +248,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     # requires operator opt-in for local source disclosure; writes additionally
     # require the existing MCP write profile AND the original SQLite grant.
     if allow_source_read:
-        @mcp.tool()
+        @read_tool()
         def native_memory_candidates_inspect(
                 root_task_id: str, after_memory_id: str | None = None,
                 limit: int = 50) -> dict:
@@ -286,7 +291,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                     supersedes_id=supersedes_id)
 
     if allow_source_read:
-        @mcp.tool()
+        @read_tool()
         def native_source_read(root_task_id: str, file_name: str,
                                offset_chars: int = 0) -> dict:
             """EXPLICITLY ENABLED disclosure of local untrusted source text.
@@ -531,7 +536,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     from .effect_contract import inspect_contract_outcome
     from .method_learning import record_trial, inspect_trials
 
-    @mcp.tool()
+    @read_tool()
     def cognition_session_inspect(root_task_id: str, after_event_id: int = 0,
                                    limit: int = 32) -> dict:
         """Recover exact goal/corrections and source-validated dependency graph.
@@ -555,7 +560,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return record_input(db_path, fixtures, root_task_id, text, origin=origin,
                             locator=locator, request_id=request_id, expected_revision=expected_revision)
 
-    @mcp.tool()
+    @read_tool()
     def cognition_inputs_inspect(root_task_id: str, after_event_id: int = 0,
                                  limit: int = 4) -> dict:
         """Page exact input text and tentative interpretation IDs; never grants."""
@@ -564,7 +569,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return inspect_inputs(db_path, fixtures, root_task_id,
                               after_event_id=after_event_id, limit=limit)
 
-    @mcp.tool()
+    @read_tool()
     def cognition_client_history(root_task_id: str, after_event_id: int = 0,
                                   limit: int = 4, include_text: bool = False) -> dict:
         """Read delivery receipts and untrusted prior assistant replies, not grants.
@@ -618,7 +623,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return reopen_node(db_path, fixtures, root_task_id, node_id, reason,
                            request_id=request_id, expected_revision=expected_revision)
 
-    @mcp.tool()
+    @read_tool()
     def cognition_contract_outcome(root_task_id: str) -> dict:
         """Independently read files against the operator's executable outcomes.
 
@@ -634,7 +639,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         return record_trial(db_path, fixtures, workspace, method_root, method_node,
                             trial_root, request_id)
 
-    @mcp.tool()
+    @read_tool()
     def cognition_method_trials(method_root: str, method_node: str) -> dict:
         """Revalidate method/source/result history; stale/failing trials reopen study."""
         return inspect_trials(db_path, fixtures, workspace, method_root, method_node)

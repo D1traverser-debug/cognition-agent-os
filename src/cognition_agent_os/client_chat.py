@@ -394,6 +394,16 @@ class ChatSession:
                 self.display(terminal_text(params.get("delta", "")))
             elif method == "item/completed":
                 item = params.get("item", {})
+                if (item.get("type") == "mcpToolCall" and item.get("server") == "caos"
+                        and item.get("status") == "failed"
+                        and (item.get("error") or {}).get("message") ==
+                            "MCP tool call requires approval, but approval policy is never"):
+                    # A model cannot repair this native approval configuration by
+                    # repeating calls or inventing another root. Preserve the
+                    # bounded cause without exposing arbitrary tool arguments.
+                    journal(self.state, self.root, request_id, "TOOL_APPROVAL_BLOCKED",
+                            turn_id=candidate, tool=item.get("tool"))
+                    raise RuntimeError("CLIENT_CAOS_TOOL_REQUIRES_APPROVAL")
                 identity = (candidate, item.get("id"))
                 if item.get("type") == "agentMessage" and identity not in seen_items:
                     text = item.get("text", "")

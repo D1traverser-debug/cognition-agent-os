@@ -113,6 +113,11 @@ as a blind retry. An already-running effect may have completed; terminating the
 client is not rollback. Failed/interrupted turns do not return a successful turn
 status. Even a completed turn is separate from the independent contract outcome.
 
+A native CAOS approval-configuration refusal is saved and stops the invocation;
+repeated model calls cannot repair that configuration. Local read tools advertise
+their actual read-only behavior. Write tools are not auto-approved, and server
+authorization remains independent of these client hints.
+
 **Validation boundary:** real subprocess protocol peers and cold MCP readback
 are tested. Official Codex 0.167.0 also passed real CAOS discovery/goal readback
 and required-server failure rejection on Linux and Windows (commit `5f1ccc8`,

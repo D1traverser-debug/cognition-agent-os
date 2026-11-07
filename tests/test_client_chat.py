@@ -106,6 +106,11 @@ for line in sys.stdin:
         emit({'id':100,'method':'item/commandExecution/requestApproval','params':{'threadId':'thread-1'}})
     elif msg.get('id')==100:
         assert msg['result']['decision']=='decline'
+        if mode in {'mcp_approval_blocked','mcp_recoverable_failure'}:
+            notify('item/completed',{'threadId':'thread-1','turnId':'turn-1','item':{
+                'id':'blocked','type':'mcpToolCall','server':'caos','tool':'cognition_session_inspect',
+                'status':'failed','error':{'message':'MCP tool call requires approval, but approval policy is never' if mode=='mcp_approval_blocked' else 'STALE_REVISION'},
+                'arguments':{'private':'do not copy into history'}}})
         if mode=='question':
             emit({'id':101,'method':'item/tool/requestUserInput','params':{'threadId':'thread-1','questions':[{'id':'q','question':'Which original source?'}]}})
             continue
@@ -183,6 +188,22 @@ class ClientChat(unittest.TestCase):
         self.assertEqual((self.state / "dispatch-count").read_text().splitlines(), ["1"])
         turns = client_chat.history(self.state / "ledger.sqlite", self.root)["turns"]
         self.assertEqual(turns[-1]["status"], "DELIVERY_UNKNOWN")
+
+    def test_native_approval_configuration_failure_stops_without_blind_retry(self):
+        chat, peer = self.chat("mcp_approval_blocked")
+        with peer, self.assertRaisesRegex(RuntimeError, "CLIENT_CAOS_TOOL_REQUIRES_APPROVAL"):
+            chat.submit("continue", request_id="approval-block")
+        turns = client_chat.history(self.state / "ledger.sqlite", self.root, limit=20)["turns"]
+        self.assertEqual([t["status"] for t in turns],
+                         ["DISPATCHING", "TOOL_APPROVAL_BLOCKED", "DELIVERY_UNKNOWN"])
+        self.assertNotIn("private", json.dumps(turns))
+        self.assertEqual((self.state / "dispatch-count").read_text().splitlines(), ["1"])
+
+    def test_correctable_mcp_failure_is_left_to_native_cognition(self):
+        chat, peer = self.chat("mcp_recoverable_failure")
+        with peer:
+            result = chat.submit("recover the latest version", request_id="recoverable-mcp")
+        self.assertEqual(result["status"], "CLIENT_TURN_COMPLETED")
 
     def test_connection_failure_preserves_input_without_claiming_dispatch(self):
         chat, mock = self.chat("startup_failure")
