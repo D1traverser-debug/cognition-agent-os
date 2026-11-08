@@ -769,6 +769,34 @@ jobs:
             ${{ runner.temp }}/caos-native-model.log
           if-no-files-found: warn
 
+  experimental_native_execution_boundary:
+    # No inference or owner files: compare native sandbox reuse with typed-only execution.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.run_attempt == 1 && contains(github.event.pull_request.body, '[run-native-execution-boundary]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
+      - name: Measure allowed and prohibited native filesystem operations
+        env:
+          PYTHONPATH: src
+        run: python scripts/measure_native_execution_boundary.py --download --output native-execution-boundary.json
+      - name: Preserve independently checked native boundary result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-execution-boundary-${{ matrix.os }}
+          path: native-execution-boundary.json
+          if-no-files-found: error
+
   experimental_real_native_cognition:
     # Opt-in real Ollama inference on an ephemeral public CI runner.
     # Synthetic independent owner-acceptance labels and actual Host artifacts.
@@ -1036,7 +1064,7 @@ jobs:
     # Always runs after other jobs. A green PR cannot hide a skipped core gate.
     # Opt-in model/child experiments remain explicitly UNTESTED when skipped.
     if: ${{ always() }}
-    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, native_feedback_seam_ab, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout, experimental_native_app_server]
+    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, native_feedback_seam_ab, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout, experimental_native_app_server, experimental_native_execution_boundary]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

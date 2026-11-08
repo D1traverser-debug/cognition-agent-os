@@ -1,6 +1,68 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-08: challenge the typed-only action architecture before expanding it
+
+The original goal needs unfamiliar tasks and low owner supervision. Current
+`capability_catalog` exposes only four registered objectives; `install_contract`
+requires an operator-authored exact effect/check document. These are real scoped
+protections, but neither is a generic execution solution or a reasonable final
+interface for a nontechnical owner. A successful cognitive-node write will not
+close this separate architecture gap.
+
+Compare (a) continuing task-specific Worker additions, (b) building another
+general shell/execution harness, (c) reusing native Codex execution under an
+explicit restricted workspace, and (d) a managed Agents API. Keep (a) as the
+existing protected baseline, reject it as the generalization strategy; (b)
+duplicates sandbox/process/recovery responsibilities; (d) adds paid-account and
+deployment dependencies outside this experiment. Investigate (c) first without
+changing production permissions or discarding the existing ledger.
+
+Primary evidence: the [official integration architecture](https://developers.openai.com/blog/codex-as-a-platform)
+separates application context/consent from the reusable harness; the
+[app-server command/exec contract](https://learn.chatgpt.com/docs/app-server)
+exposes a sandboxed argv command without inference. Pinned Codex rust-v0.167.0
+`command_exec_processor.rs` blob `1d5c3c7056057512591ff64d952947495176fe75`
+applies the requested sandbox through the configured permission constraints and
+uses UseDefault execution. `command_exec.rs` blob
+`c71aff3ddf22da4958d09351b9d70f05a68d9a4b` rejects streaming/custom output caps
+for the Windows restricted-token path. The probe therefore uses buffered calls,
+fixed code/argv, native defaults for output caps, no network, and explicitly
+excludes broad temporary-directory write allowances.
+
+Strongest counterexamples: a sandbox can reject everything because it is broken;
+an error can occur after an unauthorized write; a symlink can escape a path
+allowlist; Windows may not have a usable native sandbox. The independent probe
+requires a real allowed write and exact byte readback plus rejected read-only,
+sibling and (where supported) symlink writes with unchanged protected bytes.
+Unavailable symlinks remain NOT_TESTED. This is a public disposable CI opt-in,
+not a change to `caos chat`, owner credentials, worker grants or model budgets.
+The current Work binary exited before initialization; that is FAIL to establish
+this boundary, not proof that sandbox restrictions worked. Exact pinned release
+results on Linux and Windows remain pending.
+
+Even a PASS only qualifies a filesystem primitive. Goal fidelity, current-grant
+revocation during native execution, evidence isolation, confidential reads,
+network effects, unknown ACK recovery and independent semantic acceptance remain
+unproved. Do not enable workspace writes in production from this result alone.
+If native enforcement fails, compare a genuinely isolated external executor or
+retain the narrow baseline; never use an unsandboxed fallback to make it pass.
+
 ## 2026-11-07: publish the actual cognitive-node input contract
+
+**Observed retest, 2026-11-08:** `40c04f0` / Actions `42474730960`
+FAILED at 900 seconds, 70,085 cumulative native tokens, zero persisted nodes.
+Artifact `13615411934`, SHA256
+`020abf54074a42f2e84f82fd6e060b94b5a9594195de9c946f16c0e77a3013ed`,
+shows all node fields supplied. After a visible stale-dependency rejection the
+model removed an invented `goal-0` dependency, but retained an invented absolute
+file path for the goal stored in SQLite. Current goal/workspace/task inventory
+remained unchanged. This falsifies schema completeness as a sufficient fix for
+the record task; it does not falsify the published schema's structural checks.
+Investigate provenance affordances and model suitability next: source_refs
+refer to real local files, while original goals are ledger values. Do not create
+fake files, silently remove references, raise time limits or rerun unchanged
+source to call this successful memory/evolution. The execution-boundary probe
+below/above is a separate no-inference architecture discriminator.
 
 The `d20c6b8` / Actions `42371600946` retest again FAILED at 900 seconds;
 all mandatory checks passed. Artifact `13574622181`, SHA256

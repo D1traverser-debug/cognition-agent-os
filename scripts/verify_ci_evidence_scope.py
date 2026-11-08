@@ -32,6 +32,7 @@ OPTIONAL = (
     "experimental_open_goal_relevance",
     "native_child_readonly_holdout",
     "experimental_native_app_server",
+    "experimental_native_execution_boundary",
 )
 
 
