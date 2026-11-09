@@ -753,7 +753,7 @@ jobs:
             sleep 2
           done
           test "$ready" = 1
-          timeout 420 ollama pull qwen3.5:4b-q4_K_M
+          timeout 420 ollama pull qwen3.5:9b-q4_K_M
       - name: Run production ChatSession through native inference and real MCP
         env:
           PYTHONPATH: src

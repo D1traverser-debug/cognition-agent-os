@@ -23,8 +23,10 @@ from cognition_agent_os.native_decision import register_native_goal
 from cognition_agent_os.session_cli import provision
 from verify_codex_app_server import download
 
-MODEL = "qwen3.5:4b-q4_K_M"
-EXPERIMENT_PARENT = "d21f99d1a07b54070245614df36205f9fcb6c9d4"
+# Capacity discriminator only: same task, tools, oracle and 900s deadline as
+# the observed 4B failure at 98b245b. This is not a new production default.
+MODEL = "qwen3.5:9b-q4_K_M"
+EXPERIMENT_PARENT = "fc0f8a39bc55714995245ad82baa6c5eb52e0d0f"
 
 
 def preflight():

@@ -1,5 +1,28 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-09: isolate model capacity before further changing the tool contract
+
+`98b245b` repeatedly invented a dependency despite visible validation feedback.
+Competing causes remain limited model capability, tool/schema complexity, native
+provider compatibility, and CPU/deadline limits. Another error-message edit would
+not distinguish them. Compare reducing the tools/schema, using a paid provider,
+and changing only model capacity in the existing free disposable experiment.
+Choose one 9B trial first: [the official Ollama tag](https://ollama.com/library/qwen3.5:9b-q4_K_M)
+is the same model family and Q4_K_M class, approximately 6.6GB; record the actual
+downloaded full digest, not merely the mutable tag or marketing benchmark.
+The 4B result remains the historical baseline. Keep the synthetic task, full
+tool surface, pinned native client/runtime, context settings, 900-second deadline
+and independent cold-record oracle unchanged. No owner account or production
+model default changes. Preflight permits only the first attempt on the direct
+reviewed child of `fc0f8a3`; no rerun until another discriminating decision.
+
+Falsifiers: if 9B also fabricates references, capacity alone has not solved the
+interface; if it cannot finish on CPU/memory within the same budget, this free
+deployment route is unsuitable at that budget, not proof of universal model
+inability. A PASS would establish only this durable goal-observation seam and
+justify a fresh unfamiliar-task trial, never complete cognition/evolution.
+Reducing schema or auto-filling dependency/CAS fields is not part of this trial.
+
 ## 2026-11-09: recover selected evidence without loading an expanding history
 
 Actions `42545899803` at `98b245b` exposed two cold-entry failures on BOTH
