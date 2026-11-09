@@ -97,6 +97,16 @@ explicit CLI route remains available. See the official
 
 ### Plain-language terminal entry
 
+Before sending a message to a model, this entry verifies native filesystem
+read-only enforcement using disposable canaries. Windows additionally requires
+the native `windowsSandbox/readiness` result to be `ready`. Missing setup or a
+failed check preserves the message and stops before inference; it never silently
+disables isolation. Configure the native client's Windows sandbox through its
+own supported setup flow, then retry the saved task deliberately. CAOS does not
+perform administrator/account setup automatically. See the
+[official Windows sandbox guide](https://learn.chatgpt.com/docs/windows/windows-sandbox).
+This filesystem check is not proof of network isolation or semantic goal safety.
+
 After explicit `init` and installation/sign-in of a compatible Codex client:
 
 ```bash

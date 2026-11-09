@@ -16,13 +16,16 @@ import sys
 import tempfile
 
 from cognition_agent_os.client_chat import AppServer
+from cognition_agent_os.native_sandbox import verify_readonly_boundary
 from verify_codex_app_server import download
 
 DENIED = 73
 WRITE_PROBE = (
-    "from pathlib import Path\nimport sys\n"
+    "from pathlib import Path\nimport sys,errno\n"
     "try:\n    Path(sys.argv[1]).write_text(sys.argv[2])\n"
-    "except PermissionError:\n    sys.exit(73)\n"
+    "except OSError as exc:\n"
+    "    if exc.errno in (errno.EACCES,errno.EPERM,errno.EROFS): sys.exit(73)\n"
+    "    raise\n"
 )
 
 
@@ -46,7 +49,7 @@ def judge(cases):
             "network_and_read_confidentiality": "NOT_TESTED"}
 
 
-def measure(client, base):
+def measure(client, base, *, windows_sandbox=None):
     workspace = base / "candidate workspace 中文"
     workspace.mkdir()
     sibling = base / "protected-sibling.txt"
@@ -57,12 +60,19 @@ def measure(client, base):
     policy = {"type": "workspaceWrite", "writableRoots": [str(workspace)],
               "networkAccess": False, "excludeSlashTmp": True,
               "excludeTmpdirEnvVar": True}
-    server = AppServer([client, "app-server", "--listen", "stdio://"], workspace, timeout=30)
+    argv = [client, "app-server", "--listen", "stdio://"]
+    if windows_sandbox:
+        argv.extend(["-c", 'windows.sandbox=' + json.dumps(windows_sandbox)])
+    server = AppServer(argv, workspace, timeout=30)
     cases = {}
     try:
         server.request("initialize", {"clientInfo": {
             "name": "caos_boundary_probe", "version": "0.0.1"}})
         server.send({"method": "initialized", "params": {}})
+        try:
+            entry_preflight = verify_readonly_boundary(server, workspace)
+        except RuntimeError as exc:
+            entry_preflight = {"status": "BLOCKED", "reason": str(exc)}
 
         def write(path, selected_policy):
             # Fixed probe code and argv; never execute model/source-provided code.
@@ -94,7 +104,7 @@ def measure(client, base):
                                 "unchanged": sibling.read_bytes() == original}
     finally:
         server.close()
-    return {**judge(cases), "cases": cases}
+    return {**judge(cases), "cases": cases, "production_entry_preflight": entry_preflight}
 
 
 def main():
@@ -103,6 +113,8 @@ def main():
     group.add_argument("--download", action="store_true")
     group.add_argument("--client")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--windows-sandbox", choices=["unelevated", "mxc"],
+                        help="Explicit disposable experiment only; no saved account change")
     args = parser.parse_args()
     if args.output.exists():
         parser.error("output must be a new receipt path")
@@ -119,7 +131,8 @@ def main():
                     raise ValueError("CLIENT_NOT_FOUND")
             receipt["client_version"] = subprocess.check_output(
                 [client, "--version"], text=True, encoding="utf-8", timeout=20).strip()
-            receipt.update(measure(client, base))
+            receipt["requested_windows_sandbox"] = args.windows_sandbox
+            receipt.update(measure(client, base, windows_sandbox=args.windows_sandbox))
     except Exception as exc:
         receipt["failure"] = type(exc).__name__ + ": " + str(exc)
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -19,6 +19,7 @@ from .client_launch import prepare_launch
 from .cognitive_session import inspect_session, record_input, _identity
 from .effect_contract import inspect_contract_outcome
 from .ledger import connect_existing, readonly_snapshot, event
+from .native_sandbox import verify_readonly_boundary
 
 
 def journal(state: Path, root: str, request_id: str, status: str, **details):
@@ -238,8 +239,10 @@ class ChatSession:
             text, origin="client_user", locator=locator, request_id=request_id,
             expected_revision=view["revision_token"])
 
-    def _start(self, *, on_resume=None):
+    def _start(self, *, on_resume=None, before_thread=None):
         if self.server is not None:
+            if before_thread:
+                before_thread()
             return
         # Reuse the production MCP settings; the native client owns inference.
         argv = [self.plan["argv"][0], "app-server", "--listen", "stdio://", *self.plan["argv"][1:-1]]
@@ -249,6 +252,8 @@ class ChatSession:
         self.server.request("initialize", {"clientInfo": {
             "name": "cognition_agent_os", "title": "CAOS", "version": "0.0.1"}})
         self.server.send({"method": "initialized", "params": {}})
+        if before_thread:
+            before_thread()
         parameters = {
             "cwd": str(self.state / "workspace"),
             "sandbox": "read-only", "approvalPolicy": "never",
@@ -432,7 +437,9 @@ class ChatSession:
                         input_event_id=saved["event_id"], thread_id=self.resume_thread,
                         goal_budget=self.goal_budget, native_resume=True)
                 dispatched = True
-            self._start(on_resume=record_resume_dispatch)
+            self._start(on_resume=record_resume_dispatch,
+                        before_thread=lambda: verify_readonly_boundary(
+                            self.server, self.state / "workspace"))
             if not dispatched:
                 journal(self.state, self.root, request_id, "DISPATCHING",
                         input_event_id=saved["event_id"], thread_id=self.thread,

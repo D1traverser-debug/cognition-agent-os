@@ -32,6 +32,10 @@ DIRECT_FILE_WRITERS = frozenset({
     # Hash/path/size validation precedes this staged write; restored execution
     # is fenced. See CognitiveSessions snapshot and adversarial archive tests.
     ("session_archive", "restore_session"),
+    # Trusted entry preflight only: one random canary inside a fresh temporary
+    # directory, removed on every path. Never a model-callable writer or an
+    # owner artifact; no-dispatch/false-denial tests cover observed failures.
+    ("native_sandbox", "verify_readonly_boundary"),
 })
 
 ARTIFACT_STORES = frozenset({

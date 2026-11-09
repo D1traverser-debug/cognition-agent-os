@@ -775,7 +775,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            sandbox_args: ''
+          - os: windows-latest
+            sandbox_args: '--windows-sandbox unelevated'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 8
     steps:
@@ -788,7 +792,7 @@ jobs:
       - name: Measure allowed and prohibited native filesystem operations
         env:
           PYTHONPATH: src
-        run: python scripts/measure_native_execution_boundary.py --download --output native-execution-boundary.json
+        run: python scripts/measure_native_execution_boundary.py --download --output native-execution-boundary.json ${{ matrix.sandbox_args }}
       - name: Preserve independently checked native boundary result
         if: always()
         uses: actions/upload-artifact@v4

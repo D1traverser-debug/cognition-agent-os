@@ -1,5 +1,46 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-09: an advertised read-only policy is not observed enforcement
+
+Actions `42476051962` at `f3d3ab1` passed mandatory engineering checks, but both
+new native execution probes reported FAIL. Preserve the distinct findings:
+Linux allowed the intended write and rejected all prohibited writes with EROFS;
+the probe incorrectly accepted only Python PermissionError. Windows, using the
+unconfigured default, actually wrote the read-only target and protected sibling,
+including through a symlink. ZIP digests are respectively
+`553417d94268d5f89f91fb44376325f40a03b3892f30c7b3fcd9357daabf0d3b`
+and `ae4bfcc30f51d3c88e97c2d14cf8b0a3ca15a86756bb9e4b708116be7428fe25`.
+Do not relabel either historical FAIL as a passed run.
+
+The [official Windows implementation guide](https://learn.chatgpt.com/docs/windows/windows-sandbox)
+distinguishes MXC, elevated and weaker unelevated isolation. The pinned v0.167.0
+app-server schema exposes windowsSandbox/readiness with null parameters and
+ready/notConfigured/updateRequired statuses. Selecting sandbox=read-only alone
+therefore cannot establish the required Windows boundary. Requiring an OS name,
+trusting configuration text, or globally accepting arbitrary nonzero exits would
+all miss demonstrated counterexamples.
+
+Correct the experiment to recognize ONLY EACCES, EPERM and EROFS from its fixed
+write probe; unrelated errors/timeouts still fail. The Windows follow-up opts
+into unelevated only for the disposable process, as a different candidate, not
+an owner-account change or a production fallback. Its weaker network isolation
+remains explicitly unqualified.
+
+For production text entry, before ANY new turn or goal activation/resume, require
+native Windows readiness where applicable AND an actual read-only canary check
+in the existing workspace. A successful read proves the probe executed; its
+specific write-denial errno and independent unchanged bytes prove the tested
+filesystem refusal. Unknown output, crashes, false denial after a write and
+missing setup block inference, keep the original input and close the client.
+No auto-setup, weaker mode selection, permission grant, retry or second executor
+is introduced. Internal control-only tests may still initialize native RPC
+without inference; this is distinct from the guarded submit path.
+
+The pre-fix source fails the new no-dispatch counterexample; the corrected entry
+and adjacent normal/resume/input-journal cases pass locally. Cross-platform
+readback remains pending. These checks do not certify network confidentiality,
+generic goal/action semantics, cross-task cognition or product readiness.
+
 ## 2026-11-08: challenge the typed-only action architecture before expanding it
 
 The original goal needs unfamiliar tasks and low owner supervision. Current

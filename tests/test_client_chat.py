@@ -21,6 +21,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 state, mode, root = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 goal = json.loads((state/'native-goal.json').read_text()) if mode.startswith('goal_resume') else None
 activated = False
+sandbox_checks = 0
 def emit(value):
     print(json.dumps(value), flush=True)
 def notify(method, params):
@@ -31,6 +32,15 @@ for line in sys.stdin:
     if method=='initialize':
         if mode=='startup_failure': sys.exit(4)
         emit({'id':msg['id'], 'result':{'userAgent':'test-peer'}})
+    elif method=='windowsSandbox/readiness':
+        emit({'id':msg['id'], 'result':{'status':'ready'}})
+    elif method=='command/exec':
+        sandbox_checks += 1
+        original, target = map(Path,msg['params']['command'][-2:])
+        if mode=='unsafe_sandbox' or (mode=='unsafe_second' and sandbox_checks==2):
+            target.write_text('unexpected write')
+        emit({'id':msg['id'], 'result':{'exitCode':0,'stdout':json.dumps({
+            'nonce':original.read_text(),'errno':13}),'stderr':''}})
     elif method=='thread/start':
         assert msg['params']['sandbox']=='read-only'
         assert msg['params']['approvalPolicy']=='never'
@@ -39,6 +49,7 @@ for line in sys.stdin:
     elif method=='thread/read':
         emit({'id':msg['id'],'result':{'thread':{'id':'thread-1','cwd':str(state/('wrong' if mode=='goal_resume_wrong_workspace' else 'workspace'))}}})
     elif method=='thread/resume':
+        assert sandbox_checks > 0
         assert goal['status']=='paused'
         with sqlite3.connect(state/'ledger.sqlite') as db:
             deliveries=[json.loads(r[0]) for r in db.execute("SELECT details FROM events WHERE task_id=? AND kind='CLIENT_TURN'",(root,))]
@@ -177,6 +188,27 @@ class ClientChat(unittest.TestCase):
         self.assertEqual([t["status"] for t in turns], ["DISPATCHING", "ASSISTANT_ITEM", "COMPLETED"])
         self.assertFalse(turns[1]["assistant_text_trusted"])
         self.assertEqual(turns[-1]["assistant_item_event_ids"], [turns[1]["event_id"]])
+
+    def test_unsafe_native_sandbox_blocks_before_model_dispatch(self):
+        chat, peer = self.chat("unsafe_sandbox")
+        with peer, self.assertRaisesRegex(RuntimeError, "NATIVE_READONLY_BOUNDARY_UNVERIFIED"):
+            chat.submit("完整原话必须保留", request_id="unsafe-boundary")
+        saved = inspect_inputs(self.state / "ledger.sqlite", self.state / "sources", self.root)
+        self.assertEqual(saved["inputs"][0]["text"], "完整原话必须保留")
+        self.assertFalse((self.state / "dispatch-count").exists())
+        self.assertEqual(client_chat.history(self.state / "ledger.sqlite", self.root)["turns"], [])
+        self.assertEqual(list((self.state / "workspace").iterdir()), [])
+
+    def test_existing_connection_rechecks_before_next_turn(self):
+        chat, peer = self.chat("unsafe_second")
+        with peer:
+            chat.submit("first", request_id="boundary-first")
+            with self.assertRaisesRegex(RuntimeError, "NATIVE_READONLY_BOUNDARY_UNVERIFIED"):
+                chat.submit("second", request_id="boundary-second")
+        self.assertEqual((self.state / "dispatch-count").read_text().splitlines(), ["1"])
+        turns = client_chat.history(self.state / "ledger.sqlite", self.root)["turns"]
+        self.assertTrue(all(t["request_id"] == "boundary-first" for t in turns))
+        self.assertEqual(inspect_inputs(self.state / "ledger.sqlite", self.state / "sources", self.root)["input_count"], 2)
 
     def test_lost_ack_cannot_automatically_resend_same_request(self):
         chat, mock = self.chat("lost_ack")
