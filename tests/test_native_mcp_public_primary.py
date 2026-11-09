@@ -25,7 +25,7 @@ class _MCP:
         self.name = name
         self.tools = {}
 
-    def tool(self):
+    def tool(self, **metadata):
         def register(func):
             self.tools[func.__name__] = func
             return func

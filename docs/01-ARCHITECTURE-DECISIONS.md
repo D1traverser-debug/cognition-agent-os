@@ -1,5 +1,915 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-09: isolate model capacity before further changing the tool contract
+
+`98b245b` repeatedly invented a dependency despite visible validation feedback.
+Competing causes remain limited model capability, tool/schema complexity, native
+provider compatibility, and CPU/deadline limits. Another error-message edit would
+not distinguish them. Compare reducing the tools/schema, using a paid provider,
+and changing only model capacity in the existing free disposable experiment.
+Choose one 9B trial first: [the official Ollama tag](https://ollama.com/library/qwen3.5:9b-q4_K_M)
+is the same model family and Q4_K_M class, approximately 6.6GB; record the actual
+downloaded full digest, not merely the mutable tag or marketing benchmark.
+The 4B result remains the historical baseline. Keep the synthetic task, full
+tool surface, pinned native client/runtime, context settings, 900-second deadline
+and independent cold-record oracle unchanged. No owner account or production
+model default changes. Preflight permits only the first attempt on the direct
+reviewed child of `fc0f8a3`; no rerun until another discriminating decision.
+
+Falsifiers: if 9B also fabricates references, capacity alone has not solved the
+interface; if it cannot finish on CPU/memory within the same budget, this free
+deployment route is unsuitable at that budget, not proof of universal model
+inability. A PASS would establish only this durable goal-observation seam and
+justify a fresh unfamiliar-task trial, never complete cognition/evolution.
+Reducing schema or auto-filling dependency/CAS fields is not part of this trial.
+
+## 2026-11-09: recover selected evidence without loading an expanding history
+
+Actions `42545899803` at `98b245b` exposed two cold-entry failures on BOTH
+platforms and the synthetic merge. The ADR had grown to 81,236 characters;
+`_current_architecture_pivot` rejected the entire file above 80,000 even though
+the selected section remained valid. Local regression was run before the final
+ADR addition, so its earlier green result did not describe the pushed tree.
+This is a source lifecycle / verification-order defect, not a Windows encoding
+failure or evidence that the owner goal disappeared.
+
+Compare increasing the whole-file cap, copying a cached decision summary,
+deleting history, and reading the selected section with bounded memory/output.
+Choose the last: scan bounded lines, require a unique exact section, stop its
+scope at an equal/higher heading, and emit only the bounded action plus actual
+file SHA and line locator. Oversized selected lines and ambiguous selectors
+remain unverified. History is retained; no cached alternative source of truth
+or new controller is introduced. Counterexamples cover >80,000-character history,
+a long unrelated line, missing final newline, duplicate selectors and a numbered
+action outside the selected section. Exact current source and cp1252 entry tests
+pass. Run final regression AFTER all documentation edits as well as code edits.
+
+For repetitive audit work, `scripts/summarize_native_evidence.py` reads JSON or
+downloaded ZIPs without extraction or inference. It emits source/artifact hashes,
+reported failed checks, tool/error counts and the maximum cumulative token total.
+It excludes raw arguments, replies, reasoning and diagnostic bodies. A declared
+PASS with missing/nonboolean/failed checks is contradictory; even a consistent
+report is explicitly NOT independent verification. ZIP member identities remain
+qualified so same-basename Linux/Windows receipts cannot overwrite one another.
+This script has been used on the three actual `98b245b` artifacts; raw sources
+remain the basis for diagnosing a failure, not the derived index alone.
+
+## 2026-11-09: stop schema-hint retries; distinguish capacity and native boundaries
+
+The `98b245b` same-model trial FAILED after 900 seconds / 82,379 cumulative
+tokens (artifact `13643592466`, SHA256
+`bc7f0b4ba16105c2c9ee05a06dce1d5c28c04230e7c2df5acb47258c5607fcce`).
+It read the real goal, corrected a stale revision, removed invented file
+references, but repeatedly used nonexistent dependency `goal_revision_0`.
+No observation persisted. The new source-unavailable error was never reached:
+dependency validation rejected the proposal earlier. Therefore this run does
+NOT establish that the source recovery change improved cognition, nor that a
+new goal-reference schema is needed. Repeatedly adding hints to each successive
+4B-model failure has not delivered the owner outcome. Suspend these opt-in
+trials; next model work needs a materially different capacity/tool-surface
+comparison with the same independent outcome, rather than another hint patch.
+Current ChatGPT engineering/tool use remains available and does not depend on
+this experimental local model succeeding. General autonomous action and method
+transfer remain OPEN.
+
+Linux native execution passed all eight byte-level allowed/denied checks again
+(artifact `13643505910`). Windows unelevated failed (artifact `13643481800`):
+read-only denied the write, but the entry canary could not read its own temporary
+file, and workspace-write rejected split writable root sets before execution.
+Pinned [Codex v0.167.0 windows.rs](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/sandboxing/src/windows.rs)
+compares modern and legacy writable root projections and explicitly refuses
+unequal sets in the unelevated backend. [Upstream issue #59314](https://github.com/openai/codex/issues/59314)
+reports a related failure; it is corroboration, not proof of this canary's ACL
+cause or a supported fix. The prior unconfigured Windows trial actually allowed
+forbidden writes. Do not select that fallback, loosen roots, or label package
+installation as working Windows model dispatch. Production stays fail-closed;
+a supported configured backend still needs actual positive/negative readback.
+
+## 2026-11-09: reuse the ledger's existing goal binding; repair source recovery
+
+Challenge the provenance diagnosis from the `40c04f0` trace before adding fields.
+Every cognitive node already binds its selected root and goal_revision; `_project`
+invalidates it when the owner amends that goal. A ledger-only observation can
+already use empty source_refs, while kind=source requires actual file evidence.
+The original goal is not missing from storage or necessarily missing a new
+reference type. The demonstrated failure is an invented file path followed by
+an opaque refusal; whether model capacity also contributes remains unresolved.
+
+Compare another goal-reference schema, creating a shadow goal file, silently
+removing invalid references, and repairing the existing error/namespace contract.
+Choose the last: preserve the current root/revision binding and refuse nonexistent
+or escaping files with a static COGNITION_SOURCE_UNAVAILABLE code. Only known
+path refusals and anticipated file-access failures are normalized; arbitrary
+exception text remains masked. MCP tells the model where real files can be
+discovered and distinguishes ledger observations from file citations. It never
+fills a path/hash, deletes a reference, verifies the claim, or grants an action.
+
+Actual MCP test was RED with the fabricated absolute reference, then GREEN with
+bounded recovery text and no private path/quote disclosure. Unknown domain
+errors remain masked. Core tests cover missing/escaping files, unchanged state
+after refusal, and the already-existing ledger-only observation becoming stale
+after a goal amendment. The next same-model/case/oracle/deadline trial is tied
+to parent `d21f99d`, not an unchanged-source retry or a weaker success criterion.
+
+The separate native execution retest at `d21f99d` / Actions `42545280021` passed
+the Linux allowed/denied byte checks and production entry preflight (artifact
+`13643097213`, ZIP SHA256
+`2d51911b0d0262ce7a3d6e5fa6839769d3d18f35e772c3519cfbf2b69b36611a`).
+Windows with explicitly selected unelevated mode failed at command/exec (artifact
+`13643585303`, ZIP SHA256
+`e57fa2a26337e6863c13c7923a26d0a0f18e4344c1e3852ecae3c2c27629ce22`).
+The old experiment lost partial diagnostics when an RPC raised. Retain probe
+observations immediately and bounded RPC errors from this synthetic-only control
+experiment so the failure can be distinguished; production error masking and
+account settings remain unchanged. No Windows or general-execution PASS claimed.
+
+## 2026-11-09: an advertised read-only policy is not observed enforcement
+
+Actions `42476051962` at `f3d3ab1` passed mandatory engineering checks, but both
+new native execution probes reported FAIL. Preserve the distinct findings:
+Linux allowed the intended write and rejected all prohibited writes with EROFS;
+the probe incorrectly accepted only Python PermissionError. Windows, using the
+unconfigured default, actually wrote the read-only target and protected sibling,
+including through a symlink. ZIP digests are respectively
+`553417d94268d5f89f91fb44376325f40a03b3892f30c7b3fcd9357daabf0d3b`
+and `ae4bfcc30f51d3c88e97c2d14cf8b0a3ca15a86756bb9e4b708116be7428fe25`.
+Do not relabel either historical FAIL as a passed run.
+
+The [official Windows implementation guide](https://learn.chatgpt.com/docs/windows/windows-sandbox)
+distinguishes MXC, elevated and weaker unelevated isolation. The pinned v0.167.0
+app-server schema exposes windowsSandbox/readiness with null parameters and
+ready/notConfigured/updateRequired statuses. Selecting sandbox=read-only alone
+therefore cannot establish the required Windows boundary. Requiring an OS name,
+trusting configuration text, or globally accepting arbitrary nonzero exits would
+all miss demonstrated counterexamples.
+
+Correct the experiment to recognize ONLY EACCES, EPERM and EROFS from its fixed
+write probe; unrelated errors/timeouts still fail. The Windows follow-up opts
+into unelevated only for the disposable process, as a different candidate, not
+an owner-account change or a production fallback. Its weaker network isolation
+remains explicitly unqualified.
+
+For production text entry, before ANY new turn or goal activation/resume, require
+native Windows readiness where applicable AND an actual read-only canary check
+in the existing workspace. A successful read proves the probe executed; its
+specific write-denial errno and independent unchanged bytes prove the tested
+filesystem refusal. Unknown output, crashes, false denial after a write and
+missing setup block inference, keep the original input and close the client.
+No auto-setup, weaker mode selection, permission grant, retry or second executor
+is introduced. Internal control-only tests may still initialize native RPC
+without inference; this is distinct from the guarded submit path.
+
+The pre-fix source fails the new no-dispatch counterexample; the corrected entry
+and adjacent normal/resume/input-journal cases pass locally. Cross-platform
+readback remains pending. These checks do not certify network confidentiality,
+generic goal/action semantics, cross-task cognition or product readiness.
+
+## 2026-11-08: challenge the typed-only action architecture before expanding it
+
+The original goal needs unfamiliar tasks and low owner supervision. Current
+`capability_catalog` exposes only four registered objectives; `install_contract`
+requires an operator-authored exact effect/check document. These are real scoped
+protections, but neither is a generic execution solution or a reasonable final
+interface for a nontechnical owner. A successful cognitive-node write will not
+close this separate architecture gap.
+
+Compare (a) continuing task-specific Worker additions, (b) building another
+general shell/execution harness, (c) reusing native Codex execution under an
+explicit restricted workspace, and (d) a managed Agents API. Keep (a) as the
+existing protected baseline, reject it as the generalization strategy; (b)
+duplicates sandbox/process/recovery responsibilities; (d) adds paid-account and
+deployment dependencies outside this experiment. Investigate (c) first without
+changing production permissions or discarding the existing ledger.
+
+Primary evidence: the [official integration architecture](https://developers.openai.com/blog/codex-as-a-platform)
+separates application context/consent from the reusable harness; the
+[app-server command/exec contract](https://learn.chatgpt.com/docs/app-server)
+exposes a sandboxed argv command without inference. Pinned Codex rust-v0.167.0
+`command_exec_processor.rs` blob `1d5c3c7056057512591ff64d952947495176fe75`
+applies the requested sandbox through the configured permission constraints and
+uses UseDefault execution. `command_exec.rs` blob
+`c71aff3ddf22da4958d09351b9d70f05a68d9a4b` rejects streaming/custom output caps
+for the Windows restricted-token path. The probe therefore uses buffered calls,
+fixed code/argv, native defaults for output caps, no network, and explicitly
+excludes broad temporary-directory write allowances.
+
+Strongest counterexamples: a sandbox can reject everything because it is broken;
+an error can occur after an unauthorized write; a symlink can escape a path
+allowlist; Windows may not have a usable native sandbox. The independent probe
+requires a real allowed write and exact byte readback plus rejected read-only,
+sibling and (where supported) symlink writes with unchanged protected bytes.
+Unavailable symlinks remain NOT_TESTED. This is a public disposable CI opt-in,
+not a change to `caos chat`, owner credentials, worker grants or model budgets.
+The current Work binary exited before initialization; that is FAIL to establish
+this boundary, not proof that sandbox restrictions worked. Exact pinned release
+results on Linux and Windows remain pending.
+
+Even a PASS only qualifies a filesystem primitive. Goal fidelity, current-grant
+revocation during native execution, evidence isolation, confidential reads,
+network effects, unknown ACK recovery and independent semantic acceptance remain
+unproved. Do not enable workspace writes in production from this result alone.
+If native enforcement fails, compare a genuinely isolated external executor or
+retain the narrow baseline; never use an unsandboxed fallback to make it pass.
+
+## 2026-11-07: publish the actual cognitive-node input contract
+
+**Observed retest, 2026-11-08:** `40c04f0` / Actions `42474730960`
+FAILED at 900 seconds, 70,085 cumulative native tokens, zero persisted nodes.
+Artifact `13615411934`, SHA256
+`020abf54074a42f2e84f82fd6e060b94b5a9594195de9c946f16c0e77a3013ed`,
+shows all node fields supplied. After a visible stale-dependency rejection the
+model removed an invented `goal-0` dependency, but retained an invented absolute
+file path for the goal stored in SQLite. Current goal/workspace/task inventory
+remained unchanged. This falsifies schema completeness as a sufficient fix for
+the record task; it does not falsify the published schema's structural checks.
+Investigate provenance affordances and model suitability next: source_refs
+refer to real local files, while original goals are ledger values. Do not create
+fake files, silently remove references, raise time limits or rerun unchanged
+source to call this successful memory/evolution. The execution-boundary probe
+below/above is a separate no-inference architecture discriminator.
+
+The `d20c6b8` / Actions `42371600946` retest again FAILED at 900 seconds;
+all mandatory checks passed. Artifact `13574622181`, SHA256
+`cf2956241fbbf3c3754526bd7178e90f15f329b8969a9f6199b84553b6e6cb1e`,
+shows 45,547 cumulative native tokens and no persisted observation. The model
+used the actual revision token, received the new missing-field explanation and
+added those fields, but invented a string element in source_refs. Thus feedback
+did reach the model, while an underspecified nested argument still blocked it.
+This is not evidence that the adapter alone completes cognitive persistence.
+
+The same failed model trace also omitted required fields. Runtime recovery
+messages are necessary but do not replace a truthful machine-readable interface:
+the exposed node parameter was just `dict`, with mandatory fields only in prose.
+An actual tools/list assertion reproduced the absent required-field contract.
+
+Use shared TypedDict declarations for the node and its source/method/input/claim
+references, consumed by both the existing
+core field validator and the MCP schema generator. This keeps ordinary dict
+values and all semantic/grant/CAS checks; no second validator authority or
+framework dependency enters the stdlib core. The optional MCP environment
+already supplies typing_extensions where its schema library needs that backport.
+Strict schema configuration rejects unknown fields and scalar coercion instead
+of silently deleting or changing caller data. Missing-field guidance comes from
+the SDK's anticipated argument-validation error, while domain rejections use
+the bounded adapter described below. Real MCP tests verify the published required
+fields, incomplete/extra/coerced-input rejection, legal neighboring records and
+unchanged ledger after failures. This improves the tool contract; it does not
+prove that a model will make sound decisions or transfer knowledge.
+
+## 2026-11-07: distinguish recoverable tool rejection from a private crash
+
+The real additive-record trial at `1a26cd8` / Actions `42347815709` FAILED at
+the 900-second deadline, with 55,286 cumulative native tokens. Goal recovery
+succeeded; the ledger contained no observation. The actual model submitted
+`expected_revision: "0.0"` and omitted required node fields. The result exposed
+only `Error executing tool cognition_node_record`. Artifact `13564702806`
+(SHA256 `2f7621238b8099c3176f994d65121c50169230c7ea6bf784c20d77e572c19887`)
+retains the trace. All mandatory engineering jobs passed; this model trial did not.
+
+Reproducing those arguments through the real MCP 2.3 transport confirms a stale
+revision rejection before node validation. Its SDK `tools/base.py` intentionally
+masks arbitrary ValueError as UnexpectedToolError; documented ToolError instead
+returns an anticipated failure to the model with isError=true. This separates
+a correct state guard from a missing feedback path. Do not infer lack of write
+permission, automatically fill a fresh CAS token, or claim the narration was a write.
+
+Compare more prompt reminders, globally exposing exception text, and a bounded
+transport error adapter. Choose the adapter: map only exact reviewed codes to
+static recovery instructions; preserve original checks, isError, grant refusals,
+and SDK masking for all unknown failures. No generic retry, authority grant,
+input echo, path disclosure or automatic token replacement is introduced.
+The same boundary covers missing roots, stale revisions, malformed graph nodes,
+changed sources and revoked grants, without changing core APIs.
+
+Actual MCP tests failed before repair, then passed for the observed stale-version
+and missing-field cases plus wrong-root recovery. Unknown unsafe-source errors
+remain private, and all failed calls leave the graph/revision unchanged. The
+same model, original task class, oracle and deadline are retained for one new-source
+trial. A failed retest must reopen model/schema/context suitability; green
+transport or an assistant promise is not successful cognitive persistence.
+
+## 2026-11-07: additive cognition records are writes, not external execution
+
+First-use source `b79cb83` passed all mandatory jobs in Actions `42347242615`.
+Both Windows/Linux real native-client receipts include setup/reuse, cold resume
+and unchanged existing ledger. This closes the tested entry-preparation seam,
+not owner-device setup or complete goal achievement.
+
+The read-annotation repair exposed the next shared boundary: the native model
+also needs to persist investigation and candidate knowledge. Compare leaving
+all writes blocked (loses the required memory loop), approving the whole server
+(also admits execution prompts), and describing each audited effect accurately.
+Choose the third, preserving the single server/ledger and all effect contracts.
+
+The MCP 2025-11-25 `ToolAnnotations` source (blob
+`850a083fa228bf40af6feca42e23fd26342d3c59`) defines destructive=false as additive
+updates, distinct from readOnly=true. Pinned Codex 0.167.0 Auto mode permits
+closed-world additive tools without prompting; Writes/Prompt mode can still ask.
+Audit the transitive implementations: hypothesis, input, cognitive-node and
+method-trial recording append local events after existing grant/source/revision
+checks; records never independently certify truth, authorize effects or delete
+history. Give exactly those four readOnly=false/destructive=false/openWorld=false.
+Do not generalize from a tool name: `native_open_research_record` can fetch live
+GitHub references, so it remains outside this class. Goal changes, decision
+admission and Worker execution retain their prior client/server controls.
+
+The actual MCP inventory test failed on the unannotated hypothesis tool, then
+passed after the repair, with read-profile exclusion and neighboring effect
+tools still guarded. This only verifies the metadata/transport. One new-source
+native-model trial requires a real model-originated record and a fresh CLI
+process independently reading exactly one observation with the recovered random
+marker/constraint. Goal (including amendments), workspace and task inventory
+must remain unchanged. False success labels, absent/wrong/duplicate records,
+changed goals and invented marker variants fail the oracle. Actual model result
+remains OPEN until read back; even PASS would not prove method generalization.
+
+## 2026-11-07: first-use setup reuses the proven entry
+
+Changed-source model test `ba103cf` / Actions `42324264770` passed the real native
+MCP/random-marker oracle; all mandatory Windows/Linux checks passed. Artifact
+`13555131081` retains the unchanged model digest and actual tool trace. Cumulative
+tokens were 43,542 versus the failed attempt's 118,037; this pair is not a general
+efficiency benchmark. Full cognition/owner acceptance remains open.
+
+The next usability gap is independently observable: a source download still
+requires manual environment, package, native client and state commands before
+typing a task. Compare a new browser service/controller, a platform-specific
+bundled executable, and a thin cross-platform setup launcher. Choose the launcher
+for the current terminal entry: reuse Python venv/pip already used by delivery CI,
+the checksum-pinned official-client downloader, and existing init/restore/doctor/
+chat commands. This adds no scheduler, goal store or account-login implementation.
+Bundled executables remain a candidate if Python installation is a measured barrier;
+a web service would not repair missing inference/account access or goal quality.
+
+Setup owns only a marked runtime, verifies cached client identity, isolates Python
+search paths, reinstalls changed source and keeps private state outside Git and
+outside disposable software. Existing/unowned state is never reset. `--check` is
+read-only; setup-only never calls a model. Native CI now runs the actual setup and
+reuse with a pinned client and an already-populated goal, then checks the same
+MCP/control behavior and unchanged ledger. This must pass on both platforms before
+claiming launcher wiring; owner-machine convenience and full product quality are
+separate, still-open checks. No one-click claim can remove model login requirements.
+
+## 2026-11-07: validate model-originated permission routing, not only direct RPC
+
+Real inference at `3d196ae` / Actions `42265984438` failed after 900 seconds:
+positive model usage (118,037 cumulative tokens), no successful CAOS read and
+no recovered marker. All mandatory engineering jobs passed. The retained
+artifact `13528556356` shows every attempted CAOS read rejected with
+`MCP tool call requires approval, but approval policy is never`. This is not
+absence of inference or merely model incapacity: earlier direct native RPC
+calls bypassed the model-originated approval route.
+
+Pinned Codex `rust-v0.167.0`, `codex-rs/core/src/mcp_tool_call.rs`,
+`requires_mcp_tool_approval` defaults missing hints to possible destructive/open
+world action; known read-only, non-destructive tools need no approval in Auto
+mode. The CAOS server supplied no annotations. Select truthful read-only,
+non-destructive, closed-world annotations for the 12 audited local read tools.
+Do not globally approve the server, label writers as reads, weaken source grants,
+or swap models to conceal the integration defect. Other client approval policy
+may still require explicit approval. Writers remain subject to their existing
+client and server controls; this repair does not make them unattended actions.
+
+The real MCP metadata assertion failed on `native_goal_list` before repair and
+passed afterward, alongside the existing permission/effect negative cases.
+An exact native approval-configuration refusal is now durably identified and
+stops the chat invocation; repeating it cannot repair configuration. Unknown
+in-flight effects remain unknown, and ordinary correctable tool errors remain
+available to the native reasoning loop. A changed-source second local-model
+probe uses the same model/case class and oracle to test the permission hypothesis.
+Its outcome remains pending until actual readback; passing metadata is not enough.
+
+## 2026-11-07: commit completed replies at their observation boundary
+
+A subprocess counterexample emitted a completed assistant item and then lost
+the connection before the turn ended. The previous turn-level write discarded
+that useful reply: 1 of 26 focused tests failed. Keeping a larger final buffer
+or retrying the model would not correct this durability boundary. Commit each
+completed item to the existing event ledger immediately, deduplicate by native
+turn/item identity, and let terminal receipts reference those events. A peer
+independently reads SQLite before disconnecting, proving persistence precedes
+exception handling. All 26 focused cases then passed, including legacy console
+encoding. Unfinished streaming deltas remain best-effort display; completed
+items are untrusted observations, never verified outcomes or new instructions.
+
+## 2026-11-07: measure the actual native model seam without owner credentials
+
+Native control-only CI proves wiring and cold resume, not inference. Existing
+small-model experiments exercised a different fixed-schema Host planner; their
+results cannot answer whether the production app-server entry retrieves goals.
+Compare (a) repeating those experiments, (b) a metered remote provider, (c) one
+bounded, disposable public-CI local-model probe. Choose (c) for this seam only:
+reuse the production ChatSession and pinned official Codex, add a session-only
+loopback Ollama provider, and observe unmodified native notifications. A random
+goal marker exists only in the CAOS ledger; the continuation message omits it.
+Acceptance requires a successful real MCP read, a matching final reply, positive
+model token usage and unchanged original goal/workspace/task inventory. Record
+failed output too. This is a retrieval/inference seam check, not evidence of
+architecture reasoning, unseen-task success, owner-device usability or evolution.
+
+Primary evidence: [Ollama Codex integration](https://docs.ollama.com/integrations/codex)
+documents Responses wire format and a 64K minimum context recommendation;
+[`openai/responses.go` at v0.40.15](https://github.com/ollama/ollama/blob/v0.40.15/openai/responses.go)
+implements function-call replay and streaming conversion. The official model
+registry lists `qwen3.5:4b-q4_K_M` (Apache-2.0, tools, 3.3 GB), selected to fit
+the disposable CPU runner, not as a production quality recommendation. Runtime
+and model digest are recorded; the Ollama binary and Codex release are checksum
+pinned. Cloud use/web search are disabled. No account config or private goal is
+copied. One source-scoped CI attempt, bounded downloads and inference deadline
+prevent repeating a failed comparison without a changed hypothesis. Failure
+keeps this seam OPEN; no provider fallback or success-shaped fixture is allowed.
+
+## 2026-11-07: preserve native history and accounting on explicit resume
+
+The bounded native loop still started a new native thread for each invocation.
+CAOS could recover original inputs, but this needlessly discarded native working
+context and created new budget accounting. Reuse `thread/read`, `thread/goal/get`
+and `thread/resume`, not a second conversation store or replay of earlier turns.
+An explicit `--resume-client [THREAD_ID]` requires a clean terminal delivery
+record bound to the selected CAOS root, then checks actual native identity,
+workspace, objective, quiescence and spent tokens. Multiple candidates are not
+resolved by recency. Missing/moved/wrong/unknown state fails without creating a
+replacement thread. Persist new input before native access, record dispatch
+before resume, and preserve native creation time and usage when changing the
+explicit total budget without an objective replacement.
+
+Alternative review included the official Python SDK at `rust-v0.167.0`:
+`sdk/python/src/openai_codex/client.py` blob
+`5b38538c541aa17e807aecfa3d5a58c9ee76d0ff`, `_goal.py` blob
+`37a63fc28f4c618a4dbc77e9e408e3f4a7ae24b4`, and `pyproject.toml` blob
+`3d920e43d21448ce081b4dd68a93f11fd66da4b3`. It is a serious future replacement
+candidate, with existing goal-event routing and typed protocol support. At this
+revision synchronous response/notification waits have no per-call deadline,
+stdout uses unbounded `readline`, the simple goal setter lacks budget/origin
+arguments, and packaging pins a different CLI runtime (0.153.4). A drop-in
+migration would still need boundary adapters and actual version validation;
+retain the tested bounded transport for now, not a claim of universal superiority.
+Reopen this choice if measured maintenance or compatible SDK behavior favors it.
+
+Falsifiers include preserved nonzero usage across separate protocol processes,
+exhausted total budget, wrong workspace/root, ambiguous threads and unknown
+dispatch. The pinned native CI probe also reopens the same paused thread in a
+new process, verifies unchanged creation/usage, and changes only its explicit
+total budget without inference. Real model recovery and reduction in owner
+corrections remain open; no private account or production outcome is inferred.
+
+## 2026-11-06: reuse native goal continuation instead of a second loop
+
+`5f1ccc8` native transport jobs on Linux and Windows (run `42197902683`)
+successfully used official Codex 0.167.0 to discover 23 CAOS tools, read the
+original goal, and reject a missing required server. This is real wiring;
+no inference or owner-account acceptance was performed.
+
+The next architectural counterexample is lifecycle: the initial chat adapter
+uses ephemeral threads and stops at `turn/completed`. Official app-server
+documentation and release `rust-v0.167.0`'s
+[`thread_goal_processor.rs`](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/app-server/src/request_processors/thread_goal_processor.rs)
+(blob `82aeaf7f46f92244e59279012bc1033934fbe25a`) explicitly reject goals on
+ephemeral threads; activating a goal can itself start inference. A second
+Python retry/scheduling loop would duplicate native continuation and risk
+double dispatch. Merely adding a continuation prompt cannot fix this lifecycle.
+
+Choose opt-in `chat --goal-budget N`: use one native persistent thread and its
+existing goal engine for a bounded invocation; ordinary chat remains ephemeral.
+Prepare the native goal PAUSED, persist original input and dispatch intent,
+then activate it once (never also call `turn/start`). Keep listening across
+completed native turns until goal pause/block/budget/usage/completion or timeout.
+Use native accounting plus the existing wall-clock deadline, not a new queue.
+Goal objectives have a 4,000-character limit: bind a stable root locator rather
+than truncate or replace the full original, amendments and inputs in CAOS.
+Reject native objective/budget replacement. Native completion still cannot
+set the CAOS independent outcome to true.
+
+Each explicit invocation has its own requested budget; no automatic restart,
+background service, account configuration edit or transparent budget reset.
+Native conversation/goal state is kept by the native client in its normal local
+storage; CAOS delivery events retain the thread ID. A failed/unknown dispatch
+requires effect inspection before another invocation. Timeout/close requests a
+native pause when possible; process exit is not proof of cancellation/rollback.
+Same-process invocation reuse is rejected. At this initial checkpoint,
+cross-process native-thread resume was unimplemented (superseded by the explicit
+resume decision above). Actual model-driven goal continuation remains unverified;
+retrying the saved owner message is not its implementation.
+
+Protocol-peer counterexamples cover two completed turns before native completion,
+late paused notifications, budget exhaustion, missing ACK, timeout/pause,
+unexpected existing goal, cleared goal and objective drift. The real native CI
+probe additionally prepares and rereads a paused goal with zero tokens used;
+this validates the control path without calling a provider. Native-loop outcome
+quality, cost reduction and cross-task learning require separate real inference
+and independent result evidence. Rollback: omit the goal option while retaining
+the owner ledger, input and delivery history.
+
+## 2026-11-06: make input persistence an entry responsibility
+
+The preceding launcher proves MCP preparation/transport, but hands subsequent
+messages straight to the native UI. Saving every correction therefore still
+depends on the model remembering a tool call. This is a missing observation
+boundary; adding another instruction cannot make omitted input durable.
+
+Compared: retain the TUI (least code, no deterministic input capture); rebuild
+a standalone model/tool runtime (duplicates permissions, scheduling and recovery);
+adapt Codex app-server (adds a protocol adapter while retaining its harness).
+Choose the adapter for an opt-in `caos chat` entry, keeping `launch` available.
+No browser service, account config edit, second database, scheduler or automatic
+model-retry loop is introduced. The first plain-text message can create a goal;
+existing goals are discovered and ambiguous choices remain explicit.
+
+Official [app-server protocol](https://learn.chatgpt.com/docs/app-server) and
+the installed 0.167.0-alpha.4 generated schemas were checked for initialization,
+thread/turn startup and approval replies. Actual upstream `turn_admission.rs`
+(blob `552875473b9929a02317a892f0e7d02d9a7dfe7a`) and its tests
+(`d36f15eea6de0b274ffb39410c2c46b39db5bf4e`) demonstrate shutdown admission
+tracking, not exactly-once business effects. `transport.rs`
+(`4aef6998354c67a009b113f8103a83fdacea1e8b`) can drop messages for disconnected
+clients. Thus a missing ACK must remain UNKNOWN, not trigger automatic replay.
+
+User messages and clarification answers are committed to the existing ledger
+before forwarding. Delivery markers, questions and untrusted assistant replies
+also use existing events; metadata-first paginated readback avoids rereading
+every reply. The existing later-input fence now sees input before inference.
+Native shell policy is read-only with escalation denied; CAOS MCP contracts
+remain responsible for admitted effects. This does not fence every other
+connector the operator may have configured. No model reply promotes a method,
+changes the goal or certifies an owner outcome by itself.
+
+Falsifiers: process failure before delivery, lost ACK, early/out-of-thread
+completion, replay, clarification EOF, conflicting goals and cold source-gated
+MCP readback. Real subprocess protocol-peer tests cover these transport facts;
+they are explicitly not a model evaluation. The real installed Codex app-server
+currently exits during startup because its Work runtime home is read-only.
+An isolated SQLite-directory override did not resolve the remaining read-only
+startup failure. No account configuration/credentials were rewritten. The
+adapter's native successful inference, full semantic workflow, correction burden
+and cross-task learning remain NOT_TESTED. Roll back the adapter independently
+while retaining saved inputs and delivery evidence; never automatically resend
+an unknown delivery or discard original messages.
+
+The first exact-head cross-platform run (`ad123ed`, run `42165581798`)
+passed Linux but failed three Windows protocol-peer tests involving Chinese
+input. A `PYTHONIOENCODING=cp1252` reproduction failed before the peer's delivery
+marker; explicitly setting the peer's stdin/stdout to protocol UTF-8 makes all
+12 tests pass under that same setting. Production already uses UTF-8. Keep the
+Chinese fixtures; this correction does not establish native-client integration.
+To discriminate client incompatibility from Work's read-only runtime, the
+existing disposable Windows/Linux transport jobs now also start checksum-pinned
+official Codex `rust-v0.167.0`, read back a real CAOS goal through its MCP client,
+and require a broken mandatory MCP server to reject thread startup. No model
+turn or owner account is used. Its receipt separates wiring from inference and
+owner-outcome acceptance; native success is pending actual execution.
+
+## 2026-11-06: preflight the actual installed transport
+
+The first CI run exposed a Linux user-site installation failure: the actual
+artifact log showed `ModuleNotFoundError: mcp` under `-I`, while Windows passed.
+Use `-E -P` instead: retain normal user/system dependency directories while
+excluding environment overrides and unsafe working-directory insertion. This
+is a compatibility correction based on the failed real transport, not a
+waiver of the connection test.
+
+
+
+Windows CI on fb17a89 failed because the launcher test created a directory
+containing quotes, which Windows forbids. The portable fixture now retains
+spaces, Unicode and shell metacharacters without using an illegal filename.
+Inspection also found that preparation alone did not prove a working server:
+the MCP SDK can discard PYTHONPATH and load an older wheel from the same Python.
+Bind startup to the current package path with controlled Python startup and an argv-only
+bootstrap. The production --check now performs real MCP discovery and a
+read-only state call; it has a bounded timeout and omits private text from its
+receipt. The existing cross-platform MCP integration exercises this exact
+path and checks event-count invariance. No model/provider, account setting,
+permission, scheduler or second state store is added. Native model invocation
+and owner-outcome acceptance remain separate obligations.
+
+## 2026-11-06: executable native-client entry, conditional integration
+
+The package had an MCP server and instructions but no executable client entry.
+Choose a session-scoped local Codex launcher first: it reuses the existing
+model/tool runtime and the same private ledger without another server, queue,
+state authority or model subscription. A standalone web application introduces
+another runtime before the current model/action boundary has been verified;
+OpenCode/WorkBuddy remain replacement candidates if real client results favor
+them. This is a bounded integration choice, not evidence of an optimal whole
+architecture or a completed cognition system.
+
+The launcher validates state/root/client/dependency, passes argv without a shell,
+requires its MCP connection, propagates native failure and never edits account
+configuration. It inherits native policy and does not claim to intercept other
+tools. Explicit preparation was exercised against the private active session;
+path quoting, missing dependencies, wrong root and failure propagation are
+tested. Authentication and native model outcomes remain unverified: a fresh
+45-second no-tool probe with closed stdin still times out and reports a plugin
+catalogue 401. No credentials were read or rewritten. Do not infer a model
+endpoint diagnosis from that plugin error, and do not call --check a connection.
+
+## 2026-11-06: new input invalidates an older action decision
+
+Real MCP reproduction showed that a new user message arriving after action
+admission left the old decision admissible. Prompt-only routing and relying on
+the user to call reopen do not cover that path. A new queue/controller would
+duplicate the existing ledger. Reuse the shared admission and effect-time
+guard: any uninterpreted input, or input newer than the current decision,
+requires a fresh decision. The existing action-binding identity prevents an old
+queued action silently inheriting a new decision. This is conservative: benign
+late messages also pause work. A new decision must follow the input; merely
+recording an interpretation cannot revive the old decision.
+
+The MCP integration probe exercises late input, interpretation without a new
+decision, and a new decision alongside a pre-existing authorized positive case.
+This is an ordering invariant, not proof of semantic understanding: a model
+can still record an incorrect new decision. Nor does it interrupt an effect
+already in flight or govern client tools outside this ledger. Full outcome,
+native client integration and cross-domain evaluation remain open.
+
+## 2026-11-05: recover cognitive state through the existing client entry
+
+After the public-boundary commit's CI passed, a direct read of the real private
+session through `codex_session_context.py` still returned only the original
+goal/legacy decision state: no cognitive corrections, input counts or graph
+revision. Two fresh-process tests reproduced the omission for a single root
+and competing roots before implementation. Storage existed, but the entry's
+read path did not expose it. A successful SQLite snapshot alone therefore did
+not establish complete conversational recovery.
+
+Alternatives: more intake wording cannot reveal omitted state; a separate hook
+cache duplicates identity and becomes stale; replacing the entire store loses
+tested lineage without addressing the missing reader. Reuse the existing
+`cognitive_session._project` in the existing continuity snapshot instead. Root
+identity remains unchanged; original goals and corrections stay distinct.
+Automatic hook output carries only counts/version/locators. Explicit readback
+recovers corrections and pages nodes/messages with the same revision token.
+Changed source bytes, corrections and input-only updates reject old locators;
+multiple roots retain separate amendments and no automatic selection. No
+execution grant, second queue, account setting or Skill is added.
+
+Acceptance: real Python subprocesses, raw-private-text non-disclosure in startup
+output, exact correction/message recovery, multi-root separation, paginated
+messages, source invalidation and stale locator rejection. These prove the
+reader wiring, not actual native client invocation or semantic understanding.
+The next unresolved client test must observe invocation in a supported client.
+
+Official platform evidence was also checked directly: [MCP](https://learn.chatgpt.com/docs/extend/mcp)
+and [Plugins](https://learn.chatgpt.com/docs/plugins) state that cloud-orchestrated
+Work does not support local/plugin command hooks; local Codex config does not
+connect ChatGPT web. [Packaging](https://developers.openai.com/plugins/build/plugins)
+describes local plugin hook resources/trust, but is not account installation
+evidence. Use supported local Codex entry when available, or explicit scoped
+CLI readback in this Work environment. Do not promise a cloud hook by packaging
+local scripts. Remote service/account integration remains a distinct boundary.
+
+## 2026-11-05: one public execution boundary and reproducible delivery evidence
+
+The full parent goal and download-and-use requirement remain OPEN. Reviewing
+the original forbidden-goal probe against the current source still produced
+five forbidden local effects through the unmanaged low-level research API.
+Tracing the same path found that MCP `allow_goal_writes` exposed admission
+without requiring a managed root. The shared cause is incompatible public
+entry profiles: recording a goal could implicitly expose legacy execution.
+
+Considered routes: a natural-language keyword filter misses paraphrases and
+legitimate neighbors; disabling every effect falsely passes denial tests while
+breaking useful work; rewriting the entire ledger breaks tested recovery and
+does not establish semantic understanding. Selected: reuse the existing
+managed root, contract and transactional effect guard for ALL public MCP effect
+entries. New CLI/MCP goal registration and its managed marker commit atomically.
+Legacy reads remain available, but admission, tick and local-model paths reject
+unmanaged roots. An unused keyed root may be restricted without changing ID;
+a root with existing children cannot be silently adopted. Low-level Python
+compatibility remains explicit and is not a safe agent-facing execution profile.
+
+Countertests cover rollback on registration failure, keyed retries, pending
+legacy work, rejection before each effect call, missing-contract denial and
+real authorized positive effects through official MCP subprocesses. Operator
+fixture contracts are outside MCP and do not masquerade as model-derived user
+authorization. This closes a reachable execution bypass, NOT the arbitrary
+natural-language interpretation problem or shell/SQL/other-connector authority.
+Rollback must retain managed enforcement; using an older runtime on this state
+is not a safe rollback.
+
+Repeated manual checks also hid evidence scope and consumed context. Reuse the
+existing probes through `verify_delivery.py`: no new evaluator/controller or
+test database, no network/model call. Its receipt binds source content and log
+hashes, runs installed-wheel acceptance in isolation, and reports each profile
+separately. The same transport command runs in CI on both OSes. Existing
+`plan_incremental_audit.py` handles structural deltas. Neither source hashes nor
+test orchestration can certify cognitive quality. Unseen model tasks, native
+entry traces, correction burden, method transfer and independent owner outcomes
+still determine product readiness; passing this receipt cannot authorize merge
+or a ready-for-use claim by itself.
+
+## 2026-11-05: external research enters as evidence, not replacement authority
+
+Scope: continue the complete parent product below. New research does not reset
+the project, install a new System Prompt, or select a framework by popularity.
+
+### Findings and competing causes
+
+- **Missing instruction alone is not an adequate explanation.** Existing AGENTS
+  and the installed intake already distinguish goals, research and effects.
+  More wording does not demonstrate that the client selected or obeyed it.
+- **Input/interpretation lifecycle is incomplete.** Before this change the
+  cognitive API retained amendments and derived nodes, but no separate raw
+  conversation input. `amend_goal` deliberately invalidates every prior node
+  and effect contract. Sending a suggestion/research bundle there therefore
+  changes goal identity and invalidates unrelated work. Sending it only as a
+  hypothesis loses its distinct provenance and tentative intent categories.
+- **Activation and semantic quality remain separate open causes.** Persisting a
+  message cannot prove the model understood it, read every constraint, selected
+  the best architecture, or used the entry in a fresh ordinary conversation.
+  The original forbidden-proposal baseline remains relevant; this change is
+  not a general natural-language authorization fix.
+- **Read permissions need to cover derived copies.** Cognitive graph nodes can
+  contain source quotes. Their MCP reader previously omitted `allow_source_read`.
+  The input and graph readers now both enforce that existing disclosure setting.
+
+### Actual external mechanisms inspected
+
+| Source and observed blob | Applicable mechanism | Counterexample / transfer boundary |
+| --- | --- | --- |
+| [GSD execution](https://github.com/open-gsd/gsd-core/blob/main/gsd-core/workflows/execute-phase.md), `72722e6eb4853f76c7e76feb3eda2f4b92b6a337`; [verifier](https://github.com/open-gsd/gsd-core/blob/main/agents/gsd-verifier.md), `860c6f833806441adb51c70dd1df2ba3c69a9dc1` | Resume reconciles reachable commits with summaries; outcome requirements cannot shrink to plan tasks; behavior-dependent claims need runtime evidence | Workflow instructions are not a native CAOS hook. Initial compiled-path 404s were traced to build-at-publish sources: [verification.cts](https://github.com/open-gsd/gsd-core/blob/93bb3b283998b5845cd94be98c9ce240d2946c12/src/verification.cts), blob `b71b6ccdd00b3f26a00943b16f04a0ecfdc04e0b`, and [verify.cts](https://github.com/open-gsd/gsd-core/blob/93bb3b283998b5845cd94be98c9ce240d2946c12/src/verify.cts), blob `6589ed669a13e90cbe003b58af523701b754b0de`. Actual readers distinguish missing/unreadable evidence and recheck declared content fingerprints; legacy reports can use timestamp fallback. Those mechanisms still cannot prove an agent-written passed verdict is semantically correct. Source reviewed, upstream runtime not executed. |
+| [Atlas hook](https://github.com/code-yeongyu/oh-my-openagent/blob/dev/packages/omo-opencode/src/hooks/atlas/atlas-hook.ts), `6e7969ccfaf0020f0047a169fbbc33ba30ef6701`; [idle handler](https://github.com/code-yeongyu/oh-my-openagent/blob/dev/packages/omo-opencode/src/hooks/atlas/idle-event.ts), `72a86bc0cfa4d7bbb9dda3f1363f3e493d10fe46`; [continuation](https://github.com/code-yeongyu/oh-my-openagent/blob/dev/packages/omo-opencode/src/hooks/atlas/idle-continuation.ts), `850dc94020159da35cf37b84c72dc20126547e1b` | Runtime events, active-session identity, no-progress detection, cooldown, bounded retries, stop and background-task checks | Depends on OpenCode PluginInput/session events and continuation injection. It is not portable by copying its prompt into ChatGPT. Counted tasks and tool activity still do not establish owner-goal achievement. No runtime installation or efficacy trial performed here. |
+| [prompts.chat schema](https://github.com/f/prompts.chat/blob/main/prisma/schema.prisma), `97f36369649ad5c4565df2c9673274bb3d2b4fc6`; [team changes](https://github.com/f/prompts.chat/blob/main/src/lib/bots/team-changes.ts), `6482330766f5e6a95d7cf9acccfb5920f7bf082b` | Stable assets, separate proposed/original snapshots, versioned application, reviewer permissions, preservation of members hidden from a proposer | The inspected approval function applies the proposed snapshot; it does not itself compare the saved original with live state. Version history alone cannot prove conflict safety or effectiveness. Reuse CAOS CAS/dependency invalidation rather than importing this application/database. |
+| [ReAct original paper](https://arxiv.org/abs/2210.03629), v3; [GraphPrompt original paper](https://arxiv.org/abs/2302.08043), v3, followed from Prompt Engineering Guide | ReAct interleaves information-gathering actions with revisable planning; task-specific method choice | GraphPrompt is a GNN pretraining/downstream-task method, not an Agent Workflow Graph implementation. Neither paper proves CAOS's current client, intent recovery or authorization. |
+
+Third-party leaked prompt collections are unverified implementation references,
+not official runtime contracts. No copied leak, new dependency, new Agent or
+automatic core-rule update is introduced. This review does not certify a current
+top-ten Stars ranking or claim all ten repositories were exhaustively executed.
+
+### Alternatives and second challenge
+
+| Route | Coverage/reliability | Complexity, cost and compatibility | Failure mode / choice |
+| --- | --- | --- | --- |
+| Keep only chat/Skill wording | No durable distinction between new material and goal changes | Lowest code change, repeated recovery/correction burden | Reject as sole solution: same failure remains after interruption |
+| Separate intent agent plus vector store/controller | Could improve retrieval/interpretation with measured model evaluation | New model calls, identity/store synchronization and migration; still needs existing grants and outcomes | Defer: no measured accuracy benefit; another agent can misclassify the same message |
+| Replace the stack with GSD/OmO | Useful supported-client coordination and recovery mechanisms | Different clients/state conventions; significant migration and activation work | Not justified by these input-lifecycle failures; client comparison remains open |
+| Extend existing event ledger and dependency nodes | Exact raw input, tentative interpretations, CAS, supersession and cold recovery | No new service/table/scheduler/dependency; testable via current CLI/MCP | Selected for this boundary, not asserted globally optimal or semantically sufficient |
+
+Strong counterexamples: a quoted instruction can call itself an owner goal; a
+model can confidently misread a suggestion; a later correction can invalidate
+an earlier interpretation; two readings can disagree; an input may arrive after
+an action is queued. Accordingly, origin is explicitly unauthenticated, every
+reading remains unverified, category labels never amend goals/grant effects,
+competing readings stay visible, and amended/reopened/superseded readings use
+the existing dependency invalidation. Raw inputs survive these changes.
+
+Implementation uses `COGNITION_INPUT` events and `interpretation` nodes in the
+same root/ledger. Claims quote exact input bytes and distinguish explicit,
+inferred and uncertain readings. Graph readback reports counts; raw input is
+paged separately. Rollback is a forward correction/reopen, preserving originals;
+do not run an older binary against a snapshot containing unfamiliar node kinds.
+
+Acceptance covers input retention, unchanged goal identity, false-quote and
+false-confirmation rejection, dependent-plan invalidation, competing readings,
+idempotency/CAS, actual MCP subprocess recovery and installed CLI snapshot
+roundtrip. It does NOT certify NLP accuracy or independent semantic review.
+Uninterpreted counts are advisory: receiving a message alone does not cancel an
+already-authorized task. The caller must apply a genuine correction/reopen and
+link decision dependencies; the current tools cannot authenticate owner intent
+or intercept unrelated connectors. Automatic correct routing, held-out model
+evaluation, native client activation and cross-domain transfer remain OPEN.
+
+## Product architecture correction: cognition before Host mechanics
+
+The complete product is an opt-in interactive parent that can investigate and
+solve its own failures, then guide independent child systems. The managed
+ledger/Worker experiment below covers only part of this product. Its green CI
+does not validate the calling model's investigation, research, architectural
+judgment or sustained execution. Do not keep selecting easy Host defects while
+these parent-level outcomes remain untested.
+
+### One parent with distinct responsibilities
+
+| Component | Required behavior | Evidence needed before calling it working |
+| --- | --- | --- |
+| Entry and goal recovery | On an explicit wake, identify the selected project, recover original requirements/corrections, current state and grants; avoid unrelated chats | Actual related/unrelated client traces, cold and interrupted resumes, full-clause fidelity |
+| Cognitive decision loop | Challenge the symptom, diagnosis, research strategy and proposed fix; reopen earlier assumptions when new evidence contradicts them | Competing causal explanations distinguished by observations, including failure of the chosen explanation |
+| Research and solution design | Discover materially different approaches; study primary implementations, tests and failures; compare adaptation, consolidation, replacement and reconstruction | Versioned source/experiment receipts tied to unresolved questions; design comparison and a second challenge before execution |
+| Working context and knowledge | Keep raw authority, task state, evidence claims and reusable procedures distinct; retrieve only needed detail | Original clauses survive compression; source conflicts are visible; changed evidence withdraws dependent advice |
+| Controlled execution and result | Bind the chosen goal/method/action to lawful tools and independently read the meaningful outcome | Legal/forbidden/prerequisite neighbors, interruption reconciliation and genuine domain validators |
+| Method evolution and child interface | Derive scoped methods from results, test transfer and regressions, promote or roll back versions; guide child work without taking its business authority | Held-out tasks and negative transfer controls; child-native result readback and fewer owner corrections |
+
+The calling ChatGPT/Codex model remains the reasoning actor. The existing private
+Skill is guidance, not an enforced loop or account-wide hook. GitHub, private
+files and optional Host state must expose current facts to that actor; no one
+surface may silently substitute its summary for the original goal. A supported
+controlled client can enforce its own tool/stop boundaries; the present ChatGPT
+surface cannot claim interception of every other connector's operation.
+
+### Nonlinear control and stop semantics
+
+Diagnosis is provisional, not a single question followed by a patch. A knowledge
+gap opens research. Research may disprove the diagnosis or reveal a missing
+requirement. Competing designs must be compared under relevant owner tasks and
+lifetime maintenance cost, including reconstruction when its long-term result
+is better. Before acting, challenge the preferred design and its assumptions
+again. Execution failure may reopen requirements, evidence, method, architecture
+or the validator itself. Preserve independent branches that remain legitimate.
+
+Research depth is established by resolving material uncertainty with source
+and experimental evidence, not by counting links, reflection rounds or model
+statements. Several genuinely different candidates must be studied for an
+uncertain consequential design; that is not a rule to fetch three arbitrary
+README files on every task. Budget exhaustion yields incomplete research with
+explicit remaining uncertainty, never successful research by default.
+
+There are separate decisions to stop a tool attempt, suspend an unresolved
+investigation, accept an implementation, and declare the whole owner goal met.
+The last requires the complete outcome and its independent evidence. A local
+test or a completed method card cannot authorize that transition. Current
+ordinary chat cannot guarantee automatic continuation after a final answer;
+this is a platform boundary to test with supported client integration, not a
+reason to defer other interactive work to a future always-on server.
+
+### Reuse research; do not restart the bibliography
+
+The existing source atlas and research cards already study many Hub projects.
+Live rechecks found identical Open Deep Research and SkillOpt blobs below;
+retain those conclusions rather than claiming another novel full study.
+
+| Actual source inspected | Mechanism worth adapting | Strongest limitation for CAOS |
+| --- | --- | --- |
+| Open Deep Research `deep_researcher.py`, blob `279dbffd9e49e07962fb4e1cfeff79e45adc43e9` | Research brief, follow-up tool loop, raw notes retained alongside compression | Supervisor can stop on no tools, completion signal or iteration limit; that is not independent proof of sufficient research |
+| STORM `knowledge_curation.py`, blob `d6b892957e5ef2c68d659c294bf64a02c9135b2e` | Perspective-guided question generation and retrieved source conversations | Bounded conversation and model answers do not establish an engineering root cause or permitted business effect |
+| SkillOpt `docs/guide/training-loop.md`, blob `3ba0d524d36a5dc4774f918931d22732670e4006` | Trajectories, candidate aggregation, controlled edits, selection validation and regression comparison | Ungated configurations can force acceptance; a validation improvement is scoped to its evaluator/data |
+| Hello-Agents `Extra-Chapter/Extra10-Agent自进化.md`, blob `07dcc30d07d6508ab55a290dc135f916148a0a9e` | Separate context, skill, shared-experience and strategy/code evolution loops | Tutorial mechanisms do not prove runtime activation, transfer or permission in the present client |
+
+Sources: [research loop](https://github.com/langchain-ai/open_deep_research/blob/main/src/open_deep_research/deep_researcher.py),
+[questioning implementation](https://github.com/stanford-oval/storm/blob/main/knowledge_storm/storm_wiki/modules/knowledge_curation.py),
+[evolution gate](https://github.com/microsoft/SkillOpt/blob/main/docs/guide/training-loop.md),
+[four evolution loops](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra10-Agent%E8%87%AA%E8%BF%9B%E5%8C%96.md).
+
+### Consolidation and acceptance direction
+
+Retain reliable transaction/effect/recovery components as optional supporting
+infrastructure. Do not equate their typed action catalog with general cognition.
+Keep research/knowledge provenance and actual result evaluators; consolidate
+overlapping interface responsibilities only after checking their distinct
+contracts. Do not add another scheduler or a permanent repository-wide prompt.
+
+The next product comparison is the actual interactive parent versus the managed
+client path on equal tasks: an unfamiliar architecture problem requiring deep
+research, an interrupted task with a late correction, a misleading-source or
+invalid-experience case, and an independently governed child task. Observe
+missed clauses, unsupported claims, wrong effects, recovery, owner interventions,
+tool/context cost and final outcomes. No model trials, deployment, native fresh
+chat trace or child-business result is fabricated by this architectural revision.
+The entire product remains NOT_READY; the correction is not a release gate pass.
+
+## 2026-11-04: executable managed session experiment (conditional)
+
+The live integration baseline `cc22304c6ebae884aae95efbc19874e6b018498a`
+passes 1,179 standard-library tests, while the supplied owner-alignment probe
+still permits and executes all five explicitly forbidden proposals. Seven
+operational interfaces also create empty databases when invoked without a
+provisioned ledger. Reproduced locally before changing code. These observations
+separate semantic admission, operational provisioning and actual client
+connectivity; they do not justify blaming every failure on one cause.
+
+| Alternative | What it changes | Counterevidence / decision |
+| --- | --- | --- |
+| More Skill prose | Model guidance | Detailed rules already coexist with false admissions; no enforcement improvement demonstrated. |
+| Replace all state/execution with a graph SDK | Scheduling, checkpointing, interruption | Upstream mechanisms still require application-specific guards and outcomes. No measured semantic advantage or migration justification. |
+| Keep existing ledger/Worker, add executable evidence dependencies and operator-bound effects | Actual admission/write boundary, recovery and source invalidation | Selected as a bounded experiment. Cannot infer arbitrary owner intent or control unrelated connectors. |
+| Deny every unknown goal | Avoid effects | Prevents legitimate exploration; managed research/observations stay available while unbound effects are rejected. |
+
+First-hand code inspected: LangGraph `pregel/_loop.py` blob
+`579b8ae09d074e7aaabf6e643cc5fe554a1cdbc6` (`tick`, `_suppress_interrupt`),
+OpenAI Agents `tool_guardrails.py` blob `613d5dbcecb4bb0e71169e9f2cf81d331023473b`
+(allow/reject/raise behaviors), AutoGen `_base_group_chat.py` blob
+`60f222912387d37be37f457ad486d51060255966` (`save_state`, `load_state`, consistency
+warning during live runs). These implementations establish useful mechanisms,
+not a product superiority benchmark. No upstream code is copied into runtime.
+
+Source URLs:
+- https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/pregel/_loop.py
+- https://github.com/openai/openai-agents-python/blob/main/src/agents/tool_guardrails.py
+- https://github.com/microsoft/autogen/blob/main/python/packages/autogen-agentchat/src/autogen_agentchat/teams/_group_chat/_base_group_chat.py
+- https://learn.chatgpt.com/docs/extend/mcp
+
+Implementation: reuse native goal identity and the same event ledger; append
+immutable corrections/nodes and derive source/dependency status at read time.
+An operator contract is separate from model records and unavailable as an MCP
+grant tool. Admission and artifact-write guards both enforce it. Restored
+snapshots preserve IDs but require fresh operator binding. Legacy typed roots
+retain compatibility and are explicitly not covered by the new semantic policy.
+
+Falsifiers: stale source or reopened ancestor still executes; legal bound
+neighbor is blocked; source text can mint authority; cold recovery loses a
+correction; restored grants silently reactivate; method outcome changes without
+withdrawal. Real SQLite/Worker and official MCP subprocess tests exercise these
+conditions. A whole-framework replacement can be reopened if comparable native
+model trials demonstrate better owner outcomes/maintenance cost. Those trials
+have **not** been run; no claim of optimal architecture or product completion.
+
+Original M033 arbitrary-language understanding remains OPEN. Manually supplied
+operator policies are not evidence of automatic goal comprehension. This branch
+must not merge under the complete-product delegation until outstanding product
+gates and independent review are resolved. Operational entry and rollback:
+[`PRODUCT_OPERATION_AND_ACCEPTANCE.md`](PRODUCT_OPERATION_AND_ACCEPTANCE.md).
+
+
 > 状态：**DESIGN PROPOSAL / 未冻结** · 2026-10-20 · 对应 [00-PRODUCT-CONOPS.md](00-PRODUCT-CONOPS.md)。任何技术名称都是备选方案，不得误写成已经部署。
 
 ## A. 系统约束优先于框架

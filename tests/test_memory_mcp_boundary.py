@@ -19,7 +19,7 @@ class _MCP:
     def __init__(self, name):
         self.tools = {}
 
-    def tool(self):
+    def tool(self, **metadata):
         def register(func):
             self.tools[func.__name__] = func
             return func
@@ -72,6 +72,20 @@ class MemoryMcpToolTests(unittest.TestCase):
         inspected = s.tools["native_memory_candidates_inspect"](self.goal)
         self.assertEqual(inspected["status"], "READ_ONLY_CANDIDATES")
         self.assertFalse(inspected["any_semantic_truth_verified"])
+
+    def test_conversation_and_graph_quotes_require_source_disclosure(self):
+        default = self.server()
+        self.assertNotIn("cognition_input_record", default.tools)
+        for name in ("cognition_inputs_inspect", "cognition_session_inspect", "cognition_client_history"):
+            with self.assertRaisesRegex(PermissionError, "SOURCE_DISCLOSURE_NOT_ENABLED"):
+                default.tools[name](self.goal)
+        writable = self.server(allow_goal_writes=True)
+        self.assertIn("cognition_input_record", writable.tools)
+        with self.assertRaisesRegex(PermissionError, "SOURCE_DISCLOSURE_NOT_ENABLED"):
+            writable.tools["cognition_node_record"](self.goal,
+                {"input_refs": [{"request_id": "message"}]}, "reading", "old")
+        readable = self.server(allow_source_read=True)
+        self.assertEqual(readable.tools["cognition_inputs_inspect"](self.goal)["inputs"], [])
 
     def test_actual_mcp_memory_read_fences_midread_revoke(self):
         """The exposed MCP tool must not leak a pre-revocation text snapshot."""

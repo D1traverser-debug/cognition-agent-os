@@ -11,7 +11,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from .ledger import connect, create_task, event, _validated_due_at, _next_recurring_due
+from .ledger import connect_existing as connect, create_task, event, _validated_due_at, _next_recurring_due
 from .goal_loop import plan_goal, validate_goal, GoalError
 from .source import safe_fixture
 from .goal_audit import audit_goal

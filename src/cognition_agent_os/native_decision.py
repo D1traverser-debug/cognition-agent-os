@@ -746,6 +746,7 @@ def record_native_open_research(db_path: Path, workspace: Path, fixtures: Path,
 def register_native_goal(db_path: Path, goal: str, *,
                          allow_public_discovery: bool = False,
                          allow_public_source_read: bool = False,
+                         managed_session: bool = False,
                          client_request_id: str | None = None) -> str:
     """Register a durable owner goal with optional lost-ACK retry identity.
 
@@ -753,7 +754,12 @@ def register_native_goal(db_path: Path, goal: str, *,
     The old no-key API keeps its existing distinct-registration semantics.
     The same key with different owner intent is a hard conflict, never a
     silent switch of source/scope or privilege.
+
+    Public CLI/MCP callers require managed_session=True. The default retains
+    the historical low-level research API, not a safe public execution profile.
     """
+    if type(managed_session) is not bool:
+        raise ValueError("INVALID_NATIVE_MANAGED_PROFILE")
     contract = _contract(
         goal, allow_public_discovery=allow_public_discovery,
         allow_public_source_read=allow_public_source_read)
@@ -791,6 +797,9 @@ def register_native_goal(db_path: Path, goal: str, *,
                     if ((original["goal_rev"], original["grant_rev"]) !=
                         (auth["goal_rev"], auth["grant_rev"])):
                         raise ValueError("NATIVE_GOAL_IDEMPOTENCY_STALE_GRANT")
+                    if managed_session:
+                        from .effect_contract import _enable_managed
+                        _enable_managed(db, original["task_id"])
                     db.commit()
                     return original["task_id"]
             root = create_task(db, contract, commit=False)
@@ -805,6 +814,9 @@ def register_native_goal(db_path: Path, goal: str, *,
             if client_request_id is not None:
                 receipt["client_request_id"] = client_request_id
             event(db, root, "NATIVE_GOAL_REGISTERED", receipt)
+            if managed_session:
+                from .effect_contract import _enable_managed
+                _enable_managed(db, root)
             db.commit()
             return root
         except BaseException:
@@ -1637,8 +1649,14 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
             # never independent proof that the method matches owner intent.
             if not _selected_sources_present(parsed["selected"], source_hashes):
                 raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
+            from .effect_contract import enforce_admission, bind_action
+            from .ledger import _NATIVE_ADMISSION
+            binding = enforce_admission(db, fixtures, workspace, root_id,
+                                        parsed["selected"]["child_source_spec"])
             child = create_task(db, parsed["selected"]["child_source_spec"],
-                                parent=root_id, commit=False)
+                                parent=root_id, commit=False,
+                                admission_token=_NATIVE_ADMISSION)
+            bind_action(db, root_id, child, binding)
             previous = (observed["decisions"][-1]["task_id"]
                         if observed["decisions"] else None)
             event(db, root_id, "NATIVE_DECISION_ADMITTED", {
@@ -1682,6 +1700,12 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
         if (root["state"] != "DECOMPOSED"
             or not _valid_contract(contract)):
             return False
+        from .effect_contract import managed, verify_action_binding
+        if managed(db, root["task_id"]):
+            if workspace is None or not verify_action_binding(
+                    db, fixtures, workspace, root["task_id"], task_id,
+                    json.loads(task["source_spec"])):
+                return False
         receipts = db.execute(
             "SELECT event_id,details FROM events WHERE task_id=? "
             "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id",
@@ -1783,3 +1807,87 @@ def native_child_admitted(db: sqlite3.Connection, fixtures: Path,
     except (KeyError, ValueError, TypeError, sqlite3.Error, OSError,
             SourceUnavailable, IntentError, PermissionError):
         return False
+
+
+def list_native_goals(db_path: Path, workspace: Path, fixtures: Path,
+                      after_task_id: str | None = None) -> dict:
+    """Enumerate EVERY original root through stable native-only keyset pages.
+
+    A cold model client has no remembered root ID. A fixed LIMIT 50 without
+    an explicit continuation cursor silently hides old goals at scale.
+    The cursor is an EXISTING native root ID, not a caller-supplied SQL
+    offset/timestamp, execution grant, or implicitly selected goal.
+    """
+    require_initialized_ledger(db_path)
+    with readonly_snapshot(db_path) as db:
+        native_root = (
+            "parent_task IS NULL AND ("
+            "(CASE WHEN json_valid(source_spec) "
+            "THEN json_extract(source_spec,'$.kind') "
+            "ELSE NULL END)='native_goal' "
+            "OR task_id IN (SELECT task_id FROM events "
+            "WHERE kind='NATIVE_GOAL_REGISTERED'))")
+        # The native source_spec and its registration receipt are two
+        # separate existing identity witnesses. Either one identifies a
+        # *candidate* root for a cold inventory, but only the independent
+        # audit can expose trusted original text or admit any work.
+        # IN builds a bounded membership lookup rather than an
+        # unindexed events scan for every task row.
+        args = []
+        where = native_root
+        if after_task_id is not None:
+            if (not isinstance(after_task_id, str)
+                or len(after_task_id) != 32
+                or any(c not in "0123456789abcdef"
+                       for c in after_task_id)):
+                raise ValueError("INVALID_NATIVE_GOAL_CURSOR")
+            cursor = db.execute(
+                "SELECT created_at,task_id FROM tasks WHERE "
+                + native_root + " AND task_id=?", (after_task_id,)
+            ).fetchone()
+            if cursor is None:
+                raise ValueError("INVALID_NATIVE_GOAL_CURSOR")
+            # SQLite keyset ordering, including ties on created_at.
+            # Newer concurrently added goals cannot shift old pages as
+            # with OFFSET. Prepared values prevent cursor SQL injection.
+            where += " AND (created_at,task_id) < (?,?)"
+            args.extend((cursor["created_at"], cursor["task_id"]))
+        rows = db.execute(
+            "SELECT task_id FROM tasks WHERE " + where
+            + " ORDER BY created_at DESC,task_id DESC LIMIT 51", args
+        ).fetchall()
+    more = len(rows) > 50
+    page = rows[:50]
+    recovered = []
+    for row in page:
+        state = inspect_native_goal(
+            db_path, workspace, fixtures, row["task_id"])
+        if (state.get("status") == "NATIVE_GOAL_UNVERIFIABLE"
+            or not isinstance(state.get("original_goal"), str)):
+            # An unverified registration is not a trustworthy owner goal,
+            # but silently removing its root hides an unfinished obligation
+            # and can make a cold multi-goal inventory appear unique.
+            # Return ONLY its opaque identity/status; never disclose
+            # unverified text, re-admit work, or infer a new grant.
+            recovered.append({
+                "root_task_id": row["task_id"],
+                "status": "NATIVE_GOAL_UNVERIFIABLE",
+                "owner_outcome_verified": False,
+            })
+            continue
+        recovered.append({
+            "root_task_id": row["task_id"],
+            "original_goal": state["original_goal"],
+            "status": state["status"],
+            "decision_count": state.get("decision_count"),
+            "owner_outcome_verified": False,
+        })
+    return {"status": "NATIVE_GOAL_INVENTORY",
+            "goals": recovered, "truncated": more,
+            "next_after_task_id": page[-1]["task_id"] if more else None,
+            "ambiguous": len(recovered) > 1 or more
+                or after_task_id is not None
+                or any(item["status"] == "NATIVE_GOAL_UNVERIFIABLE"
+                       for item in recovered),
+            "selected_root_task_id": None,
+            "owner_outcome_verified": False}

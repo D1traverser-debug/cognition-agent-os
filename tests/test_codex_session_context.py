@@ -420,6 +420,38 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("ChatGPT/Codex", pivot["proposed_first_action"])
         self.assertIn("认知", pivot["proposed_first_action"])
 
+    def test_architecture_history_growth_preserves_exact_bounded_selection(self):
+        import hashlib
+        import importlib.util
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location("growing_adr", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        docs = self.tmp / "docs"
+        docs.mkdir()
+        path = docs / "01-ARCHITECTURE-DECISIONS.md"
+        selected = ("### 优先级反转（约束后续工程行为）\n"
+                    "1. ChatGPT/Codex must challenge current evidence, compare alternatives "
+                    "and inspect the real authorized outcome before accepting success.")
+        for history in ("旧历史\n" * 25000, "x" * 100000 + "\n"):
+            raw = (history + selected).encode("utf-8")  # no final newline
+            path.write_bytes(raw)
+            with patch.object(module, "ROOT", self.tmp):
+                view = module._current_architecture_pivot()
+            self.assertEqual(view["status"], "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
+            self.assertEqual(view["source_sha256"], hashlib.sha256(raw).hexdigest())
+            self.assertLess(len(view["proposed_first_action"]), 800)
+            self.assertNotIn("旧历史", json.dumps(view, ensure_ascii=False))
+        # Duplicate headings and actions outside the chosen section cannot
+        # silently become current architecture on the next cold recovery.
+        for bad in (selected + "\n" + selected,
+                    "### 优先级反转（约束后续工程行为）\n## Other\n" + selected.split("\n")[1],
+                    "### 优先级反转（约束后续工程行为）\n" + "x" * 9000):
+            path.write_text(bad, encoding="utf-8")
+            with patch.object(module, "ROOT", self.tmp):
+                self.assertEqual(module._current_architecture_pivot()["status"],
+                                 "ARCHITECTURE_PIVOT_UNVERIFIABLE")
+
     def test_sqlite_original_owner_goal_is_not_replaced_by_repo_guidance(self):
         owner = "Compare reference.csv with observed.csv, preserve source."
         with closing(connect(self.db)) as db:
@@ -570,6 +602,89 @@ class CodexSessionContext(unittest.TestCase):
             text=True, timeout=8)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return json.loads(proc.stdout)
+
+    def test_cognitive_corrections_and_messages_survive_actual_hook_readback(self):
+        from cognition_agent_os.cognitive_session import inspect_session, amend_goal, record_input
+        root = register_native_goal(self.db, "Keep the entire original goal.", managed_session=True)
+        v = inspect_session(self.db, self.fixtures, root)
+        amend_goal(self.db, self.fixtures, root, "PRIVATE_CORRECTION: keep the archive.",
+                   request_id="hook-correction", expected_revision=v["revision_token"])
+        v = inspect_session(self.db, self.fixtures, root)
+        record_input(self.db, self.fixtures, root, text="PRIVATE_INPUT: maybe replace the engine.",
+                     origin="client_user", locator="test", request_id="hook-message",
+                     expected_revision=v["revision_token"])
+        hook = self._run()
+        self.assertIn("cognition", hook)
+        self.assertEqual(hook["cognition"]["goal_revision"], 1)
+        self.assertEqual(hook["cognition"]["uninterpreted_input_count"], 1)
+        self.assertNotIn("PRIVATE_CORRECTION", json.dumps(hook))
+        self.assertNotIn("PRIVATE_INPUT", json.dumps(hook))
+        actual = self._readback_state(hook["continuity_state_readback"]["arguments"])
+        self.assertEqual(actual["readback"]["cognition"]["amendments"], ["PRIVATE_CORRECTION: keep the archive."])
+        locator = hook["cognition"]["inputs_readback"]["arguments"]
+        page = self._readback_state(locator)
+        self.assertEqual(page["status"], "COGNITION_READBACK_MATCHED")
+        self.assertEqual(page["readback"]["inputs"][0]["text"], "PRIVATE_INPUT: maybe replace the engine.")
+        # A correction changes the existing state locator, not only a side file.
+        v = inspect_session(self.db, self.fixtures, root)
+        amend_goal(self.db, self.fixtures, root, "Another actual correction.",
+                   request_id="hook-correction-2", expected_revision=v["revision_token"])
+        self.assertEqual(self._readback_state(locator)["status"], "COGNITION_READBACK_STALE")
+        self.assertEqual(self._readback_state(hook["continuity_state_readback"]["arguments"])["status"], "CONTINUITY_STATE_READBACK_STALE")
+
+    def test_ambiguous_cognitive_roots_keep_separate_corrections_and_revision(self):
+        from cognition_agent_os.cognitive_session import inspect_session, amend_goal
+        roots = [register_native_goal(self.db, text, managed_session=True)
+                 for text in ("Original first", "Original second")]
+        for i, root in enumerate(roots):
+            v = inspect_session(self.db, self.fixtures, root)
+            amend_goal(self.db, self.fixtures, root, "PRIVATE_AMENDMENT_" + str(i),
+                       request_id="correction", expected_revision=v["revision_token"])
+        hook = self._run()
+        self.assertEqual(hook["status"], "AMBIGUOUS_OPEN_OWNER_GOALS")
+        self.assertNotIn("PRIVATE_AMENDMENT", json.dumps(hook))
+        self.assertNotIn("root_task_id", hook)
+        actual = self._readback_state(hook["continuity_state_readback"]["arguments"])
+        goals = {x["root_task_id"]: x for x in actual["readback"]["original_goals"]}
+        self.assertEqual(goals[roots[1]]["cognition"]["amendments"], ["PRIVATE_AMENDMENT_1"])
+
+    def test_cognition_pages_reject_changed_sources_and_input_only_drift(self):
+        import hashlib
+        from cognition_agent_os.cognitive_session import inspect_session, record_node, record_input
+        root = register_native_goal(self.db, "Preserve corrections and source evidence.", managed_session=True)
+        source = self.fixtures / "private-evidence.txt"
+        source.write_text("PRIVATE_SOURCE observation", encoding="utf-8")
+        view = inspect_session(self.db, self.fixtures, root)
+        node = {"id": "source", "kind": "source", "text": "Observation", "depends_on": [],
+                "source_refs": [{"path": source.name, "quote": "PRIVATE_SOURCE observation",
+                                 "sha256": hashlib.sha256(source.read_bytes()).hexdigest()}],
+                "supersedes": None, "goal_revision": 0}
+        record_node(self.db, self.fixtures, root, node, request_id="source", expected_revision=view["revision_token"])
+        old = self._run()
+        self.assertNotIn("PRIVATE_SOURCE", json.dumps(old))
+        source.write_text("Changed evidence", encoding="utf-8")
+        self.assertEqual(self._readback_state(old["cognition"]["nodes_readback"]["arguments"])["status"], "COGNITION_READBACK_STALE")
+        fresh = self._run()
+        nodes = self._readback_state(fresh["cognition"]["nodes_readback"]["arguments"])
+        self.assertEqual(nodes["readback"]["nodes"][0]["status"], "SOURCE_UNAVAILABLE_OR_CHANGED")
+        for i in range(5):
+            view = inspect_session(self.db, self.fixtures, root)
+            record_input(self.db, self.fixtures, root, text="PRIVATE_MESSAGE_" + str(i), origin="client_user",
+                         locator="test", request_id="message" + str(i), expected_revision=view["revision_token"])
+        self.assertEqual(self._readback_state(fresh["continuity_state_readback"]["arguments"])["status"], "CONTINUITY_STATE_READBACK_STALE")
+        latest = self._run()
+        args = latest["cognition"]["inputs_readback"]["arguments"]
+        page = self._readback_state(args)["readback"]
+        self.assertEqual(len(page["inputs"]), 4)
+        following = self._readback_state([*args[:-1], str(page["next_after_event_id"])])["readback"]
+        self.assertEqual([x["text"] for x in following["inputs"]], ["PRIVATE_MESSAGE_4"])
+        self.assertIsNone(following["next_after_event_id"])
+        with closing(connect(self.db)) as db:
+            before = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        self._readback_state(args)
+        with closing(connect(self.db)) as db:
+            self.assertEqual(before, db.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+
 
     def _registered_contract(self, task, goal_id="independent-original"):
         return {

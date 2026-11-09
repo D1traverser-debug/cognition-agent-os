@@ -148,6 +148,7 @@ def event(db: sqlite3.Connection, task_id: str, kind: str, details: dict | None 
 # SQLite accepts NaN/+inf and coercible booleans. Such values can leave work
 # forever unclaimable without ever signaling a scheduling failure.
 _MAX_TIMESTAMP = 253402300799  # last second of Gregorian year 9999
+_NATIVE_ADMISSION = object()  # Internal call-path marker, NOT a security credential.
 
 
 def _validated_due_at(value: float | int) -> float:
@@ -173,20 +174,48 @@ def _next_recurring_due(interval: int, *, now: float) -> float:
 
 
 def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0, due_at: float | None = None,
-                parent: str | None = None, commit: bool = True) -> str:
+                parent: str | None = None, commit: bool = True,
+                admission_token=None) -> str:
     # Input validation must precede every write, including ENQUEUED events.
     interval_seconds = _validated_interval(interval_seconds)
     due = _validated_due_at(time.time() if due_at is None else due_at)
-    row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
-    tid = uuid.uuid4().hex
-    db.execute("""INSERT INTO tasks(task_id,state,state_version,goal_rev,grant_rev,due_at,interval_seconds,
-              source_spec,created_at,parent_task) VALUES(?, 'PENDING',0,?,?,?,?,?,?,?)""",
-               (tid, row["goal_rev"], row["grant_rev"], due,
-                interval_seconds, json.dumps(spec, sort_keys=True), time.time(), parent))
-    event(db, tid, "ENQUEUED", {"parent": parent})
-    if commit:
-        db.commit()
-    return tid
+    encoded = json.dumps(spec, sort_keys=True, allow_nan=False)
+    owns_transaction = not db.in_transaction
+    if owns_transaction:
+        db.execute("BEGIN IMMEDIATE")
+    db.execute("SAVEPOINT task_admission")
+    try:
+        row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
+        if row is None or row["write_allowed"] != 1:
+            raise PermissionError("TASK_ADMISSION_GRANT_REVOKED")
+        managed_only = db.execute("SELECT 1 FROM events WHERE "
+            "kind='COGNITION_MANAGED_LEDGER' LIMIT 1").fetchone() is not None
+        if managed_only and spec.get("kind") != "native_goal":
+            if admission_token is not _NATIVE_ADMISSION or parent is None:
+                raise PermissionError("MANAGED_LEDGER_REQUIRES_NATIVE_ADMISSION")
+        if parent is not None:
+            ancestor = db.execute(
+                "SELECT goal_rev,grant_rev FROM tasks WHERE task_id=?", (parent,)
+            ).fetchone()
+            if (ancestor is None or (ancestor["goal_rev"], ancestor["grant_rev"])
+                    != (row["goal_rev"], row["grant_rev"])):
+                raise ValueError("TASK_ADMISSION_PARENT_INVALID")
+        tid = uuid.uuid4().hex
+        db.execute("""INSERT INTO tasks(task_id,state,state_version,goal_rev,grant_rev,due_at,interval_seconds,
+                  source_spec,created_at,parent_task) VALUES(?, 'PENDING',0,?,?,?,?,?,?,?)""",
+                   (tid, row["goal_rev"], row["grant_rev"], due,
+                    interval_seconds, encoded, time.time(), parent))
+        event(db, tid, "ENQUEUED", {"parent": parent})
+        db.execute("RELEASE task_admission")
+        if commit:
+            db.commit()
+        return tid
+    except BaseException:
+        db.execute("ROLLBACK TO task_admission")
+        db.execute("RELEASE task_admission")
+        if owns_transaction:
+            db.rollback()
+        raise
 
 
 def claim_one(db: sqlite3.Connection, *, now: float | None = None, lease_seconds: int = 40,
@@ -403,6 +432,10 @@ def current_guard(db: sqlite3.Connection, task: dict, *, needs_write: bool) -> t
         return False, "STALE_GOAL"
     if needs_write and (not row["write_allowed"] or row["grant_rev"] != task["grant_rev"]):
         return False, "WRITE_GRANT_REVOKED"
+    if needs_write:
+        from .effect_contract import current_effect_guard
+        if not current_effect_guard(db, task):
+            return False, "COGNITIVE_EFFECT_CONTRACT_INVALIDATED"
     return True, None
 
 

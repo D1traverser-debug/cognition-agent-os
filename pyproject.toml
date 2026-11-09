@@ -13,6 +13,7 @@ dependencies = []
 mcp = ["mcp>=2,<3"]  # Local adapter requires Python 3.11+; core stays stdlib-only.
 
 [project.scripts]
+caos = "cognition_agent_os.session_cli:main"
 cognition-os = "cognition_agent_os.cli:main"
 cognition-os-mcp = "cognition_agent_os.native_mcp_bridge:main"
 
