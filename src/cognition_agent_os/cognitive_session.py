@@ -115,7 +115,17 @@ def _source_check(sources: Path, ref: dict):
             or not all(isinstance(v, str) for v in ref.values())
             or not 1 <= len(ref["quote"]) <= 4000):
         raise ValueError("COGNITION_INVALID_SOURCE_REF")
-    raw = safe_fixture(sources, ref["path"])
+    try:
+        raw = safe_fixture(sources, ref["path"])
+    except (OSError, SourceUnavailable) as exc:
+        raise ValueError("COGNITION_SOURCE_UNAVAILABLE") from exc
+    except ValueError as exc:
+        # Normalize only the reader's known path refusals, never arbitrary
+        # exception text. A ledger goal is not a file in this source namespace.
+        if str(exc) not in {"Fixture path outside approved root",
+                            "Opened fixture escaped approved root"}:
+            raise
+        raise ValueError("COGNITION_SOURCE_UNAVAILABLE") from exc
     if hashlib.sha256(raw).hexdigest() != ref["sha256"]:
         raise ValueError("COGNITION_SOURCE_CHANGED")
     if ref["quote"] not in raw.decode("utf-8"):

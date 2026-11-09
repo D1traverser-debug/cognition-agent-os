@@ -140,8 +140,19 @@ async def run():
                                      "quote": "PRIVATE_SOURCE_CONTENT_SENTINEL"}]}})
             assert unknown.is_error
             message = " ".join(getattr(p, "text", "") for p in unknown.content)
+            assert "COGNITION_SOURCE_UNAVAILABLE" in message
             assert "PRIVATE_ERROR_INPUT_SENTINEL" not in message
             assert "PRIVATE_SOURCE_CONTENT_SENTINEL" not in message
+            hidden = await client.call_tool("cognition_node_record", {
+                "root_task_id": root, "request_id": "unrecognized-domain-error",
+                "expected_revision": original_view["revision_token"],
+                "node": {"id": "invented-obligation", "kind": "obligation",
+                    "text": "PRIVATE_UNQUOTED_OWNER_CLAIM", "depends_on": [],
+                    "supersedes": None, "goal_revision": 0, "source_refs": []}})
+            assert hidden.is_error
+            masked = " ".join(getattr(p, "text", "") for p in hidden.content)
+            assert "PRIVATE_UNQUOTED_OWNER_CLAIM" not in masked
+            assert "COGNITION_OBLIGATION_MUST_QUOTE_OWNER" not in masked
             assert (await inspect(client, root))["revision_token"] == original_view["revision_token"]
             raw_input = "Maybe use a graph. This is a suggestion, not a replacement goal."
             unwrap(await client.call_tool("cognition_input_record", {

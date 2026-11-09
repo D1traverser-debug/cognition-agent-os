@@ -49,7 +49,19 @@ def judge(cases):
             "network_and_read_confidentiality": "NOT_TESTED"}
 
 
-def measure(client, base, *, windows_sandbox=None):
+def measure(client, base, *, windows_sandbox=None, receipt=None):
+    # Retain observations at their boundary even when a later RPC fails.
+    # These RPCs contain only this disposable probe's fixed code and paths.
+    receipt = receipt if receipt is not None else {}
+    receipt["native_rpc_errors"] = []
+    class ObservedServer(AppServer):
+        def receive(self, deadline):
+            message = super().receive(deadline)
+            if isinstance(message.get("error"), dict):
+                error = message["error"]
+                receipt["native_rpc_errors"].append({"code": error.get("code"),
+                    "message": str(error.get("message", ""))[:2000]})
+            return message
     workspace = base / "candidate workspace 中文"
     workspace.mkdir()
     sibling = base / "protected-sibling.txt"
@@ -63,8 +75,9 @@ def measure(client, base, *, windows_sandbox=None):
     argv = [client, "app-server", "--listen", "stdio://"]
     if windows_sandbox:
         argv.extend(["-c", 'windows.sandbox=' + json.dumps(windows_sandbox)])
-    server = AppServer(argv, workspace, timeout=30)
+    server = ObservedServer(argv, workspace, timeout=30)
     cases = {}
+    receipt["cases"] = cases
     try:
         server.request("initialize", {"clientInfo": {
             "name": "caos_boundary_probe", "version": "0.0.1"}})
@@ -73,8 +86,10 @@ def measure(client, base, *, windows_sandbox=None):
             entry_preflight = verify_readonly_boundary(server, workspace)
         except RuntimeError as exc:
             entry_preflight = {"status": "BLOCKED", "reason": str(exc)}
+        receipt["production_entry_preflight"] = entry_preflight
 
         def write(path, selected_policy):
+            receipt["last_probe_policy"] = selected_policy
             # Fixed probe code and argv; never execute model/source-provided code.
             result = server.request("command/exec", {
                 "command": [sys.executable, "-E", "-P", "-c",
@@ -132,7 +147,7 @@ def main():
             receipt["client_version"] = subprocess.check_output(
                 [client, "--version"], text=True, encoding="utf-8", timeout=20).strip()
             receipt["requested_windows_sandbox"] = args.windows_sandbox
-            receipt.update(measure(client, base, windows_sandbox=args.windows_sandbox))
+            receipt.update(measure(client, base, windows_sandbox=args.windows_sandbox, receipt=receipt))
     except Exception as exc:
         receipt["failure"] = type(exc).__name__ + ": " + str(exc)
     args.output.parent.mkdir(parents=True, exist_ok=True)

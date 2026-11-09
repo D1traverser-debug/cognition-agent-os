@@ -40,6 +40,7 @@ _TOOL_REJECTIONS = {
     "COGNITION_REQUEST_ID_CONFLICT": "Inspect existing state before deciding whether a different operation is needed; do not blindly retry with a new ID.",
     "COGNITION_DEPENDENCY_NOT_CURRENT": "Inspect the current graph and investigate changed dependencies before making a new decision.",
     "COGNITION_SOURCE_CHANGED": "Re-read the original source and reconsider dependent claims; do not substitute an invented hash.",
+    "COGNITION_SOURCE_UNAVAILABLE": "source_refs address approved source files only. Discover actual relative paths with native_capabilities and read them with native_source_read; do not invent paths or hashes. Original goals are ledger values already bound by root_task_id and goal_revision. A ledger-only observation may use empty source_refs; this does not verify its semantic truth.",
     "COGNITION_QUOTE_NOT_FOUND": "Read the actual source bytes and use an exact supported quotation, or withdraw the claim.",
     "COGNITION_GRANT_REVOKED": "Stop writes. Current operator authority is required; a model cannot grant it.",
     "CURRENT_OPERATOR_EFFECT_CONTRACT_REQUIRED": "Stop execution. An operator-bound effect contract is required; recording a decision does not authorize it.",
@@ -636,6 +637,9 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         Use the complete revision_token from cognition_session_inspect. Node
         fields: id, kind, text, depends_on, source_refs, supersedes,
         goal_revision. A source_ref is path/sha256/quote of actual local bytes.
+        Original goals are ledger values, not source-file paths. A ledger-only
+        observation may leave source_refs empty; root and goal_revision bind it
+        to the stored goal. Never fabricate a goal file or a dependency node.
         Nodes are proposals, never approval. A decision needs two option links.
         For kind=interpretation also supply input_refs (request_id/sha256) and
         claims (input_id, quote, category, meaning, basis). category is goal,

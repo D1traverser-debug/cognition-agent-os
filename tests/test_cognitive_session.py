@@ -61,6 +61,27 @@ class CognitiveSessions(unittest.TestCase):
         self.node("selected", "decision", deps=["compare", "inspect-first"],
                   action_spec=compile_intent(self.fixture.reconcile())["child_source_spec"])
 
+    def test_ledger_goal_binding_does_not_require_an_invented_file(self):
+        before = self.view()
+        files = sorted(p.name for p in self.sources.iterdir())
+        self.node("goal-observation", "observation")
+        observed = self.view()["nodes"][-1]
+        self.assertEqual(observed["goal_revision"], before["goal_revision"])
+        self.assertEqual(observed["source_refs"], [])
+        self.assertFalse(observed["semantic_truth_verified"])
+        self.assertEqual(sorted(p.name for p in self.sources.iterdir()), files)
+        amend_goal(self.db, self.sources, self.root, "New owner correction",
+                   request_id="goal-observation-amend", expected_revision=self.view()["revision_token"])
+        self.assertEqual(self.view()["nodes"][-1]["status"], "GOAL_AMENDED")
+
+    def test_invalid_source_locator_rejects_without_mutating_state(self):
+        before = self.view()
+        for path in ("/PRIVATE_PATH_SENTINEL", "missing-private-source.txt", "../escape.txt"):
+            with self.assertRaisesRegex(ValueError, "^COGNITION_SOURCE_UNAVAILABLE$"):
+                self.node("invalid-reference", "source", refs=[{
+                    "path": path, "sha256": "0" * 64, "quote": "PRIVATE_QUOTE"}])
+            self.assertEqual(self.view()["revision_token"], before["revision_token"])
+
     def test_decision_and_execution_cannot_silently_select_different_actions(self):
         self.decision()
         self.contract()

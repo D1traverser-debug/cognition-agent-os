@@ -1,5 +1,43 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-09: reuse the ledger's existing goal binding; repair source recovery
+
+Challenge the provenance diagnosis from the `40c04f0` trace before adding fields.
+Every cognitive node already binds its selected root and goal_revision; `_project`
+invalidates it when the owner amends that goal. A ledger-only observation can
+already use empty source_refs, while kind=source requires actual file evidence.
+The original goal is not missing from storage or necessarily missing a new
+reference type. The demonstrated failure is an invented file path followed by
+an opaque refusal; whether model capacity also contributes remains unresolved.
+
+Compare another goal-reference schema, creating a shadow goal file, silently
+removing invalid references, and repairing the existing error/namespace contract.
+Choose the last: preserve the current root/revision binding and refuse nonexistent
+or escaping files with a static COGNITION_SOURCE_UNAVAILABLE code. Only known
+path refusals and anticipated file-access failures are normalized; arbitrary
+exception text remains masked. MCP tells the model where real files can be
+discovered and distinguishes ledger observations from file citations. It never
+fills a path/hash, deletes a reference, verifies the claim, or grants an action.
+
+Actual MCP test was RED with the fabricated absolute reference, then GREEN with
+bounded recovery text and no private path/quote disclosure. Unknown domain
+errors remain masked. Core tests cover missing/escaping files, unchanged state
+after refusal, and the already-existing ledger-only observation becoming stale
+after a goal amendment. The next same-model/case/oracle/deadline trial is tied
+to parent `d21f99d`, not an unchanged-source retry or a weaker success criterion.
+
+The separate native execution retest at `d21f99d` / Actions `42545280021` passed
+the Linux allowed/denied byte checks and production entry preflight (artifact
+`13643097213`, ZIP SHA256
+`2d51911b0d0262ce7a3d6e5fa6839769d3d18f35e772c3519cfbf2b69b36611a`).
+Windows with explicitly selected unelevated mode failed at command/exec (artifact
+`13643585303`, ZIP SHA256
+`e57fa2a26337e6863c13c7923a26d0a0f18e4344c1e3852ecae3c2c27629ce22`).
+The old experiment lost partial diagnostics when an RPC raised. Retain probe
+observations immediately and bounded RPC errors from this synthetic-only control
+experiment so the failure can be distinguished; production error masking and
+account settings remain unchanged. No Windows or general-execution PASS claimed.
+
 ## 2026-11-09: an advertised read-only policy is not observed enforcement
 
 Actions `42476051962` at `f3d3ab1` passed mandatory engineering checks, but both
