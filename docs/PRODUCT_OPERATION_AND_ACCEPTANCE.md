@@ -18,6 +18,16 @@ memory record is not proof that the full action loop is available.
 
 ## Install and start locally
 
+Windows setup/packaging and MCP transport have passed CI, but complete model
+dispatch is **not yet accepted** on Windows: the pinned native default failed
+isolation checks, and the experimental unelevated backend rejected the requested
+write roots. `chat` checks actual read-only enforcement before inference and
+preserves the input when it blocks. It does not silently downgrade sandboxing or
+configure the owner's account. Linux byte-level boundary tests passed; those
+tests do not prove generic task completion. The tested local 4B model recovered
+goals but repeatedly failed durable observation recording; it is not an accepted
+offline replacement for a working Codex model provider.
+
 The first-use launcher runs the existing entry without user-authored JSON or
 environment-variable setup. With Python 3.11+ installed, double-click
 `Start-CAOS.cmd` on Windows, or run `python3 start_caos.py` on Linux. It reuses an
@@ -84,6 +94,14 @@ does not embed correction/message/source text. Explicit state readback includes
 corrections; `--readback-cognition ROOT REVISION nodes|inputs CURSOR` pages
 original messages or derived nodes. Follow `next_after_event_id`; changed
 state/source bytes reject stale locators. Conflicting roots remain separate.
+
+For repeated native experiment audits, run
+`python scripts/summarize_native_evidence.py RECEIPT.json ARTIFACT.zip`.
+The offline JSONL index includes hashes, failed checks, tool counts and cumulative
+usage without loading raw model traces into context. It reads known ZIP members
+without extraction. `reported_status` is the producer's claim; the script does
+not reverify the experiment or establish product readiness. Use the emitted
+archive-qualified locator to inspect the relevant original failure only.
 
 This is tested script wiring, not proof that a client loaded the hook. Local
 hooks require supported execution and trust. Cloud-orchestrated ChatGPT Work

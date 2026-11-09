@@ -420,6 +420,38 @@ class CodexSessionContext(unittest.TestCase):
         self.assertIn("ChatGPT/Codex", pivot["proposed_first_action"])
         self.assertIn("认知", pivot["proposed_first_action"])
 
+    def test_architecture_history_growth_preserves_exact_bounded_selection(self):
+        import hashlib
+        import importlib.util
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location("growing_adr", HOOK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        docs = self.tmp / "docs"
+        docs.mkdir()
+        path = docs / "01-ARCHITECTURE-DECISIONS.md"
+        selected = ("### 优先级反转（约束后续工程行为）\n"
+                    "1. ChatGPT/Codex must challenge current evidence, compare alternatives "
+                    "and inspect the real authorized outcome before accepting success.")
+        for history in ("旧历史\n" * 25000, "x" * 100000 + "\n"):
+            raw = (history + selected).encode("utf-8")  # no final newline
+            path.write_bytes(raw)
+            with patch.object(module, "ROOT", self.tmp):
+                view = module._current_architecture_pivot()
+            self.assertEqual(view["status"], "REPO_PROPOSAL_NOT_OWNER_OR_GRANT")
+            self.assertEqual(view["source_sha256"], hashlib.sha256(raw).hexdigest())
+            self.assertLess(len(view["proposed_first_action"]), 800)
+            self.assertNotIn("旧历史", json.dumps(view, ensure_ascii=False))
+        # Duplicate headings and actions outside the chosen section cannot
+        # silently become current architecture on the next cold recovery.
+        for bad in (selected + "\n" + selected,
+                    "### 优先级反转（约束后续工程行为）\n## Other\n" + selected.split("\n")[1],
+                    "### 优先级反转（约束后续工程行为）\n" + "x" * 9000):
+            path.write_text(bad, encoding="utf-8")
+            with patch.object(module, "ROOT", self.tmp):
+                self.assertEqual(module._current_architecture_pivot()["status"],
+                                 "ARCHITECTURE_PIVOT_UNVERIFIABLE")
+
     def test_sqlite_original_owner_goal_is_not_replaced_by_repo_guidance(self):
         owner = "Compare reference.csv with observed.csv, preserve source."
         with closing(connect(self.db)) as db:

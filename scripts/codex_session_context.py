@@ -93,20 +93,45 @@ def _current_architecture_pivot() -> dict:
     if not source.is_file() or source.is_symlink():
         return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
                 "source_role": "NOT_OWNER_OR_GRANT"}
-    try:
-        content = source.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
-                "source_role": "NOT_OWNER_OR_GRANT"}
     title = "### 优先级反转（约束后续工程行为）"
-    if title not in content or len(content) > 80_000:
+    # History may grow without enlarging the context sent to a client. Scan
+    # bounded lines, not a full-document character ceiling or a cached summary.
+    # A duplicate selector is ambiguous; do not silently choose an older copy.
+    candidate, matches, active, candidate_line = None, 0, False, None
+    digest = hashlib.sha256()
+    try:
+        with source.open("rb") as stream:
+            line_number = 0
+            while raw := stream.readline(8193):
+                line_number += 1
+                digest.update(raw)
+                oversized = len(raw) > 8192
+                chunk = raw
+                while len(chunk) == 8193 and not chunk.endswith(b"\n"):
+                    chunk = stream.readline(8193)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    oversized = True
+                if oversized:
+                    if active:
+                        raise ValueError("ARCHITECTURE_SECTION_LINE_TOO_LONG")
+                    continue
+                line = raw.decode("utf-8").rstrip("\r\n")
+                if line == title:
+                    matches += 1
+                    active = True
+                elif active and re.match(r"^#{1,3} ", line):
+                    active = False
+                elif active and line.startswith("1. "):
+                    if candidate is not None:
+                        raise ValueError("ARCHITECTURE_ACTION_AMBIGUOUS")
+                    candidate, candidate_line = line[3:].strip(), line_number
+    except (OSError, UnicodeError, ValueError):
         return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
                 "source_role": "NOT_OWNER_OR_GRANT"}
-    section = content.split(title, 1)[1].split("\n### ", 1)[0]
-    candidate = next(
-        (line[3:].strip() for line in section.splitlines()
-         if line.startswith("1. ")), None)
     if (not isinstance(candidate, str)
+        or matches != 1
         or not 60 <= len(candidate) <= 800
         or "ChatGPT/Codex" not in candidate):
         return {"status": "ARCHITECTURE_PIVOT_UNVERIFIABLE",
@@ -114,6 +139,8 @@ def _current_architecture_pivot() -> dict:
     return {
         "status": "REPO_PROPOSAL_NOT_OWNER_OR_GRANT",
         "source_path": relative,
+        "source_sha256": digest.hexdigest(),
+        "source_line": candidate_line,
         "proposed_first_action": candidate,
     }
 

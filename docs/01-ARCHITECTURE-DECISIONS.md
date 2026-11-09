@@ -1,5 +1,67 @@
 # cognition-agent-os — 总体架构与候选决策（ADR）
 
+## 2026-11-09: recover selected evidence without loading an expanding history
+
+Actions `42545899803` at `98b245b` exposed two cold-entry failures on BOTH
+platforms and the synthetic merge. The ADR had grown to 81,236 characters;
+`_current_architecture_pivot` rejected the entire file above 80,000 even though
+the selected section remained valid. Local regression was run before the final
+ADR addition, so its earlier green result did not describe the pushed tree.
+This is a source lifecycle / verification-order defect, not a Windows encoding
+failure or evidence that the owner goal disappeared.
+
+Compare increasing the whole-file cap, copying a cached decision summary,
+deleting history, and reading the selected section with bounded memory/output.
+Choose the last: scan bounded lines, require a unique exact section, stop its
+scope at an equal/higher heading, and emit only the bounded action plus actual
+file SHA and line locator. Oversized selected lines and ambiguous selectors
+remain unverified. History is retained; no cached alternative source of truth
+or new controller is introduced. Counterexamples cover >80,000-character history,
+a long unrelated line, missing final newline, duplicate selectors and a numbered
+action outside the selected section. Exact current source and cp1252 entry tests
+pass. Run final regression AFTER all documentation edits as well as code edits.
+
+For repetitive audit work, `scripts/summarize_native_evidence.py` reads JSON or
+downloaded ZIPs without extraction or inference. It emits source/artifact hashes,
+reported failed checks, tool/error counts and the maximum cumulative token total.
+It excludes raw arguments, replies, reasoning and diagnostic bodies. A declared
+PASS with missing/nonboolean/failed checks is contradictory; even a consistent
+report is explicitly NOT independent verification. ZIP member identities remain
+qualified so same-basename Linux/Windows receipts cannot overwrite one another.
+This script has been used on the three actual `98b245b` artifacts; raw sources
+remain the basis for diagnosing a failure, not the derived index alone.
+
+## 2026-11-09: stop schema-hint retries; distinguish capacity and native boundaries
+
+The `98b245b` same-model trial FAILED after 900 seconds / 82,379 cumulative
+tokens (artifact `13643592466`, SHA256
+`bc7f0b4ba16105c2c9ee05a06dce1d5c28c04230e7c2df5acb47258c5607fcce`).
+It read the real goal, corrected a stale revision, removed invented file
+references, but repeatedly used nonexistent dependency `goal_revision_0`.
+No observation persisted. The new source-unavailable error was never reached:
+dependency validation rejected the proposal earlier. Therefore this run does
+NOT establish that the source recovery change improved cognition, nor that a
+new goal-reference schema is needed. Repeatedly adding hints to each successive
+4B-model failure has not delivered the owner outcome. Suspend these opt-in
+trials; next model work needs a materially different capacity/tool-surface
+comparison with the same independent outcome, rather than another hint patch.
+Current ChatGPT engineering/tool use remains available and does not depend on
+this experimental local model succeeding. General autonomous action and method
+transfer remain OPEN.
+
+Linux native execution passed all eight byte-level allowed/denied checks again
+(artifact `13643505910`). Windows unelevated failed (artifact `13643481800`):
+read-only denied the write, but the entry canary could not read its own temporary
+file, and workspace-write rejected split writable root sets before execution.
+Pinned [Codex v0.167.0 windows.rs](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/sandboxing/src/windows.rs)
+compares modern and legacy writable root projections and explicitly refuses
+unequal sets in the unelevated backend. [Upstream issue #59314](https://github.com/openai/codex/issues/59314)
+reports a related failure; it is corroboration, not proof of this canary's ACL
+cause or a supported fix. The prior unconfigured Windows trial actually allowed
+forbidden writes. Do not select that fallback, loosen roots, or label package
+installation as working Windows model dispatch. Production stays fail-closed;
+a supported configured backend still needs actual positive/negative readback.
+
 ## 2026-11-09: reuse the ledger's existing goal binding; repair source recovery
 
 Challenge the provenance diagnosis from the `40c04f0` trace before adding fields.
