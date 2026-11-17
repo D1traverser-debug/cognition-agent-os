@@ -1,0 +1,225 @@
+"""Cross-surface Skill entrypoint budget, inventory and package-closure tests."""
+from __future__ import annotations
+
+import importlib.util
+import json
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+POLICY_PATH = ROOT / "config/skill_package_policy.json"
+VERIFIER_PATH = ROOT / "scripts/verify_skill_package.py"
+
+spec = importlib.util.spec_from_file_location("verify_skill_package", VERIFIER_PATH)
+verifier = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(verifier)
+
+
+class SkillPackageContractTests(unittest.TestCase):
+    def setUp(self):
+        self.policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+
+    def test_all_active_entrypoints_are_inventoried_and_within_operational_budget(self):
+        report = verifier.audit_skill_package(ROOT, self.policy)
+        self.assertEqual(report["status"], "PASS", report["errors"])
+        self.assertEqual(
+            {item["path"] for item in report["entrypoints"]},
+            {item["path"] for item in self.policy["entrypoints"]},
+        )
+        self.assertEqual(len(report["entrypoints"]), 2)
+        self.assertTrue(all(
+            item["utf8_bytes"] <= self.policy["operational_entrypoint_budget_bytes"]
+            for item in report["entrypoints"]
+        ), report["entrypoints"])
+
+    def test_shared_budget_preserves_platform_headroom(self):
+        self.assertEqual(self.policy["platform_entrypoint_limit_bytes"], 12000)
+        self.assertEqual(self.policy["operational_entrypoint_budget_bytes"], 10500)
+        self.assertEqual(self.policy["preferred_entrypoint_budget_bytes"], 9000)
+        self.assertEqual(
+            self.policy["platform_entrypoint_limit_bytes"]
+            - self.policy["operational_entrypoint_budget_bytes"],
+            1500,
+        )
+
+    def test_utf8_bytes_not_character_count_control_the_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "skills/demo/SKILL.md"
+            skill.parent.mkdir(parents=True)
+            content = "---\nname: demo\ndescription: test\n---\n" + ("中" * 80)
+            skill.write_text(content, encoding="utf-8")
+            policy = {
+                "policy_version": "1.0.0",
+                "contract": "CAOS_SKILL_PACKAGE_BUDGET",
+                "platform_entrypoint_limit_bytes": 12000,
+                "operational_entrypoint_budget_bytes": 100,
+                "preferred_entrypoint_budget_bytes": 80,
+                "reference_module_limit_bytes": 32768,
+                "package_uncompressed_limit_bytes": 131072,
+                "max_description_characters": 400,
+                "scan_roots": ["skills"],
+                "excluded_directory_names": ["archive"],
+                "entrypoints": [{
+                    "id": "demo", "path": "skills/demo/SKILL.md",
+                    "references": [], "package_id": None,
+                }],
+                "packages": [],
+            }
+            self.assertLess(len(content), 12000)
+            self.assertGreater(len(content.encode("utf-8")), 100)
+            report = verifier.audit_skill_package(root, policy)
+            self.assertEqual(report["status"], "FAIL")
+            self.assertTrue(any("UTF-8 bytes exceeds operational budget" in e
+                                for e in report["errors"]), report["errors"])
+
+    def test_unregistered_active_skill_fails_but_archived_skill_is_excluded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registered = root / ".agents/skills/known/SKILL.md"
+            registered.parent.mkdir(parents=True)
+            registered.write_text(
+                "---\nname: known\ndescription: known\n---\nbody\n",
+                encoding="utf-8",
+            )
+            extra = root / ".agents/skills/unregistered/SKILL.md"
+            extra.parent.mkdir(parents=True)
+            extra.write_text(
+                "---\nname: extra\ndescription: extra\n---\nbody\n",
+                encoding="utf-8",
+            )
+            archived = root / ".agents/skills/archive/old/SKILL.md"
+            archived.parent.mkdir(parents=True)
+            archived.write_text(
+                "---\nname: old\ndescription: old\n---\nbody\n",
+                encoding="utf-8",
+            )
+            policy = {
+                "policy_version": "1.0.0",
+                "contract": "CAOS_SKILL_PACKAGE_BUDGET",
+                "platform_entrypoint_limit_bytes": 12000,
+                "operational_entrypoint_budget_bytes": 10500,
+                "preferred_entrypoint_budget_bytes": 9000,
+                "reference_module_limit_bytes": 32768,
+                "package_uncompressed_limit_bytes": 131072,
+                "max_description_characters": 400,
+                "scan_roots": [".agents/skills"],
+                "excluded_directory_names": ["archive"],
+                "entrypoints": [{
+                    "id": "known", "path": ".agents/skills/known/SKILL.md",
+                    "references": [], "package_id": None,
+                }],
+                "packages": [],
+            }
+            report = verifier.audit_skill_package(root, policy)
+            self.assertEqual(report["status"], "FAIL")
+            self.assertTrue(any("unregistered active SKILL.md" in e
+                                for e in report["errors"]), report["errors"])
+            self.assertFalse(any("archive/old" in e for e in report["errors"]))
+
+    def test_missing_declared_reference_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "skills/demo/SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text(
+                "---\nname: demo\ndescription: test\n---\nbody\n",
+                encoding="utf-8",
+            )
+            policy = {
+                "policy_version": "1.0.0",
+                "contract": "CAOS_SKILL_PACKAGE_BUDGET",
+                "platform_entrypoint_limit_bytes": 12000,
+                "operational_entrypoint_budget_bytes": 10500,
+                "preferred_entrypoint_budget_bytes": 9000,
+                "reference_module_limit_bytes": 32768,
+                "package_uncompressed_limit_bytes": 131072,
+                "max_description_characters": 400,
+                "scan_roots": ["skills"],
+                "excluded_directory_names": ["archive"],
+                "entrypoints": [{
+                    "id": "demo", "path": "skills/demo/SKILL.md",
+                    "references": ["skills/demo/references/missing.md"],
+                    "package_id": None,
+                }],
+                "packages": [],
+            }
+            report = verifier.audit_skill_package(root, policy)
+            self.assertEqual(report["status"], "FAIL")
+            self.assertTrue(any("declared reference does not exist" in e
+                                for e in report["errors"]), report["errors"])
+
+    def test_broken_unregistered_local_markdown_link_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "skills/demo/SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text(
+                "---\\nname: demo\\ndescription: test\\n---\\n[missing](references/missing.md)\\n",
+                encoding="utf-8",
+            )
+            policy = {
+                "policy_version": "1.0.0",
+                "contract": "CAOS_SKILL_PACKAGE_BUDGET",
+                "platform_entrypoint_limit_bytes": 12000,
+                "operational_entrypoint_budget_bytes": 10500,
+                "preferred_entrypoint_budget_bytes": 9000,
+                "reference_module_limit_bytes": 32768,
+                "package_uncompressed_limit_bytes": 131072,
+                "max_description_characters": 400,
+                "scan_roots": ["skills"],
+                "excluded_directory_names": ["archive"],
+                "entrypoints": [{
+                    "id": "demo", "path": "skills/demo/SKILL.md",
+                    "references": [], "package_id": None,
+                }],
+                "packages": [],
+            }
+            report = verifier.audit_skill_package(root, policy)
+            self.assertEqual(report["status"], "FAIL")
+            self.assertTrue(any("broken local Markdown link" in e
+                                for e in report["errors"]), report["errors"])
+
+    def test_reference_modules_are_not_misclassified_as_skill_entrypoints(self):
+        report = verifier.audit_skill_package(ROOT, self.policy)
+        self.assertEqual(report["status"], "PASS", report["errors"])
+        references = {item["path"]: item["utf8_bytes"] for item in report["references"]}
+        self.assertGreater(
+            references["integrations/chatgpt/cognition-agent-os-chatgpt/"
+                       "skills/cognition-parent-chatgpt-intake/references/parent-protocol.md"],
+            12000,
+        )
+        self.assertLessEqual(
+            max(references.values()), self.policy["reference_module_limit_bytes"]
+        )
+
+    def test_native_plugin_package_builds_and_reads_back_exact_declared_files(self):
+        report = verifier.audit_skill_package(ROOT, self.policy)
+        self.assertEqual(report["status"], "PASS", report["errors"])
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "overlay.zip"
+            built = verifier.build_package(
+                ROOT, self.policy, report, "chatgpt-native-overlay", output
+            )
+            self.assertEqual(built["readback"], "PASS_EXACT_MEMBERSHIP_AND_BYTES")
+            package = self.policy["packages"][0]
+            with zipfile.ZipFile(output) as archive:
+                self.assertEqual(archive.namelist(), package["paths"])
+                for member in package["paths"]:
+                    expected = (ROOT / package["root"] / member).read_bytes()
+                    self.assertEqual(archive.read(member), expected)
+
+    def test_reusable_action_invokes_the_single_repository_verifier(self):
+        action = (ROOT / "integrations/github-actions/skill-package-budget/action.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("GITHUB_ACTION_PATH/../../../scripts/verify_skill_package.py", action)
+        self.assertIn("policy-path", action)
+        self.assertIn("package-id", action)
+
+
+if __name__ == "__main__":
+    unittest.main()

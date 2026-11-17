@@ -321,16 +321,12 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertEqual(native["skills"].rstrip("/"), "./skills")
         self.assertEqual(native["repository"], root["repository"])
 
-        # Test the real five-entry source package, not just a manifest word.
-        # Preserve the installed plugin's native metadata during upgrade.
-        entries = (
-            ".codex-plugin/plugin.json",
-            "plugin.json",
-            "agents/openai.yaml",
-            "skills/cognition-parent-chatgpt-intake/SKILL.md",
-            "skills/cognition-parent-chatgpt-intake/references/scope-probes.md",
-            "skills/cognition-parent-chatgpt-intake/references/parent-protocol.md",
-        )
+        # The shared policy is the only package-file inventory.
+        policy = json.loads((ROOT / "config/skill_package_policy.json").read_text(encoding="utf-8"))
+        package_spec = next(item for item in policy["packages"]
+                            if item["id"] == "chatgpt-native-overlay")
+        self.assertEqual(ROOT / package_spec["root"], BASE)
+        entries = tuple(package_spec["paths"])
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
             for path in entries:
@@ -387,14 +383,12 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("chatgpt_plugin_release_bundle:", workflow)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", workflow)
         self.assertNotIn("contains(github.event.pull_request.body, '[bundle-chatgpt-plugin]')", workflow)
-        self.assertIn("manifest['version']", workflow)
-        self.assertNotIn("manifest['version'] == '0.1.3'", workflow)
         self.assertIn("No installation or owner account mutation occurs in CI",
                       workflow)
-        self.assertIn("'.codex-plugin/plugin.json'", workflow)
-        self.assertIn("manifest['version'] == native['version']", workflow)
-        self.assertIn("'skills/cognition-parent-chatgpt-intake/SKILL.md'",
-                      workflow)
+        self.assertIn("python scripts/verify_skill_package.py", workflow)
+        self.assertIn("--package chatgpt-native-overlay", workflow)
+        self.assertIn("--zip-output cognition-chatgpt-plugin-overlay.zip", workflow)
+        self.assertIn("skill-package-report.json", workflow)
 
 
 if __name__ == "__main__":

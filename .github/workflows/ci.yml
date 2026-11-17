@@ -30,6 +30,8 @@ jobs:
         run: python scripts/verify_ci_checkout_source.py
       - name: Check draft requirements inventory (NOT product acceptance)
         run: python scripts/verify_assurance_registry.py
+      - name: Enforce every active Skill entrypoint budget and reference inventory
+        run: python scripts/verify_skill_package.py
       - name: Check registered effect paths and central grant guards
         run: python scripts/verify_effect_boundaries.py
       - name: Python standard library offline regressions (no remote APIs)
@@ -137,7 +139,9 @@ jobs:
       - name: Check draft requirements inventory (NOT product acceptance)
         shell: pwsh
         run: python scripts/verify_assurance_registry.py
-      - name: Check registered effect paths and central grant guards
+      - name: Enforce every active Skill entrypoint budget and reference inventory
+        shell: pwsh
+        run: python scripts/verify_skill_package.py
         shell: pwsh
         run: python scripts/verify_effect_boundaries.py
       - name: Native Windows entrypoint smoke (no installation)
@@ -622,45 +626,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Attest exact checked-out source commit
         run: python scripts/verify_ci_checkout_source.py
-      - name: Build exact native ChatGPT skill overlay from current HEAD
-        shell: bash
-        run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          import zipfile
-          base = Path('integrations/chatgpt/cognition-agent-os-chatgpt')
-          paths = [
-              '.codex-plugin/plugin.json', 'plugin.json',
-              'agents/openai.yaml',
-              'skills/cognition-parent-chatgpt-intake/SKILL.md',
-              'skills/cognition-parent-chatgpt-intake/references/scope-probes.md',
-              'skills/cognition-parent-chatgpt-intake/references/parent-protocol.md',
-          ]
-          manifest = json.loads((base/'plugin.json').read_text(encoding='utf-8'))
-          native = json.loads((base/'.codex-plugin/plugin.json').read_text(encoding='utf-8'))
-          assert manifest['name'] == native['name'] == 'cognition-agent-os-chatgpt'
-          assert isinstance(manifest['version'], str) and __import__('re').fullmatch(r'\d+\.\d+\.\d+',manifest['version'])
-          assert manifest['version'] == native['version']
-          assert native['skills'] in ('./skills', './skills/')
-          for rel in paths:
-              source = base / rel
-              assert source.is_file() and not source.is_symlink()
-          with zipfile.ZipFile('cognition-chatgpt-plugin-overlay.zip','w',
-                               compression=zipfile.ZIP_DEFLATED) as archive:
-              for rel in paths:
-                  archive.write(base / rel, arcname=rel)
-          with zipfile.ZipFile('cognition-chatgpt-plugin-overlay.zip') as archive:
-              assert sorted(archive.namelist()) == sorted(paths)
-              for rel in paths:
-                  assert archive.read(rel) == (base/rel).read_bytes()
-          print('CURRENT_HEAD_CHATGPT_OVERLAY_BUILT', manifest['version'])
-          PY
+      - name: Build exact native ChatGPT Skill overlay from the shared package policy
+        run: python scripts/verify_skill_package.py --package chatgpt-native-overlay --zip-output cognition-chatgpt-plugin-overlay.zip --report skill-package-report.json
       - name: Preserve verifiable skill package without private account secrets
         uses: actions/upload-artifact@v4
         with:
           name: cognition-chatgpt-plugin-overlay-head
-          path: cognition-chatgpt-plugin-overlay.zip
+          path: |
+            cognition-chatgpt-plugin-overlay.zip
+            skill-package-report.json
           if-no-files-found: error
 
   experimental_real_native_cognition:
