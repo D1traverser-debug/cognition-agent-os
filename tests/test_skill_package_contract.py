@@ -247,6 +247,45 @@ class SkillPackageContractTests(unittest.TestCase):
             max(references.values()), self.policy["reference_module_limit_bytes"]
         )
 
+    def test_progressive_disclosure_preserves_semantic_guardrails(self):
+        skill = (ROOT / ".agents/skills/goal-grounded-semantic-review/SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        research = (ROOT / ".agents/skills/goal-grounded-semantic-review/references/"
+                    "research-method-selection.md").read_text(encoding="utf-8")
+        verification = (ROOT / ".agents/skills/goal-grounded-semantic-review/references/"
+                        "recursive-verification.md").read_text(encoding="utf-8")
+        for token in (
+            "Multiple faults remain separate obligations until disproved",
+            "Start at the original source",
+            "Minimum decision and evidence contract",
+            "research-method-selection.md",
+            "recursive-verification.md",
+            "UNVERIFIED_ORIGINAL_SOURCE",
+        ):
+            self.assertIn(token, skill)
+        for token in (
+            "source-discovery funnel",
+            "Ask four expert questions",
+            "Decompose and trace requirements",
+            "Decide the correct root-cause intervention",
+            "Agent-Learning-Hub",
+            "Filesystem MCP",
+            "Sequential Thinking",
+            "Memory MCP",
+            "independent falsification",
+        ):
+            self.assertIn(token, research)
+        for token in (
+            "Evidence-driven recursive challenge",
+            "Verify before claiming completion",
+            "Output discipline",
+            "Empirical Skill evaluation",
+            "resource limit is not an epistemic stopping criterion",
+            "NOT_TESTED",
+        ):
+            self.assertIn(token, verification)
+
     def test_native_plugin_package_builds_and_reads_back_exact_declared_files(self):
         report = verifier.audit_skill_package(ROOT, self.policy)
         self.assertEqual(report["status"], "PASS", report["errors"])

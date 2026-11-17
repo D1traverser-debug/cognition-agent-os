@@ -34,6 +34,10 @@ For each in-scope behavioral requirement identify:
 
 For repository-wide work, inventory the entire live tree and track individual behavior obligations, not one pass/fail per filename or SHA. Review docs and scripts as material sources too. Structural inventories do not prove semantic coverage.
 
+## Mechanism distinctions to verify, not installation decisions
+
+AOCI-like governed indices and Graphify-like AST dependency graphs can locate source/code context but cannot judge an external business result. Filesystem MCP is an effect-capable file interface requiring scoped path grants. Sequential Thinking can support revision/branching but is not independently verified research or durable cross-session state by itself. Memory MCP, Hindsight or RAG can retrieve candidate knowledge but cannot authorize a changed action. A protocol-conformance server is not automatically a production capability; n8n-MCP needs real workflow credentials and an explicit effect boundary. Harness-RSI-style candidate trials require a frozen independent evaluator and keep/revert, not recursive self-approval. These are research examples, not installation decisions. Compare fresh releases and first-hand evidence whenever materially relevant.
+
 ## Decide the correct root-cause intervention
 
 Fix the actual shared failure and satisfy the complete behavioral requirement. Compare materially different remedies where the choice matters—for example, original interface, compatible adapter, contract-preserving refactor, or removal. Evaluate effects on external contracts, neighboring legitimate tasks, stale knowledge and recovery. Do not create a standalone authority, agent or documentation ledger merely to satisfy audit formatting.

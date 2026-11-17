@@ -6,7 +6,7 @@ Load this module for recurring failures, material cognition decisions, method tr
 
 On every substantive decision, question the current diagnosis and the method used to reach it. Do not assume an issue is local or architectural before inspecting competing causes. New evidence can reopen the earliest contradicted ancestor, invalidate dependent conclusions and require renewed research; preserve unaffected branches.
 
-After a contradicted hypothesis, compare whether to inspect more original evidence, change the method, revise the workflow or challenge a governing assumption. Research unfamiliar domains at the original implementation level before selecting a remedy, then challenge the preferred adaptation again. Repeating the same claim without new evidence, a counterexample, outcome feedback or an executable plan is not progress.
+After a contradicted hypothesis, compare whether to inspect more original evidence, change the method, revise the workflow or challenge a governing assumption. Research unfamiliar domains at the original implementation level before selecting a remedy, then challenge the preferred adaptation again. Repeating the same claim without new evidence, a counterexample, outcome feedback or an executable plan is not progress. A resource limit is not an epistemic stopping criterion: preserve the unproved owner obligation and verified evidence needed to continue.
 
 Record reusable methods only with exact source provenance, applicability conditions, counterexamples, failure/rollback conditions and an independent result. Transfer to a different task or domain remains NOT_TESTED until that domain verifies it. Never promote one successful fixture or a model-authored summary into a universal SOP.
 
