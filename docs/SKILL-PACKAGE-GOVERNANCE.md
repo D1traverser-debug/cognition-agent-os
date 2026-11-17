@@ -8,7 +8,7 @@ Does not claim native ChatGPT/Codex activation, correct model behavior, permissi
 
 The recurring failure was not simply an oversized file. The common mechanism was that each local repair appended more policy and domain detail to the Skill entrypoint, while package checks covered only selected entrypoints. In this repository the ChatGPT intake Skill was 8,896 UTF-8 bytes, but the active Codex goal-grounded-semantic-review/SKILL.md was 13,533 bytes. Existing tests enforced a size check on the ChatGPT entrypoint only and did not inventory all active Skills. The local test therefore gave a false sense of repository-wide coverage.
 
-A second failure mode is duplicate policy: the same rules are copied into entrypoints, CI snippets and handoff prose, then one copy changes without the others. The contract below makes the budget, active entrypoint inventory and package file closure explicit and machine-checked.
+A second failure mode is duplicate policy: the same rules are copied into entrypoints, CI snippets and handoff prose, then one copy changes without the others. The contract below makes the budget, repository-wide active entrypoint inventory and package file closure explicit and machine-checked.
 
 ## 2. One shared budget
 

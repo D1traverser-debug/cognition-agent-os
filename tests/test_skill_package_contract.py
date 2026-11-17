@@ -45,6 +45,17 @@ class SkillPackageContractTests(unittest.TestCase):
             1500,
         )
 
+    def test_child_policy_must_scan_repository_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / "config/skill_package_policy.json"
+            config.parent.mkdir(parents=True)
+            narrowed = dict(self.policy)
+            narrowed["scan_roots"] = [".agents/skills"]
+            config.write_text(json.dumps(narrowed), encoding="utf-8")
+            with self.assertRaises(verifier.SkillPackageError):
+                verifier.load_policy(root, "config/skill_package_policy.json")
+
     def test_utf8_bytes_not_character_count_control_the_budget(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -146,7 +157,7 @@ class SkillPackageContractTests(unittest.TestCase):
                 "reference_module_limit_bytes": 32768,
                 "package_uncompressed_limit_bytes": 131072,
                 "max_description_characters": 400,
-                "scan_roots": [".agents/skills"],
+                "scan_roots": ["."],
                 "excluded_directory_names": ["archive"],
                 "entrypoints": [{
                     "id": "known", "path": ".agents/skills/known/SKILL.md",

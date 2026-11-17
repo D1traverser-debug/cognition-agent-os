@@ -9,15 +9,21 @@
   "package_uncompressed_limit_bytes": 131072,
   "max_description_characters": 400,
   "scan_roots": [
-    ".agents/skills",
-    "integrations/chatgpt"
+    "."
   ],
   "excluded_directory_names": [
     "archive",
     ".git",
     ".venv",
     "__pycache__",
-    "node_modules"
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    ".tox",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache"
   ],
   "entrypoints": [
     {

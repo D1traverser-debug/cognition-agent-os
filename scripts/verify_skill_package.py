@@ -32,6 +32,8 @@ def _relative_path(value: object, label: str) -> PurePosixPath:
 
 
 def _checked_path(root: Path, value: object, label: str) -> Path:
+    if value == ".":
+        return root
     relative = _relative_path(value, label)
     current = root
     for part in relative.parts:
@@ -155,6 +157,11 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
         raise SkillPackageError("policy entrypoints must be a non-empty array")
     if not isinstance(packages, list) or not isinstance(scan_roots, list):
         raise SkillPackageError("policy packages and scan_roots must be arrays")
+    if "." not in scan_roots:
+        raise SkillPackageError(
+            "scan_roots must include the repository root '.' so new Skills "
+            "cannot escape the inventory by using an unlisted directory"
+        )
 
     ids = [item.get("id") for item in entrypoints if isinstance(item, dict)]
     paths = [item.get("path") for item in entrypoints if isinstance(item, dict)]
