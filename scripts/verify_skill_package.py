@@ -142,6 +142,12 @@ def load_policy(root: Path, policy_path: str) -> dict:
         raise SkillPackageError("reference module limit may not exceed 32768 bytes")
     if policy["package_uncompressed_limit_bytes"] > 131072:
         raise SkillPackageError("package uncompressed limit may not exceed 131072 bytes")
+    scan_roots = policy.get("scan_roots")
+    if not isinstance(scan_roots, list) or "." not in scan_roots:
+        raise SkillPackageError(
+            "scan_roots must include the repository root '.' so new Skills "
+            "cannot escape the inventory by using an unlisted directory"
+        )
     return policy
 
 
@@ -157,12 +163,6 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
         raise SkillPackageError("policy entrypoints must be a non-empty array")
     if not isinstance(packages, list) or not isinstance(scan_roots, list):
         raise SkillPackageError("policy packages and scan_roots must be arrays")
-    if "." not in scan_roots:
-        raise SkillPackageError(
-            "scan_roots must include the repository root '.' so new Skills "
-            "cannot escape the inventory by using an unlisted directory"
-        )
-
     ids = [item.get("id") for item in entrypoints if isinstance(item, dict)]
     paths = [item.get("path") for item in entrypoints if isinstance(item, dict)]
     if len(ids) != len(entrypoints) or len(set(ids)) != len(ids):
