@@ -142,6 +142,7 @@ jobs:
       - name: Enforce every active Skill entrypoint budget and reference inventory
         shell: pwsh
         run: python scripts/verify_skill_package.py
+      - name: Check registered effect paths and central grant guards
         shell: pwsh
         run: python scripts/verify_effect_boundaries.py
       - name: Native Windows entrypoint smoke (no installation)
