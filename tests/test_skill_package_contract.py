@@ -158,7 +158,7 @@ class SkillPackageContractTests(unittest.TestCase):
             skill = root / "skills/demo/SKILL.md"
             skill.parent.mkdir(parents=True)
             skill.write_text(
-                "---\\nname: demo\\ndescription: test\\n---\\n[missing](references/missing.md)\\n",
+                "---\nname: demo\ndescription: test\n---\n[missing](references/missing.md)\n",
                 encoding="utf-8",
             )
             policy = {
