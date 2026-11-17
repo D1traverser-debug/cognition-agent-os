@@ -22,7 +22,7 @@ config/skill_package_policy.json is the repository's machine-readable policy sou
 | Reference module ceiling | 32,768 UTF-8 bytes | On-demand reference bound, separate from the entrypoint limit |
 | Package uncompressed ceiling | 131,072 bytes | Bounds the declared package closure |
 
-The limit is measured from exact UTF-8 bytes, not characters, line count, token estimates, or rendered size. Multi-byte Chinese text is counted correctly. BOMs, invalid UTF-8, symlink escapes, missing references and undeclared active Skills fail closed.
+The limit is measured from canonical UTF-8 bytes with CRLF/CR normalized to LF, not characters, line count, token estimates, or rendered size. Linux and Windows therefore produce the same byte count and package payload. Multi-byte Chinese text is counted correctly. BOMs, invalid UTF-8, symlink escapes, missing references and undeclared active Skills fail closed.
 
 ## 3. Correct information architecture
 

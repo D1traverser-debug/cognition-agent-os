@@ -76,6 +76,46 @@ class SkillPackageContractTests(unittest.TestCase):
             self.assertTrue(any("UTF-8 bytes exceeds operational budget" in e
                                 for e in report["errors"]), report["errors"])
 
+    def test_crlf_checkout_uses_same_canonical_utf8_size(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "skills/demo/SKILL.md"
+            skill.parent.mkdir(parents=True)
+            lf = "---\nname: demo\ndescription: test\n---\nbody\n"
+            skill.write_bytes(lf.replace("\n", "\r\n").encode("utf-8"))
+            policy = {
+                "policy_version": "1.0.0",
+                "contract": "CAOS_SKILL_PACKAGE_BUDGET",
+                "platform_entrypoint_limit_bytes": 12000,
+                "operational_entrypoint_budget_bytes": 10500,
+                "preferred_entrypoint_budget_bytes": 9000,
+                "reference_module_limit_bytes": 32768,
+                "package_uncompressed_limit_bytes": 131072,
+                "max_description_characters": 400,
+                "scan_roots": ["skills"],
+                "excluded_directory_names": ["archive"],
+                "entrypoints": [{
+                    "id": "demo", "path": "skills/demo/SKILL.md",
+                    "references": [], "package_id": None,
+                }],
+                "packages": [],
+            }
+            report = verifier.audit_skill_package(root, policy)
+            self.assertEqual(report["status"], "PASS", report["errors"])
+            self.assertEqual(report["entrypoints"][0]["utf8_bytes"],
+                             len(lf.encode("utf-8")))
+
+    def test_child_policy_cannot_relax_shared_budgets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / "config/skill_package_policy.json"
+            config.parent.mkdir(parents=True)
+            relaxed = dict(self.policy)
+            relaxed["operational_entrypoint_budget_bytes"] = 11999
+            config.write_text(json.dumps(relaxed), encoding="utf-8")
+            with self.assertRaises(verifier.SkillPackageError):
+                verifier.load_policy(root, "config/skill_package_policy.json")
+
     def test_unregistered_active_skill_fails_but_archived_skill_is_excluded(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

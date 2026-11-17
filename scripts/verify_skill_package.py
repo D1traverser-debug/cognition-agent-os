@@ -53,7 +53,10 @@ def _read_utf8(path: Path, label: str) -> tuple[bytes, str]:
         raise SkillPackageError(f"{label}: invalid UTF-8: {exc}") from exc
     if raw.startswith(b"\xef\xbb\xbf"):
         raise SkillPackageError(f"{label}: UTF-8 BOM is not permitted")
-    return raw, text
+    # Canonicalize checkout line endings before counting or packaging so
+    # Linux and Windows produce identical UTF-8 byte budgets and ZIP content.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return text.encode("utf-8"), text
 
 
 def _frontmatter(text: str, label: str, max_description: int) -> None:
@@ -128,6 +131,15 @@ def load_policy(root: Path, policy_path: str) -> dict:
             "the documented platform ceiling is 12000 bytes; do not raise it "
             "to make an oversized Skill pass"
         )
+    if operational > 10500 or preferred > 9000:
+        raise SkillPackageError(
+            "child policies may tighten but must not relax the shared "
+            "10,500-byte operational / 9,000-byte preferred budgets"
+        )
+    if policy["reference_module_limit_bytes"] > 32768:
+        raise SkillPackageError("reference module limit may not exceed 32768 bytes")
+    if policy["package_uncompressed_limit_bytes"] > 131072:
+        raise SkillPackageError("package uncompressed limit may not exceed 131072 bytes")
     return policy
 
 
@@ -303,7 +315,8 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
                 candidate = _checked_path(root, f"{package_root_value}/{member}", f"package {package_id} member")
                 if not candidate.is_file():
                     raise SkillPackageError(f"package {package_id}: missing file {member}")
-                total += candidate.stat().st_size
+                package_bytes, _ = _read_utf8(candidate, f"package member {member}")
+                total += len(package_bytes)
                 normalized_members.add(rel.as_posix())
             if total > policy["package_uncompressed_limit_bytes"]:
                 raise SkillPackageError(
@@ -344,6 +357,7 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
         "platform_entrypoint_limit_bytes": policy["platform_entrypoint_limit_bytes"],
         "operational_entrypoint_budget_bytes": policy["operational_entrypoint_budget_bytes"],
         "preferred_entrypoint_budget_bytes": policy["preferred_entrypoint_budget_bytes"],
+        "line_endings": "CANONICAL_LF_FOR_UTF8_BYTE_COUNTS_AND_PACKAGES",
         "entrypoints": entrypoint_report,
         "references": reference_report,
         "packages": package_report,
@@ -367,7 +381,8 @@ def build_package(root: Path, policy: dict, report: dict, package_id: str, outpu
             info = zipfile.ZipInfo(member, date_time=(2020, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
-            archive.writestr(info, source.read_bytes())
+            package_bytes, _ = _read_utf8(source, f"package member {member}")
+            archive.writestr(info, package_bytes)
     with zipfile.ZipFile(output, "r") as archive:
         expected = list(config["paths"])
         actual = archive.namelist()
@@ -377,7 +392,8 @@ def build_package(root: Path, policy: dict, report: dict, package_id: str, outpu
             )
         for member in expected:
             source = _checked_path(root, f"{config['root']}/{member}", f"package {package_id} member")
-            if archive.read(member) != source.read_bytes():
+            expected_bytes, _ = _read_utf8(source, f"package member {member}")
+            if archive.read(member) != expected_bytes:
                 raise SkillPackageError(f"package {package_id}: ZIP readback mismatch: {member}")
     return {
         "id": package_id,
