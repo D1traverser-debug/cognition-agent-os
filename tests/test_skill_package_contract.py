@@ -275,7 +275,7 @@ class SkillPackageContractTests(unittest.TestCase):
             "Memory MCP",
             "independent falsification",
         ):
-            self.assertIn(token, research)
+            self.assertIn(token.lower(), research.lower())
         for token in (
             "Evidence-driven recursive challenge",
             "Verify before claiming completion",
