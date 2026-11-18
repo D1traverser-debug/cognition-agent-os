@@ -29,6 +29,7 @@ def sha(raw):
 def consumer_readback(case_id, artifact, quality_key, *, assessment="ACCEPTED",
                       quality="ACCEPTED", delivery_status="DELIVERED"):
     delivered = delivery_status == "DELIVERED"
+    quality_keys = (quality_key,) if isinstance(quality_key, str) else tuple(quality_key)
     return encode({
         "schema_version": 1,
         "case_id": case_id,
@@ -38,7 +39,7 @@ def consumer_readback(case_id, artifact, quality_key, *, assessment="ACCEPTED",
         "opened": delivered,
         "artifact_sha256": sha(artifact) if delivered and artifact is not None else None,
         "assessment": assessment,
-        "quality_assessment": {quality_key: quality},
+        "quality_assessment": {key: quality for key in quality_keys},
     })
 
 
@@ -76,7 +77,7 @@ class VoiceScriptOracleTests(unittest.TestCase):
             ],
         })
         self.readback = consumer_readback(
-            self.case_id, self.candidate, "read_aloud")
+            self.case_id, self.candidate, ("factual_grounding", "read_aloud"))
 
     def evaluate(self, artifact=None, readback=None, source=None, contract=None):
         return evaluate_voice_script(
@@ -106,7 +107,7 @@ class VoiceScriptOracleTests(unittest.TestCase):
             ],
         })
         result = self.evaluate(artifact=wrong,
-            readback=consumer_readback(self.case_id, wrong, "read_aloud"))
+            readback=consumer_readback(self.case_id, wrong, ("factual_grounding", "read_aloud")))
         self.assertEqual(result["verdict"], FAIL)
         self.assertIn(result["reason"], {
             "VOICE_SEGMENT_ORDER_MISMATCH", "VOICE_OWNER_FACT_MISMATCH"
@@ -121,12 +122,12 @@ class VoiceScriptOracleTests(unittest.TestCase):
         unreadable = b"\x00not-json"
         result = evaluate_voice_script(
             self.contract, self.source, unreadable,
-            consumer_readback(self.case_id, unreadable, "read_aloud"))
+            consumer_readback(self.case_id, unreadable, ("factual_grounding", "read_aloud")))
         self.assertEqual(result["verdict"], INSUFFICIENT)
 
     def test_explicit_consumer_non_delivery_is_failure(self):
         receipt = consumer_readback(
-            self.case_id, None, "read_aloud", delivery_status="NOT_DELIVERED",
+            self.case_id, None, ("factual_grounding", "read_aloud"), delivery_status="NOT_DELIVERED",
             assessment="REJECTED", quality="UNKNOWN")
         result = evaluate_voice_script(self.contract, self.source, None, receipt)
         self.assertEqual(result["verdict"], FAIL)
@@ -145,9 +146,21 @@ class VoiceScriptOracleTests(unittest.TestCase):
         self.assertEqual(result["verdict"], INSUFFICIENT)
         self.assertEqual(result["reason"], "CONSUMER_READBACK_NOT_BOUND_TO_ARTIFACT")
 
+    def test_consumer_must_accept_factual_grounding_and_read_aloud(self):
+        for quality, expected in (("UNKNOWN", INSUFFICIENT), ("REJECTED", FAIL)):
+            with self.subTest(factual_grounding=quality):
+                receipt = json.loads(self.readback.decode("utf-8"))
+                receipt["quality_assessment"]["factual_grounding"] = quality
+                result = self.evaluate(readback=encode(receipt))
+                self.assertEqual(result["verdict"], expected, result)
+                if quality == "UNKNOWN":
+                    self.assertEqual(result["reason"], "CONSUMER_FACTUAL_GROUNDING_UNKNOWN")
+                else:
+                    self.assertEqual(result["reason"], "CONSUMER_FACTUAL_GROUNDING_REJECTED")
+
     def test_consumer_rejects_unreadable_aloud_script(self):
         receipt = consumer_readback(
-            self.case_id, self.candidate, "read_aloud", quality="REJECTED")
+            self.case_id, self.candidate, ("factual_grounding", "read_aloud"), quality="REJECTED")
         result = self.evaluate(readback=receipt)
         self.assertEqual(result["verdict"], FAIL)
         self.assertEqual(result["reason"], "CONSUMER_READ_ALOUD_REJECTED")

@@ -64,7 +64,8 @@ def _result(verdict: str, case_id: str | None, reason: str,
 
 
 def _consumer_gate(case_id: str, artifact: bytes | None,
-                   readback_raw: bytes | None, quality_key: str) -> tuple[str, str]:
+                   readback_raw: bytes | None,
+                   quality_keys: tuple[str, ...]) -> tuple[str, str]:
     """Require a separate, artifact-bound consumer readback.
 
     A minimal success string is not a receipt. This schema is a synthetic
@@ -93,8 +94,11 @@ def _consumer_gate(case_id: str, artifact: bytes | None,
         or len(receipt["observed_at"]) > 80):
         return INSUFFICIENT, "CONSUMER_READBACK_IDENTITY_INVALID"
     quality = receipt["quality_assessment"]
-    if (not isinstance(quality, dict) or set(quality) != {quality_key}
-        or quality[quality_key] not in ("ACCEPTED", "REJECTED", "UNKNOWN")):
+    if (not isinstance(quality, dict) or not quality_keys
+        or len(set(quality_keys)) != len(quality_keys)
+        or set(quality) != set(quality_keys)
+        or any(quality[key] not in ("ACCEPTED", "REJECTED", "UNKNOWN")
+               for key in quality_keys)):
         return INSUFFICIENT, "CONSUMER_QUALITY_ASSESSMENT_MISSING"
 
     if receipt["delivery_status"] == "NOT_DELIVERED":
@@ -117,10 +121,11 @@ def _consumer_gate(case_id: str, artifact: bytes | None,
         return FAIL, "CONSUMER_REJECTED_DELIVERABLE"
     if receipt["assessment"] != "ACCEPTED":
         return INSUFFICIENT, "CONSUMER_ASSESSMENT_UNKNOWN"
-    if quality[quality_key] == "REJECTED":
-        return FAIL, f"CONSUMER_{quality_key.upper()}_REJECTED"
-    if quality[quality_key] != "ACCEPTED":
-        return INSUFFICIENT, f"CONSUMER_{quality_key.upper()}_UNKNOWN"
+    for quality_key in quality_keys:
+        if quality[quality_key] == "REJECTED":
+            return FAIL, f"CONSUMER_{quality_key.upper()}_REJECTED"
+        if quality[quality_key] != "ACCEPTED":
+            return INSUFFICIENT, f"CONSUMER_{quality_key.upper()}_UNKNOWN"
     return PASS, "CONSUMER_READBACK_ACCEPTED"
 
 
@@ -146,8 +151,9 @@ def evaluate_voice_script(
 ) -> dict:
     """Grade a structured broadcast script against revisioned source facts.
 
-    Content correctness is deterministic. Read-aloud usability is supplied by
-    the separate consumer readback. A synthetic PASS remains calibration only.
+    Owner-enumerated fact consistency is deterministic. Full free-text factual
+    grounding and read-aloud usability require separate consumer assessments.
+    A synthetic PASS remains calibration only.
     """
     case_id = None
     checks: dict[str, Any] = {}
@@ -209,13 +215,13 @@ def evaluate_voice_script(
 
         if artifact_raw is not None and isinstance(artifact_raw, bytes):
             early_verdict, early_reason = _consumer_gate(
-                case_id, artifact_raw, consumer_readback_raw, "read_aloud")
+                case_id, artifact_raw, consumer_readback_raw, ("factual_grounding", "read_aloud"))
             if early_verdict == FAIL:
                 return _result(FAIL, case_id, early_reason)
         if artifact_raw is None or not isinstance(artifact_raw, bytes):
             # A valid NOT_DELIVERED consumer observation is an actual failure.
             delivery_verdict, delivery_reason = _consumer_gate(
-                case_id, None, consumer_readback_raw, "read_aloud")
+                case_id, None, consumer_readback_raw, ("factual_grounding", "read_aloud"))
             if delivery_verdict == FAIL:
                 return _result(FAIL, case_id, delivery_reason)
             return _result(INSUFFICIENT, case_id, "VOICE_ARTIFACT_MISSING")
@@ -297,7 +303,7 @@ def evaluate_voice_script(
         checks["script_content"] = "OWNER_FACTS_MATCH"
 
         consumer_verdict, consumer_reason = _consumer_gate(
-            case_id, artifact_raw, consumer_readback_raw, "read_aloud")
+            case_id, artifact_raw, consumer_readback_raw, ("factual_grounding", "read_aloud"))
         checks["consumer_readback"] = consumer_reason
         if consumer_verdict != PASS:
             return _result(consumer_verdict, case_id, consumer_reason, checks)
@@ -450,12 +456,12 @@ def evaluate_dv_regression_triage(
 
         if artifact_raw is not None and isinstance(artifact_raw, bytes):
             early_verdict, early_reason = _consumer_gate(
-                case_id, artifact_raw, consumer_readback_raw, "reproducibility")
+                case_id, artifact_raw, consumer_readback_raw, ("reproducibility",))
             if early_verdict == FAIL:
                 return _result(FAIL, case_id, early_reason)
         if artifact_raw is None or not isinstance(artifact_raw, bytes):
             delivery_verdict, delivery_reason = _consumer_gate(
-                case_id, None, consumer_readback_raw, "reproducibility")
+                case_id, None, consumer_readback_raw, ("reproducibility",))
             if delivery_verdict == FAIL:
                 return _result(FAIL, case_id, delivery_reason)
             return _result(INSUFFICIENT, case_id, "DV_TRIAGE_ARTIFACT_MISSING")
@@ -506,7 +512,7 @@ def evaluate_dv_regression_triage(
             and observed["failure_class"] != "NONE"
         )
         consumer_verdict, consumer_reason = _consumer_gate(
-            case_id, artifact_raw, consumer_readback_raw, "reproducibility")
+            case_id, artifact_raw, consumer_readback_raw, ("reproducibility",))
         checks["consumer_readback"] = consumer_reason
         if consumer_verdict != PASS:
             return _result(consumer_verdict, case_id, consumer_reason, checks)

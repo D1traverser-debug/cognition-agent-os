@@ -15,7 +15,10 @@ The voice oracle derives the latest revision for each item and field from the
 pinned source. It checks required item presence and order, exact facts, latest
 source IDs, omitted facts, superseded values, placeholders, and minimum script
 content. Read-aloud usability requires a separate consumer assessment bound to
-the exact artifact digest.
+the exact artifact digest. The consumer must separately accept both factual
+grounding of the entire free-text script and read-aloud usability; the
+deterministic checker does not extract every semantic claim from arbitrary
+prose, so the consumer's factual-grounding assessment is mandatory.
 
 The deterministic checks do not claim to understand style or guarantee
 broadcast quality. Read-aloud usability remains a consumer-side assessment.
