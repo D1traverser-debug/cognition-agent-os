@@ -167,6 +167,96 @@ class VoiceScriptOracleTests(unittest.TestCase):
         self.assertEqual(result["reason"], "CONSUMER_READ_ALOUD_REJECTED")
 
 
+class PublicVoiceSampleTests(unittest.TestCase):
+    """Public-fact calibration; this is not a real business consumer sign-off."""
+
+    def setUp(self):
+        self.case_id = "public-tesla-berlin-20261116"
+        # Public facts checked against Reuters and TechCrunch, 2026-11-16.
+        # No copyrighted article text is stored in this fixture.
+        self.source = encode({
+            "schema_version": 1,
+            "case_id": self.case_id,
+            "revisions": [
+                {"item_id": "01", "field": "investment", "revision": 1,
+                 "value": "30亿欧元", "source_id": "Reuters-2026-11-16"},
+                {"item_id": "01", "field": "site", "revision": 1,
+                 "value": "格林海德工厂", "source_id": "Reuters-2026-11-16"},
+                {"item_id": "01", "field": "site", "revision": 2,
+                 "value": "格林海德工厂", "source_id": "TechCrunch-2026-11-16"},
+                {"item_id": "01", "field": "capacity", "revision": 1,
+                 "value": "最高每年100万辆Cybercab", "source_id": "Reuters-2026-11-16"},
+                {"item_id": "01", "field": "construction", "revision": 1,
+                 "value": "2027年上半年", "source_id": "Reuters-2026-11-16"},
+                {"item_id": "01", "field": "production", "revision": 1,
+                 "value": "2029年", "source_id": "Reuters-2026-11-16"},
+                {"item_id": "01", "field": "permit", "revision": 1,
+                 "value": "2026年底前", "source_id": "Reuters-2026-11-16"},
+                {"item_id": "01", "field": "status", "revision": 1,
+                 "value": "规划", "source_id": "Reuters-2026-11-16"},
+            ],
+        })
+        self.contract = encode({
+            "schema_version": 1,
+            "case_id": self.case_id,
+            "kind": "voice_script",
+            "source_sha256": sha(self.source),
+            "expected_order": ["01"],
+            "min_script_chars": 30,
+        })
+        self.candidate = encode({
+            "schema_version": 1,
+            "case_id": self.case_id,
+            "segments": [
+                {
+                    "item_id": "01",
+                    "text": (
+                        "特斯拉计划在柏林附近的格林海德工厂投资30亿欧元，"
+                        "建设新的Cybercab生产设施，目标年产能最高每年100万辆Cybercab。"
+                        "建设预计于2027年上半年启动，生产计划在2029年开始，"
+                        "建筑许可申请计划于2026年底前提交。这仍属于规划，并非已实现产能。"
+                    ),
+                    "claims": {
+                        "investment": "30亿欧元",
+                        "site": "格林海德工厂",
+                        "capacity": "最高每年100万辆Cybercab",
+                        "construction": "2027年上半年",
+                        "production": "2029年",
+                        "permit": "2026年底前",
+                        "status": "规划",
+                    },
+                    "source_ids": ["Reuters-2026-11-16", "TechCrunch-2026-11-16"],
+                }
+            ],
+        })
+        self.readback = consumer_readback(
+            self.case_id, self.candidate,
+            ("factual_grounding", "read_aloud"), quality="UNKNOWN")
+
+    def test_public_article_facts_do_not_self_certify_without_consumer(self):
+        result = evaluate_voice_script(
+            self.contract, self.source, self.candidate, self.readback)
+        self.assertEqual(result["verdict"], INSUFFICIENT, result)
+        self.assertEqual(result["reason"], "CONSUMER_FACTUAL_GROUNDING_UNKNOWN")
+        self.assertEqual(result["evidence_class"], "SYNTHETIC_CALIBRATION_ONLY")
+        self.assertFalse(result["business_outcome_verified"])
+        self.assertFalse(result["authorizes_mutation"])
+
+    def test_public_article_wrong_capacity_is_rejected(self):
+        wrong = json.loads(self.candidate.decode("utf-8"))
+        wrong["segments"][0]["claims"]["capacity"] = "最高每年150万辆Cybercab"
+        wrong["segments"][0]["text"] = wrong["segments"][0]["text"].replace(
+            "最高每年100万辆Cybercab", "最高每年150万辆Cybercab")
+        artifact = encode(wrong)
+        readback = consumer_readback(
+            self.case_id, artifact,
+            ("factual_grounding", "read_aloud"), quality="UNKNOWN")
+        result = evaluate_voice_script(
+            self.contract, self.source, artifact, readback)
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["reason"], "VOICE_OWNER_FACT_MISMATCH")
+
+
 class DvRegressionOracleTests(unittest.TestCase):
     def setUp(self):
         self.case_id = "dv-r17-seed17"
