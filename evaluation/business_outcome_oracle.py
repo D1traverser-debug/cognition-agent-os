@@ -314,7 +314,7 @@ _MISMATCH_RE = re.compile(
 _TIMEOUT_RE = re.compile(r"TIMEOUT time_ns=(\d+) reason=(.{1,240})\Z")
 _RETRY_RE = re.compile(r"RETRY attempt=(\d+) reason=(.{1,240})\Z")
 _EXIT_RE = re.compile(r"PROCESS_EXIT_CODE=(\d+)\Z")
-_UVM_FAILURE_RE = re.compile(r"\\bUVM_(?:ERROR|FATAL)\\b")
+_UVM_FAILURE_RE = re.compile(r"\bUVM_(?:ERROR|FATAL)\b")
 
 
 def _parse_simulator_log(raw_log: bytes) -> dict:
