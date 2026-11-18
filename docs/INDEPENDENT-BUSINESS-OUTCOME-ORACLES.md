@@ -29,11 +29,15 @@ The DV oracle pins the original raw log and an independent simulator-state
 snapshot. It parses test ID, seed, scoreboard mismatches, timeout and retry
 events, process exit code, and first-error time and line. The current parser
 accepts a bounded normalized event grammar; it is not a generic VCS/Questa/
-Xcelium UVM transcript parser. A raw `UVM_ERROR` or `UVM_FATAL` line is
+Xcelium UVM transcript parser. Any raw `UVM_INFO`, `UVM_WARNING`, `UVM_ERROR`, or `UVM_FATAL` line is
 rejected as INSUFFICIENT_EVIDENCE until a separately tested normalizer maps
-it into the canonical event format. It must never be silently ignored as a
-clean run. The independent simulator state must agree with the raw log before
-a candidate can be graded.
+the vendor transcript into the canonical event format. Accellera's UVM 1.2
+reference defines `UVM_ERROR` as a real problem that may continue simulation
+and `UVM_FATAL` as unrecoverable; report actions are configurable. Therefore
+a zero process exit code cannot replace semantic report inspection. See
+[Accellera UVM 1.2 Class Reference](https://www.accellera.org/images/downloads/standards/uvm/UVM_Class_Reference_Manual_1.2.pdf).
+The independent simulator state must agree with the normalized event stream
+before a candidate can be graded.
 
 A process exit code of zero is not a passing regression when the scoreboard
 records a mismatch. The candidate must report the observed failure class and

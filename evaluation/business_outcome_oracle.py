@@ -320,7 +320,7 @@ _MISMATCH_RE = re.compile(
 _TIMEOUT_RE = re.compile(r"TIMEOUT time_ns=(\d+) reason=(.{1,240})\Z")
 _RETRY_RE = re.compile(r"RETRY attempt=(\d+) reason=(.{1,240})\Z")
 _EXIT_RE = re.compile(r"PROCESS_EXIT_CODE=(\d+)\Z")
-_UVM_FAILURE_RE = re.compile(r"\bUVM_(?:ERROR|FATAL)\b")
+_UVM_REPORT_RE = re.compile(r"\bUVM_(?:INFO|WARNING|ERROR|FATAL)\b")
 
 
 def _parse_simulator_log(raw_log: bytes) -> dict:
@@ -344,10 +344,10 @@ def _parse_simulator_log(raw_log: bytes) -> dict:
             retries.append((line_number, int(match.group(1))))
         elif match := _EXIT_RE.fullmatch(line):
             exits.append((line_number, int(match.group(1))))
-        elif _UVM_FAILURE_RE.search(line):
-            # The current grammar is a normalized event stream, not a generic
-            # simulator/UVM log parser. Never silently ignore a real UVM error.
-            raise ValueError("SIMULATOR_LOG_UVM_FAILURE_REQUIRES_NORMALIZATION")
+        elif _UVM_REPORT_RE.search(line):
+            # The current grammar is a normalized event stream, not a vendor UVM
+            # transcript parser. Never silently treat a UVM report as normalized input.
+            raise ValueError("SIMULATOR_LOG_UVM_REPORT_REQUIRES_NORMALIZATION")
         elif line.startswith(("RUN ", "SCOREBOARD_MISMATCH", "TIMEOUT ",
                               "RETRY ", "PROCESS_EXIT_CODE=")):
             raise ValueError("SIMULATOR_LOG_EVENT_MALFORMED")

@@ -372,8 +372,8 @@ class DvRegressionOracleTests(unittest.TestCase):
         self.assertEqual(result["verdict"], INSUFFICIENT)
         self.assertEqual(result["reason"], "SIMULATOR_LOG_EVENT_MALFORMED")
 
-    def test_raw_uvm_error_and_fatal_are_not_ignored_as_pass(self):
-        for severity in ("UVM_ERROR", "UVM_FATAL"):
+    def test_raw_uvm_reports_are_not_ignored_as_pass(self):
+        for severity in ("UVM_INFO", "UVM_WARNING", "UVM_ERROR", "UVM_FATAL"):
             with self.subTest(severity=severity):
                 log = (
                     "RUN test=R17 seed=17\n"
@@ -394,7 +394,7 @@ class DvRegressionOracleTests(unittest.TestCase):
                 self.assertEqual(result["verdict"], INSUFFICIENT)
                 self.assertEqual(
                     result["reason"],
-                    "SIMULATOR_LOG_UVM_FAILURE_REQUIRES_NORMALIZATION",
+                    "SIMULATOR_LOG_UVM_REPORT_REQUIRES_NORMALIZATION",
                 )
 
     def test_boolean_cannot_masquerade_as_numeric_seed(self):
