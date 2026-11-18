@@ -24,8 +24,13 @@ broadcast quality. Read-aloud usability remains a consumer-side assessment.
 
 The DV oracle pins the original raw log and an independent simulator-state
 snapshot. It parses test ID, seed, scoreboard mismatches, timeout and retry
-events, process exit code, and first-error time and line. The independent
-simulator state must agree with the raw log before a candidate can be graded.
+events, process exit code, and first-error time and line. The current parser
+accepts a bounded normalized event grammar; it is not a generic VCS/Questa/
+Xcelium UVM transcript parser. A raw `UVM_ERROR` or `UVM_FATAL` line is
+rejected as INSUFFICIENT_EVIDENCE until a separately tested normalizer maps
+it into the canonical event format. It must never be silently ignored as a
+clean run. The independent simulator state must agree with the raw log before
+a candidate can be graded.
 
 A process exit code of zero is not a passing regression when the scoreboard
 records a mismatch. The candidate must report the observed failure class and

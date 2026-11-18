@@ -358,6 +358,31 @@ class DvRegressionOracleTests(unittest.TestCase):
         self.assertEqual(result["verdict"], INSUFFICIENT)
         self.assertEqual(result["reason"], "SIMULATOR_LOG_EVENT_MALFORMED")
 
+    def test_raw_uvm_error_and_fatal_are_not_ignored_as_pass(self):
+        for severity in ("UVM_ERROR", "UVM_FATAL"):
+            with self.subTest(severity=severity):
+                log = (
+                    "RUN test=R17 seed=17\n"
+                    f"{severity} @ 80ns: reporter [TEST_FAILURE] observed failure\n"
+                    "PROCESS_EXIT_CODE=0\n"
+                ).encode("utf-8")
+                contract = encode({
+                    "schema_version": 1,
+                    "case_id": self.case_id,
+                    "kind": "dv_regression_triage",
+                    "raw_log_sha256": sha(log),
+                    "simulator_state_sha256": sha(self.state),
+                    "expected_test_id": "R17",
+                    "expected_seed": 17,
+                })
+                result = evaluate_dv_regression_triage(
+                    contract, log, self.state, self.candidate, self.readback)
+                self.assertEqual(result["verdict"], INSUFFICIENT)
+                self.assertEqual(
+                    result["reason"],
+                    "SIMULATOR_LOG_UVM_FAILURE_REQUIRES_NORMALIZATION",
+                )
+
     def test_boolean_cannot_masquerade_as_numeric_seed(self):
         wrong = json.loads(self.candidate.decode("utf-8"))
         wrong["seed"] = True
