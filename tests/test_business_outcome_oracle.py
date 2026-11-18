@@ -159,9 +159,10 @@ class VoiceScriptOracleTests(unittest.TestCase):
                     self.assertEqual(result["reason"], "CONSUMER_FACTUAL_GROUNDING_REJECTED")
 
     def test_consumer_rejects_unreadable_aloud_script(self):
-        receipt = consumer_readback(
-            self.case_id, self.candidate, ("factual_grounding", "read_aloud"), quality="REJECTED")
-        result = self.evaluate(readback=receipt)
+        receipt = json.loads(consumer_readback(
+            self.case_id, self.candidate, ("factual_grounding", "read_aloud")).decode("utf-8"))
+        receipt["quality_assessment"]["read_aloud"] = "REJECTED"
+        result = self.evaluate(readback=encode(receipt))
         self.assertEqual(result["verdict"], FAIL)
         self.assertEqual(result["reason"], "CONSUMER_READ_ALOUD_REJECTED")
 
