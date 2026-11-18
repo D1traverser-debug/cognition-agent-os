@@ -351,6 +351,8 @@ def _parse_simulator_log(raw_log: bytes) -> dict:
         elif line.startswith(("RUN ", "SCOREBOARD_MISMATCH", "TIMEOUT ",
                               "RETRY ", "PROCESS_EXIT_CODE=")):
             raise ValueError("SIMULATOR_LOG_EVENT_MALFORMED")
+        elif line.strip():
+            raise ValueError("SIMULATOR_LOG_UNRECOGNIZED_EVENT")
     if len(runs) != 1 or len(exits) != 1:
         raise ValueError("SIMULATOR_LOG_RUN_OR_EXIT_AMBIGUOUS")
     error_events = (
