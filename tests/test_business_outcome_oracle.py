@@ -399,9 +399,9 @@ class DvRegressionOracleTests(unittest.TestCase):
 
     def test_unrecognized_log_error_is_not_ignored_as_pass(self):
         log = (
-            "RUN test=R17 seed=17\\n"
-            "ERROR: simulator assertion failed\\n"
-            "PROCESS_EXIT_CODE=0\\n"
+            "RUN test=R17 seed=17\n"
+            "ERROR: simulator assertion failed\n"
+            "PROCESS_EXIT_CODE=0\n"
         ).encode("utf-8")
         contract = encode({
             "schema_version": 1,

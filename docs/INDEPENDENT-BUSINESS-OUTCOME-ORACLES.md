@@ -31,9 +31,10 @@ normalized event stream containing RUN, SCOREBOARD_MISMATCH, TIMEOUT, RETRY,
 and PROCESS_EXIT_CODE records; it is not the original VCS/Questa/Xcelium
 vendor transcript. It parses test ID, seed, scoreboard mismatches, timeout
 and retry events, process exit code, and first-error time and line. Unknown
-non-empty lines are rejected rather than silently ignored. Any raw `UVM_INFO`, `UVM_WARNING`, `UVM_ERROR`, or `UVM_FATAL` line is
-rejected as INSUFFICIENT_EVIDENCE until a separately tested normalizer maps
-the vendor transcript into the canonical event format. Accellera's UVM 1.2
+non-empty lines are rejected rather than silently ignored. Any raw
+`UVM_INFO`, `UVM_WARNING`, `UVM_ERROR`, or `UVM_FATAL` line is rejected as
+INSUFFICIENT_EVIDENCE until a separately tested normalizer maps the vendor
+transcript into the canonical event format. Accellera's UVM 1.2
 reference defines `UVM_ERROR` as a real problem that may continue simulation
 and `UVM_FATAL` as unrecoverable; report actions are configurable. Therefore
 a zero process exit code cannot replace semantic report inspection. See
