@@ -40,7 +40,7 @@ class CompoundAbcHarnessTests(unittest.TestCase):
         self.assertIn("ONLY JSON null permitted", protocol)
         self.assertIn("alternative_reason MUST always be", protocol)
         self.assertIn("EVEN WHEN alternative_intent is null", protocol)
-        self.assertIn("DO NOT include any of those three fields", protocol)
+        self.assertIn("do not include any of those three fields", protocol.lower())
         self.assertIn("native_goal_inspect and native_procedure_evidence", protocol)
 
     def test_tool_argument_shape_decodes_json_structure_without_values(self):
