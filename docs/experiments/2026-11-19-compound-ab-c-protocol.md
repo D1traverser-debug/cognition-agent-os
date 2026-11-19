@@ -53,10 +53,10 @@ Root creation, generic native model planning, memory writes, public-source acces
 
 ## 3. Fairness and resource bounds
 
-- B and C use the same model identifier: `qwen2.5:1.5b`.
+- B and C use the same model identifier: `qwen2.5:3b`.
 - All arms use the same exact goal text, source bytes, source hashes, owner-goal hash and initial SQLite authority revision.
 - The same 600-second wall-clock budget applies to each arm.
-- B is limited to two sequential decisions. C is limited to 14 model turns and 400 output tokens per turn.
+- B is limited to two sequential decisions. C is limited to 18 model turns and 900 output tokens per turn.
 - The order of B and C is deterministically shuffled from the owner-goal hash and recorded. Ollama requests are asked to unload the model after each turn where supported.
 - Actual model calls, token counts where reported, tool calls, elapsed time, selected objectives, task states, lineage and errors are recorded. Missing token telemetry is reported as unavailable, never inferred.
 - A runs without a model as the incumbent deterministic baseline.
