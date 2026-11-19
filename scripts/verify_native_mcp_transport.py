@@ -493,6 +493,11 @@ async def run():
                     "uncertainty": "A valid local report cannot prove upstream business resolution.",
                 },
             }
+            # A process-local observation alone is insufficient: the agent
+            # must also read the current procedure projection before admission.
+            unprepared = await client.call_tool(
+                "native_decision_admit", {"root_task_id": root, "proposal": proposal})
+            assert unprepared.is_error, unprepared
             # Prime the process-local observation/procedure snapshot before
             # testing source-pin rejection. The model-facing proposal carries
             # neither mechanical digest nor previous-child identifiers.
@@ -506,6 +511,20 @@ async def run():
             still = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
             assert still["decision_count"] == 0, still
+            # Any source drift after the read invalidates the process-local
+            # snapshot; restore bytes and re-read before the next proposal.
+            saved_handoff = (sources / "handoff.json").read_bytes()
+            (sources / "handoff.json").write_text(
+                '{"retain":"changed"}\\n', encoding="utf-8")
+            stale = await client.call_tool(
+                "native_decision_admit", {"root_task_id": root, "proposal": proposal})
+            assert stale.is_error, stale
+            (sources / "handoff.json").write_bytes(saved_handoff)
+            refreshed = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": root}))
+            assert refreshed["status"] == "NATIVE_NEXT_DECISION_ADMISSIBLE", refreshed
+            await client.call_tool(
+                "native_procedure_evidence", {"root_task_id": root})
             # Goal/ledger write permission alone is no effect permission.
             no_contract = await client.call_tool("native_decision_admit", {
                 "root_task_id": root, "proposal": proposal})
@@ -602,7 +621,6 @@ async def run():
                     "source_refs": [
                         {"path": n, "sha256": hashlib.sha256(data).hexdigest()}
                         for n, data in sorted(original.items())],
-                    "previous_result_task_id": None,
                     "challenge": (
                         "The owner field might already conflict in the source."),
                     "falsifier": (
