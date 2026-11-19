@@ -445,7 +445,7 @@ def propose_native_local(db_path: Path, workspace: Path, fixtures: Path,
     This is a proposal, not task admission or a semantic evaluator. A changed
     input between inference and admission is rejected by existing CAS audit.
     """
-    if type(timeout) is not int or not 1 <= timeout <= 120:
+    if type(timeout) is not int or not 1 <= timeout <= 240:
         raise ValueError("INVALID_NATIVE_MODEL_TIMEOUT")
     current = inspect_native_goal(db_path, workspace, fixtures, root_id)
     if current["status"] != "NATIVE_NEXT_DECISION_ADMISSIBLE":
