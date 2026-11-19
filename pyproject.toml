@@ -11,6 +11,7 @@ dependencies = []
 
 [project.optional-dependencies]
 mcp = ["mcp>=2,<3"]  # Local adapter requires Python 3.11+; core stays stdlib-only.
+agents-sdk = ["openai-agents==0.25.0"]  # Opt-in local MCP orchestration experiment; never a core dependency.
 
 [project.scripts]
 caos = "cognition_agent_os.session_cli:main"
