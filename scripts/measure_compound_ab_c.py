@@ -209,11 +209,21 @@ def grade_compound_arm(
         "authority_grant_rev": authority["grant_rev"] if authority else None,
         "write_allowed": bool(authority and authority["write_allowed"] == 1),
     }
+    native_state = (
+        inspect_native_goal(db_path, workspace, fixtures, root["task_id"])
+        if root_spec["kind"] == "native_goal" else None
+    )
+    native_owner = (
+        inspect_owner_local_outcome(db_path, workspace, fixtures, root["task_id"])
+        if root_spec["kind"] == "native_goal" else None
+    )
     return {
         "arm": arm,
         "root_task_id": root["task_id"],
         "root_kind": root_spec["kind"],
         "root_state": root_state,
+        "native_state_snapshot": native_state,
+        "native_owner_postcondition": native_owner,
         "selected_objectives": selected,
         "ledger_child_task_count": len(child_list),
         "child_order": child_order,
@@ -383,6 +393,7 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
             def __init__(self):
                 self.model_calls = 0
                 self.tool_names = []
+                self.tool_results = []
                 self.usage = []
 
             async def on_llm_start(self, context, agent, system_prompt, input_items):
@@ -403,6 +414,12 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
             async def on_tool_start(self, context, agent, tool):
                 self.tool_names.append(
                     getattr(tool, "name", type(tool).__name__))
+
+            async def on_tool_end(self, context, agent, tool, result):
+                self.tool_results.append({
+                    "name": getattr(tool, "name", type(tool).__name__),
+                    "result_excerpt": str(result)[:2000],
+                })
 
         hooks = MetricsHooks()
         hooks_holder["hooks"] = hooks
@@ -543,6 +560,7 @@ uncertainty. The independent harness, not your prose, grades the artifacts.
         "output_tokens": sum(output_tokens) if output_tokens else None,
         "tool_calls": len(hooks.tool_names) if hooks else 0,
         "tool_names": hooks.tool_names if hooks else [],
+        "tool_results": hooks.tool_results if hooks else [],
         "usage_per_model_call": usage,
         "final_output_untrusted": final_output,
         "error_class": fault,
