@@ -435,7 +435,7 @@ def run_current_native_planner(home: Path, model: str) -> dict:
                     break
                 response = advance_native_local_once(
                     db, workspace, fixtures, root_id, model=model,
-                    timeout=120, structured_output=True,
+                    timeout=240, structured_output=True,
                 )
                 step = {
                     "cycle": cycle + 1,
@@ -607,12 +607,16 @@ the SECOND effect using selected_intent:
 "requirements":[{"field":"owner","equals":"ops"}]}.
 Use the exact settings.json digest, latest observation, previous_result_task_id
 equal to the first child task_id, and decision_reviews containing the first
-decision event_id exactly once with rationale and falsifier. Use
-alternative_intent=null unless a genuine eligible competitor exists. Tick once
-and inspect again.
+decision event_id exactly once with disposition="RELEVANT", rationale and
+falsifier. Use alternative_intent=null unless a genuine eligible competitor
+exists. Tick only after native_decision_admit confirms admission AND the latest
+root state is NATIVE_AWAITING_WORKER. If admission is rejected, read its safe
+recovery message, correct the proposal, and retry only while all source and
+authority snapshots remain current. Never tick after a rejected admission.
 
 Never repeat an admitted action. Stop on stale hashes, changed authority,
-rejected admission, or ambiguous lineage. A status-only answer is not work.
+ambiguous lineage, or an unrecoverable rejection. A status-only answer is not
+work.
 The independent harness grades SQLite lineage and artifact bytes; your final
 prose has no authority.
 """
@@ -634,7 +638,7 @@ prose has no authority.
         async with AsyncOpenAI(
             api_key="ollama-local-only",
             base_url=OLLAMA_OPENAI_BASE_URL,
-            timeout=90.0,
+            timeout=240.0,
             max_retries=0,
         ) as client:
             provider = OpenAIProvider(
