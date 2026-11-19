@@ -28,6 +28,7 @@ OPTIONAL = (
     "aoci_official_bootstrap_probe",
     "chatgpt_plugin_release_bundle",
     "experimental_real_native_cognition",
+    "experimental_compound_ab_c",
     "experimental_live_open_goal_method",
     "experimental_open_goal_relevance",
     "native_child_readonly_holdout",
