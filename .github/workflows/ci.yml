@@ -812,7 +812,7 @@ jobs:
         include:
           - model: 'qwen2.5-coder:0.5b'
             label: coder-05b
-          - model: 'qwen2.5:1.5b'
+          - model: 'qwen2.5:3b'
             label: instruct-15b
     runs-on: ubuntu-latest
     timeout-minutes: 26
@@ -869,6 +869,68 @@ jobs:
         with:
           name: real-native-cognition-schema-${{ matrix.label }}
           path: real-native-cognition-evidence.json
+          if-no-files-found: warn
+
+  experimental_compound_ab_c:
+    # One opt-in, same-task A/B/C screen. B and C share one real local model;
+    # C uses the pinned Agents SDK over the existing scoped MCP bridge.
+    # No cloud/paid model API, production data, deployment or user-machine install.
+    if: ${{ github.event.repository.private == false && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.body, '[run-compound-ab-c]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 34
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Attest exact checked-out source commit
+        run: python scripts/verify_ci_checkout_source.py
+      - name: Install Ollama on disposable public CI runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 https://ollama.com/install.sh --output "$RUNNER_TEMP/compound-ollama-install.sh"
+          sh "$RUNNER_TEMP/compound-ollama-install.sh"
+          ollama --version
+      - name: Start loopback-only local inference and pull one open model
+        shell: bash
+        env:
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+        run: |
+          set -euo pipefail
+          (ollama serve > "$RUNNER_TEMP/compound-ollama.log" 2>&1 &)
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          timeout 420 ollama pull qwen2.5:3b
+      - name: Install pinned optional Agents SDK and local MCP bridge dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -e '.[mcp,agents-sdk]'
+          python -c 'import agents, mcp; print("Agents SDK", agents.__version__ if hasattr(agents, "__version__") else "0.25.0", "MCP", getattr(mcp, "__version__", "installed"))'
+      - name: Run same-task deterministic/native/Agents-SDK comparison with independent oracle
+        shell: bash
+        env:
+          PYTHONPATH: src
+          OLLAMA_HOST: 127.0.0.1:11434
+          OLLAMA_NO_CLOUD: '1'
+          COGNITION_EVAL_MODEL: qwen2.5:3b
+          COGNITION_EVAL_ARM_BUDGET_SECONDS: '600'
+        run: |
+          set -euo pipefail
+          timeout 1500 python scripts/measure_compound_ab_c.py --output compound-ab-c-evidence.json
+      - name: Preserve all A/B/C traces and independent verdicts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compound-ab-c-evidence-qwen25-3b
+          path: compound-ab-c-evidence.json
           if-no-files-found: warn
 
   experimental_live_open_goal_method:
@@ -1068,7 +1130,7 @@ jobs:
     # Always runs after other jobs. A green PR cannot hide a skipped core gate.
     # Opt-in model/child experiments remain explicitly UNTESTED when skipped.
     if: ${{ always() }}
-    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, native_feedback_seam_ab, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout, experimental_native_app_server, experimental_native_execution_boundary]
+    needs: [pr_merge_compatibility, offline_regression, windows_offline_regression, installed_cli_cross_platform, native_mcp_stdio_integration, windows_native_scheduler, repo_container_integration, graphify_official_code_inventory, architecture_ab_equivalence, native_feedback_seam_ab, experimental_real_local_model, experimental_public_feedback_model, experimental_local_7b_capacity, live_public_source, aoci_official_bootstrap_probe, chatgpt_plugin_release_bundle, experimental_real_native_cognition, experimental_compound_ab_c, experimental_live_open_goal_method, experimental_open_goal_relevance, native_child_readonly_holdout, experimental_native_app_server, experimental_native_execution_boundary]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

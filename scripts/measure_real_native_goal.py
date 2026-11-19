@@ -13,9 +13,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import time
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
+from compound_owner_oracle import evaluate_compound_owner_goal
 
 from cognition_agent_os import local_model
 from cognition_agent_os.host import run_tick
@@ -117,6 +121,241 @@ def _preserved(fixture: Path, before: dict) -> bool:
         and hashlib.sha256((fixture / name).read_bytes()).hexdigest() == digest
         for name, digest in before.items()
     )
+
+
+def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
+    """Grade real Host/Worker/SQLite artifacts using a scripted planner response.
+
+    No real model inference is used. The fake transport only selects two typed
+    methods; native planning, admission, Host execution, artifacts, sandbox
+    staging, SQLite lineage and the independent oracle remain real.
+    """
+    db, workspace, fixture, before = _prepare(home, case["files"])
+    source_names = ("baseline.csv", "actual.csv", "settings.json")
+    root = register_native_goal(db, case["goal"])
+    model_calls = []
+
+    def compare_intent():
+        return {
+            "kind": "goal_intent",
+            "objective": "compare_records",
+            "resources": [
+                {"role": "reference", "path": "baseline.csv"},
+                {"role": "observed", "path": "actual.csv"},
+            ],
+        }
+
+    def ensure_intent():
+        return {
+            "kind": "goal_intent",
+            "objective": "ensure_structure",
+            "resources": [{"role": "input", "path": "settings.json"}],
+            "requirements": [{"field": "owner", "equals": "ops"}],
+        }
+
+    def scripted_transport(method, path, payload, timeout):
+        if method == "GET":
+            return {"models": [{"name": "installed:compound-oracle"}]}
+        if method != "POST" or payload.get("model") != "installed:compound-oracle":
+            raise AssertionError("UNEXPECTED_SCRIPTED_MODEL_REQUEST")
+        evidence = json.loads(payload["prompt"].split("\n\n")[-1])
+        prior = evidence["past_methods_and_independent_verdicts"]
+        model_calls.append(len(prior))
+        selected = compare_intent() if not prior else ensure_intent()
+        alternative = ensure_intent() if not prior else compare_intent()
+        basis = {
+            "decision_layer": "method_selection",
+            "source_refs": [
+                {"path": name, "sha256": digest}
+                for name, digest in sorted(
+                    evidence["source_digest_manifest"].items())
+            ],
+            "previous_result_task_id": prior[-1]["task_id"] if prior else None,
+            "challenge": (
+                "A selected local method may satisfy one clause while leaving "
+                "the other required owner effect incomplete."),
+            "falsifier": (
+                "The independent compound oracle rejects a missing child, "
+                "changed source, incorrect report or altered JSON draft."),
+            "uncertainty": (
+                "A local candidate does not establish external delivery or "
+                "business acceptance."),
+            "decision_review_version": 1,
+            "decision_reviews": [
+                {
+                    "event_id": row["event_id"],
+                    "disposition": "RELEVANT",
+                    "rationale": (
+                        "The previous method is one required part of this "
+                        "same compound owner goal."),
+                    "falsifier": (
+                        "A missing or unrelated prior artifact would refute "
+                        "this relationship."),
+                }
+                for row in prior
+            ],
+        }
+        if evidence.get("cross_root_procedure_evidence_sha256") is not None:
+            basis["cross_root_procedure_evidence_sha256"] = (
+                evidence["cross_root_procedure_evidence_sha256"])
+        answer = {
+            "selected_intent": selected,
+            "alternative_intent": alternative,
+            "decision_reason": (
+                "Choose one bounded registered method for a required local "
+                "owner-goal clause."),
+            "alternative_reason": (
+                "The alternative method addresses the other independent "
+                "clause and must not be treated as interchangeable."),
+            "expected_evidence": (
+                "A new source-pinned child artifact under the same original "
+                "goal and grant revisions."),
+            "observation_sha256": evidence["observation_sha256"],
+            "decision_basis": basis,
+        }
+        return {"done": True, "response": json.dumps(answer)}
+
+    with patch("cognition_agent_os.local_model._request",
+               side_effect=scripted_transport):
+        execution = run_tick(
+            db, workspace, fixture, max_jobs=2, planner_mode="ollama-local",
+            local_model="installed:compound-oracle",
+            auto_native_cognition=True)
+    if model_calls != [0, 1]:
+        raise RuntimeError("COMPOUND_CALIBRATION_EXPECTED_TWO_SCRIPTED_DECISIONS")
+    worker_states = [item.get("status") for item in execution.get("tasks", [])]
+    if worker_states != ["NEEDS_REVIEW", "NEEDS_REVIEW"]:
+        diagnostic = json.dumps(
+            execution.get("tasks", []), ensure_ascii=False, sort_keys=True,
+            default=str)[:4000]
+        raise RuntimeError(
+            "COMPOUND_CALIBRATION_WORKER_STATES_UNEXPECTED:" + diagnostic)
+
+    with patch("cognition_agent_os.local_model._request",
+               side_effect=AssertionError("sandbox staging must not infer")):
+        staged = run_tick(
+            db, workspace, fixture, max_jobs=1, auto_stage_goals=True)
+    if len(staged.get("sandbox_reviews", [])) != 1:
+        raise RuntimeError("COMPOUND_CALIBRATION_JSON_DRAFT_NOT_STAGED")
+
+    with closing(connect(db)) as con:
+        root_row = con.execute(
+            "SELECT * FROM tasks WHERE task_id=?", (root,)).fetchone()
+        child_rows = {
+            row["task_id"]: row
+            for row in con.execute(
+                "SELECT * FROM tasks WHERE parent_task=?", (root,))
+        }
+        child_order = [
+            row["task_id"] for row in con.execute(
+                "SELECT task_id FROM tasks WHERE parent_task=? ORDER BY rowid",
+                (root,))
+        ]
+    if root_row is None or len(child_rows) != 2:
+        raise RuntimeError("COMPOUND_CALIBRATION_LINEAGE_INCOMPLETE")
+    root_spec = json.loads(root_row["source_spec"])
+    by_kind = {
+        json.loads(row["source_spec"])["kind"]: row
+        for row in child_rows.values()
+    }
+    csv_row = by_kind.get("record_reconciliation")
+    json_row = by_kind.get("goal_case")
+    if csv_row is None or json_row is None:
+        raise RuntimeError("COMPOUND_CALIBRATION_CHILD_KIND_MISMATCH")
+
+    def child_lineage(row):
+        return {
+            "task_id": row["task_id"],
+            "parent_task": row["parent_task"],
+            "goal_rev": row["goal_rev"],
+            "grant_rev": row["grant_rev"],
+            "state": row["state"],
+            "artifact_sha256": row["artifact_hash"],
+        }
+
+    csv_id = csv_row["task_id"]
+    json_id = json_row["task_id"]
+    owner_goal_sha256 = hashlib.sha256(
+        root_spec["goal"].encode("utf-8")).hexdigest()
+    contract = {
+        "schema_version": 1,
+        "goal_id": "compound-owner-scope",
+        "kind": "csv_reconciliation_plus_json_draft",
+        "owner_goal_sha256": owner_goal_sha256,
+        "source_paths": {
+            "reference": "baseline.csv",
+            "observed": "actual.csv",
+            "draft": "settings.json",
+        },
+        "source_sha256": {name: before[name] for name in source_names},
+        "record_key": "item",
+        "draft_fields": {"owner": "ops"},
+        "allowed_effect": "LOCAL_CANDIDATES_ONLY",
+    }
+    expected_lineage = {
+        "root_task_id": root_row["task_id"],
+        "root_parent_task": root_row["parent_task"],
+        "root_kind": root_spec["kind"],
+        "owner_goal_sha256": owner_goal_sha256,
+        "goal_rev": root_row["goal_rev"],
+        "grant_rev": root_row["grant_rev"],
+        "ledger_child_task_count": len(child_rows),
+        "child_order": child_order,
+        "children": {
+            "csv_report": child_lineage(csv_row),
+            "json_draft": child_lineage(json_row),
+        },
+    }
+    csv_path = workspace / "artifacts" / (csv_id + ".json")
+    json_path = workspace / "artifacts" / (json_id + ".json")
+    candidate_path = workspace / "sandbox" / (json_id + ".candidate")
+    result = evaluate_compound_owner_goal(
+        contract=contract,
+        current_sources={
+            name: (fixture / name).read_bytes() for name in source_names
+        },
+        csv_report=csv_path.read_bytes() if csv_path.is_file() else b"",
+        json_artifact=json_path.read_bytes() if json_path.is_file() else b"",
+        json_candidate=(
+            candidate_path.read_bytes() if candidate_path.is_file() else b""),
+        expected_lineage=expected_lineage,
+    )
+    return {
+        "independent_owner_result": result["status"],
+        "synthetic_compound_result": result["status"],
+        "synthetic_local_postconditions_met":
+            result["synthetic_local_postconditions_met"],
+        "whole_local_owner_verified": False,
+        "source_preserved": _preserved(fixture, before),
+        "selected_objectives": ["compare_records", "ensure_structure"],
+        "compound_oracle_reason": result.get("reason"),
+        "compound_subresults": result.get("subresults"),
+        "scripted_planner_responses": model_calls,
+        "sandbox_reviews": staged.get("sandbox_reviews", []),
+        "lineage_snapshot": {
+            "root": {
+                "task_id": root_row["task_id"],
+                "parent_task": root_row["parent_task"],
+                "kind": root_spec["kind"],
+                "goal_rev": root_row["goal_rev"],
+                "grant_rev": root_row["grant_rev"],
+            },
+            "ledger_child_task_count": len(child_rows),
+            "child_order": child_order,
+            "children": {
+                json.loads(row["source_spec"])["kind"]: {
+                    "task_id": row["task_id"],
+                    "parent_task": row["parent_task"],
+                    "goal_rev": row["goal_rev"],
+                    "grant_rev": row["grant_rev"],
+                    "state": row["state"],
+                    "artifact_sha256": row["artifact_hash"],
+                }
+                for row in child_rows.values()
+            },
+        },
+        "business_outcome_verified": False,
+    }
 
 
 def _native_trial(case: dict, home: Path) -> dict:
@@ -432,12 +671,12 @@ ORACLE_SCOPE_PROBES = [
                  "then ensure an isolated draft of settings.json has owner "
                  "equal to ops."),
         "files": {
-            "baseline.csv": "item,qty\\nA,7\\n",
-            "actual.csv": "item,qty\\nA,6\\n",
-            "settings.json": '{"timeout":12}\\n',
+            "baseline.csv": "item,qty\nA,7\n",
+            "actual.csv": "item,qty\nA,6\n",
+            "settings.json": '{"timeout":12}\n',
         },
         "target": None, "must_complete_local_owner": True,
-        "independent_local_oracle_available": False,
+        "independent_local_oracle_available": True,
     },
     {
         "id": "causal_investigation_needs_a_domain_owner_verifier",
@@ -466,7 +705,17 @@ def measure_offline_owner_oracle_scope() -> dict:
     outcomes = []
     for probe in ORACLE_SCOPE_PROBES:
         with tempfile.TemporaryDirectory(prefix="native-oracle-scope-") as tmp:
-            observation = _baseline_trial(probe, Path(tmp))
+            if probe["id"] == "compound_owner_goal_two_independent_effects":
+                observation = _compound_oracle_calibration_trial(probe, Path(tmp))
+            else:
+                observation = _baseline_trial(probe, Path(tmp))
+        compound_status = observation.get("synthetic_compound_result")
+        evidence_status = (
+            "SYNTHETIC_COMPOUND_ORACLE_CALIBRATED"
+            if compound_status == "SYNTHETIC_COMPOUND_OWNER_GOAL_MET"
+            else "INDEPENDENT_LOCAL_OWNER_OBSERVED"
+            if probe["independent_local_oracle_available"]
+            else "OWNER_ORACLE_NOT_IMPLEMENTED")
         outcomes.append({
             "case": probe["id"],
             "independent_local_oracle_available":
@@ -474,23 +723,33 @@ def measure_offline_owner_oracle_scope() -> dict:
             "actual_owner_result": observation["independent_owner_result"],
             "whole_local_owner_verified":
                 observation["whole_local_owner_verified"],
+            "synthetic_local_postconditions_met":
+                observation.get("synthetic_local_postconditions_met", False),
+            "compound_oracle_reason": observation.get("compound_oracle_reason"),
+            "compound_subresults": observation.get("compound_subresults"),
+            "scripted_planner_responses":
+                observation.get("scripted_planner_responses", []),
+            "lineage_snapshot": observation.get("lineage_snapshot"),
             "source_preserved": observation["source_preserved"],
             "selected_objectives": observation["selected_objectives"],
             "baseline_error_class": observation.get("error_class"),
-            "evidence_status": (
-                "INDEPENDENT_LOCAL_OWNER_OBSERVED"
-                if probe["independent_local_oracle_available"]
-                else "OWNER_ORACLE_NOT_IMPLEMENTED"),
+            "evidence_status": evidence_status,
         })
     return {
         "status": "OFFLINE_OWNER_ORACLE_SCOPE_DIAGNOSTIC",
-        "no_model_or_paid_provider_used": True,
+        "no_real_model_or_paid_provider_used": True,
+        "scripted_model_transport_used": any(
+            row["scripted_planner_responses"] for row in outcomes),
+        "real_model_calls": 0,
         "source_isolated": all(row["source_preserved"] for row in outcomes),
         "total_probes": len(outcomes),
         "oracle_available_probes": sum(
             row["independent_local_oracle_available"] for row in outcomes),
         "ungradable_probes": sum(
             not row["independent_local_oracle_available"]
+            for row in outcomes),
+        "synthetic_compound_oracle_passed": any(
+            row["evidence_status"] == "SYNTHETIC_COMPOUND_ORACLE_CALIBRATED"
             for row in outcomes),
         "cases": outcomes,
         "real_model_capability_tested": False,
