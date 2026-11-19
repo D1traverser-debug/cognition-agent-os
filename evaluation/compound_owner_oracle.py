@@ -123,7 +123,7 @@ def _expected_reconciliation(reference: bytes, observed: bytes, key: str) -> dic
 def _validate_lineage(lineage: object, contract: dict) -> dict[str, Any]:
     required = {
         "root_task_id", "root_parent_task", "root_kind", "owner_goal_sha256",
-        "goal_rev", "grant_rev", "children",
+        "goal_rev", "grant_rev", "ledger_child_task_count", "children",
     }
     if not isinstance(lineage, dict) or set(lineage) != required:
         raise ValueError("BAD_EXPECTED_LINEAGE")
@@ -138,10 +138,16 @@ def _validate_lineage(lineage: object, contract: dict) -> dict[str, Any]:
             or type(lineage["grant_rev"]) is not int or lineage["grant_rev"] < 1):
         raise ValueError("BAD_EXPECTED_ROOT_LINEAGE")
     children = lineage["children"]
-    if not isinstance(children, dict) or set(children) != {"csv_report", "json_draft"}:
+    child_count = lineage["ledger_child_task_count"]
+    if (type(child_count) is not int or child_count < 0
+            or not isinstance(children, dict)
+            or set(children) != {"csv_report", "json_draft"}):
         raise ValueError("BAD_EXPECTED_CHILDREN")
-    if any(children[label] is None for label in ("csv_report", "json_draft")):
+    if child_count < 2 or any(
+            children[label] is None for label in ("csv_report", "json_draft")):
         raise ValueError("MISSING_REQUIRED_CHILD_TASK")
+    if child_count > 2:
+        raise ValueError("UNACCOUNTED_CHILD_TASKS")
     expected_states = {"csv_report": "NEEDS_REVIEW", "json_draft": "SANDBOX_VERIFIED"}
     ids = []
     for label, child in children.items():
