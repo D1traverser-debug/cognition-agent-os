@@ -320,6 +320,27 @@ class CompoundOwnerOracleTests(unittest.TestCase):
         self.assertEqual(result["status"], "NOT_ACCEPTED")
         self.assertFalse(result["authorizes_mutation"])
 
+    def test_open_goal_root_uses_the_same_compound_postcondition_oracle(self):
+        lineage = json.loads(json.dumps(self.expected_lineage))
+        lineage["root_kind"] = "open_goal"
+        result = self.evaluate(expected_lineage=lineage)
+        self.assertEqual(result["status"], "SYNTHETIC_COMPOUND_OWNER_GOAL_MET", result)
+
+    def test_missing_required_child_task_fails_closed(self):
+        lineage = json.loads(json.dumps(self.expected_lineage))
+        lineage["children"]["json_draft"] = None
+        result = self.evaluate(expected_lineage=lineage)
+        self.assertEqual(result["status"], "NOT_ACCEPTED")
+        self.assertEqual(result["reason"], "MISSING_REQUIRED_CHILD_TASK")
+
+    def test_unregistered_root_kind_is_rejected(self):
+        lineage = json.loads(json.dumps(self.expected_lineage))
+        lineage["root_kind"] = "unregistered"
+        result = self.evaluate(expected_lineage=lineage)
+        self.assertEqual(result["status"], "NOT_ACCEPTED")
+        self.assertEqual(result["reason"], "BAD_EXPECTED_ROOT_LINEAGE")
+
+
     def test_untrusted_product_oracle_label_is_not_used_as_proof(self):
         forged = json.loads(self.csv_report.decode("utf-8"))
         forged["oracle"] = "TRUSTED_SUCCESS"
