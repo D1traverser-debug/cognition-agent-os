@@ -310,6 +310,27 @@ def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
         "selected_objectives": ["compare_records", "ensure_structure"],
         "compound_oracle_reason": result.get("reason"),
         "compound_subresults": result.get("subresults"),
+        "lineage_snapshot": {
+            "root": {
+                "task_id": root_row["task_id"],
+                "parent_task": root_row["parent_task"],
+                "kind": root_spec["kind"],
+                "goal_rev": root_row["goal_rev"],
+                "grant_rev": root_row["grant_rev"],
+            },
+            "ledger_child_task_count": len(child_rows),
+            "children": {
+                json.loads(row["source_spec"])["kind"]: {
+                    "task_id": row["task_id"],
+                    "parent_task": row["parent_task"],
+                    "goal_rev": row["goal_rev"],
+                    "grant_rev": row["grant_rev"],
+                    "state": row["state"],
+                    "artifact_sha256": row["artifact_hash"],
+                }
+                for row in child_rows.values()
+            },
+        },
         "business_outcome_verified": False,
     }
 
