@@ -452,15 +452,9 @@ success. At the end, report only the observed tool states and remaining
 uncertainty. The independent harness, not your prose, grades the artifacts.
 """
         user_input = (
-            "Original owner goal:
-" + OWNER_GOAL
-            + "
-
-Existing root_task_id:
-" + root_id
-            + "
-
-Use the existing root only. Complete the bounded local work."
+            "Original owner goal:\n" + OWNER_GOAL
+            + "\n\nExisting root_task_id:\n" + root_id
+            + "\n\nUse the existing root only. Complete the bounded local work."
         )
         settings = ModelSettings(
             temperature=0,
@@ -614,8 +608,7 @@ def main() -> int:
             "product_ready": False,
         }
         args.output.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2) + "
-",
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         print(json.dumps(report, ensure_ascii=False, indent=2))
