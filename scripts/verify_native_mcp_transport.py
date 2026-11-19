@@ -493,6 +493,9 @@ async def run():
                     "uncertainty": "A valid local report cannot prove upstream business resolution.",
                 },
             }
+            current_state = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": root}))
+            assert current_state["status"] == "NATIVE_NEXT_DECISION_ADMISSIBLE", current_state
             # A new stdio process has no in-memory read binding, even though
             # the SQLite root and grant survive the restart.
             async with Client(server(allow_tick=False)) as cold_client:
