@@ -293,9 +293,20 @@ class CompoundOwnerOracleTests(unittest.TestCase):
     def test_csv_utf8_bom_is_handled_without_changing_column_identity(self):
         changed = dict(self.sources)
         changed["baseline.csv"] = b"\xef\xbb\xbf" + changed["baseline.csv"]
-        contract = dict(self.contract, source_sha256={name: sha(raw) for name, raw in changed.items()})
+        changed["actual.csv"] = b"\xef\xbb\xbf" + changed["actual.csv"]
+        contract = dict(
+            self.contract,
+            source_sha256={name: sha(raw) for name, raw in changed.items()},
+        )
+        report = json.loads(self.csv_report.decode("utf-8"))
+        report["source_sha256"] = {
+            "reference": contract["source_sha256"]["baseline.csv"],
+            "observed": contract["source_sha256"]["actual.csv"],
+        }
+        self.update_csv_report(report)
         result = self.evaluate(contract=contract, current_sources=changed)
-        self.assertEqual(result["reason"], "CSV_REPORT_PROVENANCE_MISMATCH")
+        self.assertEqual(
+            result["status"], "SYNTHETIC_COMPOUND_OWNER_GOAL_MET", result)
 
     def test_contract_cannot_escape_fixture_scope_or_authorize_writes(self):
         unsafe = dict(self.contract)
