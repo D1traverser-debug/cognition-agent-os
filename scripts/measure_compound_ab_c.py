@@ -18,6 +18,7 @@ import random
 import sys
 import tempfile
 import time
+import traceback
 from contextlib import closing
 from pathlib import Path
 from urllib.parse import urlparse
@@ -253,6 +254,8 @@ def run_incumbent_deterministic(home: Path) -> dict:
         root_id = create_task(con, {"kind": "open_goal", "goal": OWNER_GOAL})
     started = time.monotonic()
     fault = None
+    fault_message = None
+    fault_traceback = []
     receipt = {}
     try:
         receipt = run_tick(
@@ -261,6 +264,8 @@ def run_incumbent_deterministic(home: Path) -> dict:
         )
     except Exception as exc:
         fault = type(exc).__name__
+        fault_message = str(exc)[:500]
+        fault_traceback = traceback.format_exc().splitlines()[-8:]
     telemetry = {
         "model_calls": 0,
         "input_tokens": None,
@@ -269,6 +274,8 @@ def run_incumbent_deterministic(home: Path) -> dict:
         "worker_results": receipt.get("tasks", []) if receipt else [],
         "sandbox_reviews": receipt.get("sandbox_reviews", []) if receipt else [],
         "error_class": fault,
+        "error_message": fault_message,
+        "error_traceback_tail": fault_traceback,
         "budget_seconds": ARM_BUDGET_SECONDS,
     }
     return grade_compound_arm(
@@ -285,6 +292,8 @@ def run_current_native_planner(home: Path, model: str) -> dict:
     requests = []
     progress = []
     fault = None
+    fault_message = None
+    fault_traceback = []
     started = time.monotonic()
     real_request = local_model._request
 
@@ -307,6 +316,7 @@ def run_current_native_planner(home: Path, model: str) -> dict:
                 requests.append({
                     "endpoint": endpoint,
                     "transport_error_class": type(exc).__name__,
+                    "transport_error_message": str(exc)[:500],
                     "elapsed_seconds": round(
                         time.monotonic() - request_started, 3),
                 })
@@ -353,6 +363,8 @@ def run_current_native_planner(home: Path, model: str) -> dict:
                 })
     except Exception as exc:
         fault = type(exc).__name__
+        fault_message = str(exc)[:500]
+        fault_traceback = traceback.format_exc().splitlines()[-8:]
 
     telemetry = {
         "model_calls": len(requests),
@@ -364,6 +376,8 @@ def run_current_native_planner(home: Path, model: str) -> dict:
         "model_requests": requests,
         "progress": progress,
         "error_class": fault,
+        "error_message": fault_message,
+        "error_traceback_tail": fault_traceback,
         "budget_seconds": ARM_BUDGET_SECONDS,
     }
     return grade_compound_arm(
@@ -380,6 +394,8 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
         db, OWNER_GOAL, managed_session=True)
     hooks_holder = {}
     fault = None
+    fault_message = None
+    fault_traceback = []
     final_output = None
     started = time.monotonic()
 
@@ -496,7 +512,9 @@ uncertainty. The independent harness, not your prose, grades the artifacts.
             temperature=0,
             max_tokens=SDK_MAX_OUTPUT_TOKENS,
             parallel_tool_calls=False,
-            extra_args={"keep_alive": "0"},
+            # Vendor extensions belong in extra_body; extra_args are passed
+            # as Python keyword arguments to chat.completions.create().
+            extra_body={"keep_alive": "0"},
         )
         async with AsyncOpenAI(
             api_key="ollama-local-only",
@@ -547,6 +565,8 @@ uncertainty. The independent harness, not your prose, grades the artifacts.
         fault = "TIME_BUDGET_EXHAUSTED"
     except Exception as exc:
         fault = type(exc).__name__
+        fault_message = str(exc)[:500]
+        fault_traceback = traceback.format_exc().splitlines()[-8:]
 
     hooks = hooks_holder.get("hooks")
     usage = hooks.usage if hooks else []
@@ -568,6 +588,8 @@ uncertainty. The independent harness, not your prose, grades the artifacts.
         "usage_per_model_call": usage,
         "final_output_untrusted": final_output,
         "error_class": fault,
+        "error_message": fault_message,
+        "error_traceback_tail": fault_traceback,
         "budget_seconds": ARM_BUDGET_SECONDS,
         "max_turns": SDK_MAX_TURNS,
         "max_output_tokens_per_turn": SDK_MAX_OUTPUT_TOKENS,
