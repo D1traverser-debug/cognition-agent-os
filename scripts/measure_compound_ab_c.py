@@ -65,8 +65,8 @@ def local_openai_base_url(value: str) -> str:
 OLLAMA_OPENAI_BASE_URL = local_openai_base_url(
     os.environ.get("OLLAMA_HOST", "127.0.0.1:11434"))
 ARM_BUDGET_SECONDS = int(os.environ.get("COGNITION_EVAL_ARM_BUDGET_SECONDS", "600"))
-SDK_MAX_TURNS = 16
-SDK_MAX_OUTPUT_TOKENS = 512
+SDK_MAX_TURNS = 14
+SDK_MAX_OUTPUT_TOKENS = 400
 SDK_VERSION = "openai-agents==0.25.0"
 
 # The MCP server is operator-opted into local goal writes, one-root Worker
@@ -569,6 +569,8 @@ uncertainty. The independent harness, not your prose, grades the artifacts.
         "final_output_untrusted": final_output,
         "error_class": fault,
         "budget_seconds": ARM_BUDGET_SECONDS,
+        "max_turns": SDK_MAX_TURNS,
+        "max_output_tokens_per_turn": SDK_MAX_OUTPUT_TOKENS,
         "provider": "local Ollama OpenAI-compatible endpoint",
         "agents_sdk_version": SDK_VERSION,
         "tracing_disabled": True,
