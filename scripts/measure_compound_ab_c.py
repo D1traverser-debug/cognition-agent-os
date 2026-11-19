@@ -969,12 +969,6 @@ only the independent harness can accept the exact local artifact and lineage.
                 hooks_holder["session_item_count"] = len(session._items)
                 hooks_holder["decision_rejections"] = decision_rejections
                 hooks_holder["hooks"] = hooks
-                hooks_holder["checkpoints"] = checkpoints
-                hooks_holder["remaining_turns"] = remaining_turns
-                hooks_holder["stop_reason"] = stop_reason
-                hooks_holder["iterations"] = len(checkpoints)
-                hooks_holder["session_item_count"] = len(session._items)
-                hooks_holder["hooks"] = hooks
                 return {
                     "final_output": (
                         str(last_result.final_output)[:1600]
@@ -1010,6 +1004,10 @@ only the independent harness can accept the exact local artifact and lineage.
         "tool_calls": len(hooks.tool_names) if hooks else 0,
         "tool_names": hooks.tool_names if hooks else [],
         "tool_results": hooks.tool_results if hooks else [],
+        "tool_argument_shapes": hooks.tool_argument_shapes if hooks else [],
+        "tool_schema_summaries": hooks_holder.get("tool_schema_summaries", {}),
+        "harness_executions": hooks_holder.get("harness_executions", []),
+        "decision_rejections": hooks_holder.get("decision_rejections", 0),
         "usage_per_model_call": usage,
         "final_output_untrusted": sdk_meta.get("final_output"),
         "error_class": fault,
@@ -1018,6 +1016,8 @@ only the independent harness can accept the exact local artifact and lineage.
         "budget_seconds": ARM_BUDGET_SECONDS,
         "max_turns": SDK_MAX_TURNS,
         "max_output_tokens_per_turn": SDK_MAX_OUTPUT_TOKENS,
+        "segment_turn_budget": SDK_SEGMENT_TURNS,
+        "model_request_timeout_seconds": 240,
         "outer_loop_iterations": hooks_holder.get("iterations", 0),
         "outer_loop_stop_reason": hooks_holder.get("stop_reason"),
         "remaining_turns": hooks_holder.get("remaining_turns"),
@@ -1029,6 +1029,8 @@ only the independent harness can accept the exact local artifact and lineage.
         "agents_sdk_version": SDK_VERSION,
         "tracing_disabled": True,
         "allowed_tools": list(SDK_TOOL_ALLOWLIST),
+        "harness_only_execution_tools": [HARNESS_EXECUTION_TOOL],
+        "agent_can_execute_worker": False,
     }
     return grade_compound_arm(
         arm="C_AGENTS_SDK_MCP",
