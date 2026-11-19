@@ -123,7 +123,8 @@ def _expected_reconciliation(reference: bytes, observed: bytes, key: str) -> dic
 def _validate_lineage(lineage: object, contract: dict) -> dict[str, Any]:
     required = {
         "root_task_id", "root_parent_task", "root_kind", "owner_goal_sha256",
-        "goal_rev", "grant_rev", "ledger_child_task_count", "children",
+        "goal_rev", "grant_rev", "ledger_child_task_count", "child_order",
+        "children",
     }
     if not isinstance(lineage, dict) or set(lineage) != required:
         raise ValueError("BAD_EXPECTED_LINEAGE")
@@ -169,6 +170,13 @@ def _validate_lineage(lineage: object, contract: dict) -> dict[str, Any]:
         ids.append(child["task_id"])
     if len(set(ids)) != 2 or root_id in ids:
         raise ValueError("CHILD_TASK_ID_COLLISION")
+    order = lineage["child_order"]
+    if (not isinstance(order, list) or len(order) != 2
+            or order != [
+                children["csv_report"]["task_id"],
+                children["json_draft"]["task_id"],
+            ]):
+        raise ValueError("CHILD_ORDER_MISMATCH")
     return lineage
 
 
