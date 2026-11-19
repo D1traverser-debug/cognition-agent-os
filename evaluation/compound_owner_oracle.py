@@ -130,7 +130,7 @@ def _validate_lineage(lineage: object, contract: dict) -> dict[str, Any]:
     root_id = lineage["root_task_id"]
     if (not isinstance(root_id, str) or not _TASK_ID.fullmatch(root_id)
             or lineage["root_parent_task"] is not None
-            or lineage["root_kind"] != "native_goal"
+            or lineage["root_kind"] not in ("native_goal", "open_goal")
             or lineage["owner_goal_sha256"] != contract["owner_goal_sha256"]
             or not isinstance(lineage["owner_goal_sha256"], str)
             or not _SHA256.fullmatch(lineage["owner_goal_sha256"])
@@ -140,6 +140,8 @@ def _validate_lineage(lineage: object, contract: dict) -> dict[str, Any]:
     children = lineage["children"]
     if not isinstance(children, dict) or set(children) != {"csv_report", "json_draft"}:
         raise ValueError("BAD_EXPECTED_CHILDREN")
+    if any(children[label] is None for label in ("csv_report", "json_draft")):
+        raise ValueError("MISSING_REQUIRED_CHILD_TASK")
     expected_states = {"csv_report": "NEEDS_REVIEW", "json_draft": "SANDBOX_VERIFIED"}
     ids = []
     for label, child in children.items():
@@ -181,7 +183,8 @@ def evaluate_compound_owner_goal(
 
     expected_lineage MUST be read independently from the initialized SQLite
     ledger by the harness. It binds both child IDs to the same original
-    native-goal root, goal revision, grant revision and artifact hashes. It is
+    owner-goal root (native_goal or incumbent open_goal), goal revision,
+    grant revision and artifact hashes. It is
     not a model claim and it does not grant authority.
 
     This evaluator ignores Host/model success labels and report claims about
