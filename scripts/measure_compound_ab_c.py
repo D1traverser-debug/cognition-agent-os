@@ -665,9 +665,9 @@ Keep the original clause order. Do not claim the whole owner goal is complete;
 only the independent harness can accept the exact local artifact and lineage.
 """
         user_input = (
-            "Original owner goal:\\n" + OWNER_GOAL
-            + "\\n\\nCurrent root_task_id:\\n" + root_id
-            + "\\n\\nCURRENT ACTION: admit only the FIRST clause. "
+            "Original owner goal:\n" + OWNER_GOAL
+            + "\n\nCurrent root_task_id:\n" + root_id
+            + "\n\nCURRENT ACTION: admit only the FIRST clause. "
             "Call native_goal_inspect, native_capabilities and "
             "native_procedure_evidence for this exact root. Then read only "
             "baseline.csv and actual.csv with native_source_read. Confirm "
