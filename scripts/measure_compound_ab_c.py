@@ -719,13 +719,47 @@ only the independent harness can accept the exact local artifact and lineage.
                 # SQLite task ledger and authority remain the sole CAOS state.
                 session = InMemoryConversationSession(
                     "caos-compound-ab-c-" + root_id)
+                # The agent sees decision tools only. The harness retains the
+                # existing execution tool and invokes it only after an independent
+                # SQLite readback says the exact root is NATIVE_AWAITING_WORKER.
+                visible_tools = await server.list_tools()
+                visible_names = {tool.name for tool in visible_tools}
+                if visible_names != set(SDK_TOOL_ALLOWLIST):
+                    raise RuntimeError("SDK_AGENT_TOOL_ALLOWLIST_MISMATCH")
+                if HARNESS_EXECUTION_TOOL in visible_names:
+                    raise RuntimeError("WORKER_EXECUTION_TOOL_LEAKED_TO_AGENT")
+                tool_schema_summaries = {}
+                for tool in visible_tools:
+                    schema = tool.input_schema or {}
+                    summary = {
+                        "required": sorted(schema.get("required", [])),
+                        "properties": sorted(schema.get("properties", {})),
+                        "schema_sha256": hashlib.sha256(
+                            json.dumps(schema, sort_keys=True, separators=(",", ":"))
+                            .encode("utf-8")).hexdigest(),
+                    }
+                    if tool.name == "native_decision_admit":
+                        proposal = schema.get("properties", {}).get("proposal", {})
+                        if "$ref" in proposal:
+                            proposal = schema.get("$defs", {}).get(
+                                proposal["$ref"].rsplit("/", 1)[-1], proposal)
+                        summary["proposal_required"] = sorted(
+                            proposal.get("required", []))
+                        summary["proposal_properties"] = sorted(
+                            proposal.get("properties", {}))
+                    tool_schema_summaries[tool.name] = summary
+
+                session = InMemoryConversationSession(
+                    "caos-compound-ab-c-" + root_id)
                 remaining_turns = SDK_MAX_TURNS
                 checkpoints = []
+                harness_executions = []
                 last_result = None
                 next_input = user_input
-                stop_reason = "TURN_BUDGET_EXHAUSTED"
+                stop_reason = "MODEL_TURN_BUDGET_EXHAUSTED"
                 stall_count = 0
-                max_segments = 6
+                decision_rejections = 0
+                max_segments = 9
 
                 for segment in range(max_segments):
                     remaining_seconds = ARM_BUDGET_SECONDS - (
@@ -737,14 +771,18 @@ only the independent harness can accept the exact local artifact and lineage.
                         stop_reason = "WALL_CLOCK_BUDGET_EXHAUSTED"
                         break
 
+                    segment_turn_budget = min(
+                        SDK_SEGMENT_TURNS, remaining_turns)
                     calls_before = hooks.model_calls
                     tools_before = len(hooks.tool_names)
+                    results_before = len(hooks.tool_results)
+                    segment_exhausted = False
                     try:
                         last_result = await asyncio.wait_for(
                             Runner.run(
                                 agent,
                                 next_input,
-                                max_turns=remaining_turns,
+                                max_turns=segment_turn_budget,
                                 hooks=hooks,
                                 run_config=config,
                                 session=session,
@@ -753,9 +791,13 @@ only the independent harness can accept the exact local artifact and lineage.
                         )
                     except Exception as exc:
                         if type(exc).__name__ == "MaxTurnsExceeded":
-                            stop_reason = "MODEL_TURN_BUDGET_EXHAUSTED"
-                            break
-                        raise
+                            # Agents SDK persists each completed non-final turn
+                            # to the ephemeral session. The harness now regains
+                            # control and checks the actual ledger before resume.
+                            segment_exhausted = True
+                            last_result = None
+                        else:
+                            raise
 
                     calls_used = hooks.model_calls - calls_before
                     remaining_turns = max(0, remaining_turns - calls_used)
@@ -763,9 +805,35 @@ only the independent harness can accept the exact local artifact and lineage.
                         stop_reason = "NO_MODEL_CALL_PROGRESS"
                         break
 
-                    # The harness grades actual SQLite lineage and artifact
-                    # bytes after every Runner completion. Model prose is not
-                    # a termination signal.
+                    state = inspect_native_goal(
+                        db, workspace, fixtures, root_id)
+                    harness_tick = None
+                    if state.get("status") == "NATIVE_AWAITING_WORKER":
+                        tick_result = await server.call_tool(
+                            HARNESS_EXECUTION_TOOL, {"root_task_id": root_id})
+                        harness_tick = _decode_mcp_tool_result(tick_result)
+                        if harness_tick.get("status") != "NATIVE_TICK_OBSERVED":
+                            stop_reason = "HARNESS_WORKER_TICK_NOT_CONFIRMED"
+                            harness_executions.append({
+                                "segment": segment + 1,
+                                "status": harness_tick.get("status"),
+                            })
+                            break
+                        worker = harness_tick.get("worker_result") or {}
+                        sandbox = harness_tick.get("sandbox_result") or {}
+                        harness_executions.append({
+                            "segment": segment + 1,
+                            "status": harness_tick.get("status"),
+                            "worker_status": worker.get("status"),
+                            "sandbox_status": sandbox.get("status"),
+                            "target_task_id": harness_tick.get("target_task_id"),
+                        })
+                        state = inspect_native_goal(
+                            db, workspace, fixtures, root_id)
+
+                    # The independent oracle reads the actual SQLite lineage and
+                    # artifact bytes after every bounded model segment and any
+                    # harness-controlled Worker execution.
                     checkpoint = grade_compound_arm(
                         arm="C_AGENTS_SDK_MCP",
                         db_path=db,
@@ -775,20 +843,32 @@ only the independent harness can accept the exact local artifact and lineage.
                         started=started,
                         telemetry={},
                     )
-                    state = checkpoint.get("native_state_snapshot") or {}
+                    state = checkpoint.get("native_state_snapshot") or state
                     decision_count = state.get("decision_count", 0)
                     child_count = checkpoint["ledger_child_task_count"]
+                    recent_results = hooks.tool_results[results_before:]
+                    rejected_this_segment = sum(
+                        1 for item in recent_results
+                        if item.get("name") == "native_decision_admit"
+                        and "Error executing tool native_decision_admit"
+                            in item.get("result_excerpt", ""))
+                    decision_rejections += rejected_this_segment
                     checkpoints.append({
                         "segment": segment + 1,
+                        "segment_turn_budget": segment_turn_budget,
+                        "segment_max_turns_reached": segment_exhausted,
                         "model_calls_used": calls_used,
                         "model_calls_total": hooks.model_calls,
                         "tool_calls_total": len(hooks.tool_names),
+                        "decision_rejections_this_segment": rejected_this_segment,
+                        "decision_rejections_total": decision_rejections,
                         "oracle_status": checkpoint["independent_oracle_status"],
                         "oracle_reason": checkpoint["independent_oracle_reason"],
                         "native_status": state.get("status"),
                         "decision_count": decision_count,
                         "child_count": child_count,
                         "child_order": checkpoint["child_order"],
+                        "harness_worker_executed": harness_tick is not None,
                     })
 
                     if checkpoint["synthetic_local_postconditions_met"]:
@@ -805,6 +885,12 @@ only the independent harness can accept the exact local artifact and lineage.
                             "NON_RECOVERABLE_ORACLE_REJECTION:"
                             + str(checkpoint["independent_oracle_reason"]))
                         break
+                    if decision_rejections >= 2 and decision_count == 0:
+                        stop_reason = "REPEATED_NATIVE_DECISION_REJECTION"
+                        break
+                    if remaining_turns <= 0:
+                        stop_reason = "MODEL_TURN_BUDGET_EXHAUSTED"
+                        break
 
                     tools_used_this_segment = len(hooks.tool_names) - tools_before
                     if tools_used_this_segment == 0 and decision_count == 0:
@@ -814,57 +900,75 @@ only the independent harness can accept the exact local artifact and lineage.
                     if stall_count >= 2:
                         stop_reason = "REPEATED_NO_ACTION_FINAL_OUTPUT"
                         break
-                    if remaining_turns <= 0:
-                        stop_reason = "MODEL_TURN_BUDGET_EXHAUSTED"
-                        break
 
-                    if state.get("status") == "NATIVE_AWAITING_WORKER":
-                        next_input = (
-                            "The independent evaluator still reports "
-                            "NOT_ACCEPTED / MISSING_REQUIRED_CHILD_TASK. The "
-                            "actual native root is awaiting its admitted Worker. "
-                            "Call native_local_tick now for this exact root, "
-                            "then inspect the root. Do not admit another action "
-                            "until the existing child has executed."
-                        )
-                    elif decision_count == 0:
-                        next_input = (
-                            "The independent evaluator inspected the actual "
-                            "SQLite ledger and artifacts and returned "
-                            "NOT_ACCEPTED / MISSING_REQUIRED_CHILD_TASK. Your "
-                            "previous response was only a status statement; "
-                            "decision_count is still zero and no child exists. "
-                            "Continue in this same session; do not answer with "
-                            "prose only. Call native_capabilities and "
-                            "native_procedure_evidence, then native_source_read "
-                            "for baseline.csv, actual.csv and settings.json. "
-                            "Use those exact digests and the latest observation "
-                            "to call native_decision_admit for the FIRST "
-                            "required clause, then call native_local_tick. The "
-                            "operator effect contract is already installed and "
-                            "cannot be broadened."
-                        )
+                    if decision_count == 0:
+                        if decision_rejections:
+                            next_input = (
+                                "The first native_decision_admit proposal was "
+                                "rejected. Do not repeat it unchanged. Read the "
+                                "rejection feedback and the published tool schema. "
+                                "If all source hashes and the current observation "
+                                "still match, make at most one corrected FIRST "
+                                "decision. Use source_refs as a list of objects "
+                                "with exactly path and sha256. Omit review fields "
+                                "because there are no prior decisions. Do not tick."
+                            )
+                        else:
+                            next_input = (
+                                "Continue the FIRST clause only. Inspect the exact "
+                                "root, capabilities and procedure evidence; read "
+                                "baseline.csv and actual.csv; then submit one typed "
+                                "native_decision_admit proposal for compare_records. "
+                                "Use the exact observation and source digests. "
+                                "source_refs is a list of path/sha256 objects. "
+                                "alternative_intent=null and previous_result_task_id=null. "
+                                "Do not call a Worker."
+                            )
                     else:
                         last_decision = (
                             state.get("decisions", [])[-1]
                             if state.get("decisions") else {})
+                        if (last_decision.get("selected_objective")
+                                != "compare_records"):
+                            stop_reason = "FIRST_CHILD_WRONG_OWNER_CLAUSE"
+                            break
+                        if (last_decision.get("task_state")
+                                not in ("NEEDS_REVIEW", "VERIFIED")
+                                or last_decision.get("mechanical_verdict")
+                                != "REPORT_MECHANICALLY_VERIFIED"):
+                            stop_reason = "FIRST_CHILD_NOT_MECHANICALLY_VERIFIED"
+                            break
+                        if state.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+                            stop_reason = "SECOND_DECISION_NOT_ADMISSIBLE"
+                            break
                         next_input = (
-                            "The independent evaluator still reports "
-                            "NOT_ACCEPTED / MISSING_REQUIRED_CHILD_TASK. The "
-                            "first decision exists: selected objective "
-                            + str(last_decision.get("selected_objective"))
-                            + ", child task "
+                            "The first clause has been admitted and executed by "
+                            "the harness. Its exact decision event_id is "
+                            + str(last_decision.get("event_id"))
+                            + " and child task_id is "
                             + str(last_decision.get("task_id"))
-                            + ". Inspect the root and complete the remaining "
-                            "owner-goal clause in the original order. If a "
-                            "Worker is pending, call native_local_tick first. "
-                            "Otherwise refresh native_procedure_evidence and "
-                            "the current observation, then admit exactly the "
-                            "second required local method and tick it. Do not "
-                            "repeat the first action or stop after a status "
-                            "statement."
+                            + ". Now complete ONLY the SECOND clause. Re-read "
+                            "native_goal_inspect and native_procedure_evidence, "
+                            "then read settings.json. Submit one typed "
+                            "native_decision_admit proposal for ensure_structure "
+                            "with owner=ops. In decision_basis set "
+                            "previous_result_task_id to the exact first child "
+                            "task_id and include decision_review_version=1 plus "
+                            "one decision_reviews entry for the exact first "
+                            "event_id, disposition=RELEVANT, rationale and "
+                            "falsifier. Keep source_refs a list of path/sha256 "
+                            "objects. Do not call a Worker."
                         )
 
+                hooks_holder["checkpoints"] = checkpoints
+                hooks_holder["harness_executions"] = harness_executions
+                hooks_holder["tool_schema_summaries"] = tool_schema_summaries
+                hooks_holder["remaining_turns"] = remaining_turns
+                hooks_holder["stop_reason"] = stop_reason
+                hooks_holder["iterations"] = len(checkpoints)
+                hooks_holder["session_item_count"] = len(session._items)
+                hooks_holder["decision_rejections"] = decision_rejections
+                hooks_holder["hooks"] = hooks
                 hooks_holder["checkpoints"] = checkpoints
                 hooks_holder["remaining_turns"] = remaining_turns
                 hooks_holder["stop_reason"] = stop_reason
