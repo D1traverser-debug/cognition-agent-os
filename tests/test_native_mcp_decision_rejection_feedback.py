@@ -11,9 +11,9 @@ class NativeMcpDecisionRejectionFeedbackTests(unittest.TestCase):
         cases = {
             "MISSING_DECISION_COMPARISON": (
                 "alternative_reason",
-                "even when alternative_intent is null",
+                "is still required when alternative_intent is null",
                 "non-empty strings",
-                "must never be null",
+                "do not send null for this field",
             ),
             "INVALID_OBSERVATION_FINGERPRINT": (
                 "bridge-bound observation",
