@@ -16,9 +16,10 @@ class NativeMcpDecisionRejectionFeedbackTests(unittest.TestCase):
                 "must never be null",
             ),
             "INVALID_OBSERVATION_FINGERPRINT": (
+                "bridge-bound observation",
                 "64-character lowercase SHA-256",
-                "never be null",
                 "native_goal_inspect",
+                "do not add an observation_sha256 field",
             ),
             "NATIVE_DECISION_REQUIRES_FRESH_INSPECTION": (
                 "native_goal_inspect",
@@ -55,8 +56,10 @@ class NativeMcpDecisionRejectionFeedbackTests(unittest.TestCase):
             "decision_reason",
             "alternative_reason",
             "expected_evidence",
-            "observation_sha256",
             "decision_basis",
+            "Only alternative_intent may be null",
+            "Do NOT include observation_sha256",
+            "previous_result_task_id",
             "decision_review_version",
             "decision_reviews",
             "LIST of objects",
