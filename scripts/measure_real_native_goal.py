@@ -223,9 +223,13 @@ def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
             auto_native_cognition=True)
     if model_calls != [0, 1]:
         raise RuntimeError("COMPOUND_CALIBRATION_EXPECTED_TWO_SCRIPTED_DECISIONS")
-    if [item["status"] for item in execution.get("tasks", [])] != [
-            "NEEDS_REVIEW", "NEEDS_REVIEW"]:
-        raise RuntimeError("COMPOUND_CALIBRATION_WORKER_STATES_UNEXPECTED")
+    worker_states = [item.get("status") for item in execution.get("tasks", [])]
+    if worker_states != ["NEEDS_REVIEW", "NEEDS_REVIEW"]:
+        diagnostic = json.dumps(
+            execution.get("tasks", []), ensure_ascii=False, sort_keys=True,
+            default=str)[:4000]
+        raise RuntimeError(
+            "COMPOUND_CALIBRATION_WORKER_STATES_UNEXPECTED:" + diagnostic)
 
     with patch("cognition_agent_os.local_model._request",
                side_effect=AssertionError("sandbox staging must not infer")):
@@ -660,9 +664,9 @@ ORACLE_SCOPE_PROBES = [
                  "then ensure an isolated draft of settings.json has owner "
                  "equal to ops."),
         "files": {
-            "baseline.csv": "item,qty\\nA,7\\n",
-            "actual.csv": "item,qty\\nA,6\\n",
-            "settings.json": '{"timeout":12}\\n',
+            "baseline.csv": "item,qty\nA,7\n",
+            "actual.csv": "item,qty\nA,6\n",
+            "settings.json": '{"timeout":12}\n',
         },
         "target": None, "must_complete_local_owner": True,
         "independent_local_oracle_available": True,
