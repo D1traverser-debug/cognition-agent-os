@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -33,6 +34,35 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             "cognition_shell",
         ):
             self.assertNotIn(forbidden, harness.SDK_TOOL_ALLOWLIST)
+
+    def test_decision_protocol_keeps_cas_and_lineage_tokens_in_the_bridge(self):
+        protocol = harness.SDK_DECISION_PROTOCOL
+        self.assertIn("ONLY JSON null permitted", protocol)
+        self.assertIn("alternative_reason MUST always be", protocol)
+        self.assertIn("EVEN WHEN alternative_intent is null", protocol)
+        self.assertIn("DO NOT include any of those three fields", protocol)
+        self.assertIn("native_goal_inspect and native_procedure_evidence", protocol)
+
+    def test_tool_argument_shape_decodes_json_structure_without_values(self):
+        raw = json.dumps({
+            "proposal": {
+                "alternative_intent": None,
+                "alternative_reason": None,
+                "observation_sha256": None,
+                "decision_basis": {
+                    "source_refs": [{
+                        "path": "private-source.csv",
+                        "sha256": "a" * 64,
+                    }],
+                },
+            },
+        })
+        shape = harness._safe_argument_shape(raw)
+        rendered = json.dumps(shape, sort_keys=True)
+        self.assertIn('"alternative_reason": {"type": "null"}', rendered)
+        self.assertIn('"observation_sha256": {"type": "null"}', rendered)
+        self.assertNotIn("private-source.csv", rendered)
+        self.assertNotIn("a" * 64, rendered)
 
     def test_agents_sdk_provider_is_loopback_only(self):
         self.assertEqual(
