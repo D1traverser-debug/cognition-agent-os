@@ -300,6 +300,7 @@ def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
         "goal_rev": root_row["goal_rev"],
         "grant_rev": root_row["grant_rev"],
         "ledger_child_task_count": len(child_rows),
+        "child_order": child_order,
         "children": {
             "csv_report": child_lineage(csv_row),
             "json_draft": child_lineage(json_row),
