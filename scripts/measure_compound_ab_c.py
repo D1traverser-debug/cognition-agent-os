@@ -609,6 +609,7 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
                 self.tool_results = []
                 self.tool_argument_shapes = []
                 self.usage = []
+                self.decision_rejections = 0
 
             async def on_llm_start(self, context, agent, system_prompt, input_items):
                 self.model_calls += 1
@@ -636,10 +637,20 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
                 })
 
             async def on_tool_end(self, context, agent, tool, result):
+                name = getattr(tool, "name", type(tool).__name__)
+                excerpt = str(result)[:2000]
                 self.tool_results.append({
-                    "name": getattr(tool, "name", type(tool).__name__),
-                    "result_excerpt": str(result)[:2000],
+                    "name": name,
+                    "result_excerpt": excerpt,
                 })
+                if name == "native_decision_admit" and (
+                    getattr(result, "is_error", False)
+                    or "error executing tool native_decision_admit" in excerpt.lower()
+                    or "an error occurred while running the tool" in excerpt.lower()
+                    or "validation errors for nativedecisionadmitarguments" in excerpt.lower()
+                ):
+                    self.decision_rejections += 1
+                    hooks_holder["decision_rejections"] = self.decision_rejections
 
         hooks = MetricsHooks()
         hooks_holder["hooks"] = hooks
@@ -745,10 +756,6 @@ only the independent harness can accept the exact local artifact and lineage.
                     model=model,
                     mcp_servers=[server],
                 )
-                # Conversation context is ephemeral and in memory only. The
-                # SQLite task ledger and authority remain the sole CAOS state.
-                session = InMemoryConversationSession(
-                    "caos-compound-ab-c-" + root_id)
                 # The agent sees decision tools only. The harness retains the
                 # existing execution tool and invokes it only after an independent
                 # SQLite readback says the exact root is NATIVE_AWAITING_WORKER.
@@ -778,6 +785,9 @@ only the independent harness can accept the exact local artifact and lineage.
                         summary["proposal_properties"] = sorted(
                             proposal.get("properties", {}))
                     tool_schema_summaries[tool.name] = summary
+                # Persist schema evidence before inference: a timed-out model
+                # call must not erase the exact tool contract it was given.
+                hooks_holder["tool_schema_summaries"] = tool_schema_summaries
 
                 session = InMemoryConversationSession(
                     "caos-compound-ab-c-" + root_id)
@@ -788,10 +798,24 @@ only the independent harness can accept the exact local artifact and lineage.
                 next_input = user_input
                 stop_reason = "MODEL_TURN_BUDGET_EXHAUSTED"
                 stall_count = 0
-                decision_rejections = 0
                 max_segments = 9
+                segments_started = 0
+                hooks_holder.update({
+                    "checkpoints": checkpoints,
+                    "harness_executions": harness_executions,
+                    "tool_schema_summaries": tool_schema_summaries,
+                    "remaining_turns": remaining_turns,
+                    "stop_reason": stop_reason,
+                    "iterations": segments_started,
+                    "session_item_count": len(session._items),
+                    "decision_rejections": hooks.decision_rejections,
+                })
 
                 for segment in range(max_segments):
+                    segments_started = segment + 1
+                    hooks_holder["iterations"] = segments_started
+                    hooks_holder["remaining_turns"] = remaining_turns
+                    hooks_holder["session_item_count"] = len(session._items)
                     remaining_seconds = ARM_BUDGET_SECONDS - (
                         time.monotonic() - started)
                     if remaining_turns <= 0:
@@ -805,7 +829,7 @@ only the independent harness can accept the exact local artifact and lineage.
                         SDK_SEGMENT_TURNS, remaining_turns)
                     calls_before = hooks.model_calls
                     tools_before = len(hooks.tool_names)
-                    results_before = len(hooks.tool_results)
+                    rejections_before_segment = hooks.decision_rejections
                     segment_exhausted = False
                     try:
                         last_result = await asyncio.wait_for(
@@ -819,6 +843,19 @@ only the independent harness can accept the exact local artifact and lineage.
                             ),
                             timeout=remaining_seconds,
                         )
+                    except asyncio.TimeoutError:
+                        stop_reason = "WALL_CLOCK_BUDGET_EXHAUSTED"
+                        calls_used = hooks.model_calls - calls_before
+                        remaining_turns = max(0, remaining_turns - calls_used)
+                        hooks_holder.update({
+                            "stop_reason": stop_reason,
+                            "remaining_turns": remaining_turns,
+                            "iterations": segments_started,
+                            "session_item_count": len(session._items),
+                            "decision_rejections": hooks.decision_rejections,
+                            "tool_schema_summaries": tool_schema_summaries,
+                        })
+                        break
                     except Exception as exc:
                         if type(exc).__name__ == "MaxTurnsExceeded":
                             # Agents SDK persists each completed non-final turn
@@ -831,6 +868,12 @@ only the independent harness can accept the exact local artifact and lineage.
 
                     calls_used = hooks.model_calls - calls_before
                     remaining_turns = max(0, remaining_turns - calls_used)
+                    hooks_holder.update({
+                        "remaining_turns": remaining_turns,
+                        "iterations": segments_started,
+                        "session_item_count": len(session._items),
+                        "decision_rejections": hooks.decision_rejections,
+                    })
                     if calls_used <= 0:
                         stop_reason = "NO_MODEL_CALL_PROGRESS"
                         break
@@ -876,13 +919,9 @@ only the independent harness can accept the exact local artifact and lineage.
                     state = checkpoint.get("native_state_snapshot") or state
                     decision_count = state.get("decision_count", 0)
                     child_count = checkpoint["ledger_child_task_count"]
-                    recent_results = hooks.tool_results[results_before:]
-                    rejected_this_segment = sum(
-                        1 for item in recent_results
-                        if item.get("name") == "native_decision_admit"
-                        and "Error executing tool native_decision_admit"
-                            in item.get("result_excerpt", ""))
-                    decision_rejections += rejected_this_segment
+                    rejected_this_segment = (
+                        hooks.decision_rejections - rejections_before_segment)
+                    decision_rejections = hooks.decision_rejections
                     checkpoints.append({
                         "segment": segment + 1,
                         "segment_turn_budget": segment_turn_budget,
@@ -899,6 +938,15 @@ only the independent harness can accept the exact local artifact and lineage.
                         "child_count": child_count,
                         "child_order": checkpoint["child_order"],
                         "harness_worker_executed": harness_tick is not None,
+                    })
+                    hooks_holder.update({
+                        "checkpoints": checkpoints,
+                        "harness_executions": harness_executions,
+                        "remaining_turns": remaining_turns,
+                        "stop_reason": stop_reason,
+                        "iterations": segments_started,
+                        "session_item_count": len(session._items),
+                        "decision_rejections": hooks.decision_rejections,
                     })
 
                     if checkpoint["synthetic_local_postconditions_met"]:
@@ -936,11 +984,13 @@ only the independent harness can accept the exact local artifact and lineage.
                             next_input = (
                                 "The first native_decision_admit proposal was "
                                 "rejected. Do not repeat it unchanged. Read the "
-                                "rejection feedback and the published tool schema. "
-                                "If all source hashes and the current observation "
-                                "still match, make at most one corrected FIRST "
-                                "decision. Use source_refs as a list of objects "
-                                "with exactly path and sha256. Omit review fields "
+                                "rejection feedback and published tool schema. "
+                                "Re-read native_goal_inspect, native_procedure_evidence "
+                                "and both original source files. Submit at most one "
+                                "corrected proposal. The bridge supplies observation "
+                                "and lineage CAS fields; do not include them. "
+                                "alternative_reason must be a non-empty string even "
+                                "when alternative_intent is null. Omit review fields "
                                 "because there are no prior decisions. Do not tick."
                             )
                         else:
@@ -949,10 +999,11 @@ only the independent harness can accept the exact local artifact and lineage.
                                 "root, capabilities and procedure evidence; read "
                                 "baseline.csv and actual.csv; then submit one typed "
                                 "native_decision_admit proposal for compare_records. "
-                                "Use the exact observation and source digests. "
-                                "source_refs is a list of path/sha256 objects. "
-                                "alternative_intent=null and previous_result_task_id=null. "
-                                "Do not call a Worker."
+                                "Use source_refs as a list of exact path/sha256 "
+                                "objects. alternative_intent=null and provide a "
+                                "non-empty alternative_reason. The bridge binds "
+                                "observation, previous-task and procedure CAS values; "
+                                "do not include those fields. Do not call a Worker."
                             )
                     else:
                         last_decision = (
@@ -981,24 +1032,26 @@ only the independent harness can accept the exact local artifact and lineage.
                             "native_goal_inspect and native_procedure_evidence, "
                             "then read settings.json. Submit one typed "
                             "native_decision_admit proposal for ensure_structure "
-                            "with owner=ops. In decision_basis set "
-                            "previous_result_task_id to the exact first child "
-                            "task_id and include decision_review_version=1 plus "
+                            "with owner=ops. Do not include previous_result_task_id "
+                            "or observation/cross-root digest fields; the bridge "
+                            "binds those values. Include decision_review_version=1 plus "
                             "one decision_reviews entry for the exact first "
                             "event_id, disposition=RELEVANT, rationale and "
                             "falsifier. Keep source_refs a list of path/sha256 "
                             "objects. Do not call a Worker."
                         )
 
-                hooks_holder["checkpoints"] = checkpoints
-                hooks_holder["harness_executions"] = harness_executions
-                hooks_holder["tool_schema_summaries"] = tool_schema_summaries
-                hooks_holder["remaining_turns"] = remaining_turns
-                hooks_holder["stop_reason"] = stop_reason
-                hooks_holder["iterations"] = len(checkpoints)
-                hooks_holder["session_item_count"] = len(session._items)
-                hooks_holder["decision_rejections"] = decision_rejections
-                hooks_holder["hooks"] = hooks
+                hooks_holder.update({
+                    "checkpoints": checkpoints,
+                    "harness_executions": harness_executions,
+                    "tool_schema_summaries": tool_schema_summaries,
+                    "remaining_turns": remaining_turns,
+                    "stop_reason": stop_reason,
+                    "iterations": segments_started,
+                    "session_item_count": len(session._items),
+                    "decision_rejections": hooks.decision_rejections,
+                    "hooks": hooks,
+                })
                 return {
                     "final_output": (
                         str(last_result.final_output)[:1600]
@@ -1012,12 +1065,18 @@ only the independent harness can accept the exact local artifact and lineage.
         sdk_meta = asyncio.run(execute_sdk())
     except asyncio.TimeoutError:
         fault = "TIME_BUDGET_EXHAUSTED"
+        hooks_holder["stop_reason"] = "WALL_CLOCK_BUDGET_EXHAUSTED"
     except Exception as exc:
         fault = type(exc).__name__
         fault_message = str(exc)[:500]
         fault_traceback = traceback.format_exc().splitlines()[-8:]
+        hooks_holder["stop_reason"] = "SDK_EXECUTION_ERROR"
 
     hooks = hooks_holder.get("hooks")
+    if hooks is not None:
+        hooks_holder["decision_rejections"] = hooks.decision_rejections
+        hooks_holder.setdefault(
+            "remaining_turns", max(0, SDK_MAX_TURNS - hooks.model_calls))
     usage = hooks.usage if hooks else []
     input_tokens = [
         item["input_tokens"] for item in usage
