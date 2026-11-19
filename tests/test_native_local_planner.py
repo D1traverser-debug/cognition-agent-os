@@ -1819,6 +1819,7 @@ class NativeLocalModelLoop(unittest.TestCase):
             "owner_goal_sha256": owner_goal_sha256,
             "goal_rev": root_row["goal_rev"],
             "grant_rev": root_row["grant_rev"],
+            "ledger_child_task_count": len(child_rows),
             "children": {
                 "csv_report": child_lineage(csv_id),
                 "json_draft": child_lineage(json_id),
