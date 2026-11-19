@@ -22,6 +22,21 @@ from cognition_agent_os.effect_contract import install_contract
 from cognition_agent_os.intent_planner import compile_intent
 
 
+def _resolve_schema(schema, root):
+    current = schema
+    seen = set()
+    while isinstance(current, dict) and "$ref" in current:
+        ref = current["$ref"]
+        if ref in seen:
+            raise AssertionError("Recursive MCP schema reference")
+        seen.add(ref)
+        name = ref.rsplit("/", 1)[-1]
+        current = root.get("$defs", {}).get(name)
+        if current is None:
+            raise AssertionError("Unresolved MCP schema reference: " + ref)
+    return current
+
+
 def unwrap(result):
     if result.is_error:
         raise AssertionError("MCP tool call rejected: " + repr(result.content))
@@ -173,6 +188,39 @@ async def run():
                             tool.annotations.destructive_hint is not False or
                             tool.annotations.open_world_hint is not False), tool.name
             tools = {x.name for x in registered}
+            decision_spec = next(
+                x for x in registered if x.name == "native_decision_admit")
+            decision_schema = decision_spec.input_schema
+            proposal_schema = _resolve_schema(
+                decision_schema["properties"]["proposal"], decision_schema)
+            proposal_properties = proposal_schema["properties"]
+            assert {
+                "selected_intent", "alternative_intent", "decision_reason",
+                "alternative_reason", "expected_evidence",
+                "observation_sha256", "decision_basis",
+            } <= set(proposal_properties), proposal_schema
+            assert set(proposal_schema["required"]) >= {
+                "selected_intent", "alternative_intent", "decision_reason",
+                "alternative_reason", "expected_evidence",
+                "observation_sha256", "decision_basis",
+            }, proposal_schema
+            assert proposal_schema.get("additionalProperties") is False, proposal_schema
+            basis_schema = _resolve_schema(
+                proposal_properties["decision_basis"], decision_schema)
+            basis_properties = basis_schema["properties"]
+            assert {
+                "source_refs", "previous_result_task_id", "challenge",
+                "falsifier", "uncertainty",
+            } <= set(basis_properties), basis_schema
+            refs_schema = _resolve_schema(
+                basis_properties["source_refs"], decision_schema)
+            ref_item_schema = _resolve_schema(
+                refs_schema["items"], decision_schema)
+            assert set(ref_item_schema["properties"]) == {"path", "sha256"}, ref_item_schema
+            assert ref_item_schema.get("additionalProperties") is False, ref_item_schema
+            capabilities_spec = next(
+                x for x in registered if x.name == "native_capabilities")
+            assert "root_task_id" in capabilities_spec.input_schema["required"]
             create_spec = next(x for x in registered if x.name == "native_goal_create")
             assert "allow_public_discovery" not in (
                 create_spec.input_schema["properties"]), create_spec
