@@ -44,6 +44,7 @@ _TOOL_REJECTIONS = {
     "COGNITION_QUOTE_NOT_FOUND": "Read the actual source bytes and use an exact supported quotation, or withdraw the claim.",
     "COGNITION_GRANT_REVOKED": "Stop writes. Current operator authority is required; a model cannot grant it.",
     "CURRENT_OPERATOR_EFFECT_CONTRACT_REQUIRED": "Stop execution. An operator-bound effect contract is required; recording a decision does not authorize it.",
+    "UNSUPPORTED_UNGROUNDED_DECISION": "The proposal was rejected by the native admission schema. Do not tick or retry unchanged. Read the native_decision_admit tool schema and submit exactly these top-level keys: selected_intent, alternative_intent, decision_reason, alternative_reason, expected_evidence, observation_sha256, decision_basis. decision_basis may contain only source_refs, previous_result_task_id, challenge, falsifier, uncertainty, optional decision_layer, optional decision_review_version plus decision_reviews, and optional cross_root_procedure_evidence_sha256. Put decision_review_version and decision_reviews inside decision_basis. Do not add authority or success claims. If any source digest or observation is stale, stop and re-read.",
 }
 
 
