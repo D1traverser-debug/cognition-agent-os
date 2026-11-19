@@ -26,6 +26,31 @@ from cognition_agent_os.native_local_planner import (
 
 
 class NativeLocalModelLoop(unittest.TestCase):
+    def test_native_model_timeout_accepts_240_seconds_and_rejects_241(self):
+        from cognition_agent_os.native_local_planner import propose_native_local
+
+        root = register_native_goal(self.db, self.goal)
+        observed_timeouts = []
+
+        def transport(method, endpoint, payload, timeout):
+            observed_timeouts.append(timeout)
+            if method == "GET":
+                return {"models": [{"name": "installed:test"}]}
+            return {"done": True, "response": json.dumps({"abstain": True})}
+
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=transport):
+            result = propose_native_local(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test", timeout=240)
+
+        self.assertEqual(result["status"], "NATIVE_LOCAL_MODEL_ABSTAINED")
+        self.assertIn(240, observed_timeouts)
+        with self.assertRaisesRegex(ValueError, "INVALID_NATIVE_MODEL_TIMEOUT"):
+            propose_native_local(
+                self.db, self.workspace, self.fixtures, root,
+                model="installed:test", timeout=241)
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
