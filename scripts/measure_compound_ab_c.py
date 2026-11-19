@@ -423,11 +423,15 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
 
         hooks = MetricsHooks()
         hooks_holder["hooks"] = hooks
-        env = os.environ.copy()
-        existing_pythonpath = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = os.pathsep.join(
-            item for item in (str(ROOT / "src"), existing_pythonpath) if item)
-        env["PYTHONUNBUFFERED"] = "1"
+        # Do not forward the runner's ambient environment or credentials to
+        # the MCP subprocess. It needs only Python, package path and UTF-8.
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get("HOME", ""),
+            "PYTHONPATH": str(ROOT / "src"),
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONUTF8": "1",
+        }
         params = {
             "command": sys.executable,
             "args": [
