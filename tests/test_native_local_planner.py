@@ -1771,6 +1771,11 @@ class NativeLocalModelLoop(unittest.TestCase):
                 for row in db.execute(
                     "SELECT * FROM tasks WHERE parent_task=?", (root,))
             }
+            child_order = [
+                row["task_id"] for row in db.execute(
+                    "SELECT task_id FROM tasks WHERE parent_task=? ORDER BY rowid",
+                    (root,))
+            ]
         self.assertIsNotNone(root_row)
         self.assertEqual(set(child_rows), {csv_id, json_id})
         root_spec = json.loads(root_row["source_spec"])
@@ -1820,6 +1825,7 @@ class NativeLocalModelLoop(unittest.TestCase):
             "goal_rev": root_row["goal_rev"],
             "grant_rev": root_row["grant_rev"],
             "ledger_child_task_count": len(child_rows),
+            "child_order": child_order,
             "children": {
                 "csv_report": child_lineage(csv_id),
                 "json_draft": child_lineage(json_id),
