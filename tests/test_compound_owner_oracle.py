@@ -104,6 +104,7 @@ class CompoundOwnerOracleTests(unittest.TestCase):
             "owner_goal_sha256": self.contract["owner_goal_sha256"],
             "goal_rev": 1,
             "grant_rev": 1,
+            "ledger_child_task_count": 2,
             "children": {
                 "csv_report": {
                     "task_id": "a" * 32,
@@ -339,6 +340,13 @@ class CompoundOwnerOracleTests(unittest.TestCase):
         result = self.evaluate(expected_lineage=lineage)
         self.assertEqual(result["status"], "NOT_ACCEPTED")
         self.assertEqual(result["reason"], "BAD_EXPECTED_ROOT_LINEAGE")
+
+    def test_extra_unaccounted_ledger_child_fails_closed(self):
+        lineage = json.loads(json.dumps(self.expected_lineage))
+        lineage["ledger_child_task_count"] = 3
+        result = self.evaluate(expected_lineage=lineage)
+        self.assertEqual(result["status"], "NOT_ACCEPTED")
+        self.assertEqual(result["reason"], "UNACCOUNTED_CHILD_TASKS")
 
 
     def test_untrusted_product_oracle_label_is_not_used_as_proof(self):
