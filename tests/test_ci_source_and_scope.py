@@ -229,6 +229,27 @@ class CISourceAndScopeTests(unittest.TestCase):
         self.assertIn("OLLAMA_NO_CLOUD: '1'", job)
         self.assertIn("python scripts/measure_real_native_goal.py", job)
 
+    def test_compound_ab_c_experiment_is_local_opt_in_and_in_evidence_scope(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        job = workflow.split("  experimental_compound_ab_c:", 1)[1].split(
+            "\n  experimental_live_open_goal_method:", 1)[0]
+        self.assertIn("[run-compound-ab-c]", job)
+        self.assertIn(
+            "github.event.pull_request.head.repo.full_name == github.repository",
+            job)
+        self.assertIn("OLLAMA_NO_CLOUD: '1'", job)
+        self.assertIn("ollama pull qwen2.5:1.5b", job)
+        self.assertIn("'.[mcp,agents-sdk]'", job)
+        self.assertIn("measure_compound_ab_c.py", job)
+        self.assertIn("experimental_compound_ab_c", OPTIONAL)
+        scope = workflow.split("  ci_evidence_scope:", 1)[1]
+        self.assertIn("experimental_compound_ab_c", scope)
+        runner = (ROOT / "scripts/measure_compound_ab_c.py").read_text(encoding="utf-8")
+        self.assertIn("native_mcp_bridge", runner)
+        self.assertIn("OLLAMA_OPENAI_BASE_URL", runner)
+        self.assertIn("SDK_TOOL_ALLOWLIST", runner)
+        self.assertIn("product_ready", runner)
+
     def test_every_ollama_download_job_is_bound_to_this_repository_pr(self):
         """No PR body from a fork may opt into downloading model weights.
 
