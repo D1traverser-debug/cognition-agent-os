@@ -615,7 +615,8 @@ Never repeat an admitted action. Stop on stale hashes, changed authority,
 rejected admission, or ambiguous lineage. A status-only answer is not work.
 The independent harness grades SQLite lineage and artifact bytes; your final
 prose has no authority.
-"""        user_input = (
+"""
+        user_input = (
             "Original owner goal:\n" + OWNER_GOAL
             + "\n\nExisting root_task_id:\n" + root_id
             + "\n\nUse the existing root only. Complete the bounded local work. "
