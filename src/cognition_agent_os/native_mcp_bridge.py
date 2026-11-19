@@ -32,12 +32,16 @@ class NativeIntentRequirement(TypedDict):
     equals: Any
 
 
-class NativeCompareRecordsIntent(TypedDict):
+class _NativeCompareRecordsIntentRequired(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
     kind: Literal["goal_intent"]
     objective: Literal["compare_records"]
     resources: list[NativeIntentResource]
-    relationship_contract: NotRequired[dict[str, Any]]
+
+
+class NativeCompareRecordsIntent(_NativeCompareRecordsIntentRequired, total=False):
+    __pydantic_config__ = {"extra": "forbid"}
+    relationship_contract: dict[str, Any]
 
 
 class NativeEnsureStructureIntent(TypedDict):
@@ -92,24 +96,28 @@ class NativeHypothesisReview(TypedDict):
     verification_needed: str
 
 
-class NativeDecisionBasis(TypedDict):
+class _NativeDecisionBasisRequired(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
     source_refs: list[NativeSourceRef]
     previous_result_task_id: str | None
     challenge: str
     falsifier: str
     uncertainty: str
-    decision_layer: NotRequired[Literal[
+
+
+class NativeDecisionBasis(_NativeDecisionBasisRequired, total=False):
+    __pydantic_config__ = {"extra": "forbid"}
+    decision_layer: Literal[
         "entrypoint", "goal_interpretation", "context_retrieval",
         "method_selection", "implementation", "verification",
         "architecture", "permission_boundary", "method", "unspecified",
-    ]]
-    decision_review_version: NotRequired[Literal[1]]
-    decision_reviews: NotRequired[list[NativeDecisionReview]]
-    cross_root_procedure_evidence_sha256: NotRequired[str | None]
+    ]
+    decision_review_version: Literal[1]
+    decision_reviews: list[NativeDecisionReview]
+    cross_root_procedure_evidence_sha256: str | None
 
 
-class NativeDecisionProposal(TypedDict):
+class _NativeDecisionProposalRequired(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
     selected_intent: NativeGoalIntent
     alternative_intent: NativeGoalIntent | None
@@ -118,7 +126,12 @@ class NativeDecisionProposal(TypedDict):
     expected_evidence: str
     observation_sha256: str
     decision_basis: NativeDecisionBasis
-    hypothesis_reviews: NotRequired[list[NativeHypothesisReview]]
+
+
+class NativeDecisionProposal(_NativeDecisionProposalRequired, total=False):
+    __pydantic_config__ = {"extra": "forbid"}
+    hypothesis_reviews: list[NativeHypothesisReview]
+
 
 
 
