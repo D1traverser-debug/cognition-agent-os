@@ -14,6 +14,112 @@ import json
 import hashlib
 from pathlib import Path
 import sqlite3
+from typing import Any, Literal, NotRequired, TypedDict
+
+
+# Explicit nested schemas are published to MCP clients. A generic dict gives
+# the model no field-level contract and caused malformed decision proposals.
+class NativeIntentResource(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    role: str
+    path: str
+
+
+class NativeIntentRequirement(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    field: str
+    equals: Any
+
+
+class NativeCompareRecordsIntent(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    kind: Literal["goal_intent"]
+    objective: Literal["compare_records"]
+    resources: list[NativeIntentResource]
+    relationship_contract: NotRequired[dict[str, Any]]
+
+
+class NativeEnsureStructureIntent(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    kind: Literal["goal_intent"]
+    objective: Literal["ensure_structure"]
+    resources: list[NativeIntentResource]
+    requirements: list[NativeIntentRequirement]
+
+
+class NativeInvestigateEvidenceIntent(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    kind: Literal["goal_intent"]
+    objective: Literal["investigate_evidence"]
+    resources: list[NativeIntentResource]
+    question: str
+
+
+class NativeDiscoverPublicToolsIntent(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    kind: Literal["goal_intent"]
+    objective: Literal["discover_public_tools"]
+    resources: list[NativeIntentResource]
+    terms: list[str]
+
+
+NativeGoalIntent = (
+    NativeCompareRecordsIntent | NativeEnsureStructureIntent
+    | NativeInvestigateEvidenceIntent | NativeDiscoverPublicToolsIntent
+)
+
+
+class NativeSourceRef(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    path: str
+    sha256: str
+
+
+class NativeDecisionReview(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    event_id: int
+    disposition: Literal["RELEVANT", "NOT_RELEVANT", "UNRESOLVED"]
+    rationale: str
+    falsifier: str
+
+
+class NativeHypothesisReview(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    proposal_sha256: str
+    disposition: Literal["REJECTED", "CONDITIONALLY_USEFUL", "UNRESOLVED_RESEARCH_REQUIRED"]
+    counterargument: str
+    verification_needed: str
+
+
+class NativeDecisionBasis(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    source_refs: list[NativeSourceRef]
+    previous_result_task_id: str | None
+    challenge: str
+    falsifier: str
+    uncertainty: str
+    decision_layer: NotRequired[Literal[
+        "entrypoint", "goal_interpretation", "context_retrieval",
+        "method_selection", "implementation", "verification",
+        "architecture", "permission_boundary", "method", "unspecified",
+    ]]
+    decision_review_version: NotRequired[Literal[1]]
+    decision_reviews: NotRequired[list[NativeDecisionReview]]
+    cross_root_procedure_evidence_sha256: NotRequired[str | None]
+
+
+class NativeDecisionProposal(TypedDict):
+    __pydantic_config__ = {"extra": "forbid"}
+    selected_intent: NativeGoalIntent
+    alternative_intent: NativeGoalIntent | None
+    decision_reason: str
+    alternative_reason: str
+    expected_evidence: str
+    observation_sha256: str
+    decision_basis: NativeDecisionBasis
+    hypothesis_reviews: NotRequired[list[NativeHypothesisReview]]
+
+
 
 from .host import _admit_existing_ledger
 from .runner import run_once
@@ -266,7 +372,11 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
 
     @read_tool()
     def native_capabilities(root_task_id: str) -> dict:
-        """Discover live registered tools, current sources, and bounded effects."""
+        """Discover live registered tools, current sources, and bounded effects.
+
+        Args:
+            root_task_id: Exact existing 32-character root ID from the current task context.
+        """
         observed = inspect_native_goal(
             db_path, workspace, fixtures, root_task_id)
         if observed["status"] == "NATIVE_GOAL_UNVERIFIABLE":
@@ -504,8 +614,15 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             db_path, workspace, fixtures, root_task_id, proposal)
 
     @write_tool()
-    def native_decision_admit(root_task_id: str, proposal: dict) -> dict:
-        """Admit one compared typed method; fresh source/authority/lineage CAS required.
+    def native_decision_admit(
+            root_task_id: str, proposal: NativeDecisionProposal) -> dict:
+        """Admit one typed method using the published, nested proposal schema.
+
+        Args:
+            root_task_id: Exact existing 32-character root ID from the current task context.
+            proposal: Exact typed decision proposal. Source references are a list
+                of objects with path and sha256; decision_reviews belong inside
+                decision_basis. The native admission gate remains authoritative.
 
         The client researches and proposes options. This tool independently
         checks provenance and queues ONE registered local child, never raw code,
