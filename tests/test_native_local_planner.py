@@ -1772,6 +1772,7 @@ class NativeLocalModelLoop(unittest.TestCase):
                     "SELECT * FROM tasks WHERE parent_task=?", (root,))
             }
         self.assertIsNotNone(root_row)
+        self.assertEqual(set(child_rows), {csv_id, json_id})
         root_spec = json.loads(root_row["source_spec"])
         self.assertEqual(root_spec["kind"], "native_goal")
         self.assertEqual(root_spec["goal"], self.goal)
