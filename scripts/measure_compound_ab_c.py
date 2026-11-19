@@ -71,6 +71,7 @@ OLLAMA_OPENAI_BASE_URL = local_openai_base_url(
 ARM_BUDGET_SECONDS = int(os.environ.get("COGNITION_EVAL_ARM_BUDGET_SECONDS", "600"))
 SDK_MAX_TURNS = 18
 SDK_MAX_OUTPUT_TOKENS = 900
+SDK_SEGMENT_TURNS = 2
 SDK_VERSION = "openai-agents==0.25.0"
 
 # The MCP server is operator-opted into local goal writes, one-root Worker
@@ -80,12 +81,56 @@ SDK_VERSION = "openai-agents==0.25.0"
 SDK_TOOL_ALLOWLIST = (
     "native_goal_inspect",
     "native_procedure_evidence",
-    "native_owner_outcome",
     "native_capabilities",
     "native_source_read",
     "native_decision_admit",
-    "native_local_tick",
 )
+HARNESS_EXECUTION_TOOL = "native_local_tick"
+
+
+def _safe_argument_shape(value, depth: int = 0):
+    """Capture tool argument structure without storing IDs, hashes or source values."""
+    if depth >= 4:
+        return {"type": type(value).__name__}
+    if isinstance(value, dict):
+        return {
+            "type": "object",
+            "keys": sorted(str(key) for key in value),
+            "fields": {
+                str(key): _safe_argument_shape(item, depth + 1)
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            },
+        }
+    if isinstance(value, list):
+        return {
+            "type": "array",
+            "length": len(value),
+            "first_item": (
+                _safe_argument_shape(value[0], depth + 1) if value else None),
+        }
+    if isinstance(value, str):
+        return {"type": "string", "length": len(value)}
+    if value is None:
+        return {"type": "null"}
+    return {"type": type(value).__name__}
+
+
+def _decode_mcp_tool_result(result) -> dict:
+    if getattr(result, "is_error", False):
+        raise RuntimeError("HARNESS_NATIVE_TICK_MCP_REJECTED")
+    structured = getattr(result, "structured_content", None)
+    if isinstance(structured, dict):
+        return structured
+    for part in getattr(result, "content", []):
+        value = getattr(part, "text", None)
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+    raise RuntimeError("HARNESS_NATIVE_TICK_MCP_RESULT_UNVERIFIABLE")
 
 
 class InMemoryConversationSession:
