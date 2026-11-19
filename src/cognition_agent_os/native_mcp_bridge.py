@@ -15,7 +15,10 @@ import hashlib
 from pathlib import Path
 import sqlite3
 from typing import Any, Literal
-from typing_extensions import TypedDict
+try:
+    from typing_extensions import TypedDict
+except ImportError:  # core-only installs do not require optional MCP dependencies
+    from typing import TypedDict
 
 
 # Explicit nested schemas are published to MCP clients. A generic dict gives
