@@ -7,6 +7,45 @@ from cognition_agent_os.native_mcp_bridge import _TOOL_REJECTIONS
 
 
 class NativeMcpDecisionRejectionFeedbackTests(unittest.TestCase):
+    def test_mcp_cas_and_comparison_feedback_is_actionable_without_bypass(self):
+        cases = {
+            "MISSING_DECISION_COMPARISON": (
+                "alternative_reason",
+                "even when alternative_intent is null",
+                "non-empty strings",
+                "must never be null",
+            ),
+            "INVALID_OBSERVATION_FINGERPRINT": (
+                "64-character lowercase SHA-256",
+                "never be null",
+                "native_goal_inspect",
+            ),
+            "NATIVE_DECISION_REQUIRES_FRESH_INSPECTION": (
+                "native_goal_inspect",
+                "native_procedure_evidence",
+                "restarted process",
+            ),
+            "NATIVE_PROCEDURE_EVIDENCE_NOT_READ": (
+                "native_procedure_evidence",
+                "bridge binds",
+            ),
+            "NATIVE_STALE_OBSERVATION": (
+                "snapshot changed",
+                "re-read",
+                "reconsider",
+            ),
+        }
+        for code, required in cases.items():
+            message = _TOOL_REJECTIONS[code]
+            for fragment in required:
+                with self.subTest(code=code, fragment=fragment):
+                    self.assertIn(fragment.lower(), message.lower())
+            for forbidden in (
+                "bypass", "disable validation", "force admission", "grant write",
+            ):
+                with self.subTest(code=code, forbidden=forbidden):
+                    self.assertNotIn(forbidden, message.lower())
+
     def test_ungrounded_decision_rejection_explains_exact_schema_without_bypass(self):
         message = _TOOL_REJECTIONS["UNSUPPORTED_UNGROUNDED_DECISION"]
         for required in (
