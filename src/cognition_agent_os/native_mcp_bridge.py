@@ -14,14 +14,15 @@ import json
 import hashlib
 from pathlib import Path
 import sqlite3
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal
+from typing_extensions import NotRequired, TypedDict
 
 
 # Explicit nested schemas are published to MCP clients. A generic dict gives
 # the model no field-level contract and caused malformed decision proposals.
 class NativeIntentResource(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
-    role: str
+    role: Literal["reference", "observed", "input"]
     path: str
 
 
