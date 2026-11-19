@@ -812,7 +812,7 @@ jobs:
         include:
           - model: 'qwen2.5-coder:0.5b'
             label: coder-05b
-          - model: 'qwen2.5:1.5b'
+          - model: 'qwen2.5:3b'
             label: instruct-15b
     runs-on: ubuntu-latest
     timeout-minutes: 26
@@ -907,7 +907,7 @@ jobs:
             sleep 2
           done
           test "$ready" = 1
-          timeout 420 ollama pull qwen2.5:1.5b
+          timeout 420 ollama pull qwen2.5:3b
       - name: Install pinned optional Agents SDK and local MCP bridge dependencies
         shell: bash
         run: |
@@ -920,7 +920,7 @@ jobs:
           PYTHONPATH: src
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_NO_CLOUD: '1'
-          COGNITION_EVAL_MODEL: qwen2.5:1.5b
+          COGNITION_EVAL_MODEL: qwen2.5:3b
           COGNITION_EVAL_ARM_BUDGET_SECONDS: '600'
         run: |
           set -euo pipefail
@@ -929,7 +929,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: compound-ab-c-evidence-qwen25-15b
+          name: compound-ab-c-evidence-qwen25-3b
           path: compound-ab-c-evidence.json
           if-no-files-found: warn
 
