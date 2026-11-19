@@ -20,6 +20,7 @@ import tempfile
 import time
 from contextlib import closing
 from pathlib import Path
+from urllib.parse import urlparse
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,8 +48,22 @@ CASE = next(
 OWNER_GOAL = CASE["goal"]
 SOURCE_NAMES = ("baseline.csv", "actual.csv", "settings.json")
 MODEL = os.environ.get("COGNITION_EVAL_MODEL", "qwen2.5:1.5b")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_OPENAI_BASE_URL = OLLAMA_HOST + "/v1"
+def local_openai_base_url(value: str) -> str:
+    raw = value.strip()
+    if not raw.startswith(("http://", "https://")):
+        raw = "http://" + raw
+    parsed = urlparse(raw)
+    if (parsed.scheme != "http"
+            or parsed.hostname not in ("127.0.0.1", "localhost", "::1")
+            or parsed.username is not None or parsed.password is not None
+            or parsed.path not in ("", "/")
+            or parsed.query or parsed.fragment):
+        raise ValueError("OLLAMA_OPENAI_ENDPOINT_MUST_BE_LOOPBACK_HTTP")
+    return raw.rstrip("/") + "/v1"
+
+
+OLLAMA_OPENAI_BASE_URL = local_openai_base_url(
+    os.environ.get("OLLAMA_HOST", "127.0.0.1:11434"))
 ARM_BUDGET_SECONDS = int(os.environ.get("COGNITION_EVAL_ARM_BUDGET_SECONDS", "600"))
 SDK_MAX_TURNS = 16
 SDK_MAX_OUTPUT_TOKENS = 512
@@ -582,12 +597,15 @@ def main() -> int:
             "same_authority_revisions": all(
                 row["root_state"]["goal_rev"] == rows[0]["root_state"]["goal_rev"]
                 and row["root_state"]["grant_rev"] == rows[0]["root_state"]["grant_rev"]
+                and row["root_state"]["goal_rev"] == row["root_state"]["authority_goal_rev"]
+                and row["root_state"]["grant_rev"] == row["root_state"]["authority_grant_rev"]
                 and row["root_state"]["write_allowed"]
                 for row in rows),
             "arm_order": ["A"] + model_arms,
             "arm_budget_seconds": ARM_BUDGET_SECONDS,
             "no_paid_or_cloud_model_api": True,
             "only_local_ollama_used_for_B_and_C": True,
+            "ollama_openai_base_url": OLLAMA_OPENAI_BASE_URL,
             "independent_oracle_is_synthetic_local_only": True,
             "arms": rows,
             "summary": {
