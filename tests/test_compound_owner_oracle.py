@@ -105,6 +105,7 @@ class CompoundOwnerOracleTests(unittest.TestCase):
             "goal_rev": 1,
             "grant_rev": 1,
             "ledger_child_task_count": 2,
+            "child_order": ["a" * 32, "b" * 32],
             "children": {
                 "csv_report": {
                     "task_id": "a" * 32,
@@ -347,6 +348,13 @@ class CompoundOwnerOracleTests(unittest.TestCase):
         result = self.evaluate(expected_lineage=lineage)
         self.assertEqual(result["status"], "NOT_ACCEPTED")
         self.assertEqual(result["reason"], "UNACCOUNTED_CHILD_TASKS")
+
+    def test_reversed_child_execution_order_fails_closed(self):
+        lineage = json.loads(json.dumps(self.expected_lineage))
+        lineage["child_order"] = list(reversed(lineage["child_order"]))
+        result = self.evaluate(expected_lineage=lineage)
+        self.assertEqual(result["status"], "NOT_ACCEPTED")
+        self.assertEqual(result["reason"], "CHILD_ORDER_MISMATCH")
 
 
     def test_untrusted_product_oracle_label_is_not_used_as_proof(self):
