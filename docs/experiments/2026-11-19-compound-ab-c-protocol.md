@@ -56,7 +56,7 @@ Root creation, generic native model planning, memory writes, public-source acces
 - B and C use the same model identifier: `qwen2.5:3b`.
 - All arms use the same exact goal text, source bytes, source hashes, owner-goal hash and initial SQLite authority revision.
 - The same 600-second wall-clock budget applies to each arm.
-- B is limited to two sequential decisions. C is limited to 18 model turns and 900 output tokens per turn.
+- B is limited to two sequential decisions. C is limited to 18 model turns and 900 output tokens per turn. Each B/C model request is bounded at 240 seconds within the 600-second per-arm wall-clock ceiling.
 - The order of B and C is deterministically shuffled from the owner-goal hash and recorded. Ollama requests are asked to unload the model after each turn where supported.
 - Actual model calls, token counts where reported, tool calls, elapsed time, selected objectives, task states, lineage and errors are recorded. Missing token telemetry is reported as unavailable, never inferred.
 - A runs without a model as the incumbent deterministic baseline.
@@ -68,6 +68,7 @@ The orchestration surfaces differ by design: B uses the current planner/Host pat
 - Ollama is loopback-only. The SDK endpoint validator rejects non-loopback and HTTPS endpoints.
 - No cloud model API, paid inference API, API key, production grant, user data, deployment or user-machine installation is used.
 - Agent tracing is disabled.
+- A rejected native decision returns a fixed safe schema-recovery message; it does not disclose internal exception text, weaken validation, or authorize a tick. C may correct a rejected proposal only while source, observation and authority snapshots remain current.
 - The MCP subprocess receives only `PATH`, `HOME`, `PYTHONPATH`, `PYTHONUNBUFFERED` and `PYTHONUTF8`; ambient runner credentials are not forwarded.
 - The only write tools are native decision admission and one-root targeted local Worker execution. Both still require the current SQLite grant and managed-session contract.
 - All effects remain local candidates. Original source files must remain byte-identical.
