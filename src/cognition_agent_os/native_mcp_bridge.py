@@ -14,11 +14,20 @@ import json
 import hashlib
 from pathlib import Path
 import sqlite3
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 try:
     from typing_extensions import TypedDict
 except ImportError:  # core-only installs do not require optional MCP dependencies
     from typing import TypedDict
+
+try:
+    from pydantic import Field as _PydanticField
+except ImportError:  # core-only installs do not require optional MCP dependencies
+    def _schema_field(description: str):
+        return description
+else:
+    def _schema_field(description: str):
+        return _PydanticField(description=description)
 
 
 # Explicit nested schemas are published to MCP clients. A generic dict gives
@@ -79,8 +88,8 @@ NativeGoalIntent = (
 
 class NativeSourceRef(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
-    path: str
-    sha256: str
+    path: Annotated[str, _schema_field("Exact relative source filename returned by native_source_read; do not invent or rename it.")]
+    sha256: Annotated[str, _schema_field("Exact lowercase 64-character SHA-256 returned by native_source_read for this same source.")]
 
 
 class NativeDecisionReview(TypedDict):
@@ -101,11 +110,11 @@ class NativeHypothesisReview(TypedDict):
 
 class _NativeDecisionBasisRequired(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
-    source_refs: list[NativeSourceRef]
-    previous_result_task_id: str | None
-    challenge: str
-    falsifier: str
-    uncertainty: str
+    source_refs: Annotated[list[NativeSourceRef], _schema_field("A list of objects, each containing exactly path and sha256 for the actual sources used by this decision.")]
+    previous_result_task_id: Annotated[str | None, _schema_field("Exact previous executed child task ID; null only when this is the first decision.")]
+    challenge: Annotated[str, _schema_field("A concrete opposing hypothesis, 12-500 characters.")]
+    falsifier: Annotated[str, _schema_field("Specific independent evidence that would reverse this choice, 12-500 characters.")]
+    uncertainty: Annotated[str, _schema_field("What the available evidence cannot establish, 12-500 characters.")]
 
 
 class NativeDecisionBasis(_NativeDecisionBasisRequired, total=False):
@@ -122,13 +131,13 @@ class NativeDecisionBasis(_NativeDecisionBasisRequired, total=False):
 
 class _NativeDecisionProposalRequired(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
-    selected_intent: NativeGoalIntent
-    alternative_intent: NativeGoalIntent | None
-    decision_reason: str
-    alternative_reason: str
-    expected_evidence: str
-    observation_sha256: str
-    decision_basis: NativeDecisionBasis
+    selected_intent: Annotated[NativeGoalIntent, _schema_field("One currently eligible registered intent that advances the exact owner goal.")]
+    alternative_intent: Annotated[NativeGoalIntent | None, _schema_field("A genuinely competing eligible intent, or null when none applies.")]
+    decision_reason: Annotated[str, _schema_field("Non-empty explanation for selecting this method; 8-512 characters.")]
+    alternative_reason: Annotated[str, _schema_field("Always a non-empty explanation, 8-512 characters. Even when alternative_intent is null, explain why no other eligible method applies; this field must never be null.")]
+    expected_evidence: Annotated[str, _schema_field("Concrete evidence expected from the proposed local step; 8-512 characters.")]
+    observation_sha256: Annotated[str, _schema_field("Exact 64-character lowercase SHA-256 copied from the latest native_goal_inspect observation_sha256. Required and never null; do not invent or abbreviate it.")]
+    decision_basis: Annotated[NativeDecisionBasis, _schema_field("Provenance, prior-result linkage, challenge, falsifier and uncertainty for this decision.")]
 
 
 class NativeDecisionProposal(_NativeDecisionProposalRequired, total=False):
@@ -168,6 +177,8 @@ _TOOL_REJECTIONS = {
     "COGNITION_GRANT_REVOKED": "Stop writes. Current operator authority is required; a model cannot grant it.",
     "CURRENT_OPERATOR_EFFECT_CONTRACT_REQUIRED": "Stop execution. An operator-bound effect contract is required; recording a decision does not authorize it.",
     "UNSUPPORTED_UNGROUNDED_DECISION": "The proposal was rejected by the native admission schema. Do not tick or retry unchanged. Read the native_decision_admit input schema. Use exactly these top-level keys: selected_intent, alternative_intent, decision_reason, alternative_reason, expected_evidence, observation_sha256, decision_basis. decision_basis must contain source_refs, previous_result_task_id, challenge, falsifier and uncertainty; source_refs must be a LIST of objects, each with exactly path and sha256. Optional fields are decision_layer and cross_root_procedure_evidence_sha256. For a first decision with no prior decisions, omit decision_review_version and decision_reviews. When prior decisions exist, include both inside decision_basis and review every prior event exactly once. Do not add authority or success claims. If any source digest or observation is stale, stop and re-read.",
+    "MISSING_DECISION_COMPARISON": "decision_reason, alternative_reason and expected_evidence must each be non-empty strings of 8-512 characters. alternative_reason is still required when alternative_intent is null; explain why no other eligible method applies. Do not send null for this field.",
+    "INVALID_OBSERVATION_FINGERPRINT": "observation_sha256 must be the exact 64-character lowercase SHA-256 copied from the latest native_goal_inspect result. It is required and must never be null, blank, abbreviated or invented. Re-read native_goal_inspect if the exact digest is unavailable.",
 }
 
 
