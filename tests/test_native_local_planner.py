@@ -5,11 +5,16 @@ These tests establish admission/routing/worker/recovery behavior, NOT that a
 real local LLM understands novel owner objectives or passes semantic acceptance.
 """
 from contextlib import closing
+import hashlib
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
+from compound_owner_oracle import evaluate_compound_owner_goal
 
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, initialize
@@ -1704,6 +1709,151 @@ class NativeLocalModelLoop(unittest.TestCase):
         replay = run_tick(self.db, self.workspace, self.fixtures,
                           max_jobs=2, auto_native_cognition=False)
         self.assertEqual(replay["tasks"], [], replay)
+
+    def test_compound_owner_oracle_verifies_actual_host_artifacts_and_lineage(self):
+        """The independent oracle must grade real Host artifacts, not mock bytes.
+
+        Model transport is scripted for deterministic method selection; the
+        native admission, SQLite lineage, Workers, sandbox staging, artifact
+        hashes and source readback are real. This is oracle/Host integration,
+        not evidence of real-model cognition or a real business outcome.
+        """
+        root = register_native_goal(self.db, self.goal)
+        before = {p.name: p.read_bytes() for p in self.fixtures.iterdir()}
+        calls = []
+
+        def provider(method, path, payload, timeout):
+            if method == "POST":
+                evidence = json.loads(payload["prompt"].split("\n\n")[-1])
+                calls.append(len(evidence["past_methods_and_independent_verdicts"]))
+            return self.transport(method, path, payload, timeout)
+
+        with patch("cognition_agent_os.local_model._request", side_effect=provider):
+            execution = run_tick(
+                self.db, self.workspace, self.fixtures, max_jobs=2,
+                planner_mode="ollama-local", local_model="installed:test",
+                auto_native_cognition=True)
+        self.assertEqual(calls, [0, 1], execution)
+        self.assertEqual(
+            [item["status"] for item in execution["tasks"]],
+            ["NEEDS_REVIEW", "NEEDS_REVIEW"], execution)
+
+        observed = inspect_native_goal(
+            self.db, self.workspace, self.fixtures, root)
+        child_ids = {
+            item["selected_objective"]: item["task_id"]
+            for item in observed["decisions"]
+        }
+        self.assertEqual(set(child_ids), {"compare_records", "ensure_structure"})
+
+        # The isolated draft is a real sandbox file, not merely candidate text.
+        with patch("cognition_agent_os.local_model._request",
+                   side_effect=AssertionError("sandbox stage must not infer")):
+            staged = run_tick(
+                self.db, self.workspace, self.fixtures,
+                max_jobs=1, auto_stage_goals=True)
+        self.assertEqual(len(staged["sandbox_reviews"]), 1, staged)
+        self.assertEqual(
+            staged["sandbox_reviews"][0]["status"], "SANDBOX_VERIFIED", staged)
+
+        csv_id = child_ids["compare_records"]
+        json_id = child_ids["ensure_structure"]
+        csv_report = (self.workspace / "artifacts" / (csv_id + ".json")).read_bytes()
+        json_artifact = (self.workspace / "artifacts" / (json_id + ".json")).read_bytes()
+        json_candidate = (self.workspace / "sandbox" / (json_id + ".candidate")).read_bytes()
+        self.assertEqual(json.loads(json_candidate), {"original": "keep", "audited": "yes"})
+
+        with closing(connect(self.db)) as db:
+            root_row = db.execute(
+                "SELECT * FROM tasks WHERE task_id=?", (root,)).fetchone()
+            child_rows = {
+                row["task_id"]: row
+                for row in db.execute(
+                    "SELECT * FROM tasks WHERE parent_task=?", (root,))
+            }
+        self.assertIsNotNone(root_row)
+        root_spec = json.loads(root_row["source_spec"])
+        self.assertEqual(root_spec["kind"], "native_goal")
+        self.assertEqual(root_spec["goal"], self.goal)
+
+        def child_lineage(task_id):
+            row = child_rows[task_id]
+            return {
+                "task_id": row["task_id"],
+                "parent_task": row["parent_task"],
+                "goal_rev": row["goal_rev"],
+                "grant_rev": row["grant_rev"],
+                "state": row["state"],
+                "artifact_sha256": row["artifact_hash"],
+            }
+
+        owner_goal_sha256 = hashlib.sha256(
+            root_spec["goal"].encode("utf-8")).hexdigest()
+        original_sources = {
+            name: before[name]
+            for name in ("reference.csv", "observed.csv", "handoff.json")
+        }
+        contract = {
+            "schema_version": 1,
+            "goal_id": "native-compound-handoff",
+            "kind": "csv_reconciliation_plus_json_draft",
+            "owner_goal_sha256": owner_goal_sha256,
+            "source_paths": {
+                "reference": "reference.csv",
+                "observed": "observed.csv",
+                "draft": "handoff.json",
+            },
+            "source_sha256": {
+                name: hashlib.sha256(raw).hexdigest()
+                for name, raw in original_sources.items()
+            },
+            "record_key": "item",
+            "draft_fields": {"audited": "yes"},
+            "allowed_effect": "LOCAL_CANDIDATES_ONLY",
+        }
+        expected_lineage = {
+            "root_task_id": root_row["task_id"],
+            "root_parent_task": root_row["parent_task"],
+            "root_kind": root_spec["kind"],
+            "owner_goal_sha256": owner_goal_sha256,
+            "goal_rev": root_row["goal_rev"],
+            "grant_rev": root_row["grant_rev"],
+            "children": {
+                "csv_report": child_lineage(csv_id),
+                "json_draft": child_lineage(json_id),
+            },
+        }
+        current_sources = {
+            name: (self.fixtures / name).read_bytes()
+            for name in original_sources
+        }
+        result = evaluate_compound_owner_goal(
+            contract=contract,
+            current_sources=current_sources,
+            csv_report=csv_report,
+            json_artifact=json_artifact,
+            json_candidate=json_candidate,
+            expected_lineage=expected_lineage,
+        )
+        self.assertEqual(
+            result["status"], "SYNTHETIC_COMPOUND_OWNER_GOAL_MET", result)
+        self.assertEqual(result["root_task_id"], root)
+        self.assertEqual(
+            result["subresults"]["csv_reconciliation"]["discrepancies_count"], 1)
+        self.assertTrue(result["synthetic_local_postconditions_met"])
+        self.assertFalse(result["owner_outcome_verified"])
+        self.assertFalse(result["business_outcome_verified"])
+        self.assertFalse(result["authorizes_mutation"])
+
+        from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+        native_owner = inspect_owner_local_outcome(
+            self.db, self.workspace, self.fixtures, root)
+        self.assertFalse(native_owner["local_owner_outcome_verified"])
+        self.assertEqual(
+            before, {p.name: p.read_bytes() for p in self.fixtures.iterdir()})
+        self.assertEqual(
+            sorted(p.name for p in (self.workspace / "sandbox").iterdir()),
+            [json_id + ".candidate"])
 
     def test_installed_planner_challenges_both_user_and_agent_suggestions(self):
         root = register_native_goal(self.db, self.goal)
