@@ -246,6 +246,11 @@ def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
             for row in con.execute(
                 "SELECT * FROM tasks WHERE parent_task=?", (root,))
         }
+        child_order = [
+            row["task_id"] for row in con.execute(
+                "SELECT task_id FROM tasks WHERE parent_task=? ORDER BY rowid",
+                (root,))
+        ]
     if root_row is None or len(child_rows) != 2:
         raise RuntimeError("COMPOUND_CALIBRATION_LINEAGE_INCOMPLETE")
     root_spec = json.loads(root_row["source_spec"])
@@ -335,6 +340,7 @@ def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
                 "grant_rev": root_row["grant_rev"],
             },
             "ledger_child_task_count": len(child_rows),
+            "child_order": child_order,
             "children": {
                 json.loads(row["source_spec"])["kind"]: {
                     "task_id": row["task_id"],
