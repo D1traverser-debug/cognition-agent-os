@@ -561,6 +561,7 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
                 self.model_calls = 0
                 self.tool_names = []
                 self.tool_results = []
+                self.tool_argument_shapes = []
                 self.usage = []
 
             async def on_llm_start(self, context, agent, system_prompt, input_items):
@@ -579,8 +580,14 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
                 })
 
             async def on_tool_start(self, context, agent, tool):
-                self.tool_names.append(
-                    getattr(tool, "name", type(tool).__name__))
+                name = getattr(tool, "name", type(tool).__name__)
+                self.tool_names.append(name)
+                self.tool_argument_shapes.append({
+                    "name": name,
+                    "tool_call_id": getattr(context, "tool_call_id", None),
+                    "shape": _safe_argument_shape(
+                        getattr(context, "tool_arguments", None)),
+                })
 
             async def on_tool_end(self, context, agent, tool, result):
                 self.tool_results.append({
