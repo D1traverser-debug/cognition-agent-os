@@ -58,22 +58,22 @@ def unwrap(result):
 async def admit_with_current_procedure_evidence(client, root_task_id, proposal):
     """Exercise the real MCP read-before-admit contract, not a hidden planner.
 
-    The proof is a snapshot/identity fence, not approval of a method's
-    semantic relevance. The server must recheck the digest on admission.
+    The bridge binds observation, prior-task lineage and procedure evidence
+    inside this process; SQLite independently rechecks them at admission.
     """
+    observed = unwrap(await client.call_tool(
+        "native_goal_inspect", {"root_task_id": root_task_id}))
+    assert observed.get("status") == "NATIVE_NEXT_DECISION_ADMISSIBLE", observed
     projection = unwrap(await client.call_tool(
         "native_procedure_evidence", {"root_task_id": root_task_id}))
     assert projection.get("status") not in (
         "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
         "NO_REGISTERED_PROCEDURE_METHOD"), projection
-    current = projection.get("cross_root_procedure_evidence_sha256")
     candidate = json.loads(json.dumps(proposal))
+    candidate.pop("observation_sha256", None)
+    candidate["decision_basis"].pop("previous_result_task_id", None)
     candidate["decision_basis"].pop(
         "cross_root_procedure_evidence_sha256", None)
-    if current is not None:
-        assert len(current) == 64, projection
-        candidate["decision_basis"][
-            "cross_root_procedure_evidence_sha256"] = current
     return unwrap(await client.call_tool(
         "native_decision_admit", {
             "root_task_id": root_task_id, "proposal": candidate}))
@@ -196,22 +196,25 @@ async def run():
             proposal_properties = proposal_schema["properties"]
             assert {
                 "selected_intent", "alternative_intent", "decision_reason",
-                "alternative_reason", "expected_evidence",
-                "observation_sha256", "decision_basis",
+                "alternative_reason", "expected_evidence", "decision_basis",
             } <= set(proposal_properties), proposal_schema
             assert set(proposal_schema["required"]) >= {
                 "selected_intent", "alternative_intent", "decision_reason",
-                "alternative_reason", "expected_evidence",
-                "observation_sha256", "decision_basis",
+                "alternative_reason", "expected_evidence", "decision_basis",
             }, proposal_schema
+            assert "observation_sha256" not in proposal_properties, proposal_schema
+            assert proposal_properties["alternative_reason"].get("description")
+            assert "never be null" in proposal_properties[
+                "alternative_reason"]["description"].lower()
             assert proposal_schema.get("additionalProperties") is False, proposal_schema
             basis_schema = _resolve_schema(
                 proposal_properties["decision_basis"], decision_schema)
             basis_properties = basis_schema["properties"]
             assert {
-                "source_refs", "previous_result_task_id", "challenge",
-                "falsifier", "uncertainty",
+                "source_refs", "challenge", "falsifier", "uncertainty",
             } <= set(basis_properties), basis_schema
+            assert "previous_result_task_id" not in basis_properties, basis_schema
+            assert "cross_root_procedure_evidence_sha256" not in basis_properties, basis_schema
             refs_schema = _resolve_schema(
                 basis_properties["source_refs"], decision_schema)
             ref_item_schema = _resolve_schema(
@@ -483,15 +486,18 @@ async def run():
                 "decision_reason": "Read the original record evidence first.",
                 "alternative_reason": "Structural conformance does not reconcile raw supplier values.",
                 "expected_evidence": "Independent source recomputation and immutable discrepancy report.",
-                "observation_sha256": observed["observation_sha256"],
                 "decision_basis": {
                     "source_refs": refs,
-                    "previous_result_task_id": None,
                     "challenge": "A different join key may explain the apparent shortage.",
                     "falsifier": "Independent source recomputation contradicts the proposed discrepancy.",
                     "uncertainty": "A valid local report cannot prove upstream business resolution.",
                 },
             }
+            # Prime the process-local observation/procedure snapshot before
+            # testing source-pin rejection. The model-facing proposal carries
+            # neither mechanical digest nor previous-child identifiers.
+            await client.call_tool(
+                "native_procedure_evidence", {"root_task_id": root})
             bad = json.loads(json.dumps(proposal))
             bad["decision_basis"]["source_refs"][0]["sha256"] = "f" * 64
             rejected = await client.call_tool(
@@ -550,7 +556,6 @@ async def run():
             local_state = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": local_id}))
             local_proposal = json.loads(json.dumps(proposal))
-            local_proposal["observation_sha256"] = local_state["observation_sha256"]
             authorize_fixture(local_id, local_proposal["selected_intent"])
             local_queued = await admit_with_current_procedure_evidence(
                 client, local_id, local_proposal)
@@ -593,7 +598,6 @@ async def run():
                     "CSV comparison cannot satisfy the requested JSON field."),
                 "expected_evidence": (
                     "Actual stage-only JSON artifact and independent original readback."),
-                "observation_sha256": state["observation_sha256"],
                 "decision_basis": {
                     "source_refs": [
                         {"path": n, "sha256": hashlib.sha256(data).hexdigest()}
@@ -638,7 +642,6 @@ async def run():
             other_snapshot = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": other_id}))
             other_proposal = json.loads(json.dumps(proposal))
-            other_proposal["observation_sha256"] = other_snapshot["observation_sha256"]
             authorize_fixture(other_id, other_proposal["selected_intent"])
             other_queued = await admit_with_current_procedure_evidence(
                 client, other_id, other_proposal)
@@ -650,7 +653,6 @@ async def run():
             new_state = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": second_id}))
             second_proposal = json.loads(json.dumps(proposal))
-            second_proposal["observation_sha256"] = new_state["observation_sha256"]
             authorize_fixture(second_id, second_proposal["selected_intent"])
             second_queued = await admit_with_current_procedure_evidence(
                 client, second_id, second_proposal)
