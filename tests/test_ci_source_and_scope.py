@@ -238,7 +238,7 @@ class CISourceAndScopeTests(unittest.TestCase):
             "github.event.pull_request.head.repo.full_name == github.repository",
             job)
         self.assertIn("OLLAMA_NO_CLOUD: '1'", job)
-        self.assertIn("ollama pull qwen2.5:1.5b", job)
+        self.assertIn("ollama pull qwen2.5:3b", job)
         self.assertIn("'.[mcp,agents-sdk]'", job)
         self.assertIn("measure_compound_ab_c.py", job)
         self.assertIn("experimental_compound_ab_c", OPTIONAL)
