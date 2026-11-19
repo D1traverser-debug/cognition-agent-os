@@ -165,14 +165,23 @@ class NativeRealModelEvalContract(unittest.TestCase):
         self.assertEqual(report["status"],
                          "OFFLINE_OWNER_ORACLE_SCOPE_DIAGNOSTIC")
         self.assertEqual(report["total_probes"], 5)
-        self.assertEqual(report["oracle_available_probes"], 2)
-        self.assertEqual(report["ungradable_probes"], 3)
+        self.assertEqual(report["oracle_available_probes"], 3)
+        self.assertEqual(report["ungradable_probes"], 2)
         self.assertTrue(report["source_isolated"], report)
         self.assertFalse(report["real_model_capability_tested"])
         self.assertFalse(report["whole_product_ready"])
-        self.assertTrue(all(
-            x["evidence_status"] == "OWNER_ORACLE_NOT_IMPLEMENTED"
-            for x in report["cases"][2:]), report)
+        self.assertEqual(
+            report["cases"][3]["evidence_status"],
+            "SYNTHETIC_COMPOUND_ORACLE_CALIBRATED", report)
+        self.assertTrue(
+            report["cases"][3]["synthetic_local_postconditions_met"], report)
+        self.assertFalse(report["cases"][3]["whole_local_owner_verified"])
+        self.assertEqual(
+            report["cases"][2]["evidence_status"],
+            "OWNER_ORACLE_NOT_IMPLEMENTED", report)
+        self.assertEqual(
+            report["cases"][4]["evidence_status"],
+            "OWNER_ORACLE_NOT_IMPLEMENTED", report)
         self.assertTrue(all(
             x["whole_local_owner_verified"] is False
             for x in report["cases"][2:]), report)
@@ -201,7 +210,9 @@ class NativeRealModelEvalContract(unittest.TestCase):
             self.assertTrue(payload.endswith(b"\n"))
             report = json.loads(payload.decode("utf-8"))
             self.assertEqual(report["total_probes"], 5)
-            self.assertEqual(report["ungradable_probes"], 3)
+            self.assertEqual(report["oracle_available_probes"], 3)
+            self.assertEqual(report["ungradable_probes"], 2)
+            self.assertTrue(report["synthetic_compound_oracle_passed"])
             self.assertTrue(all(c["source_preserved"]
                                 for c in report["cases"]))
 
