@@ -20,6 +20,9 @@ class NativeMcpDecisionRejectionFeedbackTests(unittest.TestCase):
             "decision_basis",
             "decision_review_version",
             "decision_reviews",
+            "LIST of objects",
+            "exactly path and sha256",
+            "omit decision_review_version and decision_reviews",
             "Do not add authority",
             "re-read",
         ):
