@@ -493,6 +493,13 @@ async def run():
                     "uncertainty": "A valid local report cannot prove upstream business resolution.",
                 },
             }
+            # A new stdio process has no in-memory read binding, even though
+            # the SQLite root and grant survive the restart.
+            async with Client(server(allow_tick=False)) as cold_client:
+                cold_unprepared = await cold_client.call_tool(
+                    "native_decision_admit", {
+                        "root_task_id": root, "proposal": proposal})
+                assert cold_unprepared.is_error, cold_unprepared
             # A process-local observation alone is insufficient: the agent
             # must also read the current procedure projection before admission.
             unprepared = await client.call_tool(
@@ -605,6 +612,7 @@ async def run():
                     "audit equal to confirmed.")}))["root_task_id"]
             state = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": json_root}))
+            assert state["status"] == "NATIVE_NEXT_DECISION_ADMISSIBLE", state
             json_proposal = {
                 "selected_intent": {
                     "kind": "goal_intent", "objective": "ensure_structure",
