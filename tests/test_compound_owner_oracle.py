@@ -258,6 +258,16 @@ class CompoundOwnerOracleTests(unittest.TestCase):
         self.assertEqual(result["status"], "NOT_ACCEPTED")
         self.assertEqual(result["reason"], "CHILD_LINEAGE_MISMATCH")
 
+    def test_root_id_cannot_be_reused_as_a_child_id(self):
+        lineage = json.loads(json.dumps(self.expected_lineage))
+        root_id = lineage["children"]["csv_report"]["task_id"]
+        lineage["root_task_id"] = root_id
+        lineage["children"]["csv_report"]["parent_task"] = root_id
+        lineage["children"]["json_draft"]["parent_task"] = root_id
+        result = self.evaluate(expected_lineage=lineage)
+        self.assertEqual(result["status"], "NOT_ACCEPTED")
+        self.assertEqual(result["reason"], "CHILD_TASK_ID_COLLISION")
+
     def test_children_must_share_the_same_current_grant_revision(self):
         lineage = json.loads(json.dumps(self.expected_lineage))
         lineage["children"]["json_draft"]["grant_rev"] = 2
