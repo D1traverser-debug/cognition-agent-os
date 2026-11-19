@@ -159,7 +159,7 @@ def _validate_lineage(lineage: object, contract: dict) -> dict[str, Any]:
                 or not _SHA256.fullmatch(child["artifact_sha256"])):
             raise ValueError("CHILD_LINEAGE_MISMATCH")
         ids.append(child["task_id"])
-    if len(set(ids)) != 2:
+    if len(set(ids)) != 2 or root_id in ids:
         raise ValueError("CHILD_TASK_ID_COLLISION")
     return lineage
 
