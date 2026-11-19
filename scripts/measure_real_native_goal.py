@@ -716,6 +716,9 @@ def measure_offline_owner_oracle_scope() -> dict:
                 observation.get("synthetic_local_postconditions_met", False),
             "compound_oracle_reason": observation.get("compound_oracle_reason"),
             "compound_subresults": observation.get("compound_subresults"),
+            "scripted_planner_responses":
+                observation.get("scripted_planner_responses", []),
+            "lineage_snapshot": observation.get("lineage_snapshot"),
             "source_preserved": observation["source_preserved"],
             "selected_objectives": observation["selected_objectives"],
             "baseline_error_class": observation.get("error_class"),
@@ -723,7 +726,10 @@ def measure_offline_owner_oracle_scope() -> dict:
         })
     return {
         "status": "OFFLINE_OWNER_ORACLE_SCOPE_DIAGNOSTIC",
-        "no_model_or_paid_provider_used": True,
+        "no_real_model_or_paid_provider_used": True,
+        "scripted_model_transport_used": any(
+            row["scripted_planner_responses"] for row in outcomes),
+        "real_model_calls": 0,
         "source_isolated": all(row["source_preserved"] for row in outcomes),
         "total_probes": len(outcomes),
         "oracle_available_probes": sum(
