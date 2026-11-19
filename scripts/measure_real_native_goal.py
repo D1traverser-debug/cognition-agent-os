@@ -13,17 +13,24 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import time
 from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluation"))
+from compound_owner_oracle import evaluate_compound_owner_goal
 
 from cognition_agent_os import local_model
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, create_task, initialize
 from cognition_agent_os.native_decision import (
-    inspect_native_goal, register_native_goal)
+    admit_native_decision, capability_catalog, inspect_native_goal,
+    register_native_goal)
 from cognition_agent_os.native_local_planner import advance_native_local_once
 from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
+from cognition_agent_os.procedure_evidence import (
+    inspect_cross_root_procedure_trials, validated_procedure_snapshot_digest)
 
 MODEL = os.environ.get("COGNITION_EVAL_MODEL", "qwen2.5-coder:0.5b")
 STRUCTURED = os.environ.get("COGNITION_EVAL_STRUCTURED", "0") == "1"
@@ -117,6 +124,193 @@ def _preserved(fixture: Path, before: dict) -> bool:
         and hashlib.sha256((fixture / name).read_bytes()).hexdigest() == digest
         for name, digest in before.items()
     )
+
+
+def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
+    """Exercise the compound oracle against real Host/Worker/SQLite artifacts.
+
+    The two typed decisions are deterministic test controls, not model
+    cognition. The owner contract is constructed after execution and is never
+    supplied to a planner. All files and candidate effects stay in a temp root.
+    """
+    db, workspace, fixture, before = _prepare(home, case["files"])
+    source_names = ("baseline.csv", "actual.csv", "settings.json")
+    root = register_native_goal(db, case["goal"])
+    compare_intent = {
+        "kind": "goal_intent",
+        "objective": "compare_records",
+        "resources": [
+            {"role": "reference", "path": "baseline.csv"},
+            {"role": "observed", "path": "actual.csv"},
+        ],
+    }
+    ensure_intent = {
+        "kind": "goal_intent",
+        "objective": "ensure_structure",
+        "resources": [{"role": "input", "path": "settings.json"}],
+        "requirements": [{"field": "owner", "equals": "ops"}],
+    }
+
+    def admit_and_execute(selected: dict, alternative: dict) -> None:
+        state = inspect_native_goal(db, workspace, fixture, root)
+        if state.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+            raise RuntimeError("COMPOUND_CALIBRATION_DECISION_NOT_ADMISSIBLE")
+        catalog = capability_catalog(fixture, allow_public_discovery=False)
+        eligible = tuple(sorted({
+            method["objective"] for method in catalog["methods"]
+            if method["currently_eligible"]
+        }))
+        prior = state["decisions"]
+        trials = inspect_cross_root_procedure_trials(
+            db, workspace, fixture, root, eligible_objectives=eligible)
+        cross_root_digest = validated_procedure_snapshot_digest(trials)
+        basis = {
+            "decision_layer": "method_selection",
+            "decision_review_version": 1,
+            "decision_reviews": [
+                {
+                    "event_id": row["event_id"],
+                    "disposition": "RELEVANT",
+                    "rationale": (
+                        "The prior local action is required by this compound "
+                        "owner goal and must remain in the same lineage."),
+                    "falsifier": (
+                        "A missing or unrelated prior artifact would invalidate "
+                        "this relationship."),
+                }
+                for row in prior
+            ],
+            "source_refs": [
+                {
+                    "path": name,
+                    "sha256": hashlib.sha256((fixture / name).read_bytes()).hexdigest(),
+                }
+                for name in source_names
+            ],
+            "previous_result_task_id": prior[-1]["task_id"] if prior else None,
+            "challenge": (
+                "A single registered capability may satisfy only one clause "
+                "and omit the other required effect."),
+            "falsifier": (
+                "The independent compound oracle rejects either missing child, "
+                "source drift, wrong report or altered JSON candidate."),
+            "uncertainty": (
+                "Local artifacts do not prove external business acceptance, "
+                "delivery or semantic correctness beyond these postconditions."),
+        }
+        if cross_root_digest is not None:
+            basis["cross_root_procedure_evidence_sha256"] = cross_root_digest
+        proposal = {
+            "selected_intent": selected,
+            "alternative_intent": alternative,
+            "decision_reason": (
+                "This bounded registered method is one required action in the "
+                "owner's compound local goal."),
+            "alternative_reason": (
+                "The competing registered method is also required, but must be "
+                "admitted as a separate child rather than substituted."),
+            "expected_evidence": (
+                "A source-pinned direct child and its immutable artifact under "
+                "the same original goal and grant revisions."),
+            "observation_sha256": state["observation_sha256"],
+            "decision_basis": basis,
+        }
+        admit_native_decision(db, workspace, fixture, root, proposal)
+        tick = run_tick(
+            db, workspace, fixture, max_jobs=1, auto_stage_goals=True)
+        if not tick.get("tasks"):
+            raise RuntimeError("COMPOUND_CALIBRATION_WORKER_DID_NOT_RUN")
+
+    admit_and_execute(compare_intent, ensure_intent)
+    admit_and_execute(ensure_intent, compare_intent)
+
+    with closing(connect(db)) as con:
+        root_row = con.execute(
+            "SELECT * FROM tasks WHERE task_id=?", (root,)).fetchone()
+        child_rows = {
+            row["task_id"]: row
+            for row in con.execute(
+                "SELECT * FROM tasks WHERE parent_task=?", (root,))
+        }
+    if root_row is None or len(child_rows) != 2:
+        raise RuntimeError("COMPOUND_CALIBRATION_LINEAGE_INCOMPLETE")
+    root_spec = json.loads(root_row["source_spec"])
+    by_kind = {
+        json.loads(row["source_spec"])["kind"]: row
+        for row in child_rows.values()
+    }
+    csv_row = by_kind.get("record_reconciliation")
+    json_row = by_kind.get("goal_case")
+    if csv_row is None or json_row is None:
+        raise RuntimeError("COMPOUND_CALIBRATION_CHILD_KIND_MISMATCH")
+
+    def child_lineage(row):
+        return {
+            "task_id": row["task_id"],
+            "parent_task": row["parent_task"],
+            "goal_rev": row["goal_rev"],
+            "grant_rev": row["grant_rev"],
+            "state": row["state"],
+            "artifact_sha256": row["artifact_hash"],
+        }
+
+    csv_id = csv_row["task_id"]
+    json_id = json_row["task_id"]
+    owner_goal_sha256 = hashlib.sha256(
+        root_spec["goal"].encode("utf-8")).hexdigest()
+    contract = {
+        "schema_version": 1,
+        "goal_id": "compound-owner-scope",
+        "kind": "csv_reconciliation_plus_json_draft",
+        "owner_goal_sha256": owner_goal_sha256,
+        "source_paths": {
+            "reference": "baseline.csv",
+            "observed": "actual.csv",
+            "draft": "settings.json",
+        },
+        "source_sha256": {name: before[name] for name in source_names},
+        "record_key": "item",
+        "draft_fields": {"owner": "ops"},
+        "allowed_effect": "LOCAL_CANDIDATES_ONLY",
+    }
+    expected_lineage = {
+        "root_task_id": root_row["task_id"],
+        "root_parent_task": root_row["parent_task"],
+        "root_kind": root_spec["kind"],
+        "owner_goal_sha256": owner_goal_sha256,
+        "goal_rev": root_row["goal_rev"],
+        "grant_rev": root_row["grant_rev"],
+        "children": {
+            "csv_report": child_lineage(csv_row),
+            "json_draft": child_lineage(json_row),
+        },
+    }
+    csv_path = workspace / "artifacts" / (csv_id + ".json")
+    json_path = workspace / "artifacts" / (json_id + ".json")
+    candidate_path = workspace / "sandbox" / (json_id + ".candidate")
+    result = evaluate_compound_owner_goal(
+        contract=contract,
+        current_sources={
+            name: (fixture / name).read_bytes() for name in source_names
+        },
+        csv_report=csv_path.read_bytes() if csv_path.is_file() else b"",
+        json_artifact=json_path.read_bytes() if json_path.is_file() else b"",
+        json_candidate=(
+            candidate_path.read_bytes() if candidate_path.is_file() else b""),
+        expected_lineage=expected_lineage,
+    )
+    return {
+        "independent_owner_result": result["status"],
+        "synthetic_compound_result": result["status"],
+        "synthetic_local_postconditions_met":
+            result["synthetic_local_postconditions_met"],
+        "whole_local_owner_verified": False,
+        "source_preserved": _preserved(fixture, before),
+        "selected_objectives": ["compare_records", "ensure_structure"],
+        "compound_oracle_reason": result.get("reason"),
+        "compound_subresults": result.get("subresults"),
+        "business_outcome_verified": False,
+    }
 
 
 def _native_trial(case: dict, home: Path) -> dict:
@@ -437,7 +631,7 @@ ORACLE_SCOPE_PROBES = [
             "settings.json": '{"timeout":12}\\n',
         },
         "target": None, "must_complete_local_owner": True,
-        "independent_local_oracle_available": False,
+        "independent_local_oracle_available": True,
     },
     {
         "id": "causal_investigation_needs_a_domain_owner_verifier",
@@ -466,7 +660,17 @@ def measure_offline_owner_oracle_scope() -> dict:
     outcomes = []
     for probe in ORACLE_SCOPE_PROBES:
         with tempfile.TemporaryDirectory(prefix="native-oracle-scope-") as tmp:
-            observation = _baseline_trial(probe, Path(tmp))
+            if probe["id"] == "compound_owner_goal_two_independent_effects":
+                observation = _compound_oracle_calibration_trial(probe, Path(tmp))
+            else:
+                observation = _baseline_trial(probe, Path(tmp))
+        compound_status = observation.get("synthetic_compound_result")
+        evidence_status = (
+            "SYNTHETIC_COMPOUND_ORACLE_CALIBRATED"
+            if compound_status == "SYNTHETIC_COMPOUND_OWNER_GOAL_MET"
+            else "INDEPENDENT_LOCAL_OWNER_OBSERVED"
+            if probe["independent_local_oracle_available"]
+            else "OWNER_ORACLE_NOT_IMPLEMENTED")
         outcomes.append({
             "case": probe["id"],
             "independent_local_oracle_available":
@@ -474,13 +678,14 @@ def measure_offline_owner_oracle_scope() -> dict:
             "actual_owner_result": observation["independent_owner_result"],
             "whole_local_owner_verified":
                 observation["whole_local_owner_verified"],
+            "synthetic_local_postconditions_met":
+                observation.get("synthetic_local_postconditions_met", False),
+            "compound_oracle_reason": observation.get("compound_oracle_reason"),
+            "compound_subresults": observation.get("compound_subresults"),
             "source_preserved": observation["source_preserved"],
             "selected_objectives": observation["selected_objectives"],
             "baseline_error_class": observation.get("error_class"),
-            "evidence_status": (
-                "INDEPENDENT_LOCAL_OWNER_OBSERVED"
-                if probe["independent_local_oracle_available"]
-                else "OWNER_ORACLE_NOT_IMPLEMENTED"),
+            "evidence_status": evidence_status,
         })
     return {
         "status": "OFFLINE_OWNER_ORACLE_SCOPE_DIAGNOSTIC",
@@ -491,6 +696,9 @@ def measure_offline_owner_oracle_scope() -> dict:
             row["independent_local_oracle_available"] for row in outcomes),
         "ungradable_probes": sum(
             not row["independent_local_oracle_available"]
+            for row in outcomes),
+        "synthetic_compound_oracle_passed": any(
+            row["evidence_status"] == "SYNTHETIC_COMPOUND_ORACLE_CALIBRATED"
             for row in outcomes),
         "cases": outcomes,
         "real_model_capability_tested": False,
