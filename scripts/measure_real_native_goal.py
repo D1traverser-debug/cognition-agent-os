@@ -25,12 +25,9 @@ from cognition_agent_os import local_model
 from cognition_agent_os.host import run_tick
 from cognition_agent_os.ledger import connect, create_task, initialize
 from cognition_agent_os.native_decision import (
-    admit_native_decision, capability_catalog, inspect_native_goal,
-    register_native_goal)
+    inspect_native_goal, register_native_goal)
 from cognition_agent_os.native_local_planner import advance_native_local_once
 from cognition_agent_os.owner_postcondition import inspect_owner_local_outcome
-from cognition_agent_os.procedure_evidence import (
-    inspect_cross_root_procedure_trials, validated_procedure_snapshot_digest)
 
 MODEL = os.environ.get("COGNITION_EVAL_MODEL", "qwen2.5-coder:0.5b")
 STRUCTURED = os.environ.get("COGNITION_EVAL_STRUCTURED", "0") == "1"
@@ -127,102 +124,115 @@ def _preserved(fixture: Path, before: dict) -> bool:
 
 
 def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
-    """Exercise the compound oracle against real Host/Worker/SQLite artifacts.
+    """Grade real Host/Worker/SQLite artifacts using a scripted planner response.
 
-    The two typed decisions are deterministic test controls, not model
-    cognition. The owner contract is constructed after execution and is never
-    supplied to a planner. All files and candidate effects stay in a temp root.
+    No real model inference is used. The fake transport only selects two typed
+    methods; native planning, admission, Host execution, artifacts, sandbox
+    staging, SQLite lineage and the independent oracle remain real.
     """
     db, workspace, fixture, before = _prepare(home, case["files"])
     source_names = ("baseline.csv", "actual.csv", "settings.json")
     root = register_native_goal(db, case["goal"])
-    compare_intent = {
-        "kind": "goal_intent",
-        "objective": "compare_records",
-        "resources": [
-            {"role": "reference", "path": "baseline.csv"},
-            {"role": "observed", "path": "actual.csv"},
-        ],
-    }
-    ensure_intent = {
-        "kind": "goal_intent",
-        "objective": "ensure_structure",
-        "resources": [{"role": "input", "path": "settings.json"}],
-        "requirements": [{"field": "owner", "equals": "ops"}],
-    }
+    model_calls = []
 
-    def admit_and_execute(selected: dict, alternative: dict) -> None:
-        state = inspect_native_goal(db, workspace, fixture, root)
-        if state.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
-            raise RuntimeError("COMPOUND_CALIBRATION_DECISION_NOT_ADMISSIBLE")
-        catalog = capability_catalog(fixture, allow_public_discovery=False)
-        eligible = tuple(sorted({
-            method["objective"] for method in catalog["methods"]
-            if method["currently_eligible"]
-        }))
-        prior = state["decisions"]
-        trials = inspect_cross_root_procedure_trials(
-            db, workspace, fixture, root, eligible_objectives=eligible)
-        cross_root_digest = validated_procedure_snapshot_digest(trials)
+    def compare_intent():
+        return {
+            "kind": "goal_intent",
+            "objective": "compare_records",
+            "resources": [
+                {"role": "reference", "path": "baseline.csv"},
+                {"role": "observed", "path": "actual.csv"},
+            ],
+        }
+
+    def ensure_intent():
+        return {
+            "kind": "goal_intent",
+            "objective": "ensure_structure",
+            "resources": [{"role": "input", "path": "settings.json"}],
+            "requirements": [{"field": "owner", "equals": "ops"}],
+        }
+
+    def scripted_transport(method, path, payload, timeout):
+        if method == "GET":
+            return {"models": [{"name": "installed:compound-oracle"}]}
+        if method != "POST" or payload.get("model") != "installed:compound-oracle":
+            raise AssertionError("UNEXPECTED_SCRIPTED_MODEL_REQUEST")
+        evidence = json.loads(payload["prompt"].split("\n\n")[-1])
+        prior = evidence["past_methods_and_independent_verdicts"]
+        model_calls.append(len(prior))
+        selected = compare_intent() if not prior else ensure_intent()
+        alternative = ensure_intent() if not prior else compare_intent()
         basis = {
             "decision_layer": "method_selection",
+            "source_refs": [
+                {"path": name, "sha256": digest}
+                for name, digest in sorted(
+                    evidence["source_digest_manifest"].items())
+            ],
+            "previous_result_task_id": prior[-1]["task_id"] if prior else None,
+            "challenge": (
+                "A selected local method may satisfy one clause while leaving "
+                "the other required owner effect incomplete."),
+            "falsifier": (
+                "The independent compound oracle rejects a missing child, "
+                "changed source, incorrect report or altered JSON draft."),
+            "uncertainty": (
+                "A local candidate does not establish external delivery or "
+                "business acceptance."),
             "decision_review_version": 1,
             "decision_reviews": [
                 {
                     "event_id": row["event_id"],
                     "disposition": "RELEVANT",
                     "rationale": (
-                        "The prior local action is required by this compound "
-                        "owner goal and must remain in the same lineage."),
+                        "The previous method is one required part of this "
+                        "same compound owner goal."),
                     "falsifier": (
-                        "A missing or unrelated prior artifact would invalidate "
+                        "A missing or unrelated prior artifact would refute "
                         "this relationship."),
                 }
                 for row in prior
             ],
-            "source_refs": [
-                {
-                    "path": name,
-                    "sha256": hashlib.sha256((fixture / name).read_bytes()).hexdigest(),
-                }
-                for name in source_names
-            ],
-            "previous_result_task_id": prior[-1]["task_id"] if prior else None,
-            "challenge": (
-                "A single registered capability may satisfy only one clause "
-                "and omit the other required effect."),
-            "falsifier": (
-                "The independent compound oracle rejects either missing child, "
-                "source drift, wrong report or altered JSON candidate."),
-            "uncertainty": (
-                "Local artifacts do not prove external business acceptance, "
-                "delivery or semantic correctness beyond these postconditions."),
         }
-        if cross_root_digest is not None:
-            basis["cross_root_procedure_evidence_sha256"] = cross_root_digest
-        proposal = {
+        if evidence.get("cross_root_procedure_evidence_sha256") is not None:
+            basis["cross_root_procedure_evidence_sha256"] = (
+                evidence["cross_root_procedure_evidence_sha256"])
+        answer = {
             "selected_intent": selected,
             "alternative_intent": alternative,
             "decision_reason": (
-                "This bounded registered method is one required action in the "
-                "owner's compound local goal."),
+                "Choose one bounded registered method for a required local "
+                "owner-goal clause."),
             "alternative_reason": (
-                "The competing registered method is also required, but must be "
-                "admitted as a separate child rather than substituted."),
+                "The alternative method addresses the other independent "
+                "clause and must not be treated as interchangeable."),
             "expected_evidence": (
-                "A source-pinned direct child and its immutable artifact under "
-                "the same original goal and grant revisions."),
-            "observation_sha256": state["observation_sha256"],
+                "A new source-pinned child artifact under the same original "
+                "goal and grant revisions."),
+            "observation_sha256": evidence["observation_sha256"],
             "decision_basis": basis,
         }
-        admit_native_decision(db, workspace, fixture, root, proposal)
-        tick = run_tick(
-            db, workspace, fixture, max_jobs=1, auto_stage_goals=True)
-        if not tick.get("tasks"):
-            raise RuntimeError("COMPOUND_CALIBRATION_WORKER_DID_NOT_RUN")
+        return {"done": True, "response": json.dumps(answer)}
 
-    admit_and_execute(compare_intent, ensure_intent)
-    admit_and_execute(ensure_intent, compare_intent)
+    with patch("cognition_agent_os.local_model._request",
+               side_effect=scripted_transport):
+        execution = run_tick(
+            db, workspace, fixture, max_jobs=2, planner_mode="ollama-local",
+            local_model="installed:compound-oracle",
+            auto_native_cognition=True)
+    if model_calls != [0, 1]:
+        raise RuntimeError("COMPOUND_CALIBRATION_EXPECTED_TWO_SCRIPTED_DECISIONS")
+    if [item["status"] for item in execution.get("tasks", [])] != [
+            "NEEDS_REVIEW", "NEEDS_REVIEW"]:
+        raise RuntimeError("COMPOUND_CALIBRATION_WORKER_STATES_UNEXPECTED")
+
+    with patch("cognition_agent_os.local_model._request",
+               side_effect=AssertionError("sandbox staging must not infer")):
+        staged = run_tick(
+            db, workspace, fixture, max_jobs=1, auto_stage_goals=True)
+    if len(staged.get("sandbox_reviews", [])) != 1:
+        raise RuntimeError("COMPOUND_CALIBRATION_JSON_DRAFT_NOT_STAGED")
 
     with closing(connect(db)) as con:
         root_row = con.execute(
@@ -310,6 +320,8 @@ def _compound_oracle_calibration_trial(case: dict, home: Path) -> dict:
         "selected_objectives": ["compare_records", "ensure_structure"],
         "compound_oracle_reason": result.get("reason"),
         "compound_subresults": result.get("subresults"),
+        "scripted_planner_responses": model_calls,
+        "sandbox_reviews": staged.get("sandbox_reviews", []),
         "lineage_snapshot": {
             "root": {
                 "task_id": root_row["task_id"],
