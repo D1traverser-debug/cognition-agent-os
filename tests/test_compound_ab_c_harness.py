@@ -17,14 +17,16 @@ class CompoundAbcHarnessTests(unittest.TestCase):
         self.assertEqual(set(harness.SDK_TOOL_ALLOWLIST), {
             "native_goal_inspect",
             "native_procedure_evidence",
-            "native_owner_outcome",
             "native_capabilities",
             "native_source_read",
             "native_decision_admit",
-            "native_local_tick",
         })
+        self.assertEqual(harness.HARNESS_EXECUTION_TOOL, "native_local_tick")
+        self.assertNotIn(harness.HARNESS_EXECUTION_TOOL, harness.SDK_TOOL_ALLOWLIST)
         for forbidden in (
             "native_goal_create",
+            "native_local_tick",
+            "native_owner_outcome",
             "native_local_model_plan",
             "native_memory_candidate_record",
             "native_public_primary_source_read",
