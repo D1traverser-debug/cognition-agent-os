@@ -14,7 +14,8 @@ import json
 import hashlib
 from pathlib import Path
 import sqlite3
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
+from typing_extensions import TypedDict
 
 
 # Explicit nested schemas are published to MCP clients. A generic dict gives
