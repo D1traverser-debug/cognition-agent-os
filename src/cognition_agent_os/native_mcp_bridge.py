@@ -111,7 +111,6 @@ class NativeHypothesisReview(TypedDict):
 class _NativeDecisionBasisRequired(TypedDict):
     __pydantic_config__ = {"extra": "forbid"}
     source_refs: Annotated[list[NativeSourceRef], _schema_field("A list of objects, each containing exactly path and sha256 for the actual sources used by this decision.")]
-    previous_result_task_id: Annotated[str | None, _schema_field("Exact previous executed child task ID; null only when this is the first decision.")]
     challenge: Annotated[str, _schema_field("A concrete opposing hypothesis, 12-500 characters.")]
     falsifier: Annotated[str, _schema_field("Specific independent evidence that would reverse this choice, 12-500 characters.")]
     uncertainty: Annotated[str, _schema_field("What the available evidence cannot establish, 12-500 characters.")]
@@ -126,7 +125,6 @@ class NativeDecisionBasis(_NativeDecisionBasisRequired, total=False):
     ]
     decision_review_version: Literal[1]
     decision_reviews: list[NativeDecisionReview]
-    cross_root_procedure_evidence_sha256: str | None
 
 
 class _NativeDecisionProposalRequired(TypedDict):
@@ -136,8 +134,7 @@ class _NativeDecisionProposalRequired(TypedDict):
     decision_reason: Annotated[str, _schema_field("Non-empty explanation for selecting this method; 8-512 characters.")]
     alternative_reason: Annotated[str, _schema_field("Always a non-empty explanation, 8-512 characters. Even when alternative_intent is null, explain why no other eligible method applies; this field must never be null.")]
     expected_evidence: Annotated[str, _schema_field("Concrete evidence expected from the proposed local step; 8-512 characters.")]
-    observation_sha256: Annotated[str, _schema_field("Exact 64-character lowercase SHA-256 copied from the latest native_goal_inspect observation_sha256. Required and never null; do not invent or abbreviate it.")]
-    decision_basis: Annotated[NativeDecisionBasis, _schema_field("Provenance, prior-result linkage, challenge, falsifier and uncertainty for this decision.")]
+    decision_basis: Annotated[NativeDecisionBasis, _schema_field("Provenance, challenge, falsifier and uncertainty for this decision. The server binds observation and prior-task CAS values.")]
 
 
 class NativeDecisionProposal(_NativeDecisionProposalRequired, total=False):
@@ -179,6 +176,9 @@ _TOOL_REJECTIONS = {
     "UNSUPPORTED_UNGROUNDED_DECISION": "The proposal was rejected by the native admission schema. Do not tick or retry unchanged. Read the native_decision_admit input schema. Use exactly these top-level keys: selected_intent, alternative_intent, decision_reason, alternative_reason, expected_evidence, observation_sha256, decision_basis. decision_basis must contain source_refs, previous_result_task_id, challenge, falsifier and uncertainty; source_refs must be a LIST of objects, each with exactly path and sha256. Optional fields are decision_layer and cross_root_procedure_evidence_sha256. For a first decision with no prior decisions, omit decision_review_version and decision_reviews. When prior decisions exist, include both inside decision_basis and review every prior event exactly once. Do not add authority or success claims. If any source digest or observation is stale, stop and re-read.",
     "MISSING_DECISION_COMPARISON": "decision_reason, alternative_reason and expected_evidence must each be non-empty strings of 8-512 characters. alternative_reason is still required when alternative_intent is null; explain why no other eligible method applies. Do not send null for this field.",
     "INVALID_OBSERVATION_FINGERPRINT": "observation_sha256 must be the exact 64-character lowercase SHA-256 copied from the latest native_goal_inspect result. It is required and must never be null, blank, abbreviated or invented. Re-read native_goal_inspect if the exact digest is unavailable.",
+    "NATIVE_DECISION_REQUIRES_FRESH_INSPECTION": "Read native_goal_inspect and native_procedure_evidence for this exact root in the current MCP process, then reconsider the decision. A restarted process has no cached snapshot.",
+    "NATIVE_PROCEDURE_EVIDENCE_NOT_READ": "Read native_procedure_evidence for this exact root before submitting a decision. The bridge binds its exact digest; do not add a digest field to the proposal.",
+    "NATIVE_STALE_OBSERVATION": "The source/goal/decision snapshot changed since it was inspected. Re-read native_goal_inspect, native_capabilities, native_procedure_evidence and the required source bytes; reconsider rather than resubmitting the old proposal.",
 }
 
 
@@ -243,6 +243,31 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     if not allow_goal_writes and (allow_host_tick or allow_local_model_plan):
         raise ValueError("READ_ONLY_MCP_CANNOT_ENABLE_WORKER_OR_MODEL_WRITES")
     mcp = MCPServer("cognition-agent-os-local")
+    # Ephemeral read-before-admit bindings belong to this one MCP process.
+    # They are never authority: the original SQLite CAS/grant is rechecked
+    # inside admit_native_decision. A restart intentionally requires fresh reads.
+    decision_snapshots: dict[str, dict[str, Any]] = {}
+
+    def _snapshot_from_inspection(root_task_id: str, observed: dict) -> None:
+        digest = observed.get("observation_sha256")
+        if (observed.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE"
+            or not isinstance(digest, str) or len(digest) != 64
+            or any(ch not in "0123456789abcdef" for ch in digest)):
+            decision_snapshots.pop(root_task_id, None)
+            return
+        previous = (
+            observed["decisions"][-1]["task_id"]
+            if observed.get("decisions") else None)
+        old = decision_snapshots.get(root_task_id)
+        if old is not None and old.get("observation_sha256") == digest:
+            old["previous_result_task_id"] = previous
+        else:
+            decision_snapshots[root_task_id] = {
+                "observation_sha256": digest,
+                "previous_result_task_id": previous,
+                "procedure_evidence_read": False,
+                "cross_root_procedure_evidence_sha256": None,
+            }
 
     def exposed_tool(**metadata):
         def register(fn):
@@ -326,14 +351,18 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         """Read verified goal/CAS state and a bounded research history page.
 
         Follow open_research_next_before_event_id to recover older source
-        records. On NATIVE_SOURCE_CHANGED, research_reentry_sha256 is a
-        separate, non-authorizing CAS for hypothesis/research records ONLY;
-        observation_sha256 is absent and native_decision_admit remains blocked.
+        records. The bridge retains the exact observation snapshot in this
+        process; native_decision_admit binds it server-side after a fresh
+        native_procedure_evidence read. Call this again after source inspection.
+        On NATIVE_SOURCE_CHANGED, research_reentry_sha256 is a separate,
+        non-authorizing CAS for hypothesis/research records ONLY.
         Pagination never grants execution. None means the newest page.
         """
-        return inspect_native_goal(
+        observed = inspect_native_goal(
             db_path, workspace, fixtures, root_task_id,
             research_before_event_id=research_before_event_id)
+        _snapshot_from_inspection(root_task_id, observed)
+        return observed
 
     @read_tool()
     def native_procedure_evidence(root_task_id: str) -> dict:
@@ -351,10 +380,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         observed = inspect_native_goal(
             db_path, workspace, fixtures, root_task_id)
         if observed.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE":
+            decision_snapshots.pop(root_task_id, None)
             return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
                     "reason": observed.get("status"),
                     "root_task_id": root_task_id,
                     "owner_outcome_verified": False}
+        _snapshot_from_inspection(root_task_id, observed)
         with closing(_read_only_ledger(db_path)) as db:
             row = db.execute(
                 "SELECT source_spec FROM tasks WHERE task_id=? "
@@ -370,6 +401,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         eligible = tuple(sorted({method["objective"] for method in
             catalog["methods"] if method["currently_eligible"]}))
         if not eligible:
+            decision_snapshots.pop(root_task_id, None)
             return {"status": "NO_REGISTERED_PROCEDURE_METHOD",
                     "root_task_id": root_task_id,
                     "owner_outcome_verified": False}
@@ -379,9 +411,21 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         try:
             digest = validated_procedure_snapshot_digest(projection)
         except ValueError:
+            decision_snapshots.pop(root_task_id, None)
             return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
                     "root_task_id": root_task_id,
                     "owner_outcome_verified": False}
+        snapshot = decision_snapshots.get(root_task_id)
+        if (snapshot is None
+            or snapshot.get("observation_sha256") != observed.get("observation_sha256")):
+            _snapshot_from_inspection(root_task_id, observed)
+            snapshot = decision_snapshots.get(root_task_id)
+        if snapshot is None:
+            return {"status": "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+                    "root_task_id": root_task_id,
+                    "owner_outcome_verified": False}
+        snapshot["procedure_evidence_read"] = True
+        snapshot["cross_root_procedure_evidence_sha256"] = digest
         return {**projection,
                 "root_task_id": root_task_id,
                 "cross_root_procedure_evidence_sha256": digest,
@@ -648,17 +692,49 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
 
         Args:
             root_task_id: Exact existing 32-character root ID from the current task context.
-            proposal: Exact typed decision proposal. Source references are a list
+            proposal: Semantic decision proposal. Source references are a list
                 of objects with path and sha256; decision_reviews belong inside
-                decision_basis. The native admission gate remains authoritative.
+                decision_basis. Do not include observation_sha256,
+                previous_result_task_id or cross-root digest: the bridge binds
+                those exact CAS/lineage values from this process's latest reads.
+                alternative_reason remains a required non-empty string even
+                when alternative_intent is null.
 
         The client researches and proposes options. This tool independently
         checks provenance and queues ONE registered local child, never raw code,
         unrestricted shell commands, external effects or self-declared success.
         """
         require_managed_session(db_path, root_task_id)
+        snapshot = decision_snapshots.get(root_task_id)
+        if snapshot is None:
+            raise ValueError("NATIVE_DECISION_REQUIRES_FRESH_INSPECTION")
+        if snapshot.get("procedure_evidence_read") is not True:
+            raise ValueError("NATIVE_PROCEDURE_EVIDENCE_NOT_READ")
+        current = inspect_native_goal(
+            db_path, workspace, fixtures, root_task_id)
+        if (current.get("status") != "NATIVE_NEXT_DECISION_ADMISSIBLE"
+            or current.get("observation_sha256") != snapshot.get("observation_sha256")):
+            decision_snapshots.pop(root_task_id, None)
+            raise ValueError("NATIVE_STALE_OBSERVATION")
+        candidate = dict(proposal)
+        if "observation_sha256" in candidate:
+            raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+        basis = candidate.get("decision_basis")
+        if not isinstance(basis, dict):
+            raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+        basis = dict(basis)
+        if ("previous_result_task_id" in basis
+            or "cross_root_procedure_evidence_sha256" in basis):
+            raise ValueError("UNSUPPORTED_UNGROUNDED_DECISION")
+        basis["previous_result_task_id"] = snapshot["previous_result_task_id"]
+        cross_root_digest = snapshot.get(
+            "cross_root_procedure_evidence_sha256")
+        if cross_root_digest is not None:
+            basis["cross_root_procedure_evidence_sha256"] = cross_root_digest
+        candidate["decision_basis"] = basis
+        candidate["observation_sha256"] = snapshot["observation_sha256"]
         return admit_native_decision(
-            db_path, workspace, fixtures, root_task_id, proposal)
+            db_path, workspace, fixtures, root_task_id, candidate)
 
     if allow_local_model_plan:
         @exposed_tool()
