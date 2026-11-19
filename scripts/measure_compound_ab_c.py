@@ -87,6 +87,39 @@ SDK_TOOL_ALLOWLIST = (
 )
 HARNESS_EXECUTION_TOOL = "native_local_tick"
 
+# Mechanical CAS and lineage values are harness-owned, not model-authored prose.
+# The MCP bridge binds these from the same process's latest inspected snapshot.
+SDK_DECISION_PROTOCOL = """native_decision_admit requires one object named proposal with EXACT top-level
+keys: selected_intent, alternative_intent, decision_reason, alternative_reason,
+expected_evidence, decision_basis.
+
+decision_basis MUST contain exactly these required fields:
+source_refs, challenge, falsifier, uncertainty.
+source_refs MUST be a LIST of objects, each with exactly path and sha256, copied
+from actual native_source_read results. Do not use a path-to-hash dictionary.
+Do not invent or abbreviate source digests.
+
+The MCP bridge, not the model, binds observation_sha256, previous_result_task_id
+and cross_root_procedure_evidence_sha256 from the same process's latest
+native_goal_inspect and native_procedure_evidence reads. DO NOT include any of
+those three fields in the proposal or decision_basis. A fresh MCP process has
+no cached snapshot; re-read before deciding.
+
+The ONLY JSON null permitted in a decision proposal is alternative_intent.
+alternative_reason MUST always be a meaningful non-empty string of at least
+8 characters, EVEN WHEN alternative_intent is null; explain why no other
+eligible registered method applies. Never send null for alternative_reason,
+decision_reason, expected_evidence, challenge, falsifier or uncertainty.
+
+For the first decision, omit decision_review_version and decision_reviews
+because no prior decision exists. For later decisions, include
+decision_review_version=1 and decision_reviews inside decision_basis, with
+each prior event reviewed exactly once in event_id order.
+Do not add fields. Do not retry an unchanged rejected proposal. Before every
+decision, re-read the goal and procedure evidence after reading its required
+source bytes. The native admission gate remains authoritative.
+"""
+
 
 def _safe_argument_shape(value, depth: int = 0):
     """Capture tool argument structure without storing IDs, hashes or source values."""
@@ -109,6 +142,19 @@ def _safe_argument_shape(value, depth: int = 0):
                 _safe_argument_shape(value[0], depth + 1) if value else None),
         }
     if isinstance(value, str):
+        # SDK callbacks expose tool arguments as serialized JSON text. Decode
+        # only its structure so null/type/field-shape failures are observable
+        # without retaining source values, hashes, identifiers or rationale.
+        if len(value) <= 65536:
+            try:
+                parsed = json.loads(value)
+            except (ValueError, TypeError):
+                parsed = None
+            if isinstance(parsed, (dict, list)):
+                return {
+                    "type": "json",
+                    "shape": _safe_argument_shape(parsed, depth + 1),
+                }
         return {"type": "string", "length": len(value)}
     if value is None:
         return {"type": "null"}
@@ -633,25 +679,7 @@ NOT call native_local_tick. That tool is not available to you. After a decision
 is admitted, the harness checks SQLite and executes the exact pending child
 through the existing native MCP boundary. It then supplies the next clause.
 
-native_decision_admit requires one object named proposal with EXACT top-level
-keys:
-selected_intent, alternative_intent, decision_reason, alternative_reason,
-expected_evidence, observation_sha256, decision_basis.
-
-decision_basis MUST contain:
-source_refs, previous_result_task_id, challenge, falsifier, uncertainty.
-source_refs MUST be a LIST like
-[{{"path":"baseline.csv","sha256":"<exact 64-hex digest>"}}].
-Do not use a path-to-hash dictionary. Do not invent or abbreviate digests.
-For the first decision, previous_result_task_id is null and OMIT
-decision_review_version and decision_reviews because no prior decision exists.
-For later decisions, include decision_review_version=1 and decision_reviews
-inside decision_basis, with each prior event reviewed exactly once.
-If native_procedure_evidence returns a non-null
-cross_root_procedure_evidence_sha256, copy that exact digest into
-decision_basis. If it is null, omit the field.
-Do not add fields. Do not retry an unchanged rejected proposal. Re-read current
-evidence before any corrected attempt. The native admission gate is final.
+{SDK_DECISION_PROTOCOL}
 
 A valid first decision for this owner goal uses selected_intent:
 {{"kind":"goal_intent","objective":"compare_records","resources":[
@@ -669,12 +697,14 @@ only the independent harness can accept the exact local artifact and lineage.
             + "\n\nCurrent root_task_id:\n" + root_id
             + "\n\nCURRENT ACTION: admit only the FIRST clause. "
             "Call native_goal_inspect, native_capabilities and "
-            "native_procedure_evidence for this exact root. Then read only "
-            "baseline.csv and actual.csv with native_source_read. Confirm "
-            "compare_records is currently eligible. Submit one native_decision_admit "
-            "proposal with the exact source digests, current observation digest, "
-            "source_refs as a list of path/sha256 objects, alternative_intent=null, "
-            "and previous_result_task_id=null. Do not call a Worker."
+            "native_procedure_evidence for this exact root. Read only baseline.csv "
+            "and actual.csv with native_source_read. Then call native_goal_inspect "
+            "and native_procedure_evidence again to refresh the process-local "
+            "snapshot. Confirm compare_records is eligible. Submit one proposal "
+            "with source_refs as a list of exact path/sha256 objects, "
+            "alternative_intent=null, and a non-empty alternative_reason. Do not "
+            "include observation_sha256, previous_result_task_id or the "
+            "cross-root digest; the bridge binds them. Do not call a Worker."
         )
         settings = ModelSettings(
             temperature=0,
