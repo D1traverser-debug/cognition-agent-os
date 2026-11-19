@@ -522,7 +522,7 @@ async def run():
             # snapshot; restore bytes and re-read before the next proposal.
             saved_handoff = (sources / "handoff.json").read_bytes()
             (sources / "handoff.json").write_text(
-                '{"retain":"changed"}\\n', encoding="utf-8")
+                '{"retain":"changed"}\n', encoding="utf-8")
             stale = await client.call_tool(
                 "native_decision_admit", {"root_task_id": root, "proposal": proposal})
             assert stale.is_error, stale
