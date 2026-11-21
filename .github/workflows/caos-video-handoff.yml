@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: D1traverser-debug/video-growth-agent
-          ref: ced6feeab8d76d5c9d9b655348764904ec97de11
+          ref: 2e482dcdfbf3e36375eeea587666d4e5997d8c32
           path: video
           persist-credentials: false
       - name: Set up Python
