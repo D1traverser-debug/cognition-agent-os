@@ -1,9 +1,8 @@
-"""Independent negative-contract tests for the CAOS -> Video handoff compiler."""
+"""Stdlib regression for CAOS -> Video handoff compilation, without extra test dependencies."""
 from copy import deepcopy
 import hashlib
 import json
-
-import pytest
+import unittest
 
 from cognition_agent_os.child_handoff import ChildHandoffError, compile_video_handoff
 
@@ -45,47 +44,50 @@ def draft():
     }
 
 
-def test_roundtrip_shape_matches_video_contract():
-    r = compile_video_handoff("project_01", BRIEF, draft())
-    payload = json.dumps(BRIEF, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    assert r["brief_sha256"] == hashlib.sha256(payload).hexdigest()
-    assert r["goal"] == BRIEF["goal"]
-    assert r["project_id"] == "project_01"
-    assert set(r) == {
-        "schema_version", "parent_system", "child_system", "project_id",
-        "brief_sha256", "owner_goal_ref", "goal", "owner_corrections",
-        "source_refs", "decision", "allowed_effects", "verification", "unknowns",
-    }
+class ChildVideoHandoffTests(unittest.TestCase):
+    def test_roundtrip_shape_matches_video_contract(self):
+        r = compile_video_handoff("project_01", BRIEF, draft())
+        payload = json.dumps(BRIEF, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self.assertEqual(r["brief_sha256"], hashlib.sha256(payload).hexdigest())
+        self.assertEqual(r["goal"], BRIEF["goal"])
+        self.assertEqual(r["project_id"], "project_01")
+        self.assertEqual(set(r), {
+            "schema_version", "parent_system", "child_system", "project_id",
+            "brief_sha256", "owner_goal_ref", "goal", "owner_corrections",
+            "source_refs", "decision", "allowed_effects", "verification", "unknowns",
+        })
+
+    def test_reject_missing_authority_and_counterevidence(self):
+        mutations = [
+            lambda b, d: b.pop("governance"),
+            lambda b, d: b["governance"].update({"mode": "VIDEO_STANDALONE"}),
+            lambda b, d: d.pop("owner_goal_ref"),
+            lambda b, d: d.update({"source_refs": []}),
+            lambda b, d: d.update({"allowed_effects": ["PRODUCTION_DEPLOY"]}),
+            lambda b, d: d["decision"].update({"selected_option": "ghost"}),
+            lambda b, d: d["decision"].update({"hypotheses": []}),
+            lambda b, d: d["verification"].update({"independent_evidence": []}),
+        ]
+        for i, mutate in enumerate(mutations):
+            with self.subTest(case=i):
+                b, d = deepcopy(BRIEF), draft()
+                mutate(b, d)
+                with self.assertRaises(ChildHandoffError):
+                    compile_video_handoff("project_01", b, d)
+
+    def test_different_goal_produces_different_digest(self):
+        first = compile_video_handoff("project_01", BRIEF, draft())
+        changed = deepcopy(BRIEF)
+        changed["goal"] = "A revised owner goal"
+        second = compile_video_handoff("project_01", changed, draft())
+        self.assertNotEqual(first["brief_sha256"], second["brief_sha256"])
+
+    def test_compiler_cannot_grant_effects_or_fabricate_goal(self):
+        d = draft()
+        d["goal"] = "Force a different outcome"
+        with self.assertRaises(ChildHandoffError):
+            compile_video_handoff("project_01", BRIEF, d)
 
 
-@pytest.mark.parametrize("mutation", [
-    lambda b, d: b.pop("governance"),
-    lambda b, d: b["governance"].update({"mode": "VIDEO_STANDALONE"}),
-    lambda b, d: d.pop("owner_goal_ref"),
-    lambda b, d: d.update({"source_refs": []}),
-    lambda b, d: d.update({"allowed_effects": ["PRODUCTION_DEPLOY"]}),
-    lambda b, d: d["decision"].update({"selected_option": "ghost"}),
-    lambda b, d: d["decision"].update({"hypotheses": []}),
-    lambda b, d: d["verification"].update({"independent_evidence": []}),
-])
-def test_reject_missing_authority_and_counterevidence(mutation):
-    b, d = deepcopy(BRIEF), draft()
-    mutation(b, d)
-    with pytest.raises(ChildHandoffError):
-        compile_video_handoff("project_01", b, d)
-
-
-def test_different_goal_produces_different_digest():
-    first = compile_video_handoff("project_01", BRIEF, draft())
-    changed = deepcopy(BRIEF)
-    changed["goal"] = "A revised owner goal"
-    second = compile_video_handoff("project_01", changed, draft())
-    assert first["brief_sha256"] != second["brief_sha256"]
-
-
-def test_compiler_does_not_grant_effects_or_fabricate_goal():
-    b = deepcopy(BRIEF)
-    d = draft()
-    d["goal"] = "Force a different outcome"
-    with pytest.raises(ChildHandoffError):
-        compile_video_handoff("project_01", b, d)
+if __name__ == "__main__":
+    unittest.main()
