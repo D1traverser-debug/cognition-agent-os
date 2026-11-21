@@ -43,7 +43,7 @@ def reviewed_draft():
             "falsifier": "Owner-outcome test contradicts selected route",
             "rollback": "Restore original version",
         },
-        "allowed_effects": ["PUBLIC_READ"],
+        "allowed_effects": ["PUBLIC_READ", "ISOLATED_LOCAL_WRITE"],
         "verification": {
             "owner_outcomes": ["Real business acceptance"],
             "independent_evidence": ["Unrelated reviewer actual bytes"],
@@ -57,6 +57,7 @@ def task():
         "task_id": "research", "kind": "research", "executor": "agent",
         "depends_on": [], "inputs": [], "outputs": ["decision"],
         "acceptance": {"requirement": "Independent evidence"},
+        "requirements": {"effect_class": "ISOLATED_LOCAL_WRITE"},
     }
 
 
