@@ -23,6 +23,8 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             "native_procedure_evidence",
             "native_capabilities",
             "native_source_read",
+            "cognition_session_inspect",
+            "cognition_node_record",
             "native_decision_admit",
         })
         self.assertEqual(harness.HARNESS_EXECUTION_TOOL, "native_local_tick")
@@ -35,6 +37,9 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             "native_memory_candidate_record",
             "native_public_primary_source_read",
             "cognition_shell",
+            "cognition_goal_amend",
+            "cognition_reopen",
+            "cognition_input_record",
         ):
             self.assertNotIn(forbidden, harness.SDK_TOOL_ALLOWLIST)
 
@@ -46,6 +51,10 @@ class CompoundAbcHarnessTests(unittest.TestCase):
         normalized_protocol = " ".join(protocol.lower().split())
         self.assertIn("do not include any of those three fields", normalized_protocol)
         self.assertIn("native_goal_inspect and native_procedure_evidence", protocol)
+        self.assertIn("CURRENT cognition decision", protocol)
+        self.assertIn("cognition_session_inspect and cognition_node_record", protocol)
+        self.assertIn("TWO genuinely competing option nodes", protocol)
+        self.assertIn("exactly matching the compiled child source_spec", protocol)
 
     def test_tool_argument_shape_decodes_json_structure_without_values(self):
         raw = json.dumps({
