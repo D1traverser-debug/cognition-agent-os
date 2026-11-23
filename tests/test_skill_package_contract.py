@@ -293,9 +293,9 @@ class SkillPackageContractTests(unittest.TestCase):
         for token in ("## Files and knowledge CRUD", "CAOS_OPERATING_MANUAL.md", "NO_OP",
                       "independent provider readback", "parent-protocol.md"):
             self.assertIn(token, skill)
-        for token in ("Library and connector file effects", "delete only proven redundant",
-                      "exact provider resource ID", "File moved to trash", "not permanently purged",
-                      "After a write/delete/move", "UNVERIFIED"):
+        for token in ("Source lifecycle at the real retrieval/write boundary",
+                      "SOURCE_LIFECYCLE_CONFLICT", "privacy deletion",
+                      "get_plugin_metadata", "expected_release_id"):
             self.assertIn(token, protocol)
         plugin = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
         codex = json.loads((root / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
