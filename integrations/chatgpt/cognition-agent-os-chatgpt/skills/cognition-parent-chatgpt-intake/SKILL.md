@@ -4,7 +4,7 @@ description: Use for cognition-agent-os or established cognition parent/child wo
 ---
 # Cognition parent: opt-in ChatGPT entry
 
-**Role:** ONE product `cognition-agent-os`; this Skill is its interactive ChatGPT intake, not a permanent Host, grant, automatic client hook, or second task ledger. Account Custom Instructions are only a possible ordinary-chat hint, not installed by this file. The installed account release and repository source may differ. Never trigger this project on unrelated daily questions.
+**Role:** ONE `cognition-agent-os` ChatGPT intake, not a permanent Host, grant, hook, or second ledger. Account Custom Instructions are optional routing hints, not installed here. Installed account release and GitHub source may differ. Do not trigger unrelated tasks.
 
 ## Responsibility and stable naming
 
@@ -15,13 +15,13 @@ description: Use for cognition-agent-os or established cognition parent/child wo
 
 ## Files and knowledge CRUD — checked lifecycle
 
-For any in-scope file create/read/update/delete/rename/move/cleanup, first retrieve the one current Continuity entry and the relevant §3 of `/cognition-agent-os/CAOS_OPERATING_MANUAL.md` (or flag unavailable). Confirm owner, exact ID/version, canonical copy, permission and dependencies; compare bytes/hashes when calling a file redundant. Plan `NO_OP`/update/delete and rollback; **delete only proven unneeded, unreferenced copies when cleanup is authorized**, retain unique history. After effects, independently reread provider identity, contents/hash and active references; report trash semantics exactly. The on-demand `references/parent-protocol.md` supplies detailed source lifecycle and authority rules. This is a workflow guard, not an unbypassable ChatGPT tool interceptor.
+For file C/R/U/D, load the one Continuity entry and `/cognition-agent-os/CAOS_OPERATING_MANUAL.md` §3. Check owner, exact ID/version/hash, dependencies, grant, `NO_OP`/delete/rollback, and independent provider readback. Full rules: [parent-protocol.md](references/parent-protocol.md). This is not a native hard hook.
 
 ## Ordinary-chat entry / recursive dependency graph
 
 **Ordinary new chats are the required entry surface, OUTSIDE ChatGPT Projects.** Project instructions are not an account-wide trigger. `allow_implicit_invocation: true`, plugin presence and defaultPrompt do NOT prove native Skill selection. No tool here is authorized/capable of updating account Custom Instructions. If actual client selection trace is unavailable, record NOT_TESTED, not PASS.
 
-**Unlabeled but still in-scope follow-ups:** If user context selects cognition/child work, resume without requesting repeated specialist lists. For a genuinely ambiguous new `继承`, consult personal context and accessible private goal records, **do not guess the named repo**, latest timestamp or project. Ask one necessary choice only if distinct active goals remain. No interception of unrelated programming, food or ordinary chats.
+**Unlabeled but still in-scope follow-ups:** Resume selected parent/child work without repeating known details. For ambiguous new `继承`, search private goals; **do not guess the named repo** or newest timestamp. Ask only if distinct goals remain; do not intercept unrelated chats.
 
 **Recursive dependency graph (NOT a fixed pipeline):** Scope the complete owner goal, authority and live sources. Diagnosis, research, comparison, execution and learning are revisitable responsibilities, not ordered stages. **RECURSIVELY** challenge competing root causes and the diagnostic method; trace relevant original implementations, tests and counterexamples; compare real alternatives; **RECHALLENGE the selected method and research coverage BEFORE action**. New contradictory evidence can reopen an ancestor, invalidate dependent conclusions, escalate the causal layer and send the system BACK into investigation. Only grant-valid actions execute; independent owner outcomes can reopen earlier assumptions. Neither a checklist nor green CI nor model self-rating proves these cognition decisions happened. Continue lawful read-only research while evidence remains open.
 
@@ -36,7 +36,7 @@ These are recursive graph responsibilities, **not an ordered sequence**; new evi
 - **Execute / independent check / recursive reopen:** Perform lawful actions through the existing trusted gateway; reread provider and owner/business outcomes against the original goal. A green CI, self-report or model rationale does not prove success. Failed or contradictory evidence can invalidate upstream causal assumptions, method choice and dependent conclusions; reopen investigation and research, not just retry.
 - **Learn/continue:** Persist evidence, failed hypotheses, chosen method/falsifier and OPEN obligations in existing PRIVATE sources/indexes; invalidate stale derived claims while retaining history. Retain reusable methods only with applicability, counterexamples, failure conditions and independent outcome; cross-domain transfer requires a fresh trial. If a meaningful lawful action remains, perform and verify it; otherwise preserve OPEN and the exact blocker. Never claim background work between messages.
 
-**Continuation/stop check:** Before ending, compare the complete goal with independently read-back effects. If an authorized next action advances an OPEN clause, execute it; otherwise preserve the exact blocker. Never claim background work between messages.
+**Continuation/stop check:** Compare full goal to independently read-back effects. Execute legal OPEN work, otherwise preserve the blocker. Never claim background work.
 
 ## Owner-visible decision and execution evidence (not private chain-of-thought)
 
