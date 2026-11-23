@@ -80,6 +80,55 @@ class CompoundAbcHarnessTests(unittest.TestCase):
         self.assertNotIn("private-source.csv", rendered)
         self.assertNotIn("a" * 64, rendered)
 
+    def test_tool_contract_diagnostics_distinguish_missing_and_resource_schema_keys(self):
+        schemas = {
+            "cognition_decision_bundle_record": {
+                "required": [
+                    "root_task_id", "selected_intent_json", "selected_option",
+                    "alternative_option", "decision_reason",
+                ],
+                "properties": [
+                    "root_task_id", "selected_intent_json", "selected_option",
+                    "alternative_option", "decision_reason",
+                ],
+            },
+            "native_source_read": {
+                "required": ["root_task_id", "file_name"],
+                "properties": ["root_task_id", "file_name", "offset_chars"],
+            },
+        }
+        def shape(value):
+            return harness._safe_argument_shape(json.dumps(value))
+
+        wrong_decision = harness._tool_contract_delta(
+            "cognition_decision_bundle_record",
+            shape({"root_task_id": "x" * 32}), schemas)
+        self.assertEqual(wrong_decision["missing_required"], [
+            "alternative_option", "decision_reason",
+            "selected_intent_json", "selected_option",
+        ])
+        self.assertEqual(wrong_decision["unexpected_keys"], [])
+        self.assertFalse(wrong_decision["shape_valid"])
+        self.assertFalse(wrong_decision["values_validated"])
+        self.assertFalse(wrong_decision["authorizes_action"])
+
+        wrong_source = harness._tool_contract_delta(
+            "native_source_read",
+            shape({"root_task_id": "x" * 32, "path": "baseline.csv",
+                   "role": "reference"}), schemas)
+        self.assertEqual(wrong_source["missing_required"], ["file_name"])
+        self.assertEqual(wrong_source["unexpected_keys"], ["path", "role"])
+        self.assertFalse(wrong_source["shape_valid"])
+
+        valid_shape = harness._tool_contract_delta(
+            "native_source_read",
+            shape({"root_task_id": "x" * 32, "file_name": "baseline.csv"}),
+            schemas)
+        self.assertTrue(valid_shape["shape_valid"])
+        self.assertFalse(valid_shape["values_validated"])
+        self.assertIsNone(harness._tool_contract_delta(
+            "unknown_tool", shape({}), schemas))
+
     def test_agents_sdk_provider_is_loopback_only(self):
         self.assertEqual(
             harness.local_openai_base_url("127.0.0.1:11434"),
