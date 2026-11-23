@@ -5,7 +5,10 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import tempfile
+import types
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -80,6 +83,96 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             with self.subTest(remote=remote), self.assertRaisesRegex(
                     ValueError, "LOOPBACK_HTTP"):
                 harness.local_openai_base_url(remote)
+
+    def test_no_model_bridge_admits_grounded_first_clause(self):
+        """Discriminate protocol/bridge failure from a model's inability to use it.
+
+        The probe uses the same real SQLite, local fixtures, scoped contract
+        and native MCP decision body as the B/C screen; it deliberately does
+        not infer model cognition or an independent owner-outcome PASS.
+        """
+        from cognition_agent_os.native_decision import (
+            inspect_native_goal, register_native_goal,
+        )
+        from cognition_agent_os.native_mcp_bridge import build_mcp_server
+
+        class _FakeMcp:
+            def __init__(self, name):
+                self.tools = {}
+
+            def tool(self, **metadata):
+                def register(fn):
+                    self.tools[fn.__name__] = fn
+                    return fn
+                return register
+
+        with tempfile.TemporaryDirectory(prefix="caos-s2-bridge-control-") as home:
+            db, workspace, fixtures, before = harness.benchmark._prepare(
+                Path(home), harness.CASE["files"])
+            root = register_native_goal(db, harness.OWNER_GOAL,
+                                        managed_session=True)
+            harness.bind_compound_effect_contract(
+                db, fixtures, workspace, root, before)
+            fake_mcp = types.ModuleType("mcp")
+            fake_server = types.ModuleType("mcp.server")
+            fake_server.MCPServer = _FakeMcp
+            with patch.dict(sys.modules, {
+                    "mcp": fake_mcp, "mcp.server": fake_server}):
+                server = build_mcp_server(
+                    db, workspace, fixtures,
+                    allow_goal_writes=True,
+                    allow_host_tick=True,
+                    allow_source_read=True)
+            tools = server.tools
+            inspected = tools["native_goal_inspect"](root)
+            self.assertEqual(
+                inspected["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+            tools["native_capabilities"](root)
+            tools["native_procedure_evidence"](root)
+            refs = []
+            for source in ("baseline.csv", "actual.csv"):
+                read = tools["native_source_read"](root, source)
+                self.assertEqual(read["status"], "NATIVE_SOURCE_EXCERPT")
+                refs.append({
+                    "path": read["file_name"],
+                    "sha256": read["source_sha256"],
+                })
+            # Required second inspection refreshes CAS after actual reads.
+            tools["native_goal_inspect"](root)
+            tools["native_procedure_evidence"](root)
+            proposal = {
+                "selected_intent": {
+                    "kind": "goal_intent",
+                    "objective": "compare_records",
+                    "resources": [
+                        {"role": "reference", "path": "baseline.csv"},
+                        {"role": "observed", "path": "actual.csv"},
+                    ],
+                },
+                "alternative_intent": None,
+                "decision_reason":
+                    "Compare the original and observed CSV records first.",
+                "alternative_reason":
+                    "A JSON draft cannot establish the requested CSV differences.",
+                "expected_evidence":
+                    "An independently inspectable local discrepancy artifact.",
+                "decision_basis": {
+                    "source_refs": refs,
+                    "challenge":
+                        "The CSV rows may not represent all original clauses.",
+                    "falsifier":
+                        "A source mismatch or independent discrepancy audit could reverse the choice.",
+                    "uncertainty":
+                        "A CSV comparison cannot prove the JSON draft is complete.",
+                },
+            }
+            admitted = tools["native_decision_admit"](root, proposal)
+            self.assertEqual(
+                admitted["status"], "NATIVE_METHOD_ENQUEUED", admitted)
+            state = inspect_native_goal(db, workspace, fixtures, root)
+            self.assertEqual(state["decision_count"], 1)
+            self.assertEqual(state["status"], "NATIVE_AWAITING_WORKER")
+            self.assertFalse(state["owner_outcome_verified"])
 
     def test_independent_contract_pins_exact_goal_and_all_source_bytes(self):
         source_hashes = {
