@@ -189,6 +189,21 @@ async def run():
                             tool.annotations.destructive_hint is not False or
                             tool.annotations.open_world_hint is not False), tool.name
             tools = {x.name for x in registered}
+            # The small-model decision front end MUST be flat on the actual
+            # MCP wire; generic nested node schemas caused schema-as-values.
+            flat_spec = next(
+                x for x in registered
+                if x.name == "cognition_decision_bundle_record")
+            flat_schema = flat_spec.input_schema
+            flat_names = {
+                "root_task_id", "selected_intent_json", "selected_option",
+                "alternative_option", "decision_reason",
+            }
+            assert set(flat_schema.get("required", [])) == flat_names, flat_schema
+            assert set(flat_schema.get("properties", {})) == flat_names, flat_schema
+            assert all(
+                flat_schema["properties"][name].get("type") == "string"
+                for name in flat_names), flat_schema
             decision_spec = next(
                 x for x in registered if x.name == "native_decision_admit")
             decision_schema = decision_spec.input_schema
