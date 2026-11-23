@@ -135,6 +135,14 @@ not constitute a controlled comparison of model intelligence. The experiment
 tests *architecture-path reachability* only. Any empirical result must be
 recorded against its exact run SHA and retained in full, including errors.
 
+**Opt-in reproducibility fence:** GitHub Actions enables the isolated
+`experimental_compound_ab_c` only for a same-repository PR with the exact
+`[run-compound-ab-c]` marker in its PR description. A metadata edit alone
+must not be treated as experimental execution: confirm a `synchronize`
+run on the exact commit after opt-in, confirm the experimental job actually
+started (not SKIPPED), and preserve its artifact. If its result is pending,
+retain `MODEL_RESULT=NOT_TESTED` instead of borrowing earlier CI success.
+
 ## 7. Interpretation rules
 
 - A/B/C results are not selected by model final prose. The independent oracle and actual ledger/artifact bytes determine the local result.
