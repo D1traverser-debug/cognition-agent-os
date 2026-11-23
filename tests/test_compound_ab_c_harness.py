@@ -371,6 +371,11 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             action_spec = compile_intent(intent)["child_source_spec"]
             before_session = tools["cognition_session_inspect"](root)
             self.assertEqual(len(before_session["nodes"]), 0)
+            # A model can cite only source text read through the granted tool.
+            for name in ("baseline.csv", "actual.csv"):
+                self.assertEqual(
+                    tools["native_source_read"](root, name)["status"],
+                    "NATIVE_SOURCE_EXCERPT")
             with self.assertRaises(ValueError):
                 tools["cognition_decision_bundle_record"](
                     root, "{not-valid-json",
@@ -404,7 +409,7 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             self.assertEqual(decision["action_spec"], action_spec)
             self.assertTrue(all(n["status"] == "CURRENT" for n in nodes))
             self.assertFalse(session["owner_outcome_verified"])
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(Exception, "COGNITION_STALE_REVISION"):
                 tools["cognition_decision_bundle_record"](
                     root, json.dumps(intent), "Try a different choice",
                     "Draft JSON first", "Old inspected revision should fail")
