@@ -303,6 +303,69 @@ class SkillPackageContractTests(unittest.TestCase):
         self.assertEqual(plugin["version"], codex["version"])
         self.assertLess(len(skill.encode("utf-8")), 9000)
 
+    def test_package_build_detects_post_audit_source_drift(self):
+        """A clean old report cannot certify changed Skill or reference bytes."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            skill = root / "skills/demo/SKILL.md"
+            reference = root / "skills/demo/references/method.md"
+            reference.parent.mkdir(parents=True)
+            original_skill = (
+                "---\nname: demo\ndescription: test\n---\n"
+                "[method](references/method.md)\n"
+            )
+            skill.write_text(original_skill, encoding="utf-8")
+            reference.write_text("version-one\n", encoding="utf-8")
+            policy = {
+                "policy_version": "1.0.0",
+                "contract": "CAOS_SKILL_PACKAGE_BUDGET",
+                "platform_entrypoint_limit_bytes": 12000,
+                "operational_entrypoint_budget_bytes": 10500,
+                "preferred_entrypoint_budget_bytes": 9000,
+                "reference_module_limit_bytes": 32768,
+                "package_uncompressed_limit_bytes": 131072,
+                "max_description_characters": 400,
+                "scan_roots": ["."],
+                "excluded_directory_names": ["archive"],
+                "entrypoints": [{
+                    "id": "demo", "path": "skills/demo/SKILL.md",
+                    "references": ["skills/demo/references/method.md"],
+                    "package_id": "demo",
+                }],
+                "packages": [{
+                    "id": "demo", "root": ".",
+                    "paths": ["skills/demo/SKILL.md",
+                              "skills/demo/references/method.md"],
+                }],
+            }
+            report = verifier.audit_skill_package(root, policy)
+            self.assertEqual(report["status"], "PASS", report["errors"])
+            output = root / "bundle.zip"
+
+            # Same byte count, different meaning: size-only checks miss this.
+            skill.write_text(original_skill.replace("name: demo", "name: deMo"),
+                             encoding="utf-8")
+            with self.assertRaises(verifier.SkillPackageError):
+                verifier.build_package(root, policy, report, "demo", output)
+            self.assertFalse(output.exists())
+
+            skill.write_text(original_skill, encoding="utf-8")
+            reference.write_text("version-two\n", encoding="utf-8")
+            with self.assertRaises(verifier.SkillPackageError):
+                verifier.build_package(root, policy, report, "demo", output)
+            self.assertFalse(output.exists())
+
+            reference.write_text("version-one\n", encoding="utf-8")
+            skill.write_text(original_skill + "中" * 4000, encoding="utf-8")
+            with self.assertRaises(verifier.SkillPackageError):
+                verifier.build_package(root, policy, report, "demo", output)
+            self.assertFalse(output.exists())
+
+            skill.write_text(original_skill, encoding="utf-8")
+            built = verifier.build_package(root, policy, report, "demo", output)
+            self.assertEqual(built["readback"],
+                             "PASS_EXACT_MEMBERSHIP_AND_BYTES")
+
     def test_native_plugin_package_builds_and_reads_back_exact_declared_files(self):
         report = verifier.audit_skill_package(ROOT, self.policy)
         self.assertEqual(report["status"], "PASS", report["errors"])
