@@ -473,6 +473,81 @@ class CompoundAbcHarnessTests(unittest.TestCase):
                 },
             })
             self.assertEqual(result["status"], "NATIVE_METHOD_ENQUEUED")
+            first_tick = tools["native_local_tick"](root)
+            self.assertEqual(first_tick["status"], "NATIVE_TICK_OBSERVED")
+            state = tools["native_goal_inspect"](root)
+            self.assertEqual(state["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+            self.assertEqual(state["decision_count"], 1)
+            first_event_id = state["decisions"][-1]["event_id"]
+
+            # The second clause demands another CURRENT cognitive decision,
+            # not a reused first-clause graph or an invented completion claim.
+            json_intent = {
+                "kind": "goal_intent", "objective": "ensure_structure",
+                "resources": [{"role": "input", "path": "settings.json"}],
+                "requirements": [{"field": "owner", "equals": "ops"}],
+            }
+            settings_read = tools["native_source_read"](root, "settings.json")
+            self.assertEqual(settings_read["status"], "NATIVE_SOURCE_EXCERPT")
+            tools["cognition_session_inspect"](root)
+            second_graph = tools["cognition_decision_bundle_record"](
+                root, json.dumps(json_intent),
+                "Create an isolated settings draft preserving original fields",
+                "Skip the settings draft and leave the owner goal unfinished",
+                "Create the requested settings draft only after the CSV report"
+                " is mechanically checked and without editing original files")
+            self.assertEqual(second_graph["status"], "RECORDED")
+            graph = inspect_session(db, fixtures, root)["nodes"]
+            self.assertEqual(len(graph), 6)
+            self.assertEqual(graph[-1]["action_spec"],
+                             compile_intent(json_intent)["child_source_spec"])
+            tools["native_goal_inspect"](root)
+            tools["native_procedure_evidence"](root)
+            second = tools["native_decision_admit"](root, {
+                "selected_intent": json_intent,
+                "alternative_intent": None,
+                "decision_reason":
+                    "Prepare an isolated JSON draft after CSV reconciliation.",
+                "alternative_reason":
+                    "CSV comparison alone does not create the required JSON draft.",
+                "expected_evidence":
+                    "A checked local JSON candidate with owner set to ops.",
+                "decision_basis": {
+                    "source_refs": [{
+                        "path": "settings.json",
+                        "sha256": settings_read["source_sha256"],
+                    }],
+                    "challenge":
+                        "The draft could unintentionally erase existing fields.",
+                    "falsifier":
+                        "An independent field-level diff could show lost data.",
+                    "uncertainty":
+                        "A local draft does not deploy settings to production.",
+                    "decision_review_version": 1,
+                    "decision_reviews": [{
+                        "event_id": first_event_id,
+                        "disposition": "RELEVANT",
+                        "rationale":
+                            "CSV reconciliation is mechanically checked first.",
+                        "falsifier":
+                            "A source mismatch would invalidate that report.",
+                    }],
+                },
+            })
+            self.assertEqual(second["status"], "NATIVE_METHOD_ENQUEUED")
+            second_tick = tools["native_local_tick"](root)
+            self.assertEqual(second_tick["status"], "NATIVE_TICK_OBSERVED")
+            graded = harness.grade_compound_arm(
+                arm="S2_FLAT_BUNDLE_NO_MODEL_CONTROL",
+                db_path=db, workspace=workspace, fixtures=fixtures,
+                original_sha256=before, started=time.monotonic(),
+                telemetry={"model_calls": 0},
+            )
+            self.assertEqual(
+                graded["independent_oracle_status"],
+                "SYNTHETIC_COMPOUND_OWNER_GOAL_MET", graded)
+            self.assertTrue(graded["source_preserved"])
+            self.assertFalse(graded["business_outcome_verified"])
 
     def test_independent_contract_pins_exact_goal_and_all_source_bytes(self):
         source_hashes = {
