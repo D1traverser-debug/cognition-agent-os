@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/skill_package_policy.json"
@@ -365,6 +366,21 @@ class SkillPackageContractTests(unittest.TestCase):
             built = verifier.build_package(root, policy, report, "demo", output)
             self.assertEqual(built["readback"],
                              "PASS_EXACT_MEMBERSHIP_AND_BYTES")
+            published = output.read_bytes()
+
+            # Publishing must be transactional: an injected ZIP write failure
+            # must leave the previous validated output intact.
+            with patch.object(zipfile.ZipFile, "writestr",
+                              side_effect=OSError("INJECTED_ZIP_WRITE_FAILURE")):
+                with self.assertRaisesRegex(OSError, "INJECTED_ZIP_WRITE_FAILURE"):
+                    verifier.build_package(root, policy, report, "demo", output)
+            self.assertEqual(output.read_bytes(), published)
+            self.assertEqual(list(root.glob(".bundle.zip.*.tmp")), [])
+
+            # Never permit the package output path to overwrite its source.
+            with self.assertRaises(verifier.SkillPackageError):
+                verifier.build_package(root, policy, report, "demo", skill)
+            self.assertEqual(skill.read_text(encoding="utf-8"), original_skill)
 
     def test_native_plugin_package_builds_and_reads_back_exact_declared_files(self):
         report = verifier.audit_skill_package(ROOT, self.policy)
