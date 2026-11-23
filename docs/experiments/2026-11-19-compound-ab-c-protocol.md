@@ -108,6 +108,33 @@ The pre-correction C allowlist had neither `cognition_session_inspect` nor `cogn
 
 A separate deterministic two-clause control is being checked through real MCP entrypoints, scoped Worker ticks and the independent synthetic compound oracle. It is a **non-model functional control**, not evidence that Qwen2.5 3B can independently create the graph, choose the correct method, execute it or learn it. A successful offline CI will establish only gate reachability; after engineering stability, an explicitly opt-in real-model rerun with the corrected seven-tool surface is required, followed by unseen owner goals before any S2/S5 acceptance claim.
 
+## 6.2. Pre-registered real-model rerun after the managed-gate correction
+
+This is one **opt-in** repeat of the same isolated A/B/C screen at the
+unchanged exact original owner goal/fixture/independent-oracle contract, not
+a release or architectural selection. The discriminating intervention in C is
+the two new already-existing, grant-checked cognition tool capabilities
+(`cognition_session_inspect`, `cognition_node_record`) and instructions to
+create a CURRENT decision with two competing options before admitting the
+matching native local child. The original five-tool C failure remains a
+negative control. The 600-second arm ceiling, fixed `qwen2.5:3b` local
+model, 18-turn/900-token per-turn C limits, B existing native planner,
+harness-only Worker admission, source hashes and independent oracle stay
+unchanged.
+
+**Falsifiers and interpretation:** If C still records no decision, examine
+tool arguments, actual graph nodes and model/inference budget before assuming
+model incapacity. If the graph is current but admission fails, locate the
+first failing effect/authority/lineage gate without removing it. If one child
+is admitted but not both accepted, diagnose the earliest missing owner clause.
+C success on this one synthetic local task is NOT native new-chat selection,
+external business result, unseen-domain generalization or S5 reusable method
+promotion. B is kept as a failure-prone managed-effect baseline; its current
+native planner does not itself record cognitive decision nodes, so B/C do
+not constitute a controlled comparison of model intelligence. The experiment
+tests *architecture-path reachability* only. Any empirical result must be
+recorded against its exact run SHA and retained in full, including errors.
+
 ## 7. Interpretation rules
 
 - A/B/C results are not selected by model final prose. The independent oracle and actual ledger/artifact bytes determine the local result.
