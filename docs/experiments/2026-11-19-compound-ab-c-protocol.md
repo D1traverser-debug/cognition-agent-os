@@ -38,11 +38,13 @@ All arms receive identical fixture bytes and exact owner-goal text. Each arm rec
 - Registers the same native goal with a managed local session.
 - Uses OpenAI Agents SDK 0.25.0 with Chat Completions mode against the same local Ollama model.
 - Uses the existing stdio MCP bridge, SQLite ledger and native admission function.
-- The model-visible allowlist contains decision/read tools only:
+- The model-visible allowlist contains four bounded native read tools, one cognition-session read tool, one additive cognition-node record tool, and one native decision-admission tool:
   - `native_goal_inspect`
   - `native_procedure_evidence`
   - `native_capabilities`
   - `native_source_read`
+  - `cognition_session_inspect`
+  - `cognition_node_record`
   - `native_decision_admit`
 - `native_local_tick` is deliberately NOT exposed to the model. The harness invokes that existing MCP tool only after it independently reads the root and confirms `NATIVE_AWAITING_WORKER`. The harness never creates a new Worker or execution authority.
 - Root creation, generic native model planning, memory writes, public-source access, arbitrary shell and external connectors are not exposed to C.
@@ -97,6 +99,14 @@ The previous Qwen2.5 3B screens are retained as failures, not silently replaced:
 These results exposed three integration defects rather than a passing architecture: the B timeout ceiling disagreed with the experiment, the MCP decision tool published a generic dictionary rather than its actual nested contract, and the SDK's internal tool loop could consume the entire arm budget before the independent harness regained control.
 
 The current candidate addresses those defects by aligning B's hard timeout ceiling to 240 seconds, publishing strict nested MCP argument schemas, segmenting SDK execution into two-turn intervals, removing Worker execution from the model-visible tool list, and having the harness inspect and execute only a confirmed pending child. The exact-head rerun must determine whether these changes actually improve the independent verdict.
+
+## 6.1. 2026-11-23 upstream decision-gate falsification and correction
+
+A new *no-model* positive-control test exercises the same managed root, scoped operator effect contract, original fixtures, native MCP decision body and SQLite. The deliberately incomplete probe called `native_decision_admit` after reading source/procedure evidence **without** recording a current cognitive decision. On exact commit `3180a6577b416ff5b284e360b85d37e13fb31ab6`, Linux CI emitted `CURRENT_COGNITIVE_DECISION_REQUIRED` at `effect_contract.enforce_admission`. This rejects the hypothesis that a syntactically grounded native proposal alone can ever reach execution on a managed root. It is a **correct security gate**, not permission to remove a check.
+
+The pre-correction C allowlist had neither `cognition_session_inspect` nor `cognition_node_record`; the original model-visible surface could not satisfy this prerequisite, even with a perfect native decision proposal. Its absence is a demonstrable interface/permission-path defect upstream of model quality. The revised C candidate exposes only those two additional existing tools, without making `native_local_tick`, original-goal amendments, cognitional reopening, memory writes, shell, external access or contract installation model-visible. The client must record two competing option nodes and a CURRENT decision binding the exact compiled action spec, using fresh revision tokens; the existing managed effect gate remains authoritative.
+
+A separate deterministic two-clause control is being checked through real MCP entrypoints, scoped Worker ticks and the independent synthetic compound oracle. It is a **non-model functional control**, not evidence that Qwen2.5 3B can independently create the graph, choose the correct method, execute it or learn it. A successful offline CI will establish only gate reachability; after engineering stability, an explicitly opt-in real-model rerun with the corrected seven-tool surface is required, followed by unseen owner goals before any S2/S5 acceptance claim.
 
 ## 7. Interpretation rules
 
