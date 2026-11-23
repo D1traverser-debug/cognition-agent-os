@@ -381,6 +381,83 @@ def record_node(db_path: Path, sources: Path, root_id: str, node: dict, *,
                    "COGNITION_NODE", {"node": node})
 
 
+def record_decision_bundle(
+    db_path: Path, sources: Path, root_id: str, *,
+    selected_option: str, alternative_option: str, decision_reason: str,
+    action_spec: dict, source_refs: list[SourceReference],
+    request_id: str, expected_revision: str,
+) -> dict:
+    """Atomically record model-authored competing options and one bound decision.
+
+    This is a mechanical projection into the EXISTING cognitive graph, not
+    planning, evidence authentication, effect permission, or owner acceptance.
+    The caller still needs native_decision_admit and its managed effect gate.
+    """
+    phrases = (selected_option, alternative_option, decision_reason)
+    if (any(type(s) is not str or not 12 <= len(s.strip()) <= 2000
+            for s in phrases)
+            or selected_option.strip().casefold() == alternative_option.strip().casefold()):
+        raise ValueError("COGNITION_OPTIONS_NOT_COMPETING")
+    if (type(request_id) is not str or not _ID.fullmatch(request_id)
+            or type(expected_revision) is not str or len(expected_revision) != 64
+            or type(action_spec) is not dict
+            or type(source_refs) is not list or len(source_refs) > 16):
+        raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
+    digest({"action_spec": action_spec, "sources": source_refs})
+    key = digest({"root": root_id, "request": request_id})[:24]
+    ids = (f"bundle-{key}-selected", f"bundle-{key}-alternative",
+           f"bundle-{key}-decision")
+    request_ids = tuple(f"bundle-{key}-{i}" for i in range(3))
+    with closing(connect_existing(db_path)) as db:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            _identity(db, root_id, write=True)
+            view = _project(db, sources, root_id)
+            goal_rev = view["goal_revision"]
+            nodes = [
+                {"id": ids[0], "kind": "option", "text": selected_option,
+                 "depends_on": [], "source_refs": source_refs,
+                 "supersedes": None, "goal_revision": goal_rev},
+                {"id": ids[1], "kind": "option", "text": alternative_option,
+                 "depends_on": [], "source_refs": source_refs,
+                 "supersedes": None, "goal_revision": goal_rev},
+                {"id": ids[2], "kind": "decision", "text": decision_reason,
+                 "depends_on": [ids[0], ids[1]], "source_refs": source_refs,
+                 "supersedes": None, "goal_revision": goal_rev,
+                 "action_spec": action_spec},
+            ]
+            prior = {n["id"]: n for n in view["nodes"]}
+            if any(node_id in prior for node_id in ids):
+                # A lost response may be retried; replay only the same complete
+                # CURRENT bundle, never append a duplicate or adopt stale data.
+                if all(node_id in prior and prior[node_id]["status"] == "CURRENT"
+                       and all(prior[node_id].get(k) == v for k, v in node.items())
+                       for node_id, node in zip(ids, nodes)):
+                    db.commit()
+                    return {"status": "REPLAYED", "decision_node_id": ids[2],
+                            "option_node_ids": list(ids[:2]),
+                            "owner_outcome_verified": False}
+                raise ValueError("COGNITION_REQUEST_ID_CONFLICT")
+            if expected_revision != view["revision_token"]:
+                raise ValueError("COGNITION_STALE_REVISION")
+            if len(_events(db, root_id)) + 3 > MAX_EVENTS:
+                raise ValueError("COGNITION_HISTORY_LIMIT_EXPORT_REQUIRED")
+            for node, item_request_id in zip(nodes, request_ids):
+                # Read back the projection INSIDE this same SQLite transaction.
+                # Later nodes can only depend on previously validated nodes.
+                view = _project(db, sources, root_id)
+                _validate_node(node, view, sources)
+                event(db, root_id, "COGNITION_NODE",
+                      {"node": node, "request_id": item_request_id})
+            db.commit()
+            return {"status": "RECORDED", "decision_node_id": ids[2],
+                    "option_node_ids": list(ids[:2]),
+                    "owner_outcome_verified": False}
+        except BaseException:
+            db.rollback()
+            raise
+
+
 def amend_goal(db_path: Path, sources: Path, root_id: str, text: str, *,
                request_id: str, expected_revision: str) -> dict:
     """Preserve a supplied correction; client attribution is not authentication.
