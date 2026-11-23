@@ -294,9 +294,9 @@ class SkillPackageContractTests(unittest.TestCase):
                       "independent provider readback", "parent-protocol.md"):
             self.assertIn(token, skill)
         for token in ("Source lifecycle at the real retrieval/write boundary",
-                      "SOURCE_LIFECYCLE_CONFLICT", "privacy deletion",
-                      "get_plugin_metadata", "expected_release_id"):
+                      "privacy deletion", "get_plugin_metadata", "expected_release_id"):
             self.assertIn(token, protocol)
+        self.assertIn("SOURCE_LIFECYCLE_CONFLICT", skill)
         plugin = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
         codex = json.loads((root / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(plugin["name"], codex["name"])
