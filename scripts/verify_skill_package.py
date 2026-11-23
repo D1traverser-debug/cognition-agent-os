@@ -7,9 +7,12 @@ Reference modules have a separate bound and must be explicitly declared.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -317,6 +320,7 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
                 raise SkillPackageError(f"package {package_id}: duplicate package paths")
             total = 0
             normalized_members = set()
+            member_sha256 = {}
             for member in members:
                 rel = _relative_path(member, f"package {package_id} member")
                 candidate = _checked_path(root, f"{package_root_value}/{member}", f"package {package_id} member")
@@ -325,6 +329,7 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
                 package_bytes, _ = _read_utf8(candidate, f"package member {member}")
                 total += len(package_bytes)
                 normalized_members.add(rel.as_posix())
+                member_sha256[rel.as_posix()] = hashlib.sha256(package_bytes).hexdigest()
             if total > policy["package_uncompressed_limit_bytes"]:
                 raise SkillPackageError(
                     f"package {package_id}: {total} uncompressed bytes exceeds "
@@ -347,6 +352,7 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
                 "root": package_root_value,
                 "paths": members,
                 "uncompressed_bytes": total,
+                "member_sha256": member_sha256,
                 "status": "PASS",
             })
         except (OSError, ValueError, SkillPackageError) as exc:
@@ -374,41 +380,77 @@ def audit_skill_package(root: Path, policy: dict) -> dict:
 
 
 def build_package(root: Path, policy: dict, report: dict, package_id: str, output: Path) -> dict:
+    """Publish only the canonical bytes certified by this full-tree audit.
+
+    The audit report is a preflight, not a persistent authority. Bind each
+    declared member to its canonical SHA-256, stage an immutable snapshot,
+    validate the ZIP before publication, and atomically replace the output.
+    """
+    if report.get("status") != "PASS":
+        raise SkillPackageError("full Skill package audit did not pass")
     package = next((item for item in report["packages"] if item["id"] == package_id), None)
     if package is None:
         raise SkillPackageError(f"unknown package id: {package_id}")
     if package["status"] != "PASS":
         raise SkillPackageError(f"package {package_id} did not pass audit")
     config = next(item for item in policy["packages"] if item["id"] == package_id)
+    expected = list(config["paths"])
+    audited_sha256 = package.get("member_sha256")
+    if not isinstance(audited_sha256, dict) or set(audited_sha256) != set(expected):
+        raise SkillPackageError(f"package {package_id}: missing audited member digests")
+
     package_root = _checked_path(root, config["root"], f"package root {package_id}")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for member in config["paths"]:
-            source = _checked_path(root, f"{config['root']}/{member}", f"package {package_id} member")
-            info = zipfile.ZipInfo(member, date_time=(2020, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o100644 << 16
-            package_bytes, _ = _read_utf8(source, f"package member {member}")
-            archive.writestr(info, package_bytes)
-    with zipfile.ZipFile(output, "r") as archive:
-        expected = list(config["paths"])
-        actual = archive.namelist()
-        if actual != expected:
+    output = output.resolve()
+    snapshots: dict[str, bytes] = {}
+    for member in expected:
+        source = _checked_path(
+            root, f"{config['root']}/{member}", f"package {package_id} member"
+        )
+        if source.resolve() == output:
+            raise SkillPackageError(f"package {package_id}: output overlaps source {member}")
+        package_bytes, _ = _read_utf8(source, f"package member {member}")
+        if hashlib.sha256(package_bytes).hexdigest() != audited_sha256[member]:
             raise SkillPackageError(
-                f"package {package_id}: ZIP membership/order mismatch: {actual!r}"
+                f"package {package_id}: audited source changed before build: {member}"
             )
-        for member in expected:
-            source = _checked_path(root, f"{config['root']}/{member}", f"package {package_id} member")
-            expected_bytes, _ = _read_utf8(source, f"package member {member}")
-            if archive.read(member) != expected_bytes:
-                raise SkillPackageError(f"package {package_id}: ZIP readback mismatch: {member}")
+        snapshots[member] = package_bytes
+    if sum(map(len, snapshots.values())) != package["uncompressed_bytes"]:
+        raise SkillPackageError(f"package {package_id}: audited package size changed")
+
+    # Avoid publishing a partial ZIP or corrupting an existing valid release.
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        dir=output.parent, prefix=f".{output.name}.", suffix=".tmp"
+    )
+    os.close(fd)
+    temporary = Path(temporary_name)
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for member in expected:
+                info = zipfile.ZipInfo(member, date_time=(2020, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                archive.writestr(info, snapshots[member])
+        with zipfile.ZipFile(temporary, "r") as archive:
+            actual = archive.namelist()
+            if actual != expected:
+                raise SkillPackageError(
+                    f"package {package_id}: ZIP membership/order mismatch: {actual!r}"
+                )
+            for member in expected:
+                if archive.read(member) != snapshots[member]:
+                    raise SkillPackageError(
+                        f"package {package_id}: ZIP readback mismatch: {member}"
+                    )
+        os.replace(temporary, output)
+    finally:
+        temporary.unlink(missing_ok=True)
     return {
         "id": package_id,
         "zip_path": str(output),
         "zip_bytes": output.stat().st_size,
         "readback": "PASS_EXACT_MEMBERSHIP_AND_BYTES",
     }
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
