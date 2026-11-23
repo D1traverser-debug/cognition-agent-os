@@ -393,6 +393,31 @@ class CompoundAbcHarnessTests(unittest.TestCase):
                     "This is not a meaningful comparison")
             self.assertEqual(inspect_session(db, fixtures, root)["nodes"], [])
 
+            # A fault on the THIRD ledger write must roll back the two
+            # otherwise-valid options. No partial graph may survive.
+            from cognition_agent_os import cognitive_session as cognitive_module
+            real_event = cognitive_module.event
+
+            def third_node_write_fails(db_conn, event_root, kind, payload):
+                if (kind == "COGNITION_NODE"
+                        and payload["node"]["kind"] == "decision"):
+                    raise RuntimeError("INJECTED_THIRD_NODE_FAILURE")
+                return real_event(db_conn, event_root, kind, payload)
+
+            with patch.object(cognitive_module, "event",
+                              side_effect=third_node_write_fails):
+                with self.assertRaisesRegex(
+                        RuntimeError, "INJECTED_THIRD_NODE_FAILURE"):
+                    tools["cognition_decision_bundle_record"](
+                        root, json.dumps(intent),
+                        "Compare pinned baseline and actual CSV source values",
+                        "Draft only settings JSON before checking the CSV",
+                        "Choose the CSV comparison first so differences have an"
+                        " independently reviewable source-pinned artifact")
+            self.assertEqual(
+                inspect_session(db, fixtures, root)["nodes"], [],
+                "A third-node commit fault must roll back BOTH options")
+            # Exactly the same model choice remains replayable after rollback.
             result = tools["cognition_decision_bundle_record"](
                 root, json.dumps(intent),
                 "Compare pinned baseline and actual CSV source values",
