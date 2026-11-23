@@ -436,10 +436,18 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             self.assertEqual(decision["action_spec"], action_spec)
             self.assertTrue(all(n["status"] == "CURRENT" for n in nodes))
             self.assertFalse(session["owner_outcome_verified"])
-            with self.assertRaisesRegex(Exception, "COGNITION_STALE_REVISION"):
-                tools["cognition_decision_bundle_record"](
-                    root, json.dumps(intent), "Try a different choice",
-                    "Draft JSON first", "Old inspected revision should fail")
+            # Check the authoritative SQLite CAS directly, without requiring
+            # the optional MCP package in the standard-library test runner.
+            from cognition_agent_os.cognitive_session import record_decision_bundle
+            with self.assertRaisesRegex(ValueError, "COGNITION_STALE_REVISION"):
+                record_decision_bundle(
+                    db, fixtures, root,
+                    selected_option="Compare the CSV sources before JSON editing",
+                    alternative_option="Edit JSON before comparing the CSV sources",
+                    decision_reason="Old CAS must not authorize another decision",
+                    action_spec=action_spec, source_refs=[],
+                    request_id="s2-stale-core-cas-rejected",
+                    expected_revision=before_session["revision_token"])
             self.assertEqual(len(inspect_session(db, fixtures, root)["nodes"]), 3)
             inspected = tools["native_goal_inspect"](root)
             self.assertEqual(inspected["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
