@@ -84,32 +84,43 @@ SDK_TOOL_ALLOWLIST = (
     "native_capabilities",
     "native_source_read",
     "cognition_session_inspect",
-    "cognition_node_record",
+    "cognition_decision_bundle_record",
     "native_decision_admit",
 )
 HARNESS_EXECUTION_TOOL = "native_local_tick"
 
 # Mechanical CAS and lineage values are harness-owned, not model-authored prose.
 # The MCP bridge binds these from the same process's latest inspected snapshot.
-SDK_DECISION_PROTOCOL = """MANAGED EFFECT GATE (do not bypass): before every native_decision_admit,
-the real Host needs a CURRENT cognition decision bound to the EXACT action_spec.
-Use cognition_session_inspect and cognition_node_record. Every node requires
-id, kind, text, depends_on (list), source_refs (list), supersedes=null and
-goal_revision from the current session. Use a unique request_id and the
-LATEST revision_token for every write; re-inspect after each write. Create
-TWO genuinely competing option nodes and one decision depending on both IDs,
-with the decision action_spec exactly matching the compiled child source_spec.
-Any source node requires an actual SHA256 and verbatim quote from source bytes.
-The graph is a method decision, NOT independent owner outcome verification.
-For compare_records baseline.csv vs actual.csv, the decision action_spec is
-{"kind":"record_reconciliation","reference":"baseline.csv",
-"observed":"actual.csv","objective":"identify_discrepancies"}.
-For ensure_structure settings.json owner=ops, decision action_spec is
-{"kind":"goal_case","goal_type":"json_keys","input":"settings.json",
-"desired":{"owner":"ops"}}.
-For the SECOND clause a NEW current action-bound decision is mandatory.
-Never replace this gate with a fabricated approval or bypass.
-
+SDK_DECISION_PROTOCOL = """MANAGED EFFECT GATE (do not bypass): native_decision_admit
+requires a CURRENT cognition decision bound to the EXACT compiled action_spec.
+For each owner clause, first read the needed original source files using
+native_source_read, inspect the goal and method evidence, and then call
+cognition_session_inspect to acquire a fresh server-side CAS snapshot.
+Call cognition_decision_bundle_record with ONLY five flat scalar arguments:
+root_task_id, selected_intent_json, selected_option, alternative_option,
+decision_reason. selected_intent_json is a STRING containing a JSON DATA object
+with kind=goal_intent and an eligible selected objective, actual resources and
+requirements. Do NOT pass JSON Schema descriptors such as title, type,
+properties, required, additionalProperties or $defs as runtime values.
+The selected and alternative option descriptions must be genuinely different
+candidate methods, with at least 12 characters each. Explain the evidence
+and tradeoff in decision_reason. The original source reads bind real paths,
+source digests and quotations; the bridge compiles the selected intent and
+atomically records two option nodes and one CURRENT action-bound decision in
+the EXISTING SQLite graph with fresh CAS. All checks remain authoritative;
+the bridge does not grant an effect or independently verify reasoning.
+Do not hand-author cognition node ids, dependency links, supersession or CAS
+tokens. On rejection investigate the error rather than repeating unchanged.
+For compare_records use JSON DATA:
+{"kind":"goal_intent","objective":"compare_records","resources":[
+{"role":"reference","path":"baseline.csv"},{"role":"observed","path":"actual.csv"}]}.
+For ensure_structure use JSON DATA:
+{"kind":"goal_intent","objective":"ensure_structure","resources":[
+{"role":"input","path":"settings.json"}],
+"requirements":[{"field":"owner","equals":"ops"}]}.
+The SECOND owner clause needs a NEW cognition decision after inspecting the
+new session revision; preserving the first decision is not enough.
+"""
 native_decision_admit requires one object named proposal with EXACT top-level
 keys: selected_intent, alternative_intent, decision_reason, alternative_reason,
 expected_evidence, decision_basis.
@@ -734,9 +745,11 @@ only the independent harness can accept the exact local artifact and lineage.
             "and actual.csv with native_source_read. Then call native_goal_inspect "
             "and native_procedure_evidence again to refresh the process-local "
             "snapshot. Confirm compare_records is eligible. First use "
-            "cognition_session_inspect and cognition_node_record to save "
-            "two competing option nodes and a CURRENT decision bound to "
-            "the exact compiled compare_records action_spec. Then refresh "
+            "cognition_session_inspect and cognition_decision_bundle_record "
+            "to record both competing options and a CURRENT decision for "
+            "the compiled compare_records action_spec. Pass actual selected "
+            "intent JSON DATA as the selected_intent_json string, plus original "
+            "selected/alternative option texts and a reason. Then refresh "
             "native_goal_inspect and native_procedure_evidence. Submit one proposal "
             "with source_refs as a list of exact path/sha256 objects, "
             "alternative_intent=null, and a non-empty alternative_reason. Do not "
@@ -1024,9 +1037,10 @@ only the independent harness can accept the exact local artifact and lineage.
                                 "Continue the FIRST clause only. Inspect the exact "
                                 "root, capabilities and procedure evidence; read "
                                 "baseline.csv and actual.csv; then record two "
-                                "cognition option nodes and a CURRENT action-bound "
-                                "decision using cognition_session_inspect and "
-                                "cognition_node_record. Refresh the native goal "
+                                "option choice and CURRENT action-bound decision "
+                                "using cognition_session_inspect and "
+                                "cognition_decision_bundle_record with actual "
+                                "intent JSON as a string. Refresh the native goal "
                                 "and procedure evidence; then submit one typed "
                                 "native_decision_admit proposal for compare_records. "
                                 "Use source_refs as a list of exact path/sha256 "
@@ -1060,10 +1074,10 @@ only the independent harness can accept the exact local artifact and lineage.
                             + str(last_decision.get("task_id"))
                             + ". Now complete ONLY the SECOND clause. Re-read "
                             "native_goal_inspect and native_procedure_evidence, "
-                            "then read settings.json. Record two new option nodes "
-                            "and a new CURRENT cognition decision bound to the "
-                            "compiled ensure_structure action_spec using "
-                            "cognition_session_inspect and cognition_node_record. "
+                            "then read settings.json. Record a fresh two-option "
+                            "decision for the compiled ensure_structure action_spec "
+                            "using cognition_session_inspect and "
+                            "cognition_decision_bundle_record with intent JSON DATA. "
                             "Refresh native_goal_inspect and native_procedure_evidence. "
                             "Submit one typed native_decision_admit proposal for ensure_structure "
                             "with owner=ops. Do not include previous_result_task_id "
