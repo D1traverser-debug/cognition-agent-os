@@ -320,6 +320,36 @@ def bind_compound_effect_contract(
     return result["sha256"]
 
 
+def _tool_contract_delta(name: str, argument_shape: dict,
+                         schemas: dict) -> dict | None:
+    """Classify tool-call key mismatch without storing private argument values.
+
+    This is diagnostic only: it never repairs a call, grants an action, or
+    changes a tool's true MCP validation and admission decisions.
+    """
+    schema = schemas.get(name)
+    if not isinstance(schema, dict):
+        return None
+    required = schema.get("required")
+    properties = schema.get("properties")
+    if not isinstance(required, list) or not isinstance(properties, list):
+        return None
+    outer = argument_shape.get("shape", {}) if isinstance(argument_shape, dict) else {}
+    actual = outer.get("keys", []) if isinstance(outer, dict) else []
+    if not isinstance(actual, list):
+        actual = []
+    missing = sorted(set(required) - set(actual))
+    extra = sorted(set(actual) - set(properties))
+    return {
+        "name": name,
+        "missing_required": missing,
+        "unexpected_keys": extra,
+        "shape_valid": not missing and not extra and outer.get("type") == "object",
+        "values_validated": False,
+        "authorizes_action": False,
+    }
+
+
 def _optional_bytes(path: Path) -> bytes:
     if path.is_symlink() or not path.is_file():
         return b""
@@ -640,6 +670,7 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
                 self.tool_names = []
                 self.tool_results = []
                 self.tool_argument_shapes = []
+                self.tool_contract_deltas = []
                 self.usage = []
                 self.decision_rejections = 0
 
@@ -661,12 +692,17 @@ def run_agents_sdk_mcp(home: Path, model: str) -> dict:
             async def on_tool_start(self, context, agent, tool):
                 name = getattr(tool, "name", type(tool).__name__)
                 self.tool_names.append(name)
+                shape = _safe_argument_shape(
+                    getattr(context, "tool_arguments", None))
                 self.tool_argument_shapes.append({
                     "name": name,
                     "tool_call_id": getattr(context, "tool_call_id", None),
-                    "shape": _safe_argument_shape(
-                        getattr(context, "tool_arguments", None)),
+                    "shape": shape,
                 })
+                delta = _tool_contract_delta(
+                    name, shape, hooks_holder.get("tool_schema_summaries", {}))
+                if delta is not None:
+                    self.tool_contract_deltas.append(delta)
 
             async def on_tool_end(self, context, agent, tool, result):
                 name = getattr(tool, "name", type(tool).__name__)
