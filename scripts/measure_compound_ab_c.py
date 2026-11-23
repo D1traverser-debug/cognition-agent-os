@@ -120,7 +120,7 @@ For ensure_structure use JSON DATA:
 "requirements":[{"field":"owner","equals":"ops"}]}.
 The SECOND owner clause needs a NEW cognition decision after inspecting the
 new session revision; preserving the first decision is not enough.
-"""
+
 native_decision_admit requires one object named proposal with EXACT top-level
 keys: selected_intent, alternative_intent, decision_reason, alternative_reason,
 expected_evidence, decision_basis.
