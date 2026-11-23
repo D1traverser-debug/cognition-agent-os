@@ -25,7 +25,7 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             "native_capabilities",
             "native_source_read",
             "cognition_session_inspect",
-            "cognition_node_record",
+            "cognition_decision_bundle_record",
             "native_decision_admit",
         })
         self.assertEqual(harness.HARNESS_EXECUTION_TOOL, "native_local_tick")
@@ -323,6 +323,116 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             self.assertTrue(graded["synthetic_local_postconditions_met"])
             self.assertTrue(graded["source_preserved"])
             self.assertFalse(graded["business_outcome_verified"])
+
+    def test_compact_decision_bundle_has_flat_model_api_and_fail_closed_cas(self):
+        """RED: prove complex graph writes can be one safe, model-authored choice.
+
+        This is not a model cognition pass: the ordinary managed effect gate and
+        native worker admission still decide whether any candidate may run.
+        """
+        from cognition_agent_os.native_decision import register_native_goal
+        from cognition_agent_os.native_mcp_bridge import build_mcp_server
+        from cognition_agent_os.cognitive_session import inspect_session
+        from cognition_agent_os.intent_planner import compile_intent
+
+        class _FakeMcp:
+            def __init__(self, name):
+                self.tools = {}
+
+            def tool(self, **metadata):
+                def register(fn):
+                    self.tools[fn.__name__] = fn
+                    return fn
+                return register
+
+        with tempfile.TemporaryDirectory(prefix="caos-s2-flat-decision-") as home:
+            db, workspace, fixtures, before = harness.benchmark._prepare(
+                Path(home), harness.CASE["files"])
+            root = register_native_goal(db, harness.OWNER_GOAL,
+                                        managed_session=True)
+            harness.bind_compound_effect_contract(
+                db, fixtures, workspace, root, before)
+            fake_mcp = types.ModuleType("mcp")
+            fake_server = types.ModuleType("mcp.server")
+            fake_server.MCPServer = _FakeMcp
+            with patch.dict(sys.modules, {
+                    "mcp": fake_mcp, "mcp.server": fake_server}):
+                tools = build_mcp_server(
+                    db, workspace, fixtures, allow_goal_writes=True,
+                    allow_host_tick=True, allow_source_read=True).tools
+            self.assertIn("cognition_decision_bundle_record", tools)
+            intent = {
+                "kind": "goal_intent", "objective": "compare_records",
+                "resources": [
+                    {"role": "reference", "path": "baseline.csv"},
+                    {"role": "observed", "path": "actual.csv"},
+                ],
+            }
+            action_spec = compile_intent(intent)["child_source_spec"]
+            before_session = tools["cognition_session_inspect"](root)
+            self.assertEqual(len(before_session["nodes"]), 0)
+            with self.assertRaises(ValueError):
+                tools["cognition_decision_bundle_record"](
+                    root, "{not-valid-json",
+                    "Compare original CSV records", "Draft JSON first",
+                    "The original owner task asks to compare records first")
+            self.assertEqual(
+                inspect_session(db, fixtures, root)["nodes"], [],
+                "Invalid JSON must never write partial option nodes")
+            with self.assertRaises(ValueError):
+                tools["cognition_decision_bundle_record"](
+                    root, json.dumps(intent),
+                    "Same option", "Same option",
+                    "This is not a meaningful comparison")
+            self.assertEqual(inspect_session(db, fixtures, root)["nodes"], [])
+
+            result = tools["cognition_decision_bundle_record"](
+                root, json.dumps(intent),
+                "Compare pinned baseline and actual CSV source values",
+                "Draft only settings JSON before checking the CSV",
+                "Choose the CSV comparison first so differences have an"
+                " independently reviewable source-pinned artifact")
+            self.assertEqual(result["status"], "RECORDED")
+            session = inspect_session(db, fixtures, root)
+            nodes = session["nodes"]
+            self.assertEqual(len(nodes), 3)
+            self.assertEqual([n["kind"] for n in nodes],
+                             ["option", "option", "decision"])
+            decision = nodes[-1]
+            self.assertEqual(decision["depends_on"],
+                             [nodes[0]["id"], nodes[1]["id"]])
+            self.assertEqual(decision["action_spec"], action_spec)
+            self.assertTrue(all(n["status"] == "CURRENT" for n in nodes))
+            self.assertFalse(session["owner_outcome_verified"])
+            with self.assertRaises(ValueError):
+                tools["cognition_decision_bundle_record"](
+                    root, json.dumps(intent), "Try a different choice",
+                    "Draft JSON first", "Old inspected revision should fail")
+            self.assertEqual(len(inspect_session(db, fixtures, root)["nodes"]), 3)
+            inspected = tools["native_goal_inspect"](root)
+            self.assertEqual(inspected["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE")
+            tools["native_procedure_evidence"](root)
+            refs = []
+            for source in ("baseline.csv", "actual.csv"):
+                read = tools["native_source_read"](root, source)
+                refs.append({
+                    "path": source, "sha256": read["source_sha256"]})
+            tools["native_goal_inspect"](root)
+            tools["native_procedure_evidence"](root)
+            result = tools["native_decision_admit"](root, {
+                "selected_intent": intent,
+                "alternative_intent": None,
+                "decision_reason": "Compare the source CSV records first.",
+                "alternative_reason": "The JSON draft cannot verify CSV differences.",
+                "expected_evidence": "A source-pinned discrepancy artifact.",
+                "decision_basis": {
+                    "source_refs": refs,
+                    "challenge": "There may be additional owner obligations.",
+                    "falsifier": "An independent comparison could disprove the report.",
+                    "uncertainty": "The JSON draft is not yet complete.",
+                },
+            })
+            self.assertEqual(result["status"], "NATIVE_METHOD_ENQUEUED")
 
     def test_independent_contract_pins_exact_goal_and_all_source_bytes(self):
         source_hashes = {
