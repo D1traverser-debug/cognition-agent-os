@@ -234,6 +234,68 @@ the model supplies semantic options and tradeoffs"). Its applicability remains
 and an invalidation/rollback probe succeed. Do not promote it into a
 general CAOS semantic method or change S0/S5/product readiness on this basis.
 
+## 6.4. Flat-tool real-model result: failed; escalate above node schema
+
+At exact PR #66 HEAD `46c8ccee842507f6611a59840466cc722e4a8604`,
+GitHub Actions
+[45146706285](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/45146706285)
+completed `success` and the optional Qwen2.5 3B experiment job
+`137597665432` actually ran and uploaded
+`compound-ab-c-evidence-qwen25-3b` (artifact `14806045408`).
+**Independent A/B/C owner verdicts were all `NOT_ACCEPTED`.** C made 5
+model calls, 24 tool calls, ran 600.221 seconds, admitted zero child tasks,
+left all original source bytes unchanged, and stopped on
+`WALL_CLOCK_BUDGET_EXHAUSTED`. B's one local model call did not admit
+a child. The independent experiment has *not* established improved task
+completion. Engineering test success does not replace this verdict.
+
+**First-hand tool-argument counterexample:** `on_tool_start` captures
+structure without retaining secret values. For each of the three observed
+`cognition_decision_bundle_record` calls, the model passed only
+`root_task_id`, **omitting the other four REQUIRED scalar string keys**
+(`selected_intent_json`, `selected_option`, `alternative_option`,
+`decision_reason`). Multiple `native_source_read` calls used
+`root_task_id,path,role` instead of the contract's
+`root_task_id,file_name,offset_chars`. Thus the model appears to
+reuse an *intent resource object* as a tool call. Tool results frequently
+contained only the Agents SDK generic error
+`An error occurred while running the tool.` The cognition graph remained
+empty. The run's `decision_rejections=0` means the *later*
+`native_decision_admit` was never reached; it is NOT evidence of valid
+decision-tool usage. No Worker action was authorized.
+
+**Hypotheses revised:**
+
+- Original **nested CognitiveNode schema** is not a sufficient cause:
+  the actual MCP transport regression proved five flat string fields, yet
+  the model omitted four. The earlier candidate narrowed the interface
+  and fixed mechanical atomicity, but did not make this local model use it.
+- The tool-use failure may be in model capacity, Ollama/OpenAI-compatible
+  tool-call interpretation, the runtime's mapping of validation errors to
+  generic text, or the high number of tools and calls. Do not declare any
+  one cause independently proven without a discriminating probe.
+- The already-passing no-model, original-Host, two-clause positive controls
+  refute the claim that an authorized action is unreachable in *principle*.
+  They do not prove the model selects the correct semantics.
+- B remains a structurally incomparable old baseline without the managed
+  CURRENT graph node. Comparing B+C on cognitive intelligence or calling
+  C optimal is **unsupported**.
+
+**Next causal discriminator:** instrument malformed-call rates against the
+actual pre-recorded MCP `required`/properties without logging argument
+values; test a *single tool, simple scalar-input* local model probe and a
+*provider/SDK adapter error-feedback* probe using the same local model.
+Then compare a model-produced structured decision passed through an
+independently checked graph projector against C's direct multi-tool calling,
+under same grants, source evidence, owner clauses and oracle. A stronger
+model may be examined only with a separate controlled capacity comparison;
+do not secretly change the preregistered 3B benchmark. A repeated run with
+only another prompt wording, no new causal discriminator, is insufficient.
+No invalid tool arguments may be silently translated into an authorized
+decision. The owner-facing ChatGPT interactive source/Skill path is an
+independent higher-level product gate, not repaired by this local Host work.
+**S0 remains NOT_TESTED; S2/S5 OPEN; product NOT_READY.**
+
 ## 7. Interpretation rules
 
 - A/B/C results are not selected by model final prose. The independent oracle and actual ledger/artifact bytes determine the local result.
