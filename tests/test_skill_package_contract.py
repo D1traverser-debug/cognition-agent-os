@@ -286,6 +286,24 @@ class SkillPackageContractTests(unittest.TestCase):
         ):
             self.assertIn(token, verification)
 
+    def test_live_chatgpt_package_retains_file_crud_governance_and_versions(self):
+        root = ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt"
+        skill = (root / "skills/cognition-parent-chatgpt-intake/SKILL.md").read_text(encoding="utf-8")
+        for token in (
+            "## Files and knowledge CRUD",
+            "/cognition-agent-os/CAOS_OPERATING_MANUAL.md",
+            "NO_OP",
+            "delete only proven unneeded, unreferenced copies",
+            "independently reread provider",
+            "trash semantics",
+        ):
+            self.assertIn(token, skill)
+        plugin = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
+        codex = json.loads((root / ".codex-plugin/plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(plugin["name"], codex["name"])
+        self.assertEqual(plugin["version"], codex["version"])
+        self.assertLessEqual(len(skill.encode("utf-8")), self.policy["operational_entrypoint_budget_bytes"])
+
     def test_native_plugin_package_builds_and_reads_back_exact_declared_files(self):
         report = verifier.audit_skill_package(ROOT, self.policy)
         self.assertEqual(report["status"], "PASS", report["errors"])
