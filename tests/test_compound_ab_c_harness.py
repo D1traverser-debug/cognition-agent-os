@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest.mock import patch
@@ -217,6 +218,111 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             self.assertEqual(state["decision_count"], 1)
             self.assertEqual(state["status"], "NATIVE_AWAITING_WORKER")
             self.assertFalse(state["owner_outcome_verified"])
+
+            # Execute the admitted first child through the scoped Host, not
+            # a synthetic claim or model-asserted outcome.
+            tick = tools["native_local_tick"](root)
+            self.assertEqual(tick["status"], "NATIVE_TICK_OBSERVED", tick)
+            state = inspect_native_goal(db, workspace, fixtures, root)
+            self.assertEqual(state["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE", state)
+            self.assertEqual(state["decision_count"], 1)
+            self.assertEqual(
+                state["decisions"][0]["mechanical_verdict"],
+                "REPORT_MECHANICALLY_VERIFIED")
+            original_first_event_id = state["decisions"][0]["event_id"]
+
+            # The second clause must have a NEW decision and a different
+            # compiled action. Reusing the first cognition decision fails.
+            draft_intent = {
+                "kind": "goal_intent",
+                "objective": "ensure_structure",
+                "resources": [{"role": "input", "path": "settings.json"}],
+                "requirements": [{"field": "owner", "equals": "ops"}],
+            }
+            settings_read = tools["native_source_read"](root, "settings.json")
+            self.assertEqual(settings_read["status"], "NATIVE_SOURCE_EXCERPT")
+            draft_refs = [{
+                "path": "settings.json",
+                "sha256": settings_read["source_sha256"],
+            }]
+            draft_nodes = [
+                ("settings-source", "source", [],
+                 [{"path": "settings.json",
+                   "sha256": settings_read["source_sha256"],
+                   "quote": settings_read["excerpt"].splitlines()[0]}],
+                 "Original settings document evidence."),
+                ("option-draft-json", "option", ["settings-source"], [],
+                 "Prepare a local JSON draft that preserves source fields."),
+                ("option-skip-json", "option", ["settings-source"], [],
+                 "Leave settings unchanged and accept incomplete owner goal."),
+                ("decision-draft-json", "decision",
+                 ["option-draft-json", "option-skip-json"], [],
+                 "Choose isolated JSON draft after CSV mechanical verification."),
+            ]
+            for name, kind, deps, source_refs, explanation in draft_nodes:
+                session = tools["cognition_session_inspect"](root)
+                node = {
+                    "id": name, "kind": kind, "text": explanation,
+                    "depends_on": deps, "source_refs": source_refs,
+                    "supersedes": None,
+                    "goal_revision": session["goal_revision"],
+                }
+                if kind == "decision":
+                    node["action_spec"] = (
+                        compile_intent(draft_intent)["child_source_spec"])
+                result = tools["cognition_node_record"](
+                    root, node, "s2-bridge-control-" + name,
+                    session["revision_token"])
+                self.assertEqual(result["status"], "RECORDED")
+            tools["native_goal_inspect"](root)
+            tools["native_procedure_evidence"](root)
+            second_proposal = {
+                "selected_intent": draft_intent,
+                "alternative_intent": None,
+                "decision_reason":
+                    "Create only a local candidate of settings.json after CSV review.",
+                "alternative_reason":
+                    "The comparison method has already been completed and cannot draft JSON.",
+                "expected_evidence":
+                    "A standalone JSON draft with owner=ops and original fields preserved.",
+                "decision_basis": {
+                    "source_refs": draft_refs,
+                    "challenge":
+                        "The JSON draft may accidentally overwrite existing keys.",
+                    "falsifier":
+                        "An independent field-level comparison could detect changed original values.",
+                    "uncertainty":
+                        "A local verified draft is not a production settings deployment.",
+                    "decision_review_version": 1,
+                    "decision_reviews": [{
+                        "event_id": original_first_event_id,
+                        "disposition": "RELEVANT",
+                        "rationale":
+                            "The first CSV reconciliation is now mechanically reviewed.",
+                        "falsifier":
+                            "A source or ledger lineage mismatch would invalidate that result.",
+                    }],
+                },
+            }
+            second_admission = tools["native_decision_admit"](root, second_proposal)
+            self.assertEqual(
+                second_admission["status"], "NATIVE_METHOD_ENQUEUED",
+                second_admission)
+            second_tick = tools["native_local_tick"](root)
+            self.assertEqual(
+                second_tick["status"], "NATIVE_TICK_OBSERVED", second_tick)
+            graded = harness.grade_compound_arm(
+                arm="S2_NO_MODEL_BRIDGE_CONTROL",
+                db_path=db, workspace=workspace, fixtures=fixtures,
+                original_sha256=before, started=time.monotonic(),
+                telemetry={},
+            )
+            self.assertEqual(
+                graded["independent_oracle_status"],
+                "SYNTHETIC_COMPOUND_OWNER_GOAL_MET", graded)
+            self.assertTrue(graded["synthetic_local_postconditions_met"])
+            self.assertTrue(graded["source_preserved"])
+            self.assertFalse(graded["real_business_outcome_verified"])
 
     def test_independent_contract_pins_exact_goal_and_all_source_bytes(self):
         source_hashes = {
