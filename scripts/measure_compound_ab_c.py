@@ -733,10 +733,11 @@ only the independent harness can accept the exact local artifact and lineage.
             "native_procedure_evidence for this exact root. Read only baseline.csv "
             "and actual.csv with native_source_read. Then call native_goal_inspect "
             "and native_procedure_evidence again to refresh the process-local "
-            "snapshot. Confirm compare_records is eligible. First use cognition_session_inspect
-and cognition_node_record to save two competing option nodes and a CURRENT
-decision bound to the exact compiled compare_records action_spec. Then refresh
-native_goal_inspect and native_procedure_evidence. Submit one proposal "
+            "snapshot. Confirm compare_records is eligible. First use "
+            "cognition_session_inspect and cognition_node_record to save "
+            "two competing option nodes and a CURRENT decision bound to "
+            "the exact compiled compare_records action_spec. Then refresh "
+            "native_goal_inspect and native_procedure_evidence. Submit one proposal "
             "with source_refs as a list of exact path/sha256 objects, "
             "alternative_intent=null, and a non-empty alternative_reason. Do not "
             "include observation_sha256, previous_result_task_id or the "
