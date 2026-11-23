@@ -322,7 +322,7 @@ class CompoundAbcHarnessTests(unittest.TestCase):
                 "SYNTHETIC_COMPOUND_OWNER_GOAL_MET", graded)
             self.assertTrue(graded["synthetic_local_postconditions_met"])
             self.assertTrue(graded["source_preserved"])
-            self.assertFalse(graded["real_business_outcome_verified"])
+            self.assertFalse(graded["business_outcome_verified"])
 
     def test_independent_contract_pins_exact_goal_and_all_source_bytes(self):
         source_hashes = {
