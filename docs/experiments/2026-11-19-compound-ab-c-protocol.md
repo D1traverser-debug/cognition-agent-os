@@ -202,6 +202,19 @@ and satisfy the unchanged independent compound oracle. Do not call this
 a model pass. Cross-platform regressions, artifact source identity and
 exact-head CI are required; tests at previous commits do not establish it.
 
+**Exact-head pre-inference engineering receipt (2026-11-23):**
+PR #66 candidate source head `7957354d870617dd63e0b4b082813bd7a4096f0c`
+completed GitHub Actions
+[45145578119](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/45145578119)
+with overall `success`. Linux offline ran 1,342 tests (one skipped);
+Windows offline regression, Ubuntu and Windows MCP stdio transport, PR merge
+compatibility, installed CLI and required safety checks also succeeded. The
+new no-model two-clause flat-bundle test exercised the *unchanged* independent
+compound oracle and reported `SYNTHETIC_COMPOUND_OWNER_GOAL_MET`, with source
+bytes preserved, and the injected-third-node rollback and stale CAS checks
+passed. This is engineering and synthetic-local evidence ONLY, not proof of
+real-model progress, real business outcome or general method transfer.
+
 **New real-model discriminator (opt-in after engineering stability):** repeat
 the same Qwen2.5 3B A/B/C synthetic owner task and independent oracle, with
 original source bytes, registered methods, 600-second bounds, B control,
