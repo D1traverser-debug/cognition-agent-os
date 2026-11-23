@@ -95,6 +95,7 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             inspect_native_goal, register_native_goal,
         )
         from cognition_agent_os.native_mcp_bridge import build_mcp_server
+        from cognition_agent_os.intent_planner import compile_intent
 
         class _FakeMcp:
             def __init__(self, name):
@@ -137,18 +138,52 @@ class CompoundAbcHarnessTests(unittest.TestCase):
                     "path": read["file_name"],
                     "sha256": read["source_sha256"],
                 })
-            # Required second inspection refreshes CAS after actual reads.
+            # A valid effect requires a CURRENT cognition decision bound
+            # to the exact executable action, not merely a native proposal.
+            # Use existing cognition MCP tools instead of bypassing the gate.
+            decision_intent = {
+                "kind": "goal_intent",
+                "objective": "compare_records",
+                "resources": [
+                    {"role": "reference", "path": "baseline.csv"},
+                    {"role": "observed", "path": "actual.csv"},
+                ],
+            }
+            action_spec = compile_intent(decision_intent)["child_source_spec"]
+            source_quote = (
+                tools["native_source_read"](root, "baseline.csv")["excerpt"]
+                .splitlines()[0])
+            cognition_nodes = [
+                ("baseline-source", "source", [],
+                 [{"path": "baseline.csv", "sha256": refs[0]["sha256"],
+                   "quote": source_quote}], "Original baseline CSV evidence."),
+                ("option-compare", "option", ["baseline-source"], [],
+                 "Compare CSV records before changing JSON draft."),
+                ("option-draft-first", "option", ["baseline-source"], [],
+                 "Draft the JSON settings first, leaving CSV unexplained."),
+                ("decision-compare", "decision",
+                 ["option-compare", "option-draft-first"], [],
+                 "Select CSV comparison first, challenge draft-first."),
+            ]
+            for name, kind, deps, source_refs, explanation in cognition_nodes:
+                session = tools["cognition_session_inspect"](root)
+                node = {
+                    "id": name, "kind": kind, "text": explanation,
+                    "depends_on": deps, "source_refs": source_refs,
+                    "supersedes": None,
+                    "goal_revision": session["goal_revision"],
+                }
+                if kind == "decision":
+                    node["action_spec"] = action_spec
+                written = tools["cognition_node_record"](
+                    root, node, "s2-bridge-control-" + name,
+                    session["revision_token"])
+                self.assertEqual(written["status"], "RECORDED")
+            # Required second inspection refreshes CAS after cognition writes.
             tools["native_goal_inspect"](root)
             tools["native_procedure_evidence"](root)
             proposal = {
-                "selected_intent": {
-                    "kind": "goal_intent",
-                    "objective": "compare_records",
-                    "resources": [
-                        {"role": "reference", "path": "baseline.csv"},
-                        {"role": "observed", "path": "actual.csv"},
-                    ],
-                },
+                "selected_intent": decision_intent,
                 "alternative_intent": None,
                 "decision_reason":
                     "Compare the original and observed CSV records first.",
