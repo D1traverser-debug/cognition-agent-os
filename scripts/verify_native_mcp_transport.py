@@ -174,7 +174,8 @@ async def run():
                      "cognition_client_history", "cognition_contract_outcome",
                      "cognition_method_trials"}
             records = {"native_hypothesis_record", "cognition_input_record",
-                       "cognition_node_record", "cognition_method_trial"}
+                       "cognition_node_record", "cognition_decision_bundle_record",
+                       "cognition_method_trial"}
             for tool in registered:
                 if tool.name in reads | records:
                     assert tool.annotations is not None, tool.name
