@@ -53,9 +53,11 @@ class CompoundAbcHarnessTests(unittest.TestCase):
         self.assertIn("do not include any of those three fields", normalized_protocol)
         self.assertIn("native_goal_inspect and native_procedure_evidence", protocol)
         self.assertIn("CURRENT cognition decision", protocol)
-        self.assertIn("cognition_session_inspect and cognition_node_record", protocol)
-        self.assertIn("TWO genuinely competing option nodes", protocol)
-        self.assertIn("exactly matching the compiled child source_spec", protocol)
+        self.assertIn("cognition_session_inspect", protocol)
+        self.assertIn("cognition_decision_bundle_record", protocol)
+        self.assertIn("JSON DATA", protocol)
+        self.assertIn("two option nodes", protocol)
+        self.assertIn("EXACT compiled action_spec", protocol)
 
     def test_tool_argument_shape_decodes_json_structure_without_values(self):
         raw = json.dumps({
