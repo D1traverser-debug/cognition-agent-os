@@ -247,6 +247,9 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     # They are never authority: the original SQLite CAS/grant is rechecked
     # inside admit_native_decision. A restart intentionally requires fresh reads.
     decision_snapshots: dict[str, dict[str, Any]] = {}
+    # Ephemeral read proofs and cognitive CAS only; neither grants a write.
+    cognition_read_tokens: dict[str, str] = {}
+    source_read_evidence: dict[str, dict[str, dict[str, str]]] = {}
 
     def _snapshot_from_inspection(root_task_id: str, observed: dict) -> None:
         digest = observed.get("observation_sha256")
@@ -578,6 +581,12 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             post_manifest = _sources(fixtures)
             if post_manifest.get(file_name) != digest:
                 raise ValueError("SOURCE_CHANGED_DURING_READ")
+            if offset_chars == 0:
+                quote = next((line for line in excerpt.splitlines()
+                              if line and len(line) <= 4000), None)
+                if quote:
+                    source_read_evidence.setdefault(root_task_id, {})[file_name] = {
+                        "path": file_name, "sha256": digest, "quote": quote}
             return {
                 "status": "NATIVE_SOURCE_EXCERPT",
                 "file_name": file_name, "source_sha256": digest,
@@ -799,7 +808,8 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
     # Durable cognition shares the existing native roots/events, not a new
     # scheduler. Effect-contract installation is deliberately NOT exposed.
     from .cognitive_session import (
-        inspect_session, record_node, amend_goal, reopen_node, record_input, inspect_inputs)
+        inspect_session, record_node, record_decision_bundle,
+        amend_goal, reopen_node, record_input, inspect_inputs)
     from .effect_contract import inspect_contract_outcome
     from .method_learning import record_trial, inspect_trials
 
@@ -813,8 +823,13 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
         """
         if not allow_source_read:
             raise PermissionError("SOURCE_DISCLOSURE_NOT_ENABLED")
-        return inspect_session(db_path, fixtures, root_task_id,
-                               after_event_id=after_event_id, limit=limit)
+        state = inspect_session(db_path, fixtures, root_task_id,
+                                after_event_id=after_event_id, limit=limit)
+        if state.get("grant_current"):
+            cognition_read_tokens[root_task_id] = state["revision_token"]
+        else:
+            cognition_read_tokens.pop(root_task_id, None)
+        return state
 
     @record_tool()
     def cognition_input_record(root_task_id: str, text: str, origin: str, locator: str,
@@ -874,6 +889,67 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             raise PermissionError("SOURCE_DISCLOSURE_NOT_ENABLED")
         return record_node(db_path, fixtures, root_task_id, node,
                            request_id=request_id, expected_revision=expected_revision)
+
+    @record_tool()
+    def cognition_decision_bundle_record(
+            root_task_id: str, selected_intent_json: str,
+            selected_option: str, alternative_option: str,
+            decision_reason: str) -> dict:
+        """Record a model-chosen method and real competing alternative atomically.
+
+        Unlike generic cognition_node_record this model-facing tool uses only
+        scalar arguments; the bridge maps them to three validated canonical
+        nodes in ONE existing SQLite transaction. The model owns choices and
+        rationale; source pins, CAS, and action compilation are mechanical.
+        This never admits an effect or certifies semantic/owner success.
+        Call cognition_session_inspect AND native_source_read first.
+        selected_intent_json is JSON DATA (not JSON Schema): a valid goal_intent
+        object for the registered method you selected.
+        """
+        if not allow_source_read:
+            raise PermissionError("SOURCE_DISCLOSURE_NOT_ENABLED")
+        expected = cognition_read_tokens.get(root_task_id)
+        if expected is None:
+            raise ValueError("COGNITION_STALE_REVISION")
+        if type(selected_intent_json) is not str or len(selected_intent_json) > 4096:
+            raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
+        try:
+            intent = json.loads(selected_intent_json)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("COGNITION_INVALID_DECISION_BUNDLE") from exc
+        if type(intent) is not dict or intent.get("kind") != "goal_intent":
+            raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
+        from .intent_planner import compile_intent
+        try:
+            action = compile_intent(intent)["child_source_spec"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("COGNITION_INVALID_DECISION_BUNDLE") from exc
+        if type(action) is not dict:
+            raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
+        resources = intent.get("resources", [])
+        if type(resources) is not list or any(
+                type(r) is not dict or type(r.get("path")) is not str
+                for r in resources):
+            raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
+        observed_refs = source_read_evidence.get(root_task_id, {})
+        paths = [r["path"] for r in resources]
+        if any(name not in observed_refs for name in paths):
+            raise ValueError("COGNITION_EVIDENCE_NOT_READ")
+        refs = [observed_refs[name] for name in dict.fromkeys(paths)]
+        request_digest = hashlib.sha256(json.dumps(
+            [root_task_id, intent, selected_option, alternative_option,
+             decision_reason], sort_keys=True, ensure_ascii=False,
+            allow_nan=False).encode("utf-8")).hexdigest()[:24]
+        result = record_decision_bundle(
+            db_path, fixtures, root_task_id,
+            selected_option=selected_option,
+            alternative_option=alternative_option,
+            decision_reason=decision_reason,
+            action_spec=action, source_refs=refs,
+            request_id="bundle-request-" + request_digest,
+            expected_revision=expected)
+        cognition_read_tokens.pop(root_task_id, None)
+        return result
 
     @write_tool()
     def cognition_goal_amend(root_task_id: str, correction: str, request_id: str,
