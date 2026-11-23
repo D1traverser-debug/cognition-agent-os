@@ -143,6 +143,84 @@ run on the exact commit after opt-in, confirm the experimental job actually
 started (not SKIPPED), and preserve its artifact. If its result is pending,
 retain `MODEL_RESULT=NOT_TESTED` instead of borrowing earlier CI success.
 
+## 6.3. Exact seven-tool model result, competing causes, and bounded repair
+
+**Observed RED after §6.2:** GitHub Actions run
+[45138814460](https://github.com/D1traverser-debug/cognition-agent-os/actions/runs/45138814460)
+at exact source head `7d76e50144b6f5d242d4a4b3c8cc7b0b871f9687`
+completed its experiment job successfully **as an engineering run**, but the
+independent A, B and C verdicts were all `NOT_ACCEPTED`. C ran 11 model
+calls, 23 MCP tool calls and 600.175 seconds; it produced zero child tasks.
+Its real tool trace repeatedly passed JSON **schema descriptors** (including
+`{"title":"Id","type":"string"}`) as `cognition_node_record` parameter
+**values**, and hit Pydantic validation errors. The previous five-tool
+reachability gap was removed, but no executable method decision was created.
+All three original source files remained unchanged. The independent oracle
+did **not** accept the task. No actual model ability improvement was proved.
+
+**Competing explanations and discriminators:**
+
+1. Missing legal write path: previously demonstrated and corrected; a
+   deterministic client reaches both native methods and the independent
+   synthetic local owner oracle through the existing bridge/Host. Not the
+   sufficient cause of this latest failure.
+2. Complex model-facing contracts: observed failure copies the generic
+   `CognitiveNode` schema as call arguments; four sequential node writes each
+   required explicit IDs, dependencies, goal version and CAS. Directly supported
+   by failed call traces.
+3. SDK/Ollama schema translation or local 3B parameter-generation capacity:
+   still possible; the trace alone does not assign fault to a particular
+   SDK/provider layer. Must be distinguished on the **actual MCP wire** and
+   in one controlled real-model rerun.
+4. Gate or independent oracle defective: the no-model two-clause positive
+   control, original-source preservation and separate independent oracle
+   challenge this explanation. No relaxation of a valid gate is allowed.
+
+**Compared routes:** adding more natural-language instructions alone repeats a
+previous failed intervention; replacing the model, adding a second autonomous
+scheduler or bypassing the gate changes the experiment/authority boundary.
+The selected **provisional interface adaptation** projects a single
+model-authored choice through a flat `cognition_decision_bundle_record` MCP
+tool (five scalar strings) into three canonical nodes under one existing
+SQLite transaction. The model still chooses the selected method, competing
+option and rationale. The bridge mechanically parses the selected intent,
+uses **only already disclosed and digest-verified local source reads**, compiles
+the existing action spec, binds a previously inspected revision and lets
+`cognitive_session` enforce source/check/commit/rollback/replay. It neither
+inventors alternatives nor grants Worker permissions, and the independent
+`native_decision_admit` and operator effect contract remain unchanged.
+The original generic `cognition_node_record` continues to exist for more
+capable clients; only the isolated C tool allowlist changes.
+
+**Independent engineering falsifiers:** in a real MCP stdio schema inspection,
+every input field of the compact tool must be `type=string`; the generic
+nested node is not visible to C. An injected failure on the third node must
+roll back *all* nodes. Missing source-read evidence, wrong owner root, stale
+CAS, malformed intent and duplicate options must fail without mutation.
+A separate no-model positive control must execute **both** original clauses
+and satisfy the unchanged independent compound oracle. Do not call this
+a model pass. Cross-platform regressions, artifact source identity and
+exact-head CI are required; tests at previous commits do not establish it.
+
+**New real-model discriminator (opt-in after engineering stability):** repeat
+the same Qwen2.5 3B A/B/C synthetic owner task and independent oracle, with
+original source bytes, registered methods, 600-second bounds, B control,
+harness-only Worker and no external effects. C's only functional intervention
+is the flat source-pinned atomic cognition interface and its corresponding
+instructions; it still has seven allowlisted tools. If the model still copies
+schema descriptors as scalar values, return to provider/model/tool-format
+diagnosis; if it records a CURRENT decision but native admission fails, inspect
+proposal structure and lineage; if it admits only one child, address the
+second-clause ownership/review path. **Do not automatically keep repeating
+the same expensive screen without a new causal discriminator.**
+
+**Method-learning hold:** this is a domain-neutral *candidate rule*
+("mechanical state/CAS/graph construction belongs in a checked tool boundary;
+the model supplies semantic options and tradeoffs"). Its applicability remains
+`NOT_VALIDATED_FOR_TRANSFER` until an independently checked unfamiliar goal
+and an invalidation/rollback probe succeed. Do not promote it into a
+general CAOS semantic method or change S0/S5/product readiness on this basis.
+
 ## 7. Interpretation rules
 
 - A/B/C results are not selected by model final prose. The independent oracle and actual ledger/artifact bytes determine the local result.
