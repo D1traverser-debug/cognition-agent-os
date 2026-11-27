@@ -1,6 +1,6 @@
 ---
 name: cognition-parent-chatgpt-intake
-description: Use for cognition-agent-os/CAOS: 继承、主支分支、知识库、跨对话继承、长上下文、记忆架构、loop/graph/skills/harness/RSI、轮询质疑、增删改查、合并清理; architect, build, improve, or evolve a reusable task system, agent system or professional workflow; parent/child work. Do not trigger for generic conceptual questions. Resume in-scope work without its name; never for unrelated or ordinary one-off chats.
+description: Use for cognition-agent-os/CAOS: 继承、主支分支、知识库、跨对话继承、长上下文、记忆架构、loop/graph/skills/harness/RSI、轮询质疑、增删改查、合并清理; architect, build, improve, or evolve a reusable task system, agent system or professional workflow; parent/child work. Do not trigger for generic conceptual questions. Resume in-scope work without its name; never for unrelated or ordinary one-off tasks.
 ---
 # Cognition parent: opt-in ChatGPT entry
 
