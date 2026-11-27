@@ -407,5 +407,33 @@ class SkillPackageContractTests(unittest.TestCase):
         self.assertIn("package-id", action)
 
 
+    def test_explicit_system_building_entry_does_not_misroute_to_caos_repo(self):
+        skill_path = (
+            ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt/skills/"
+            "cognition-parent-chatgpt-intake/SKILL.md"
+        )
+        skill = skill_path.read_text(encoding="utf-8")
+        description = next(
+            line[len("description: "):]
+            for line in skill.splitlines()
+            if line.startswith("description: ")
+        )
+        self.assertIn("architect, build, improve, or evolve a reusable task system", description)
+        self.assertIn("Do not trigger for generic conceptual questions", description)
+        self.assertIn("ordinary one-off tasks", description)
+        self.assertIn("do not route the work into modifying the cognition-agent-os repository", skill)
+        manifest = json.loads((
+            ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt/plugin.json"
+        ).read_text(encoding="utf-8"))
+        ui = manifest["extensions"]["com.openai"]["interface"]
+        self.assertEqual(manifest["version"], "0.1.25")
+        self.assertIn("用户要求构建其他系统时，不得误改 cognition-agent-os 本身", ui["defaultPrompt"])
+        self.assertNotIn("继续 cognition-agent-os", ui["defaultPrompt"])
+        codex_manifest = json.loads((
+            ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt/.codex-plugin/plugin.json"
+        ).read_text(encoding="utf-8"))
+        self.assertEqual(codex_manifest["version"], manifest["version"])
+        self.assertEqual(codex_manifest["interface"]["defaultPrompt"], ui["defaultPrompt"])
+
 if __name__ == "__main__":
     unittest.main()
