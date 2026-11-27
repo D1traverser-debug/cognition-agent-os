@@ -54,11 +54,25 @@ class CorpusDecisionProvenance(unittest.TestCase):
         fake_mcp = types.ModuleType("mcp")
         fake_server = types.ModuleType("mcp.server")
         fake_server.MCPServer = _MCP
-        with patch.dict(sys.modules, {
-                "mcp": fake_mcp, "mcp.server": fake_server}):
-            self.server = build_mcp_server(
-                self.db, self.workspace, self.sources,
-                allow_goal_writes=True, allow_source_read=True)
+        fake_server_module = types.ModuleType("mcp.server.mcpserver")
+        fake_exceptions = types.ModuleType("mcp.server.mcpserver.exceptions")
+
+        class FakeToolError(Exception):
+            pass
+
+        fake_exceptions.ToolError = FakeToolError
+        self.tool_error = FakeToolError
+        # The real MCP wrapper converts supported denials into ToolError.
+        # Keep the test shim active through tool CALLS, not only registration.
+        modules = patch.dict(sys.modules, {
+            "mcp": fake_mcp, "mcp.server": fake_server,
+            "mcp.server.mcpserver": fake_server_module,
+            "mcp.server.mcpserver.exceptions": fake_exceptions})
+        modules.start()
+        self.addCleanup(modules.stop)
+        self.server = build_mcp_server(
+            self.db, self.workspace, self.sources,
+            allow_goal_writes=True, allow_source_read=True)
 
     def _record(self):
         intent = {
@@ -105,7 +119,7 @@ class CorpusDecisionProvenance(unittest.TestCase):
         self.server.tools["native_source_read"](self.goal, "evidence.md")
         self.source.write_text("Source content changed after the MCP read.\n",
                                encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "COGNITION_SOURCE_CHANGED"):
+        with self.assertRaisesRegex(self.tool_error, "COGNITION_SOURCE_CHANGED"):
             self._record()
         view = inspect_session(self.db, self.sources, self.goal)
         self.assertEqual(view["revision_token"], before["revision_token"])
