@@ -3,3 +3,8 @@
 /archive/** -text
 /archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md text eol=lf
 /SESSION_HANDOFF.md text eol=lf
+
+# Keep active Skill packages byte-stable across operating systems.
+/.agents/skills/** text eol=lf
+/integrations/chatgpt/** text eol=lf
+/config/skill_package_policy.json text eol=lf

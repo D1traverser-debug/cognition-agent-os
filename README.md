@@ -6,7 +6,11 @@
 
 Given the owner's complete goal, constraints and lawful authorization, the parent should preserve intent across interruption, decompose and challenge assumptions, research unfamiliar professional methods and tools, compare materially different solutions, execute only allowed effects, independently verify the full owner/child-business result, change method after failure, retain evidence-backed learning and transfer to unfamiliar domains while reducing owner correction burden and unnecessary system complexity.
 
-Current ChatGPT/Codex cognition and the repository Host/SQLite are technical surfaces of the same intended parent, but they are **not automatically connected**. Child systems retain their own task IDs, state, business data, permissions and result oracles. Historical `universal-agent-os` is not the active parent.
+Current ChatGPT/Codex cognition and the repository Host/SQLite are technical surfaces of the same intended parent, but they are **not automatically connected**. Child systems retain their own task IDs, state, business data, permissions and result oracles.
+
+## Architecture convergence
+
+Managed local execution is optional for ordinary ChatGPT interaction. Use the current architecture decision in `docs/01-ARCHITECTURE-DECISIONS.md` and the owner-outcome gate in `docs/PRODUCT-READINESS-GATE.md`. No parallel task ledger or mandatory deployment is implied by an adapter.
 
 ## Default context surface
 

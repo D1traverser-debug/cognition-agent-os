@@ -1,0 +1,63 @@
+{
+  "policy_version": "1.0.0",
+  "contract": "CAOS_SKILL_PACKAGE_BUDGET",
+  "encoding": "UTF-8",
+  "platform_entrypoint_limit_bytes": 12000,
+  "operational_entrypoint_budget_bytes": 10500,
+  "preferred_entrypoint_budget_bytes": 9000,
+  "reference_module_limit_bytes": 32768,
+  "package_uncompressed_limit_bytes": 131072,
+  "max_description_characters": 400,
+  "scan_roots": [
+    "."
+  ],
+  "excluded_directory_names": [
+    "archive",
+    ".git",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    ".tox",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache"
+  ],
+  "entrypoints": [
+    {
+      "id": "goal-grounded-semantic-review",
+      "path": ".agents/skills/goal-grounded-semantic-review/SKILL.md",
+      "references": [
+        ".agents/skills/goal-grounded-semantic-review/references/agent-learning-hub-primary-sources.md",
+        ".agents/skills/goal-grounded-semantic-review/references/research-method-selection.md",
+        ".agents/skills/goal-grounded-semantic-review/references/recursive-verification.md"
+      ],
+      "package_id": null
+    },
+    {
+      "id": "cognition-parent-chatgpt-intake",
+      "path": "integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/SKILL.md",
+      "references": [
+        "integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/references/parent-protocol.md",
+        "integrations/chatgpt/cognition-agent-os-chatgpt/skills/cognition-parent-chatgpt-intake/references/scope-probes.md"
+      ],
+      "package_id": "chatgpt-native-overlay"
+    }
+  ],
+  "packages": [
+    {
+      "id": "chatgpt-native-overlay",
+      "root": "integrations/chatgpt/cognition-agent-os-chatgpt",
+      "paths": [
+        ".codex-plugin/plugin.json",
+        "plugin.json",
+        "agents/openai.yaml",
+        "skills/cognition-parent-chatgpt-intake/SKILL.md",
+        "skills/cognition-parent-chatgpt-intake/references/scope-probes.md",
+        "skills/cognition-parent-chatgpt-intake/references/parent-protocol.md"
+      ]
+    }
+  ]
+}

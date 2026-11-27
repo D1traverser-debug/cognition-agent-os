@@ -112,16 +112,16 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
                      "competing root-cause hypotheses", "counterevidence",
                      "falsifier/rollback", "NOT_TESTED/UNKNOWN",
                      "private chain-of-thought"):
-            self.assertIn(term, skill)
+            self.assertIn(term, complete_policy())
         # Verify the comparison obligation, not one frozen slogan that
         # rejects legitimate additions such as retire/remove.
         study = skill.split("- **Study deeply / traverse original projects:**", 1)[1].split("\n- **Rechallenge BEFORE decision", 1)[0]
         for method in ("reuse", "adapt", "replace", "remove", "build"):
             self.assertRegex(study, rf"\b{method}\b")
-        self.assertIn("For EVERY cognition-system decision", skill)
+        self.assertIn("Every decision checks goal fit, evidence, viable alternatives", skill)
         # These are graph responsibilities, not a numbered pipeline.
         self.assertIn("not an ordered sequence", skill)
-        self.assertIn("new evidence can reopen any node", skill)
+        self.assertIn("New contradictory evidence can reopen an ancestor", skill)
         workflow = skill.split("## Work on the problem, not the instructions", 1)[1].split(
             "## Owner-visible decision and execution evidence", 1)[0]
         self.assertNotRegex(workflow, r"(?m)^\d+\. \*\*")
@@ -139,7 +139,8 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         core = SKILL.read_text(encoding="utf-8")
         protocol = PROTOCOL.read_text(encoding="utf-8")
         self.assertLess(len(core.encode("utf-8")), 9000)
-        self.assertGreater(len(protocol), 16000)
+        self.assertIn("## Federated first-mile and decision re-entry", protocol)
+        self.assertIn("## Tool choice and inspection lifecycle", protocol)
         self.assertIn("references/parent-protocol.md", core)
         self.assertIn("The concise `../SKILL.md` is the interactive execution entrance", protocol)
         for token in ("SOURCE_LIFECYCLE_CONFLICT", "Source lifecycle at the real retrieval/write boundary",
@@ -149,12 +150,13 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
 
     def test_decision_also_challenges_own_prompt_method_and_test(self):
         core = SKILL.read_text(encoding="utf-8")
-        for token in ("Decision self-critique", "goal, prompt/entry, source",
-                      "SKILL_DEFECT", "EXECUTION_LAPSE", "ENTRY_NOT_SELECTED",
+        for token in ("Decision self-critique", "goal interpretation, entry, source",
                       "Bounded critique", "without new evidence", "independent readback"):
             self.assertIn(token, core)
+        for token in ("SKILL_DEFECT", "EXECUTION_LAPSE", "ENTRY_NOT_SELECTED"):
+            self.assertIn(token, complete_policy())
         self.assertLess(core.index("Rechallenge BEFORE decision"), core.index("Execute / independent check / recursive reopen"))
-        self.assertIn("Do not rewrite an existing valid rule", core)
+        self.assertIn("Do not rewrite a valid rule for an execution lapse", core)
 
     def test_owner_woken_interactive_phase_not_gated_on_permanent_host(self):
         """Source policy only; cannot prove a fresh ChatGPT launch."""
@@ -211,9 +213,9 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         codex = AGENTS.read_text(encoding="utf-8")
         for content in (chatgpt, codex):
             self.assertIn("cognition-agent-os", content)
-            self.assertIn("universal-agent-os", content)
             self.assertRegex(content.lower(), r"child.{0,300}(?:grant|permission|native)")
-            self.assertNotIn("UAOS is the active parent", content)
+        self.assertIn("parent instructions neither grant child permissions", chatgpt)
+        self.assertIn("Each child retains its native state, grants, IDs and outcome oracle", codex)
         self.assertIn("SESSION_HANDOFF.md", chatgpt)
         self.assertIn("SESSION_HANDOFF.md", codex)
         self.assertTrue(CODEX_SKILL.is_file())
@@ -284,7 +286,7 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
 
     def test_evaluation_cases_not_default_loaded(self):
         probes = PROBES.read_text(encoding="utf-8")
-        for title in ("M. Legacy-entry collision:", "N. Bare new-chat inherit:",
+        for title in ("M. Stale-entry collision:", "N. Bare new-chat inherit:",
                       "O. Direct child resume:", "P. Newly discovered project:",
                       "Q. Interrupted work / mid-task user question / connection loss:",
                       "R. In-scope skill selection versus ordinary-chat non-trigger:",
@@ -321,16 +323,12 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertEqual(native["skills"].rstrip("/"), "./skills")
         self.assertEqual(native["repository"], root["repository"])
 
-        # Test the real five-entry source package, not just a manifest word.
-        # Preserve the installed plugin's native metadata during upgrade.
-        entries = (
-            ".codex-plugin/plugin.json",
-            "plugin.json",
-            "agents/openai.yaml",
-            "skills/cognition-parent-chatgpt-intake/SKILL.md",
-            "skills/cognition-parent-chatgpt-intake/references/scope-probes.md",
-            "skills/cognition-parent-chatgpt-intake/references/parent-protocol.md",
-        )
+        # The shared policy is the only package-file inventory.
+        policy = json.loads((ROOT / "config/skill_package_policy.json").read_text(encoding="utf-8"))
+        package_spec = next(item for item in policy["packages"]
+                            if item["id"] == "chatgpt-native-overlay")
+        self.assertEqual(ROOT / package_spec["root"], BASE)
+        entries = tuple(package_spec["paths"])
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
             for path in entries:
@@ -387,14 +385,12 @@ class ChatGPTSourceBoundaries(unittest.TestCase):
         self.assertIn("chatgpt_plugin_release_bundle:", workflow)
         self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", workflow)
         self.assertNotIn("contains(github.event.pull_request.body, '[bundle-chatgpt-plugin]')", workflow)
-        self.assertIn("manifest['version']", workflow)
-        self.assertNotIn("manifest['version'] == '0.1.3'", workflow)
         self.assertIn("No installation or owner account mutation occurs in CI",
                       workflow)
-        self.assertIn("'.codex-plugin/plugin.json'", workflow)
-        self.assertIn("manifest['version'] == native['version']", workflow)
-        self.assertIn("'skills/cognition-parent-chatgpt-intake/SKILL.md'",
-                      workflow)
+        self.assertIn("python scripts/verify_skill_package.py", workflow)
+        self.assertIn("--package chatgpt-native-overlay", workflow)
+        self.assertIn("--zip-output cognition-chatgpt-plugin-overlay.zip", workflow)
+        self.assertIn("skill-package-report.json", workflow)
 
 
 if __name__ == "__main__":
