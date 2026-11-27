@@ -111,6 +111,32 @@ class CorpusDecisionProvenance(unittest.TestCase):
         self.assertEqual(view["revision_token"], before["revision_token"])
         self.assertEqual(view["nodes"], [])
 
+    def test_source_free_public_metadata_decision_is_not_forced_to_cite_local_corpus(self):
+        # The fix must not invent a local file prerequisite for a distinct,
+        # explicitly scoped public metadata capability. Recording a plan is
+        # still not an authorization to disclose a query or execute a tool.
+        public_root = register_native_goal(
+            self.db, "Compare public agent-tool metadata approaches.",
+            allow_public_discovery=True)
+        enable_managed_session(self.db, public_root)
+        self.server.tools["cognition_session_inspect"](public_root)
+        intent = {
+            "kind": "goal_intent",
+            "objective": "discover_public_tools",
+            "resources": [],
+            "terms": ["agents"],
+        }
+        result = self.server.tools["cognition_decision_bundle_record"](
+            public_root, json.dumps(intent),
+            "Discover public candidate metadata",
+            "Research the existing local methods first",
+            "Public leads must receive separate independent review.")
+        self.assertEqual(result["status"], "RECORDED")
+        view = inspect_session(self.db, self.sources, public_root)
+        self.assertEqual(len(view["nodes"]), 3)
+        self.assertTrue(all(not n["source_refs"] for n in view["nodes"]))
+        self.assertFalse(result["owner_outcome_verified"])
+
 
 if __name__ == "__main__":
     unittest.main()
