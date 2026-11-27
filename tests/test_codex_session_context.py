@@ -344,6 +344,9 @@ class CodexSessionContext(unittest.TestCase):
                       architecture["proposed_first_action"])
         self.assertIn("挑战", architecture["proposed_first_action"])
         self.assertIn("适应性减轻流程", architecture["proposed_first_action"])
+        self.assertIn("轮询上层根因", architecture["proposed_first_action"])
+        self.assertIn("深度学习", architecture["proposed_first_action"])
+        self.assertIn("唯一统一候选", architecture["proposed_first_action"])
         self.assertGreater(self.last_context_chars, 100,
                            "Native client owns the token overflow; hook must remain valid")
         topology = project["live_python_topology"]
