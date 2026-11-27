@@ -598,6 +598,100 @@ class CompoundAbcHarnessTests(unittest.TestCase):
             self.assertTrue(graded["source_preserved"])
             self.assertFalse(graded["business_outcome_verified"])
 
+    def test_single_mcp_submission_per_effect_passes_existing_compound_oracle(self):
+        """Mechanical boundary comparison only; proposals are test authored."""
+        from cognition_agent_os.native_decision import register_native_goal
+        from cognition_agent_os.native_mcp_bridge import build_mcp_server
+        from cognition_agent_os.cognitive_session import inspect_session
+        from cognition_agent_os.ledger import connect
+        from contextlib import closing
+
+        class _FakeMcp:
+            def __init__(self, name):
+                self.tools = {}
+
+            def tool(self, **metadata):
+                def register(fn):
+                    self.tools[fn.__name__] = fn
+                    return fn
+                return register
+
+        with tempfile.TemporaryDirectory(prefix="caos-unified-proposal-") as home:
+            started = time.monotonic()
+            db, workspace, fixtures, before = harness.benchmark._prepare(
+                Path(home), harness.CASE["files"])
+            root = register_native_goal(db, harness.OWNER_GOAL, managed_session=True)
+            harness.bind_compound_effect_contract(db, fixtures, workspace, root, before)
+            fake_mcp = types.ModuleType("mcp")
+            fake_server = types.ModuleType("mcp.server")
+            fake_server.MCPServer = _FakeMcp
+            with patch.dict(sys.modules, {"mcp": fake_mcp, "mcp.server": fake_server}):
+                tools = build_mcp_server(
+                    db, workspace, fixtures, allow_goal_writes=True,
+                    allow_host_tick=True, allow_source_read=True).tools
+            csv = {"kind": "goal_intent", "objective": "compare_records",
+                   "resources": [{"role": "reference", "path": "baseline.csv"},
+                                 {"role": "observed", "path": "actual.csv"}]}
+            draft = {"kind": "goal_intent", "objective": "ensure_structure",
+                     "resources": [{"role": "input", "path": "settings.json"}],
+                     "requirements": [{"field": "owner", "equals": "ops"}]}
+            refs = [{"path": name, "sha256": sha} for name, sha in before.items()]
+            for index, (selected, alternative) in enumerate(((csv, draft), (draft, csv))):
+                observed = tools["native_goal_inspect"](root)
+                self.assertEqual(observed["status"], "NATIVE_NEXT_DECISION_ADMISSIBLE", observed)
+                session = tools["cognition_session_inspect"](root)
+                self.assertEqual(len(session["nodes"]), index * 3)
+                tools["native_procedure_evidence"](root)
+                proposal = {
+                    "selected_intent": selected, "alternative_intent": alternative,
+                    "decision_reason": ("Compare records before preparing the draft."
+                                        if index == 0 else
+                                        "Prepare the remaining required JSON draft."),
+                    "alternative_reason": ("A JSON draft first misses the required order."
+                                           if index == 0 else
+                                           "Repeating the comparison does not finish the draft."),
+                    "expected_evidence": "Independent source-pinned artifact and lineage.",
+                    "decision_basis": {
+                        "source_refs": refs,
+                        "challenge": "The result may miss a required source or field.",
+                        "falsifier": "Independent outcome inspection can reveal an error.",
+                        "uncertainty": "Neither local effect alone proves the whole goal.",
+                        "decision_review_version": 1,
+                        "decision_reviews": [
+                            {"event_id": entry["event_id"], "disposition": "RELEVANT",
+                             "rationale": "The prior comparison is the first required result.",
+                             "falsifier": "Source drift would invalidate that result."}
+                            for entry in observed["decisions"]],
+                    },
+                }
+                if index == 0:
+                    with self.assertRaisesRegex(ValueError, "COGNITION_EVIDENCE_NOT_READ"):
+                        tools["native_decision_admit"](root, proposal, project_decision=True)
+                    self.assertEqual(inspect_session(db, fixtures, root)["nodes"], [])
+                    with closing(connect(db)) as conn:
+                        self.assertEqual(conn.execute(
+                            "SELECT count(*) FROM tasks WHERE parent_task=?", (root,)
+                        ).fetchone()[0], 0)
+                for name in before:
+                    self.assertEqual(tools["native_source_read"](root, name)["status"],
+                                     "NATIVE_SOURCE_EXCERPT")
+                tools["native_goal_inspect"](root)
+                tools["native_procedure_evidence"](root)
+                admitted = tools["native_decision_admit"](root, proposal, project_decision=True)
+                self.assertEqual(admitted["status"], "NATIVE_METHOD_ENQUEUED", admitted)
+                self.assertFalse(admitted["owner_outcome_verified"])
+                tick = tools["native_local_tick"](root)
+                self.assertEqual(tick["status"], "NATIVE_TICK_OBSERVED", tick)
+            grade = harness.grade_compound_arm(
+                arm="S2_SINGLE_SUBMISSION_NO_MODEL_CONTROL",
+                db_path=db, workspace=workspace, fixtures=fixtures,
+                original_sha256=before, started=started, telemetry={"model_calls": 0})
+            self.assertEqual(grade["independent_oracle_status"],
+                             "SYNTHETIC_COMPOUND_OWNER_GOAL_MET", grade)
+            self.assertEqual(grade["ledger_child_task_count"], 2)
+            self.assertTrue(grade["source_preserved"])
+            self.assertFalse(grade["business_outcome_verified"])
+
     def test_independent_contract_pins_exact_goal_and_all_source_bytes(self):
         source_hashes = {
             "baseline.csv": hashlib.sha256(b"baseline").hexdigest(),

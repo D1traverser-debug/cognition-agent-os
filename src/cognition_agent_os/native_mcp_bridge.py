@@ -696,7 +696,8 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
 
     @write_tool()
     def native_decision_admit(
-            root_task_id: str, proposal: NativeDecisionProposal) -> dict:
+            root_task_id: str, proposal: NativeDecisionProposal,
+            project_decision: bool = False) -> dict:
         """Admit one typed method using the published, nested proposal schema.
 
         Args:
@@ -708,6 +709,11 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
                 those exact CAS/lineage values from this process's latest reads.
                 alternative_reason remains a required non-empty string even
                 when alternative_intent is null.
+            project_decision: For a simple managed graph, project the same
+                compared typed proposal atomically with admission. Requires
+                a fresh cognition_session_inspect and actual granted source
+                reads. An explicit richer graph or null alternative still
+                uses the existing graph path. Defaults to false.
 
         The client researches and proposes options. This tool independently
         checks provenance and queues ONE registered local child, never raw code,
@@ -742,8 +748,31 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             basis["cross_root_procedure_evidence_sha256"] = cross_root_digest
         candidate["decision_basis"] = basis
         candidate["observation_sha256"] = snapshot["observation_sha256"]
-        return admit_native_decision(
-            db_path, workspace, fixtures, root_task_id, candidate)
+        if type(project_decision) is not bool:
+            raise ValueError("INVALID_COGNITION_PROJECTION_MODE")
+        projection = {}
+        if project_decision:
+            if not allow_source_read:
+                raise PermissionError("SOURCE_DISCLOSURE_NOT_ENABLED")
+            revision = cognition_read_tokens.get(root_task_id)
+            if revision is None:
+                raise ValueError("COGNITION_STALE_REVISION")
+            refs = basis.get("source_refs")
+            observed_refs = source_read_evidence.get(root_task_id, {})
+            if (not isinstance(refs, list)
+                    or any(not isinstance(item, dict)
+                           or not isinstance(item.get("path"), str)
+                           or observed_refs.get(item["path"], {}).get("sha256")
+                              != item.get("sha256")
+                           or item["path"] not in observed_refs
+                           for item in refs)):
+                raise ValueError("COGNITION_EVIDENCE_NOT_READ")
+            projection["cognition_revision"] = revision
+        result = admit_native_decision(
+            db_path, workspace, fixtures, root_task_id, candidate, **projection)
+        if project_decision:
+            cognition_read_tokens.pop(root_task_id, None)
+        return result
 
     if allow_local_model_plan:
         @exposed_tool()
