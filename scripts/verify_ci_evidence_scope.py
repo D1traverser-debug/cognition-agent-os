@@ -20,6 +20,7 @@ CORE = (
 )
 OPTIONAL = (
     "architecture_ab_equivalence",
+    "native_feedback_seam_ab",
     "experimental_real_local_model",
     "experimental_public_feedback_model",
     "experimental_local_7b_capacity",
@@ -27,9 +28,12 @@ OPTIONAL = (
     "aoci_official_bootstrap_probe",
     "chatgpt_plugin_release_bundle",
     "experimental_real_native_cognition",
+    "experimental_compound_ab_c",
     "experimental_live_open_goal_method",
     "experimental_open_goal_relevance",
     "native_child_readonly_holdout",
+    "experimental_native_app_server",
+    "experimental_native_execution_boundary",
 )
 
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cognition-agent-os-chatgpt",
-  "version": "0.1.20",
-  "description": "Private ChatGPT skills-only plugin for cognition-agent-os goal recovery, tool selection, first-hand research, independent verification and safe correction. Does not itself connect a custom Host API.",
+  "version": "0.1.25",
+  "description": "Private ChatGPT skills-only plugin for CAOS goal recovery, recursive root-cause research, adaptive workflow design, reusable task-system architecture/build/evolution, tool discovery, independent verification and safe correction. Does not itself connect a custom Host API.",
   "author": {
     "name": "cognition-agent-os owner"
   },
@@ -11,14 +11,14 @@
     "com.openai": {
       "interface": {
         "displayName": "Cognition Agent OS — ChatGPT",
-        "shortDescription": "认知目标恢复与工具核验",
-        "longDescription": "ChatGPT 原生认知工作流：跨会话恢复、目标纠偏、工具链核对、合法行动与独立验收。未配置 MCP/API Host，不自动取得业务写入权限。",
+        "shortDescription": "通用认知与系统构建",
+        "longDescription": "ChatGPT 原生认知工作流：目标恢复、递归根因研究、动态工作流设计、其他任务系统架构与构建、工具发现、合法行动和独立验收。未配置 MCP/API Host，不自动取得业务写入权限。",
         "developerName": "cognition-agent-os owner",
         "category": "Productivity",
         "capabilities": [
           "Interactive"
         ],
-        "defaultPrompt": "继续 cognition-agent-os：恢复完整用户目标及纠正；自主发现遗漏、未执行与漂移，质疑、研究、比较方案；合法执行并独立验收真实结果，失败纠偏；有合法下一步即继续，确实受阻才报告。"
+        "defaultPrompt": "按 CAOS 认知方法处理当前选定目标：恢复完整用户目标与纠正；持续质疑、研究并比较方案；按需设计工作流，合法执行、独立验收真实结果，失败纠偏。用户要求构建其他系统时，不得误改 cognition-agent-os 本身；简单一次性任务保持轻量。"
       }
     }
   }

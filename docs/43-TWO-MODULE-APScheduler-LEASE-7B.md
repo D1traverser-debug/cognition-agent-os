@@ -51,7 +51,7 @@ The **modified** full original package with all real dependencies must pass PUBL
 
 **PENDING ONE REAL LOCAL 7B RUN.** Do not conflate the original Docker reproduction, green Actions infrastructure or successful model token generation with an accepted code patch. The first experiment outcome shall be recorded from the actual Actions job log without changing the frozen manifests, without same-issue retry or false positive. P31 remains an honest rejected-candidate negative outcome.
 
-This is the same experimental Draft PR #12 branch `feat/p10-runtime-conformance-20261020`, not merged into main, not deployed to owner PC and not a registered UAOS service child.
+This is the same experimental Draft PR #12 branch `feat/p10-runtime-conformance-20261020`, not merged into main, not deployed to owner PC and not a registered production service child.
 
 
 ## Actual P32 genuine 7B result — 2026-10-22 Beijing: PARTIAL, NOT ACCEPTED

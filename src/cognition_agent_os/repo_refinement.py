@@ -20,7 +20,7 @@ from .container_lab import candidate_changes,cases_from_bytes,run_suite,Containe
 from .repo_repair import audit_repo,_sources,_candidate_from_model,sha
 from .source import safe_fixture
 from .runner import store_once,ArtifactConflict,read_audited_artifact
-from .ledger import connect,create_task,event,current_guard
+from .ledger import connect_existing as connect,create_task,event,current_guard
 
 MAX_ATTEMPTS_PER_LINEAGE=3
 TASK=re.compile(r"[0-9a-f]{32}\Z")

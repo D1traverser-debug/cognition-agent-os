@@ -1,7 +1,7 @@
 """Frozen Git-blob provenance guard for old PR evidence; NOT runtime acceptance.
 
-This test uses only repository-local archived bytes and a dated exact-source
-receipt. It does not connect GitHub or infer historical PR semantic equivalence,
+This test checks retained local historical bytes, and exact locators for
+research retired to Git history. It does not connect GitHub or infer historical PR semantic equivalence,
 safe closure, owner permission or a production memory engine.
 """
 from __future__ import annotations
@@ -52,23 +52,9 @@ class HistoricalBranchProvenanceTests(unittest.TestCase):
             self.assertRegex(row["git_blob_sha1"],SHA)
             self.assertFalse((ROOT/row["path"]).exists(),
                              "research candidate accidentally entered active tree")
-        # Preserve the exact historical bytes under a quarantine prefix, not
-        # merely an old branch reference or an unchecked documentation claim.
-        # The frozen source register is the independent expected SHA oracle.
-        archive = ROOT/"archive"/"research"
-        self.assertTrue(archive.is_dir())
-        for row in entries:
-            matches = [
-                p for p in archive.rglob(Path(row["path"]).name)
-                if p.is_file() and not p.is_symlink()
-                and p.relative_to(archive).parts[1:]
-                   == tuple(Path(row["path"]).parts)
-            ]
-            self.assertEqual(len(matches), 1,
-                             "missing or ambiguous isolated source: " + row["path"])
-            self.assertEqual(git_blob_sha1(matches[0].read_bytes()),
-                             row["git_blob_sha1"],
-                             "preserved source bytes changed: " + row["path"])
+        retired = self.data["retired_research_checkout"]
+        indexed = {row["git_blob_sha1"] for row in retired["files"]}
+        self.assertTrue({row["git_blob_sha1"] for row in entries} <= indexed)
         self.assertIn("DO_NOT_PROMOTE_ISOLATED_RETRIEVAL_RESEARCH_AS_AUTHORITY",
                       self.data["prohibitions"])
 
@@ -90,32 +76,28 @@ class HistoricalBranchProvenanceTests(unittest.TestCase):
                           "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT",
                           "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED"})
 
-    def test_non_pr_unique_sources_are_byte_preserved_but_not_enabled(self):
-        from pathlib import Path
-        prefixes = {
-            "METHOD_SELECTION_SKILL_ISOLATED": "nonpr-engineering-method",
-            "HISTORICAL_GRAPHIFY_WORKFLOW_EXPERIMENT": "nonpr-graphify-old-workflow",
-            "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED": "nonpr-model-quality-v5",
-        }
-        sources = self.data["isolated_unpromoted_non_pr_artifacts"]
-        self.assertEqual(len(sources), 9)
-        for item in sources:
-            archive = (ROOT / "archive" / "research" / prefixes[item["kind"]]
-                       / item["path"])
-            self.assertTrue(archive.is_file() and not archive.is_symlink(),
-                            item["path"])
-            self.assertTrue(archive.resolve().is_relative_to(ROOT))
-            self.assertEqual(git_blob_sha1(archive.read_bytes()),
-                             item["git_blob_sha1"], item["path"])
-            self.assertFalse((ROOT/item["path"]).exists(),
-                             "unreviewed source must remain isolated")
-        original_audit = (
-            ROOT / "archive/research/nonpr-safe-fixture-audit/audits/2026-10-24"
-            / "WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json")
-        self.assertTrue(original_audit.is_file() and not original_audit.is_symlink())
-        self.assertEqual(git_blob_sha1(original_audit.read_bytes()),
-                         "2f334551e23bb4566c87644051c8a42016d2c59c")
-        self.assertIn("DO_NOT_AUTOMATICALLY_CLOSE_OR_MERGE_BRANCHES",
+    def test_retired_research_has_exact_history_locators_without_checkout_copies(self):
+        retired = self.data["retired_research_checkout"]
+        self.assertEqual(retired["policy"], "GIT_HISTORY_ONLY_NOT_ACTIVE_CHECKOUT")
+        self.assertRegex(retired["source_commit"], SHA)
+        files = retired["files"]
+        self.assertEqual(len(files), retired["verified_blob_count"])
+        self.assertEqual(len(files), len({row["path"] for row in files}))
+        expected = {
+            row["git_blob_sha1"] for row in
+            self.data["isolated_not_promoted_from_pr32"]["paths"]
+            + self.data["isolated_unpromoted_non_pr_artifacts"]
+        } | {"2f334551e23bb4566c87644051c8a42016d2c59c"}
+        self.assertEqual({row["git_blob_sha1"] for row in files}, expected)
+        for row in files:
+            target = ROOT / row["path"]
+            self.assertTrue(row["path"].startswith("archive/research/"))
+            self.assertTrue(target.resolve().is_relative_to(ROOT))
+            self.assertFalse(target.exists(), row["path"])
+            self.assertGreater(row["size"], 0)
+            self.assertRegex(row["git_blob_sha1"], SHA)
+        self.assertFalse((ROOT / "archive" / "research").exists())
+        self.assertIn("DO_NOT_DELETE_UNIQUE_EVIDENCE_WITHOUT_REPLACEMENT",
                       self.data["prohibitions"])
 
     def test_historical_provenance_is_discoverable_from_existing_entry(self):

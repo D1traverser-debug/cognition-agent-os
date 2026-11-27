@@ -17,6 +17,24 @@ import tempfile
 from mcp import Client, StdioServerParameters
 
 from cognition_agent_os.ledger import connect, initialize
+from cognition_agent_os.cognitive_session import inspect_session, record_node
+from cognition_agent_os.effect_contract import install_contract
+from cognition_agent_os.intent_planner import compile_intent
+
+
+def _resolve_schema(schema, root):
+    current = schema
+    seen = set()
+    while isinstance(current, dict) and "$ref" in current:
+        ref = current["$ref"]
+        if ref in seen:
+            raise AssertionError("Recursive MCP schema reference")
+        seen.add(ref)
+        name = ref.rsplit("/", 1)[-1]
+        current = root.get("$defs", {}).get(name)
+        if current is None:
+            raise AssertionError("Unresolved MCP schema reference: " + ref)
+    return current
 
 
 def unwrap(result):
@@ -37,6 +55,30 @@ def unwrap(result):
     raise AssertionError("No structured, verifiable MCP tool result")
 
 
+async def admit_with_current_procedure_evidence(client, root_task_id, proposal):
+    """Exercise the real MCP read-before-admit contract, not a hidden planner.
+
+    The bridge binds observation, prior-task lineage and procedure evidence
+    inside this process; SQLite independently rechecks them at admission.
+    """
+    observed = unwrap(await client.call_tool(
+        "native_goal_inspect", {"root_task_id": root_task_id}))
+    assert observed.get("status") == "NATIVE_NEXT_DECISION_ADMISSIBLE", observed
+    projection = unwrap(await client.call_tool(
+        "native_procedure_evidence", {"root_task_id": root_task_id}))
+    assert projection.get("status") not in (
+        "NATIVE_PROCEDURE_EVIDENCE_UNAVAILABLE",
+        "NO_REGISTERED_PROCEDURE_METHOD"), projection
+    candidate = json.loads(json.dumps(proposal))
+    candidate.pop("observation_sha256", None)
+    candidate["decision_basis"].pop("previous_result_task_id", None)
+    candidate["decision_basis"].pop(
+        "cross_root_procedure_evidence_sha256", None)
+    return unwrap(await client.call_tool(
+        "native_decision_admit", {
+            "root_task_id": root_task_id, "proposal": candidate}))
+
+
 async def run():
     with tempfile.TemporaryDirectory() as home:
         base = Path(home)
@@ -54,6 +96,28 @@ async def run():
         original = {f.name: f.read_bytes() for f in sources.iterdir()}
         with closing(connect(db)) as ledger:
             initialize(ledger)
+
+        def authorize_fixture(root_id, intent):
+            """Explicit test-operator authorization, never an agent-visible tool.
+
+            These five fixed fixture cases are scoped by this test author.
+            This is NOT automatic NL approval or a default admission helper.
+            """
+            spec = compile_intent(intent)["child_source_spec"]
+            for name, kind, deps in [("fixture-action", "option", []),
+                    ("fixture-read-only", "option", []),
+                    ("fixture-decision", "decision", ["fixture-action", "fixture-read-only"])]:
+                view = inspect_session(db, sources, root_id)
+                node = {"id": name, "kind": kind, "text": name, "depends_on": deps,
+                    "source_refs": [], "supersedes": None, "goal_revision": view["goal_revision"]}
+                if kind == "decision":
+                    node["action_spec"] = spec
+                record_node(db, sources, root_id, node, request_id=name,
+                    expected_revision=view["revision_token"])
+            view = inspect_session(db, sources, root_id)
+            install_contract(db, sources, root_id, {"version": 1,
+                "goal_sha256": view["goal_sha256"],
+                "effects": [{"spec": spec, "prerequisites": []}], "outcomes": []})
 
         def server(*, allow_tick, allow_source_read=False,
                    allow_model_plan=False, public_goal=None):
@@ -84,10 +148,13 @@ async def run():
             env={"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")})
         async with Client(default_params) as read_client:
             names = {tool.name for tool in (await read_client.list_tools()).tools}
-            assert {"native_goal_list", "native_goal_inspect"} <= names
+            assert {"native_goal_list", "native_goal_inspect",
+                    "native_procedure_evidence"} <= names
             assert not ({"native_goal_create", "native_decision_admit",
                          "native_hypothesis_record",
                          "native_open_research_record",
+                         "cognition_input_record", "cognition_node_record",
+                         "cognition_method_trial",
                          "native_local_tick", "native_local_model_plan"} & names)
             blocked = await read_client.call_tool(
                 "native_goal_create", {"owner_goal": "must never register"})
@@ -99,7 +166,80 @@ async def run():
         # Real negotiated MCP transport, not a direct Python function test.
         async with Client(server(allow_tick=False)) as client:
             registered = (await client.list_tools()).tools
+            # Model-originated native calls consult annotations; direct RPC calls do not.
+            reads = {"native_goal_list", "native_goal_inspect", "native_capabilities",
+                     "native_procedure_evidence", "native_owner_outcome",
+                     "native_memory_candidates_inspect", "native_source_read",
+                     "cognition_session_inspect", "cognition_inputs_inspect",
+                     "cognition_client_history", "cognition_contract_outcome",
+                     "cognition_method_trials"}
+            records = {"native_hypothesis_record", "cognition_input_record",
+                       "cognition_node_record", "cognition_decision_bundle_record",
+                       "cognition_method_trial"}
+            for tool in registered:
+                if tool.name in reads | records:
+                    assert tool.annotations is not None, tool.name
+                    hints = tool.annotations.model_dump(by_alias=True)
+                    assert hints["readOnlyHint"] is (tool.name in reads), tool.name
+                    assert hints["destructiveHint"] is False, tool.name
+                    assert hints["openWorldHint"] is False, tool.name
+                else:
+                    assert tool.annotations is None or tool.annotations.read_only_hint is not True, tool.name
+                    assert (tool.annotations is None or
+                            tool.annotations.destructive_hint is not False or
+                            tool.annotations.open_world_hint is not False), tool.name
             tools = {x.name for x in registered}
+            # The small-model decision front end MUST be flat on the actual
+            # MCP wire; generic nested node schemas caused schema-as-values.
+            flat_spec = next(
+                x for x in registered
+                if x.name == "cognition_decision_bundle_record")
+            flat_schema = flat_spec.input_schema
+            flat_names = {
+                "root_task_id", "selected_intent_json", "selected_option",
+                "alternative_option", "decision_reason",
+            }
+            assert set(flat_schema.get("required", [])) == flat_names, flat_schema
+            assert set(flat_schema.get("properties", {})) == flat_names, flat_schema
+            assert all(
+                flat_schema["properties"][name].get("type") == "string"
+                for name in flat_names), flat_schema
+            decision_spec = next(
+                x for x in registered if x.name == "native_decision_admit")
+            decision_schema = decision_spec.input_schema
+            proposal_schema = _resolve_schema(
+                decision_schema["properties"]["proposal"], decision_schema)
+            proposal_properties = proposal_schema["properties"]
+            assert {
+                "selected_intent", "alternative_intent", "decision_reason",
+                "alternative_reason", "expected_evidence", "decision_basis",
+            } <= set(proposal_properties), proposal_schema
+            assert set(proposal_schema["required"]) >= {
+                "selected_intent", "alternative_intent", "decision_reason",
+                "alternative_reason", "expected_evidence", "decision_basis",
+            }, proposal_schema
+            assert "observation_sha256" not in proposal_properties, proposal_schema
+            assert proposal_properties["alternative_reason"].get("description")
+            assert "never be null" in proposal_properties[
+                "alternative_reason"]["description"].lower()
+            assert proposal_schema.get("additionalProperties") is False, proposal_schema
+            basis_schema = _resolve_schema(
+                proposal_properties["decision_basis"], decision_schema)
+            basis_properties = basis_schema["properties"]
+            assert {
+                "source_refs", "challenge", "falsifier", "uncertainty",
+            } <= set(basis_properties), basis_schema
+            assert "previous_result_task_id" not in basis_properties, basis_schema
+            assert "cross_root_procedure_evidence_sha256" not in basis_properties, basis_schema
+            refs_schema = _resolve_schema(
+                basis_properties["source_refs"], decision_schema)
+            ref_item_schema = _resolve_schema(
+                refs_schema["items"], decision_schema)
+            assert set(ref_item_schema["properties"]) == {"path", "sha256"}, ref_item_schema
+            assert ref_item_schema.get("additionalProperties") is False, ref_item_schema
+            capabilities_spec = next(
+                x for x in registered if x.name == "native_capabilities")
+            assert "root_task_id" in capabilities_spec.input_schema["required"]
             create_spec = next(x for x in registered if x.name == "native_goal_create")
             assert "allow_public_discovery" not in (
                 create_spec.input_schema["properties"]), create_spec
@@ -107,7 +247,8 @@ async def run():
             assert "native_source_read" not in tools, tools
             assert "native_local_model_plan" not in tools, tools
             assert {"native_goal_create", "native_goal_inspect",
-                    "native_decision_admit", "native_capabilities"} <= tools
+                    "native_decision_admit", "native_capabilities",
+                    "native_procedure_evidence"} <= tools
             goal = ("Reconcile original supplier evidence, prepare isolated "
                     "handoff after checking source truth, never alter originals.")
             stable_request = "mcp-native-create-lost-ack-0001"
@@ -361,15 +502,33 @@ async def run():
                 "decision_reason": "Read the original record evidence first.",
                 "alternative_reason": "Structural conformance does not reconcile raw supplier values.",
                 "expected_evidence": "Independent source recomputation and immutable discrepancy report.",
-                "observation_sha256": observed["observation_sha256"],
                 "decision_basis": {
                     "source_refs": refs,
-                    "previous_result_task_id": None,
                     "challenge": "A different join key may explain the apparent shortage.",
                     "falsifier": "Independent source recomputation contradicts the proposed discrepancy.",
                     "uncertainty": "A valid local report cannot prove upstream business resolution.",
                 },
             }
+            current_state = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": root}))
+            assert current_state["status"] == "NATIVE_NEXT_DECISION_ADMISSIBLE", current_state
+            # A new stdio process has no in-memory read binding, even though
+            # the SQLite root and grant survive the restart.
+            async with Client(server(allow_tick=False)) as cold_client:
+                cold_unprepared = await cold_client.call_tool(
+                    "native_decision_admit", {
+                        "root_task_id": root, "proposal": proposal})
+                assert cold_unprepared.is_error, cold_unprepared
+            # A process-local observation alone is insufficient: the agent
+            # must also read the current procedure projection before admission.
+            unprepared = await client.call_tool(
+                "native_decision_admit", {"root_task_id": root, "proposal": proposal})
+            assert unprepared.is_error, unprepared
+            # Prime the process-local observation/procedure snapshot before
+            # testing source-pin rejection. The model-facing proposal carries
+            # neither mechanical digest nor previous-child identifiers.
+            await client.call_tool(
+                "native_procedure_evidence", {"root_task_id": root})
             bad = json.loads(json.dumps(proposal))
             bad["decision_basis"]["source_refs"][0]["sha256"] = "f" * 64
             rejected = await client.call_tool(
@@ -378,9 +537,27 @@ async def run():
             still = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
             assert still["decision_count"] == 0, still
-            admitted = unwrap(await client.call_tool(
-                "native_decision_admit", {"root_task_id": root,
-                                          "proposal": proposal}))
+            # Any source drift after the read invalidates the process-local
+            # snapshot; restore bytes and re-read before the next proposal.
+            saved_handoff = (sources / "handoff.json").read_bytes()
+            (sources / "handoff.json").write_text(
+                '{"retain":"changed"}\n', encoding="utf-8")
+            stale = await client.call_tool(
+                "native_decision_admit", {"root_task_id": root, "proposal": proposal})
+            assert stale.is_error, stale
+            (sources / "handoff.json").write_bytes(saved_handoff)
+            refreshed = unwrap(await client.call_tool(
+                "native_goal_inspect", {"root_task_id": root}))
+            assert refreshed["status"] == "NATIVE_NEXT_DECISION_ADMISSIBLE", refreshed
+            await client.call_tool(
+                "native_procedure_evidence", {"root_task_id": root})
+            # Goal/ledger write permission alone is no effect permission.
+            no_contract = await client.call_tool("native_decision_admit", {
+                "root_task_id": root, "proposal": proposal})
+            assert no_contract.is_error
+            authorize_fixture(root, proposal["selected_intent"])
+            admitted = await admit_with_current_procedure_evidence(
+                client, root, proposal)
             assert admitted["status"] == "NATIVE_METHOD_ENQUEUED", admitted
             queued = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": root}))
@@ -424,10 +601,9 @@ async def run():
             local_state = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": local_id}))
             local_proposal = json.loads(json.dumps(proposal))
-            local_proposal["observation_sha256"] = local_state["observation_sha256"]
-            local_queued = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": local_id, "proposal": local_proposal}))
+            authorize_fixture(local_id, local_proposal["selected_intent"])
+            local_queued = await admit_with_current_procedure_evidence(
+                client, local_id, local_proposal)
             local_tick = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": local_id}))
             assert local_tick["target_task_id"] == local_queued["child_task_id"]
@@ -455,6 +631,7 @@ async def run():
                     "audit equal to confirmed.")}))["root_task_id"]
             state = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": json_root}))
+            assert state["status"] == "NATIVE_NEXT_DECISION_ADMISSIBLE", state
             json_proposal = {
                 "selected_intent": {
                     "kind": "goal_intent", "objective": "ensure_structure",
@@ -467,12 +644,10 @@ async def run():
                     "CSV comparison cannot satisfy the requested JSON field."),
                 "expected_evidence": (
                     "Actual stage-only JSON artifact and independent original readback."),
-                "observation_sha256": state["observation_sha256"],
                 "decision_basis": {
                     "source_refs": [
                         {"path": n, "sha256": hashlib.sha256(data).hexdigest()}
                         for n, data in sorted(original.items())],
-                    "previous_result_task_id": None,
                     "challenge": (
                         "The owner field might already conflict in the source."),
                     "falsifier": (
@@ -481,9 +656,9 @@ async def run():
                         "A local handoff draft is not an external business effect."),
                 },
             }
-            queued_json = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": json_root, "proposal": json_proposal}))
+            authorize_fixture(json_root, json_proposal["selected_intent"])
+            queued_json = await admit_with_current_procedure_evidence(
+                client, json_root, json_proposal)
             observed_json = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": json_root}))
             assert observed_json["target_task_id"] == queued_json["child_task_id"]
@@ -512,10 +687,9 @@ async def run():
             other_snapshot = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": other_id}))
             other_proposal = json.loads(json.dumps(proposal))
-            other_proposal["observation_sha256"] = other_snapshot["observation_sha256"]
-            other_queued = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": other_id, "proposal": other_proposal}))
+            authorize_fixture(other_id, other_proposal["selected_intent"])
+            other_queued = await admit_with_current_procedure_evidence(
+                client, other_id, other_proposal)
             second = unwrap(await client.call_tool(
                 "native_goal_create", {"owner_goal": (
                     "Independently reconcile a second supplier case "
@@ -524,10 +698,9 @@ async def run():
             new_state = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": second_id}))
             second_proposal = json.loads(json.dumps(proposal))
-            second_proposal["observation_sha256"] = new_state["observation_sha256"]
-            second_queued = unwrap(await client.call_tool(
-                "native_decision_admit", {
-                    "root_task_id": second_id, "proposal": second_proposal}))
+            authorize_fixture(second_id, second_proposal["selected_intent"])
+            second_queued = await admit_with_current_procedure_evidence(
+                client, second_id, second_proposal)
             selected_tick = unwrap(await client.call_tool(
                 "native_local_tick", {"root_task_id": second_id}))
             assert selected_tick["status"] == "NATIVE_TICK_OBSERVED", selected_tick
@@ -582,8 +755,19 @@ async def run():
                     await client.call_tool("native_goal_list", {}))["goals"]
             }, "NEWER_GOAL_INVISIBLE_ON_FRESH_DISCOVERY"
             with closing(connect(db)) as ledger:
-                from cognition_agent_os.ledger import alter_authority
+                from cognition_agent_os.ledger import alter_authority, create_task
+                # Unrelated legacy rows are valid only BEFORE revocation.
+                # They still challenge native type filtering on cold discovery.
+                for ordinal in range(58):
+                    create_task(ledger, {"kind": "fixture", "ref": "unrelated-" + str(ordinal)}, commit=False)
+                ledger.commit()
                 alter_authority(ledger, revoke=True)
+                try:
+                    create_task(ledger, {"kind": "fixture", "ref": "revoked"})
+                except PermissionError:
+                    pass
+                else:
+                    raise AssertionError("REVOKED_LEGACY_ENQUEUE_WAS_ADMITTED")
             revoked = unwrap(await client.call_tool(
                 "native_goal_inspect", {"root_task_id": second_id}))
             assert revoked["status"] == "NATIVE_GRANT_REVOKED", revoked
@@ -591,19 +775,6 @@ async def run():
                 "native_goal_create",
                 {"owner_goal": "This cannot regrant revoked authority."})
             assert new_attempt.is_error, new_attempt
-
-        # Forty-plus unrelated legacy tasks can be generated between
-        # sessions. A page cut BEFORE native type filtering would silently
-        # hide all earlier genuine owner goals, causing irreversible drift.
-        # These rows are NOT native roots and must never enter the native list.
-        from cognition_agent_os.ledger import create_task
-        with closing(connect(db)) as ledger:
-            for ordinal in range(58):
-                create_task(ledger, {
-                    "kind": "fixture",
-                    "ref": "unrelated-" + str(ordinal),
-                }, commit=False)
-            ledger.commit()
 
         # A brand-new client knows NO root id. It rediscovers the original
         # user goals via real SQLite before selecting the one whose exact

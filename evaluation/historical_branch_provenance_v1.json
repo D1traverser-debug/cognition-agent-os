@@ -257,14 +257,15 @@
     "DO_NOT_AUTOMATICALLY_CLOSE_OR_MERGE_BRANCHES",
     "DO_NOT_TREAT_HISTORICAL_PR_AS_CURRENT_OWNER_OR_CODE_TRUTH",
     "DO_NOT_PROMOTE_ISOLATED_RETRIEVAL_RESEARCH_AS_AUTHORITY",
-    "DO_NOT_DELETE_ARCHIVED_SOURCE"
+    "DO_NOT_DELETE_UNIQUE_EVIDENCE_WITHOUT_REPLACEMENT"
   ],
   "evidence_limitations": [
     "Only exact Git blob identity and missing paths checked; semantic equivalence of modified same-path files remains UNVERIFIED.",
     "Archived PR49 sources are preserved bytes, NOT current runtime behavior.",
     "PR32 retrieval experiments are still research artifacts, NOT a production knowledge/memory integration.",
     "Live PR existence and fresh HEAD require provider reread, not this dated JSON.",
-    "Same-path modified blobs require semantic review before branch closure; byte-only inventory cannot prove complete equivalence."
+    "Same-path modified blobs require semantic review before branch closure; byte-only inventory cannot prove complete equivalence.",
+    "Retired research checkout copies remain in the immutable source commit reachable from the current candidate; use git show <source_commit>:<path> or provider exact-ref reads on demand. No duplicate active snapshot is needed."
   ],
   "non_pr_branch_observations": [
     {
@@ -431,5 +432,138 @@
       "source_branch": "experiment/research-model-quality-ab-20261024",
       "kind": "MULTILINGUAL_UNSEEN_V5_EVAL_ISOLATED"
     }
-  ]
+  ],
+  "retired_research_checkout": {
+    "policy": "GIT_HISTORY_ONLY_NOT_ACTIVE_CHECKOUT",
+    "source_commit": "d287a32c09ef20e2cc305b63bcfc672841010728",
+    "verified_blob_count": 25,
+    "files": [
+      {
+        "path": "archive/research/nonpr-engineering-method/.agents/skills/engineering-solution-assessment/SKILL.md",
+        "git_blob_sha1": "29b8c035040ef00daf6c4c5727d2b5170d270854",
+        "size": 3495
+      },
+      {
+        "path": "archive/research/nonpr-engineering-method/.agents/skills/engineering-solution-assessment/references/failure-classes.md",
+        "git_blob_sha1": "494dd31460ece2cbad2276de0e2ecc2196ba13b3",
+        "size": 3119
+      },
+      {
+        "path": "archive/research/nonpr-engineering-method/.agents/skills/engineering-solution-assessment/references/learning-and-transfer.md",
+        "git_blob_sha1": "44efba1ab0d09955e8d2acb466190a7aa109ebac",
+        "size": 2640
+      },
+      {
+        "path": "archive/research/nonpr-engineering-method/.agents/skills/engineering-solution-assessment/references/method-selection.md",
+        "git_blob_sha1": "a546f75f579d9b8ee65873bd6e4b933473b51eec",
+        "size": 3993
+      },
+      {
+        "path": "archive/research/nonpr-engineering-method/evaluation/engineering_method_behavior_cases_v1.json",
+        "git_blob_sha1": "bf5f29fbcac18e991b30786cb87caf4a6f3e1bf5",
+        "size": 1940
+      },
+      {
+        "path": "archive/research/nonpr-engineering-method/knowledge/engineering-methods/method_cards_v1.json",
+        "git_blob_sha1": "302f6b6054a7a5fa8e3c4b4f7c39851279e15d3f",
+        "size": 6457
+      },
+      {
+        "path": "archive/research/nonpr-engineering-method/tests/test_engineering_skill_package.py",
+        "git_blob_sha1": "0b1bce06fc49a299d4b69bfed971b0eb1678eb53",
+        "size": 1637
+      },
+      {
+        "path": "archive/research/nonpr-graphify-old-workflow/.github/workflows/graphify-code-inventory.yml",
+        "git_blob_sha1": "fc894a42a203aa1a74acb43817d8bd9e728a9a07",
+        "size": 1173
+      },
+      {
+        "path": "archive/research/nonpr-model-quality-v5/evaluation/inspect_unseen_goal_set_v5.json",
+        "git_blob_sha1": "f4949b62ccf10c1c3c0a3e7b7aa4ade1959030ce",
+        "size": 6204
+      },
+      {
+        "path": "archive/research/nonpr-safe-fixture-audit/audits/2026-10-24/WHOLE_TREE_SEMANTIC_ASSURANCE_INDEX.json",
+        "git_blob_sha1": "2f334551e23bb4566c87644051c8a42016d2c59c",
+        "size": 49436
+      },
+      {
+        "path": "archive/research/pr29/docs/29-EVIDENCE-RELEVANCE-EXPERIMENT.md",
+        "git_blob_sha1": "72df2a6eb9acaef34c28d94416bf3866e1798f02",
+        "size": 4652
+      },
+      {
+        "path": "archive/research/pr29/evaluation/evidence_roles_holdout_v2.json",
+        "git_blob_sha1": "eef6d08b90c999e75815508100f4d871a6abcfe1",
+        "size": 14879
+      },
+      {
+        "path": "archive/research/pr29/evaluation/evidence_selection_holdout_v1.json",
+        "git_blob_sha1": "af750f8e604fbaad6b0aef503d3ac5584cf16277",
+        "size": 11387
+      },
+      {
+        "path": "archive/research/pr29/scripts/evaluate_evidence_retrieval.py",
+        "git_blob_sha1": "4a39b2efceb680e139d9d2b3849556b890021307",
+        "size": 9136
+      },
+      {
+        "path": "archive/research/pr29/src/cognition_agent_os/evidence_ranker.py",
+        "git_blob_sha1": "530a36a4c183d68fff6a97d9fa658330e2ab6147",
+        "size": 4651
+      },
+      {
+        "path": "archive/research/pr29/tests/test_evidence_ranker.py",
+        "git_blob_sha1": "5e89198680e0f34b3e26469e2a3ffef94650037f",
+        "size": 4747
+      },
+      {
+        "path": "archive/research/pr30/docs/30-EXTERNAL-BEIR-METHOD-EXPERIMENT.md",
+        "git_blob_sha1": "caa63e99f3a42e422bf117af23231d5701437ff1",
+        "size": 5071
+      },
+      {
+        "path": "archive/research/pr30/scripts/measure_external_beir_retrieval.py",
+        "git_blob_sha1": "f955ddcb01bfe2fc59aea19891b34068e33639be",
+        "size": 15594
+      },
+      {
+        "path": "archive/research/pr30/tests/test_external_beir_methods.py",
+        "git_blob_sha1": "713da7fcb20cc00b36a0b12e99782e8e9abc7f94",
+        "size": 2779
+      },
+      {
+        "path": "archive/research/pr31/docs/31-ORIGINAL-SCIFACT-CLAIM-JUDGMENT.md",
+        "git_blob_sha1": "79a62e71ccfb6020cdc588bf4b35ebb168df5fd7",
+        "size": 5278
+      },
+      {
+        "path": "archive/research/pr31/scripts/measure_external_scifact_claim_judgment.py",
+        "git_blob_sha1": "1afdab43a22bcfbbf4fd07762f11ab27dfbf2acd",
+        "size": 13276
+      },
+      {
+        "path": "archive/research/pr31/tests/test_original_scifact_judgment.py",
+        "git_blob_sha1": "e00c0a60ce9f2bb4909cce2741cafbb42af97b4e",
+        "size": 3119
+      },
+      {
+        "path": "archive/research/pr32/docs/32-SCIFACT-SCHEMA-ORDER-CAUSAL-STUDY.md",
+        "git_blob_sha1": "c764977be5d183e5cf4596f5442e9712caa18883",
+        "size": 4858
+      },
+      {
+        "path": "archive/research/pr32/scripts/measure_scifact_enum_order.py",
+        "git_blob_sha1": "09c13be5b47464c1e9c5bd211d2a121532a55eb5",
+        "size": 11272
+      },
+      {
+        "path": "archive/research/pr32/tests/test_scifact_enum_order.py",
+        "git_blob_sha1": "d09da13dc7972ab3dbf2f7a7c80b56b3b24ef243",
+        "size": 3635
+      }
+    ],
+    "verification_scope": "Provider tree compared with original frozen blob register before deletion. Offline tests validate locators and absence of duplicate checkout files, not remote history availability or semantic correctness."
+  }
 }

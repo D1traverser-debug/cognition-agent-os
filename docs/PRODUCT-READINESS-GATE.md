@@ -37,16 +37,6 @@ applicable cross-domain methods, routes advice/work through the child's
 admitted interface, coordinates dependencies and reads independent
 business outcomes without overwriting child state.
 
-**Separate legacy child-control migration (not the default cognition task):**
-Four child manifests may still describe historical UAOS binding. That is
-migration evidence, not an instruction to switch the current owner-selected
-goal from cognition/evolution to child wiring. Only investigate or change these
-bindings when a child-control or child-business task actually requires it.
-For a selected migration, independently verify child-native identity, grants,
-business state, acceptance and negative neighbors before any cutover; do not
-silently rewrite child production or merge/release/deploy. Redesign remains
-conditional on measured owner outcomes rather than legacy-code cloning.
-
 **One cognition parent, two presently distinct technical surfaces.**
 This ChatGPT/tool session participates as the actual parent's interactive
 cognition and orchestration surface; the repository is the SAME parent's
@@ -73,8 +63,7 @@ selected project/task context. Unrelated everyday ChatGPT conversations must
 not be forced through cognition-agent-os, run a mandatory controller, or incur
 its research/verification overhead. A reliable keyword/context trigger is
 acceptable; **universal automatic invocation in every ChatGPT conversation
-is NOT a product requirement or current acceptance gate**. The obsolete
-`uaos-controller-runtime` is not a prerequisite and must not be restored.
+is NOT a product requirement or current acceptance gate**. Neither unrelated historical control layers nor a universal runtime interceptor are prerequisites.
 
 **Owner clarification (2026-10-29, supersedes any implied always-on prerequisite):**
 "持续" means the owner can explicitly wake ChatGPT by messaging in the current
@@ -120,6 +109,17 @@ independent comparison, lawful action with currently connected tools,
 real-result readback and correction, without requiring the owner to repeatedly
 enumerate missing checks or integrations. Evaluate actual triggered use, not
 hypothetical blanket ChatGPT interception.
+
+Keep the interactive owner outcome as the
+priority over infrastructure experiments, documentation expansion or test-count
+optimization. Requirements are owner outcomes and necessary constraints, not
+implementation choices. Use the least complex sufficient mechanism; justify
+added or retained complexity by a specific unmet obligation or protected valid
+behavior and relevant evidence. Do not make optional infrastructure, fixed
+workflow stages, role counts or per-action reports a prerequisite. Assess actual
+outcome completeness, correction burden, latency/cost and meaningful failures;
+retain independent acceptance and permissions. Reopen the route if simplification
+loses a required behavior. Historical evidence is not a live requirement.
 
 **Deferred, not discarded and OPTIONAL for this owner:** Local/cloud deployment, unattended persistent
 Host scheduling, paid APIs, commercialization and a ChatGPT-to-host MCP/API
@@ -260,3 +260,49 @@ completion of a research stage.** Tests prove contracts or discriminate
 causes; a completed owner-relevant vertical outcome advances product status.
 No approval to merge, release, deploy to user device, spend on models or write
 to real external services is given by this document. Keep interactive acceptance OPEN until its real client/outcome gates above pass. If the owner later opts into unattended deployment, evaluate the separate six deployment gates at the same code SHA; do not conflate the phases.
+
+
+## Owner clarification 2026-11-27 — general system architecture and construction (INTERACTIVE ACCEPTANCE OPEN)
+
+The parent must be useful not only for completing individual business tasks, but also for **designing, building, improving and validating other task systems, agent systems and professional workflows when the owner asks for them**. This is a first-class owner outcome, not a requirement to turn every ordinary request into a software project.
+
+The owner supplies the intended result, constraints, preferences where material, and necessary authorization. The parent is responsible for discovering the relevant professional methods, tools and primary sources; decomposing the full requirement; challenging its own first interpretation and competing root causes; studying real implementations, call paths, tests and failure cases; comparing reuse/adapt/replace/remove/build; designing the appropriate architecture and workflow; and independently verifying the complete deliverable. Do not require the owner to provide a domain-expert checklist, enumerate tools, choose a framework, or operate routine test scenarios.
+
+**No fixed pipeline is implied.** A task-specific dependency graph may branch, merge, parallelize, loop, pause, or be rebuilt as evidence changes. The decision/research loop and execution/feedback loop revisit upstream assumptions when a counterexample invalidates them. Depth is proportional to novelty, uncertainty, impact, risk and reversibility; a fixed number of research rounds, links, agents or documents is not an acceptance criterion. A simple one-off task must remain simple and must not incur irrelevant architecture/research overhead.
+
+### Required observable behavior
+
+| Acceptance area | Required result | Falsifier / negative control | Status |
+|---|---|---|---|
+| Goal class and fidelity | Distinguish a one-off result from a requested reusable system/workflow or an evolution of an existing system. Preserve every owner clause, correction, constraint and prohibition. | A tempting local subtask or a preferred framework silently narrows the goal; an ordinary simple request is forced into system design. | OPEN |
+| Professional discovery and deep study | Discover relevant authoritative sources and current tools without requiring the owner to name them. Read the actual specification, implementation/call path, tests, failure cases and compatibility boundaries that can change the decision. | A README, search snippet, star count, model summary or URL inventory is represented as deep study; irrelevant repositories are loaded merely to inflate coverage. | OPEN |
+| Root-cause and method challenge | Keep materially different explanations alive until evidence distinguishes them. Rechallenge the selected diagnosis, research coverage and preferred method before consequential action. | The first attractive proposal is accepted; a local patch is declared root cause without checking shared entrypoints and higher layers; repeated prose substitutes for new evidence. | OPEN |
+| Architecture and workflow synthesis | Produce a task-specific architecture and dynamic dependency/work graph with explicit component responsibilities, interfaces, state/authority boundaries, capabilities, failure/recovery behavior and acceptance contracts appropriate to scope. | A fixed universal pipeline, hardcoded domain list, arbitrary model-authored imports, or a diagram without executable/observable contracts is treated as a complete system. | OPEN |
+| Build and verification | Within current authorization, create or modify runnable artifacts in an isolated/approved workspace; run relevant tests and negative cases; independently read back the resulting artifact or external state against the complete owner goal. | Documentation-only, green CI, a self-scored report, a tool-call success or a sandbox fixture is represented as a real business/system outcome. | OPEN |
+| Learning and transfer | Record source/version, applicability, counterexamples, failure and rollback conditions. Validate a method on a genuinely different unseen task before widening its scope. | A single success, similar wording, a generated Skill patch or a model's own confidence is promoted as universal knowledge. | OPEN |
+| Owner burden and resource discipline | The parent discovers the expert steps and available tools; asks only for genuinely missing subjective facts or authority. Measure complete-result quality, corrections, latency, context/tool cost and unnecessary complexity together. | The owner must repeatedly remind the agent to research, compare, challenge, test, or list missing tools; or the agent over-researches a simple request. | OPEN |
+
+### System-construction result contract
+
+When the actual goal requires a system, the acceptance target should cover the relevant subset of:
+
+- complete requirement and constraint traceability back to original owner sources;
+- system context, component responsibilities, boundaries and replaceable interfaces;
+- data/state ownership, knowledge provenance and dependency invalidation;
+- task-specific dynamic workflow, capability contracts and authorization/effect boundaries;
+- failure classification, retries/idempotency, interruption recovery, rollback/compensation and observability;
+- independent evaluation, positive/negative/neighbor cases and held-out tasks;
+- runnable implementation or an explicit, evidence-backed reason a part remains unimplemented;
+- operational, maintenance, cost and migration implications.
+
+This is an acceptance vocabulary, **not a mandatory template or fixed stage list**. Do not build a larger system than the owner outcome needs. If only a design is authorized, do not silently implement or deploy; if implementation is authorized, a design document alone does not satisfy the implementation goal.
+
+### Current architecture gap and evidence boundary
+
+The current Draft architecture contains an evidence/decision graph, a bounded local planner, four registered native method contracts in `intent_planner.py`, and an explicit static execution registry in `capability_dispatch.py`. `native_decision.py` can preserve open-domain research proposals, but these proposals do not automatically become executable capabilities. This is a deliberate safety boundary, **not evidence that the Host already supports general system construction**. The current ChatGPT tool surface and repository Host are not assumed connected. See the candidate architecture decision in `docs/01-ARCHITECTURE-DECISIONS.md` §K. The evidence graph can represent multiple dependencies, but the current `task_dependencies` table keys on `task_id` and permits only one predecessor per successor; its dependency gate also admits only a narrow set of local task kinds. Therefore there is not yet a general executable multi-predecessor work DAG.
+
+The acceptance experiment must compare the existing native model + currently available tools against any proposed work-graph/adapter change on the same unseen owner tasks. Add orchestration, a new framework, agent roles, a database, plugin auto-discovery or a new capability registry only if it produces a measured improvement in complete owner outcomes without weakening authority, independent verification, compatibility or cost. A mature framework may replace a deficient responsibility layer if the same-task evidence supports it; no framework is preselected.
+
+**Native invocation boundary:** first-party client traces are required to claim that an installed Skill was selected before the first material decision. This current conversation's source inspection and tool use do not prove fresh-chat native Skill selection. Without an accessible first-party trace, keep that item NOT_TESTED. The repository candidate package now explicitly covers owner requests to architect/build/evolve another reusable task system, adds ordinary concept/one-off negative controls, and removes the default-prompt assumption that every invocation means editing the CAOS repository. The candidate package version is 0.1.25; CI packaging is not installation or publication, and does not close native-selection acceptance. The owner must not be asked to perform repetitive manual test ceremonies merely to satisfy the report; the agent should use authorized test clients, sandboxes and traces when available, and continue independent work when a particular client surface is not observable.
+
+**Disposition remains NOT_READY.** No document update, static test, CI run, graph schema, model response or successful local build closes this acceptance area without independently verified unseen system-building and one-off negative-control outcomes.

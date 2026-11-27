@@ -15,7 +15,7 @@ from contextlib import closing
 from .ledger import readonly_snapshot
 from .bounded_outcome_oracle import assess_local_record
 from .goal_audit import audit_goal
-from .source import safe_fixture
+from .source import SourceUnavailable, safe_fixture
 
 
 
@@ -199,7 +199,10 @@ def audit_controlled_candidate(db_path:Path,workspace:Path,
                     or receipt.get("grant_rev")!=root["grant_rev"]
                     or receipt.get("business_outcome_verified") is not False):
                     return {**fail,"reason":"ATTEMPT_PROVENANCE_MISMATCH"}
-                original=safe_fixture(fixtures,proposal["input"])
+                try:
+                    original=safe_fixture(fixtures,proposal["input"])
+                except (OSError, SourceUnavailable):
+                    return {**fail,"reason":"SOURCE_UNAVAILABLE"}
                 digest=hashlib.sha256(original).hexdigest()
                 if digest!=c["input_sha256"]:
                     return {**fail,"reason":"SOURCE_PIN_MISMATCH"}
@@ -223,6 +226,8 @@ def audit_controlled_candidate(db_path:Path,workspace:Path,
                 else:
                     if child["state"]=="NEEDS_REVIEW":
                         proof=audit_goal(db_path,workspace,fixtures,child["task_id"])
+                        if proof["status"]=="AUDIT_SOURCE_UNAVAILABLE":
+                            return {**fail,"reason":"SOURCE_UNAVAILABLE"}
                         if proof["status"]!="CANDIDATE_MECHANICALLY_VALID":
                             return {**fail,"reason":"CHILD_ARTIFACT_REJECTED"}
                         artifact=workspace/"artifacts"/(child["task_id"]+".json")

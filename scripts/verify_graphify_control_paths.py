@@ -10,7 +10,7 @@ from pathlib import Path
 
 REQUIRED_PATHS = (
     ("src_cognition_agent_os_cli_main", "src_cognition_agent_os_host_run_tick"),
-    ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_runner_run_once"),
+    ("src_cognition_agent_os_host_run_tick", "src_cognition_agent_os_native_tick_flow_drain_native_feedback"),
     ("src_cognition_agent_os_runner_run_once", "src_cognition_agent_os_ledger_claim_one"),
     # Post-refactor: runner performs admission, a static adapter dispatches
     # capability-specific work. Prove BOTH real call edges independently.
@@ -49,6 +49,28 @@ REQUIRED_PATHS = (
     ("src_cognition_agent_os_conformance_check_one", "src_cognition_agent_os_open_goal_audit_open_goal"),
 )
 
+# Independently reviewed capability->handler->target contract. A code graph
+# generated from the same (possibly broken) source cannot supply this oracle:
+# otherwise an incorrect registry rewrite would update its own "proof".
+# These are STATIC source routes, not evidence that every handler was executed.
+EXPECTED_CAPABILITY_ROUTES = {
+    "knowledge_intent": ("_knowledge", "knowledge_routing", "run_knowledge_intent"),
+    "research_gap": ("_gap", "research_gap", "run_research_gap"),
+    "research_assessment": ("_assessment", "research_assessment", "run_assessment"),
+    "repo_container_repair": ("_repo_repair", "repo_repair", "run_repo_candidate"),
+    "pipeline_code_repair": ("_pipeline", "pipeline_repair", "run_pipeline_case"),
+    "pure_code_repair": ("_pure_repair", "repair_search", "run_repair_case"),
+    "investigate_goal": ("_investigate", "investigation", "run_investigation"),
+    "goal_intent": ("_intent", "intent_runtime", "run_intent"),
+    "open_goal": ("_open_goal", "open_goal", "run_open_goal"),
+    "public_tool_discovery": ("_public_tool_discovery", "public_tool_discovery", "run_public_discovery"),
+    "domain_contract": ("_domain_contract", "domain_contract", "run_domain_contract"),
+    "record_reconciliation": ("_reconcile", "reconciliation", "run_reconciliation"),
+    "goal_case": ("_goal_case", "goal_loop", "run_goal_case"),
+    "fixture": ("_snapshot_diff", "runner", "get_pair"),
+    "github": ("_snapshot_diff", "runner", "get_pair"),
+}
+
 def check(graph_path: Path, repo: Path) -> dict:
     g=json.loads(graph_path.read_text(encoding="utf-8"))
     nodes={n["id"] for n in g["nodes"]}
@@ -56,6 +78,51 @@ def check(graph_path: Path, repo: Path) -> dict:
            if e.get("relation")=="calls" and e.get("confidence")=="EXTRACTED"}
     sha=subprocess.check_output(["git","rev-parse","HEAD"],cwd=repo,text=True).strip()
     errors=[]
+    # Graph reachability and module import layering are different properties.
+    # This catches NEW extracted Python module import cycles, while preserving
+    # legitimate recursive cognitive loops at the function/control level.
+    # An extracted AST graph is a bounded structural observation, not proof
+    # that dynamically imported modules or external plugins are cycle-free.
+    module_nodes = {}
+    for node in g["nodes"]:
+        source_file = node.get("source_file")
+        if (isinstance(source_file, str)
+            and source_file.startswith("src/cognition_agent_os/")
+            and source_file.endswith(".py")):
+            stem = source_file.rsplit("/", 1)[-1][:-3].strip("_")
+            if node.get("id") == "src_cognition_agent_os_" + stem:
+                module_nodes[node["id"]] = source_file
+    module_deps = {key: set() for key in module_nodes}
+    for edge in g["links"]:
+        if (edge.get("relation") == "imports_from"
+            and edge.get("confidence") == "EXTRACTED"
+            and edge.get("source") in module_nodes
+            and edge.get("target") in module_nodes):
+            module_deps[edge["source"]].add(edge["target"])
+    # Deterministic DFS with an explicit active stack identifies an actual
+    # cycle, not a module merely downstream of some unrelated cycle.
+    module_colors = {}
+    module_stack = []
+    import_cycles = []
+    def examine_module(module):
+        module_colors[module] = 1
+        module_stack.append(module)
+        for child in sorted(module_deps[module]):
+            if module_colors.get(child) == 1:
+                idx = module_stack.index(child)
+                import_cycles.append(module_stack[idx:] + [child])
+            elif module_colors.get(child, 0) == 0:
+                examine_module(child)
+        module_stack.pop()
+        module_colors[module] = 2
+    for module in sorted(module_deps):
+        if module_colors.get(module, 0) == 0:
+            examine_module(module)
+    if import_cycles:
+        for cycle in import_cycles[:10]:
+            errors.append("MODULE_IMPORT_CYCLE:" + "->".join(
+                module.removeprefix("src_cognition_agent_os_")
+                for module in cycle))
     if g.get("built_at_commit")!=sha:
         errors.append("STALE_GRAPH_COMMIT")
     if len(nodes)!=len(g["nodes"]):
@@ -83,6 +150,49 @@ def check(graph_path: Path, repo: Path) -> dict:
         evidence.append({"caller":src,"callee":dst,"confidence":"EXTRACTED",
                          "source_file":citations[0]["source_file"],
                          "source_location":citations[0]["source_location"]})
+    # The refactored Host routes its actual Worker dependency as an explicit
+    # function argument. This must be verified by AST instead of inventing a
+    # direct Host->runner call or relying on inferred Graphify reachability.
+    try:
+        host_ast = ast.parse(
+            (repo / "src/cognition_agent_os/host.py").read_text(encoding="utf-8"))
+        flow_ast = ast.parse(
+            (repo / "src/cognition_agent_os/native_tick_flow.py")
+            .read_text(encoding="utf-8"))
+        host_fn = next(n for n in host_ast.body
+                       if isinstance(n, ast.FunctionDef) and n.name == "run_tick")
+        flow_fn = next(n for n in flow_ast.body
+                       if isinstance(n, ast.FunctionDef)
+                       and n.name == "drain_native_feedback")
+        host_imports_worker = any(
+            isinstance(n, ast.ImportFrom) and n.level == 1
+            and n.module == "runner"
+            and any(alias.name == "run_once" for alias in n.names)
+            for n in host_ast.body)
+        flow_calls = [n for n in ast.walk(host_fn)
+                      if isinstance(n, ast.Call)
+                      and isinstance(n.func, ast.Name)
+                      and n.func.id == "drain_native_feedback"]
+        wired = any(
+            k.arg == "run_one" and isinstance(k.value, ast.Name)
+            and k.value.id == "run_once"
+            for call in flow_calls for k in call.keywords)
+        flow_executes = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "run_one" for n in ast.walk(flow_fn))
+        if not (host_imports_worker and wired and flow_executes):
+            errors.append("NATIVE_FEEDBACK_WORKER_DELEGATION_UNPROVEN")
+        else:
+            evidence.append({
+                "caller": "src_cognition_agent_os_host_run_tick",
+                "callee": "src_cognition_agent_os_runner_run_once",
+                "confidence": "SOURCE_AST_EXPLICIT_DEPENDENCY_WIRING",
+                "source_file": "src/cognition_agent_os/host.py",
+                "source_location": "L" + str(flow_calls[0].lineno),
+            })
+    except (OSError, ValueError, StopIteration, SyntaxError, TypeError):
+        errors.append("NATIVE_FEEDBACK_WORKER_DELEGATION_UNPROVEN")
+
     # The intentionally static registry is indirect. Python AST, not a
     # guessed Graphify edge, must independently witness both the exact
     # goal_intent binding and its direct call to the legacy target function.
@@ -111,6 +221,117 @@ def check(graph_path: Path, repo: Path) -> dict:
             errors.append("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN")
     except (OSError, ValueError, StopIteration, SyntaxError, TypeError, AttributeError):
         errors.append("CAPABILITY_REGISTRY_INTENT_EXECUTION_UNPROVEN")
+
+    # A reviewable registry must be checked in FULL. Graphify cannot infer
+    # Python calls through _HANDLERS[kind], and the old checker only protected
+    # goal_intent: the other registered kinds could be silently redirected.
+    # This local AST audit never imports or executes capability modules.
+    capability_routes = []
+    try:
+        routing_module = ast.parse(
+            (repo / "src/cognition_agent_os/capability_dispatch.py")
+            .read_text(encoding="utf-8"))
+        registries = [
+            n.value for n in routing_module.body
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "_HANDLERS"
+                    for t in n.targets)
+        ]
+        if len(registries) != 1 or not isinstance(registries[0], ast.Dict):
+            raise ValueError("REGISTRY_NOT_STATIC_UNIQUE")
+        registry_pairs = []
+        for key, target in zip(registries[0].keys, registries[0].values):
+            if (not isinstance(key, ast.Constant) or not isinstance(key.value, str)
+                or not isinstance(target, ast.Name)):
+                raise ValueError("REGISTRY_NON_LITERAL_BINDING")
+            registry_pairs.append((key.value, target.id))
+        registry = dict(registry_pairs)
+        if (len(registry) != len(registry_pairs)
+            or set(registry) != set(EXPECTED_CAPABILITY_ROUTES)):
+            errors.append("CAPABILITY_REGISTRY_SET_CHANGED")
+
+        functions = {
+            n.name: n for n in routing_module.body
+            if isinstance(n, ast.FunctionDef)
+        }
+        for kind, (expected_handler, imported_from, target) in (
+                EXPECTED_CAPABILITY_ROUTES.items()):
+            if registry.get(kind) != expected_handler:
+                errors.append("CAPABILITY_ROUTE_MISMATCH:" + kind)
+                continue
+            matching = [
+                n for n in routing_module.body
+                if isinstance(n, ast.FunctionDef)
+                and n.name == expected_handler
+            ]
+            if len(matching) != 1:
+                errors.append("CAPABILITY_TARGET_UNPROVEN:" + kind)
+                continue
+            handler = matching[0]
+            if expected_handler == "_snapshot_diff":
+                # Two legacy task kinds share one explicit compatibility
+                # adapter. Their static runner.get_pair reference is
+                # independently checked, not silently treated as arbitrary.
+                imported = any(
+                    isinstance(n, ast.ImportFrom)
+                    and n.level == 1 and n.module is None
+                    and any(a.name == "runner" and a.asname == "legacy"
+                            for a in n.names)
+                    for n in ast.walk(handler))
+                calls = [
+                    n for n in ast.walk(handler)
+                    if isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == target
+                    and isinstance(n.func.value, ast.Name)
+                    and n.func.value.id == "legacy"
+                ]
+            else:
+                imported = any(
+                    isinstance(n, ast.ImportFrom)
+                    and n.level == 1 and n.module == imported_from
+                    and any(a.name == target and a.asname is None
+                            for a in n.names)
+                    for n in ast.walk(handler))
+                calls = [
+                    n for n in ast.walk(handler)
+                    if isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Name)
+                    and n.func.id == target
+                ]
+            if not imported or not calls:
+                errors.append("CAPABILITY_TARGET_UNPROVEN:" + kind)
+                continue
+            capability_routes.append({
+                "task_kind": kind,
+                "handler": expected_handler,
+                "target_module": "cognition_agent_os." + imported_from,
+                "target_function": target,
+                "source_file": "src/cognition_agent_os/capability_dispatch.py",
+                "source_location": "L" + str(calls[0].lineno),
+                "confidence": "SOURCE_AST_STATIC_ROUTE_NOT_RUNTIME_PROOF",
+            })
+
+        dispatches = [
+            n for n in routing_module.body
+            if isinstance(n, ast.FunctionDef) and n.name == "dispatch_capability"
+        ]
+        if len(dispatches) != 1 or not any(
+            isinstance(n, ast.Return)
+            and isinstance(n.value, ast.Call)
+            and isinstance(n.value.func, ast.Subscript)
+            and isinstance(n.value.func.value, ast.Name)
+            and n.value.func.value.id == "_HANDLERS"
+            and isinstance(n.value.func.slice, ast.Name)
+            and n.value.func.slice.id == "kind"
+            and len(n.value.args) == 1
+            and isinstance(n.value.args[0], ast.Name)
+            and n.value.args[0].id == "context"
+            for n in ast.walk(dispatches[0])
+        ):
+            errors.append("CAPABILITY_DISPATCH_BYPASS")
+    except (OSError, ValueError, SyntaxError, TypeError, KeyError, AttributeError):
+        errors.append("CAPABILITY_REGISTRY_UNVERIFIABLE")
 
     # A Graphify snapshot is a useful extracted CODE graph, not proof of
     # today’s active cognition entry. The original list above predates the
@@ -177,11 +398,16 @@ def check(graph_path: Path, repo: Path) -> dict:
             })
         except (OSError, ValueError, SyntaxError, TypeError):
             errors.append(failure)
-    return {"status":"PASS" if not errors else "FAIL",
+    return {"module_count":len(module_nodes),
+            "module_import_edges":sum(len(v) for v in module_deps.values()),
+            "module_import_cycle_count":len(import_cycles),
+            "status":"PASS" if not errors else "FAIL",
             "commit":sha,"nodes":len(nodes),"edges":len(g["links"]),
             "inferred_edges":sum(e.get("confidence")=="INFERRED" for e in g["links"]),
             "control_edges":evidence,
             "active_native_source_edges":native_provenance,
+             "capability_routes":capability_routes,
+             "capability_route_expected_count":len(EXPECTED_CAPABILITY_ROUTES),
             "errors":errors,"semantic_outcome_verified":False}
 
 def main():

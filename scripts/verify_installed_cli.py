@@ -23,6 +23,47 @@ def main() -> None:
         raise SystemExit("INSTALLED_CLI_MISSING")
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
+    environment["PYTHONUTF8"] = "1"
+
+    # Exercise the new product entry as an INSTALLED executable in fresh
+    # processes, including identity discovery without remembered IDs.
+    managed = binary / ("caos.exe" if os.name == "nt" else "caos")
+    if not managed.is_file():
+        raise SystemExit("MANAGED_CLI_MISSING")
+    with tempfile.TemporaryDirectory(prefix="caos-installed-") as tmp:
+        base = Path(tmp)
+        state = base / "state"
+        def session(at, *args, expected=0):
+            result = subprocess.run([str(managed), "--state", str(at), *args],
+                text=True, encoding="utf-8", capture_output=True, env=environment, timeout=35)
+            assert result.returncode == expected, (args, result.stdout, result.stderr)
+            return json.loads(result.stdout if expected == 0 else result.stderr)
+        assert session(state, "list", expected=2)["status"] == "BLOCKED"
+        assert not state.exists()
+        session(state, "init")
+        goal = base / "original.txt"
+        original = "恢复完整目标与纠正；禁止把恢复记录当作业务完成。"
+        goal.write_text(original, encoding="utf-8")
+        created = session(state, "goal", "--file", str(goal), "--request-id", "installed-smoke-goal-001")
+        root = created["root_task_id"]
+        assert session(state, "list")["goals"][0]["original_goal"] == original
+        assert session(state, "list")["selected_root_task_id"] is None
+        assert session(state, "inspect", "--root", root)["goal"]["original"] == original
+        message = "可以参考 Graph；这只是候选方案，不要替换完整目标。"
+        request = base / "message.json"
+        request.write_text(json.dumps({"text": message, "origin": "client_user",
+            "locator": "installed CLI smoke", "request_id": "installed-message-001",
+            "expected_revision": created["revision_token"]}, ensure_ascii=False), encoding="utf-8")
+        session(state, "receive", "--root", root, "--file", str(request))
+        assert session(state, "inputs", "--root", root)["inputs"][0]["text"] == message
+        assert session(state, "inspect", "--root", root)["goal"] == created["goal"]
+        archive = base / "snapshot.zip"
+        session(state, "snapshot", "--file", str(archive))
+        restored = base / "restored"
+        session(restored, "restore", "--file", str(archive))
+        assert session(restored, "list")["goals"][0]["root_task_id"] == root
+        assert session(restored, "inputs", "--root", root)["inputs"][0]["text"] == message
+        assert session(restored, "outcome", "--root", root)["contract_outcome_verified"] is False
 
     with tempfile.TemporaryDirectory(prefix="cognition-installed-smoke-") as root:
         base = Path(root)
@@ -127,6 +168,7 @@ def main() -> None:
     print(json.dumps({
         "status": "INSTALLED_CLI_SMOKE_PASS",
         "installed_version": package,
+        "managed_cli_cold_discovery_and_snapshot": True,
         "entrypoint": cli.name,
         "fresh_goal_no_guess": True,
         "explicit_init_only": True,

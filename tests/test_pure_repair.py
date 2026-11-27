@@ -6,6 +6,7 @@ All writes are in temporary workspace, never original source or production.
 from __future__ import annotations
 
 import hashlib
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -480,6 +481,26 @@ class PureRepairTests(unittest.TestCase):
                          "CAPABILITY_DISABLED")
         self.assertFalse((self.ws/"repair_lab"/(second+".py")).exists())
         self.assertFalse(event["production_mutation_authorized"])
+
+    def test_holdout_retry_beyond_timestamp_domain_is_quarantined(self):
+        """An invalid retry time must not leave an unreachable pending review."""
+        from cognition_agent_os.ledger import _MAX_TIMESTAMP
+        tid,_=self.example_compare()
+        self.assertEqual(run_once(self.db,self.ws,self.fx)['status'],'NEEDS_REVIEW')
+        self.fx.joinpath('hidden.json').write_bytes(b'tampered')
+        with closing(connect(self.db)) as db:
+            db.execute('UPDATE tasks SET due_at=? WHERE task_id=?',
+                       (_MAX_TIMESTAMP-100,tid))
+            db.commit()
+        result=review_patch(self.db,self.ws,self.fx,tid)
+        self.assertEqual(result['status'],'HOLDOUT_RETRY_NOT_ADMITTED')
+        self.assertEqual(result['reason'],'RETRY_TIME_OUT_OF_RANGE')
+        row=self.row(tid)
+        self.assertEqual(row['state'],'UNKNOWN')
+        self.assertEqual(row['error_code'],'INVALID_REPAIR_RETRY_SCHEDULE')
+        self.assertLessEqual(row['due_at'],_MAX_TIMESTAMP)
+        self.assertEqual(len(self.receipt(tid,'REPAIR_RETRY_SCHEDULE_REFUSED')),1)
+        self.assertFalse((self.ws/'repair_lab').exists())
 
     def test_unavailable_holdout_has_finite_retry_budget(self):
         tid,_=self.example_compare()

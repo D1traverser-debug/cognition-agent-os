@@ -14,7 +14,7 @@ import re
 import sqlite3
 
 from .ledger import open_readonly_snapshot
-from .ledger import create_task,current_guard,event,finalize_observed
+from .ledger import create_task,current_guard,event,finalize_observed, live_claim_owner
 from .source import safe_fixture,SourceUnavailable
 from .runner import store_once,ArtifactConflict
 from .knowledge_routing import _checked_spec,KnowledgeRoutingError
@@ -114,8 +114,7 @@ def enqueue_research_gap(db:sqlite3.Connection,task:dict,fixtures:Path,
     db.execute("BEGIN IMMEDIATE")
     try:
         row=db.execute("SELECT * FROM tasks WHERE task_id=?",(tid,)).fetchone()
-        if (not row or row["claim_token"]!=task["claim_token"]
-            or row["state"]!="RUNNING"):
+        if not live_claim_owner(row,task):
             db.commit();return {"task_id":tid,"status":"STALE_WORKER"}
         ok,reason=current_guard(db,task,needs_write=True)
         if not ok:

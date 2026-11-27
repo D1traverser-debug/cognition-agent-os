@@ -28,6 +28,14 @@ DIRECT_STAGES = frozenset({
 DIRECT_FILE_WRITERS = frozenset({
     ("container_lab", "run_suite"),
     ("signed_feedback", "_historical_negative_is_authentic"),
+    # Operator-only restore to a NEW private directory, never a model tool.
+    # Hash/path/size validation precedes this staged write; restored execution
+    # is fenced. See CognitiveSessions snapshot and adversarial archive tests.
+    ("session_archive", "restore_session"),
+    # Trusted entry preflight only: one random canary inside a fresh temporary
+    # directory, removed on every path. Never a model-callable writer or an
+    # owner artifact; no-dispatch/false-denial tests cover observed failures.
+    ("native_sandbox", "verify_readonly_boundary"),
 })
 
 ARTIFACT_STORES = frozenset({

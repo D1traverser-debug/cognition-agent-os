@@ -220,6 +220,63 @@ class RepoLabTest(unittest.TestCase):
                 "SELECT COUNT(*) FROM events WHERE task_id=? AND kind='CONFORMANCE_VIOLATION'",
                 (tid,)).fetchone()[0],1)
 
+    def test_oversized_holdout_after_docker_cannot_be_accepted(self):
+        """Real bounded source failure before commit cannot escape review."""
+        tid = self.plan()
+        def oversized_after_docker(base, changes, entrypoint, cases):
+            result = self._fake_suite(base, changes, entrypoint, cases)
+            if cases == self.hidden:
+                (self.fx/"hidden.json").write_bytes(b"X" * (1024 * 1024 + 1))
+            return result
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=oversized_after_docker):
+            result = review_repo(self.dbpath, self.ws, self.fx, tid)
+        self.assertEqual(result["status"], "HOLDOUT_PIN_MISMATCH", result)
+        self.assertEqual(self.state(tid)["state"], "NEEDS_REVIEW")
+        self.assertFalse((self.ws/"repo_lab"/tid).exists())
+
+    def test_oversized_holdout_after_staging_rejects_without_acceptance(self):
+        """Staged bytes must never be promoted against inaccessible gold."""
+        from cognition_agent_os import repo_repair
+        tid = self.plan()
+        original_stage = repo_repair._stage
+        def stage_then_oversize(*args, **kwargs):
+            effect = original_stage(*args, **kwargs)
+            (self.fx/"hidden.json").write_bytes(b"X" * (1024 * 1024 + 1))
+            return effect
+        with (patch("cognition_agent_os.repo_repair.run_suite",
+                    side_effect=self._fake_suite),
+              patch.object(repo_repair, "_stage", side_effect=stage_then_oversize)):
+            result = review_repo(self.dbpath, self.ws, self.fx, tid)
+        self.assertEqual(result["status"], "POST_EFFECT_REJECTED", result)
+        self.assertEqual(self.state(tid)["state"], "UNKNOWN")
+        with closing(connect(self.dbpath)) as db:
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='REPO_DOCKER_HOLDOUT_ACCEPTED'", (tid,)
+            ).fetchone()[0], 0)
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM events WHERE task_id=? "
+                "AND kind='REPO_DOCKER_POST_STAGE_REJECTED'", (tid,)
+            ).fetchone()[0], 1)
+
+    def test_oversized_holdout_after_acceptance_revokes_lab_claim(self):
+        """An accepted repair cannot retain a positive claim on unreadable gold."""
+        tid = self.plan()
+        with patch("cognition_agent_os.repo_repair.run_suite",
+                   side_effect=self._fake_suite):
+            self.assertEqual(review_repo(self.dbpath, self.ws, self.fx, tid)["status"],
+                             "REPAIR_LAB_VERIFIED")
+        (self.fx/"hidden.json").write_bytes(b"X" * (1024 * 1024 + 1))
+        checked = audit_repo(self.dbpath, self.ws, self.fx, tid,
+                             require_staged=True)
+        self.assertEqual(checked["reason"], "HOLDOUT_PIN_MISMATCH", checked)
+        observed = inspect_conformance(self.dbpath, self.ws, self.fx,
+                                       enforce=True)
+        self.assertEqual(observed["status"], "CONFORMANCE_VIOLATIONS", observed)
+        self.assertEqual(self.state(tid)["state"], "UNKNOWN")
+        self.assertTrue(capability_disabled(self.dbpath, REPAIR_LAB_CAPABILITY))
+
     def test_p30_hidden_gold_drifts_after_docker_before_review_commit(self):
         tid=self.plan()
         contaminated=b'[{"input":{},"expected":{"net":999}}]'

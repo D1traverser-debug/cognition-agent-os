@@ -15,7 +15,11 @@ from .planner import propose
 # Fixed loopback origin; cannot be selected by source content or model output.
 _BASE = "http://127.0.0.1:11434"
 _MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:-]{0,120}\Z")
-_MAX_RESPONSE = 16384
+# Ollama /api/generate includes a context-token array in its JSON response.
+# The native planner allows 14.5k characters of prompt; 16 KiB can reject a
+# valid bounded generation before its textual response is inspected. Keep a
+# hard ceiling, but size it for the prompt/context envelope.
+_MAX_RESPONSE = 256 * 1024
 
 
 class LocalModelUnavailable(Exception):

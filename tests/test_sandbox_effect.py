@@ -1,4 +1,5 @@
 """P6 sandbox outcome acceptance tests; never write original fixture sources."""
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -50,6 +51,40 @@ class SandboxEffectTests(unittest.TestCase):
         try:
             return [dict(r) for r in db.execute("SELECT * FROM events WHERE task_id=?",(tid,))]
         finally:db.close()
+
+    def test_66387_byte_valid_goal_artifact_is_audited_and_staged_exactly(self):
+        """Auditor and effect adapter share the 128 KiB artifact identity bound."""
+        from cognition_agent_os.goal_audit import audit_goal
+
+        tid, name, before = self.make()
+        artifact = self.out / "artifacts" / (tid + ".json")
+        original = artifact.read_bytes()
+        target_size = 66_387
+        self.assertLess(len(original), target_size)
+        # JSON permits trailing whitespace. Re-pin this exact valid byte
+        # revision in the isolated test ledger to exercise a large legitimate
+        # artifact without changing the candidate or its meaning.
+        audited_bytes = original + b" " * (target_size - len(original))
+        self.assertEqual(len(audited_bytes), target_size)
+        artifact.write_bytes(audited_bytes)
+        artifact_sha256 = hashlib.sha256(audited_bytes).hexdigest()
+        with closing(connect(self.db)) as db:
+            db.execute("UPDATE tasks SET artifact_hash=? WHERE task_id=?",
+                       (artifact_sha256, tid))
+            db.commit()
+
+        audit = audit_goal(self.db, self.out, self.fx, tid)
+        self.assertEqual(audit["status"], "CANDIDATE_MECHANICALLY_VALID", audit)
+        self.assertEqual(audit["artifact_sha256"], artifact_sha256)
+        self.assertEqual(audit["observed_artifact_sha256"], artifact_sha256)
+
+        result = stage_one(self.db, self.out, self.fx, tid)
+        self.assertEqual(result["status"], "SANDBOX_VERIFIED", result)
+        expected_candidate = json.loads(audited_bytes)["candidate_text"].encode("utf-8")
+        staged = (self.out / "sandbox" / (tid + ".candidate")).read_bytes()
+        self.assertEqual(staged, expected_candidate)
+        self.assertEqual((self.fx / name).read_bytes(), before)
+        self.assertEqual(self.task(tid)["state"], "SANDBOX_VERIFIED")
 
     def test_json_sandbox_actual_effect_readback_and_source_unchanged(self):
         tid,name,before=self.make()
@@ -119,6 +154,28 @@ class SandboxEffectTests(unittest.TestCase):
         self.assertEqual(r["status"],"EFFECT_UNKNOWN")
         self.assertEqual(self.task(tid)["state"],"NEEDS_REVIEW")
         self.assertEqual((dest/(tid+".candidate")).read_text(),"TAMPER")
+
+    def test_effect_retry_beyond_timestamp_domain_never_creates_zombie(self):
+        """Unusable retry clock makes an explicit UNKNOWN, not a fake schedule."""
+        import cognition_agent_os.sandbox_effect as sandbox_module
+        from cognition_agent_os.ledger import _MAX_TIMESTAMP
+        from types import SimpleNamespace
+        tid,_,_=self.make()
+        folder=self.out/'sandbox';folder.mkdir(exist_ok=True)
+        (folder/(tid+'.candidate')).write_text('TAMPER')
+        initial_due=self.task(tid)['due_at']
+        with patch.object(sandbox_module,'time',
+                          SimpleNamespace(time=lambda:_MAX_TIMESTAMP-10)):
+            result=stage_one(self.db,self.out,self.fx,tid)
+        self.assertEqual(result['status'],'EFFECT_RETRY_NOT_ADMITTED')
+        self.assertEqual(result['reason'],'RETRY_TIME_OUT_OF_RANGE')
+        current=self.task(tid)
+        self.assertEqual(current['state'],'UNKNOWN')
+        self.assertEqual(current['error_code'],'INVALID_SANDBOX_RETRY_SCHEDULE')
+        self.assertEqual(current['due_at'],initial_due)
+        self.assertEqual([e['kind'] for e in self.events(tid)].count(
+                         'SANDBOX_RETRY_SCHEDULE_REFUSED'),1)
+        self.assertEqual((folder/(tid+'.candidate')).read_text(),'TAMPER')
 
     def test_repeated_sandbox_failure_has_finite_retry_budget(self):
         tid,_,_=self.make()

@@ -1,0 +1,43 @@
+name: CAOS Skill package budget
+description: Enforce UTF-8 Skill entrypoint budgets and declared on-demand package closure.
+inputs:
+  policy-path:
+    description: Repository-relative path to the child repository's Skill package policy JSON.
+    required: false
+    default: config/skill_package_policy.json
+  report-path:
+    description: Optional repository-relative JSON report path.
+    required: false
+    default: skill-package-report.json
+  package-id:
+    description: Optional package id to build and read back as an exact ZIP.
+    required: false
+    default: ""
+  zip-output:
+    description: Optional repository-relative ZIP output path; requires package-id.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        POLICY_PATH: ${{ inputs.policy-path }}
+        REPORT_PATH: ${{ inputs.report-path }}
+        PACKAGE_ID: ${{ inputs.package-id }}
+        ZIP_OUTPUT: ${{ inputs.zip-output }}
+      run: |
+        set -euo pipefail
+        script="$GITHUB_ACTION_PATH/../../../scripts/verify_skill_package.py"
+        args=(--root "$GITHUB_WORKSPACE" --policy "$POLICY_PATH")
+        if [[ -n "$REPORT_PATH" ]]; then
+          args+=(--report "$GITHUB_WORKSPACE/$REPORT_PATH")
+        fi
+        if [[ -n "$PACKAGE_ID" || -n "$ZIP_OUTPUT" ]]; then
+          if [[ -z "$PACKAGE_ID" || -z "$ZIP_OUTPUT" ]]; then
+            echo "package-id and zip-output must be supplied together" >&2
+            exit 2
+          fi
+          args+=(--package "$PACKAGE_ID" --zip-output "$GITHUB_WORKSPACE/$ZIP_OUTPUT")
+        fi
+        python "$script" "${args[@]}"
