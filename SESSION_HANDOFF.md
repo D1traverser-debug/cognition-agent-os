@@ -1,4 +1,4 @@
-# cognition-agent-os — continuation pointer
+# cognition-agent-os — dated continuation pointer (2026-11-27)
 
 **BOOTSTRAP INDEX ONLY — not a complete work log; use progressive disclosure.** This is not the original owner contract, actual ChatGPT execution hook, completed cognitive method, or runtime source of truth. The selected product is **cognition-agent-os itself**. Retrieve the PRIVATE original owner requirements and latest correction; don't make the owner repeat accessible requirements.
 
@@ -29,6 +29,6 @@ The ten entries are **locations of authority and evidence**, NOT ordered thinkin
 
 **Recursive causal diagnosis, not six sequential workflow boxes:** question competing causes, tools, context and test method; read original mechanisms and counterexamples; re-question initial selection before authorized action; independently observe the actual outcome and reopen its upstream basis if it fails. Retain source version, method applicability and falsifier. Do NOT add another controller, duplicate ledger, generic promise, new checklist or source-only test as a proxy for owner success.
 
-**Live inventory:** read current code and exact-head CI, not a cached module count or dated audit. Retire superseded review routes only after ancestry, retained behavior and independent evidence are checked. Keep historical evidence out of default context; the private continuity entry owns current task status.
+**Live inventory:** read current code and exact-head CI, not a cached module count or dated audit. Retire superseded review routes only after ancestry, retained behavior and independent evidence are checked. Keep historical evidence out of default context; the private continuity entry owns current task status. Earlier handoff evidence remains in `archive/SESSION_HANDOFF_20261024_PRE_COMPACTION.md` for on-demand recovery.
 
 **Product status: NOT_READY.** Interactive fresh-session Skill selection, unfamiliar-task root-cause quality, true reusable method transfer and fewer user corrections have not been independently demonstrated. No unapproved main merge, paid inference, deployment, destructive cleanup or child production write.
