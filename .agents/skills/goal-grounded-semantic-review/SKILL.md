@@ -26,7 +26,7 @@ These references are progressive-disclosure modules, not additional controllers,
 
 ## Minimum decision and evidence contract
 
-For each material obligation, connect its original source to the current authority, implementation path, relevant tests, independent oracle and owner outcome. Compare reuse/adapt/replace/remove/build as relevant; challenge the preferred option and research coverage before action. Execute only within current grants. Read back the real provider/state/effect and compare it with the original outcome. If evidence contradicts a premise, reopen the earliest affected decision rather than merely retrying a child operation.
+For each material obligation, connect its original source to the current authority, implementation path, relevant tests, independent oracle and owner outcome. Compare reuse/adapt/replace/remove/build as relevant; challenge the preferred option and research coverage before action. Treat a mechanism as necessary only when it serves an unmet owner outcome or protects a necessary constraint/valid behavior. Prefer the least complex sufficient route; compare the cost of keeping, removing or deferring it, and check required behavior after simplification. Execute only within current grants. Read back the real provider/state/effect and compare it with the original outcome. If evidence contradicts a premise, reopen the earliest affected decision rather than merely retrying a child operation.
 
 Do not equate source inventory with semantic coverage, green CI with owner acceptance, a successful fixture with cross-domain transfer, or Skill presence with native client activation. Missing first-party activation/effect evidence remains NOT_TESTED or UNKNOWN.
 

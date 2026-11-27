@@ -119,7 +119,16 @@ full original goal and correction fidelity, context-appropriate investigation,
 independent comparison, lawful action with currently connected tools,
 real-result readback and correction, without requiring the owner to repeatedly
 enumerate missing checks or integrations. Evaluate actual triggered use, not
-hypothetical blanket ChatGPT interception.
+hypothetical blanket ChatGPT interception. Keep the interactive owner outcome as the
+priority over infrastructure experiments, documentation expansion or test-count
+optimization. Requirements are owner outcomes and necessary constraints, not
+implementation choices. Use the least complex sufficient mechanism; justify
+added or retained complexity by a specific unmet obligation or protected valid
+behavior and relevant evidence. Do not make optional infrastructure, fixed
+workflow stages, role counts or per-action reports a prerequisite. Assess actual
+outcome completeness, correction burden, latency/cost and meaningful failures;
+retain independent acceptance and permissions. Reopen the route if simplification
+loses a required behavior. Historical evidence is not a live requirement.
 
 **Deferred, not discarded and OPTIONAL for this owner:** Local/cloud deployment, unattended persistent
 Host scheduling, paid APIs, commercialization and a ChatGPT-to-host MCP/API
