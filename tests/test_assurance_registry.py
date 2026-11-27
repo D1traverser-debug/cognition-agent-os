@@ -68,6 +68,16 @@ class AssuranceRegistryTests(unittest.TestCase):
             check(self.registry, self.conops.replace(
                 '到期且用户未再发消息', '失去上下文自动理解原始用户需求'), self.readiness)
 
+    def test_new_system_construction_scenario_is_current_not_legacy(self):
+        legacy_ids = {item["id"] for item in self.registry["legacy_scenarios"]}
+        current_ids = {item["id"] for item in self.registry["current_scenarios"]}
+        self.assertEqual(len(legacy_ids), 14)
+        self.assertNotIn("OT15", legacy_ids)
+        self.assertIn("OT15", current_ids)
+        result = check(self.registry, self.conops, self.readiness)
+        self.assertEqual(result["current_scenarios"], 15)
+        self.assertEqual(result["legacy_scenarios"], 14)
+
     def test_product_readiness_text_cannot_silently_flip(self):
         with self.assertRaises(RegistryError):
             check(self.registry, self.conops, self.readiness.replace(
