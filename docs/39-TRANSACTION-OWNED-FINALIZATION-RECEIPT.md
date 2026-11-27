@@ -2,7 +2,7 @@
 
 ## Result and project authority
 
-The existing `cognition-agent-os` candidate branch is an **experimental** Draft PR #12, not merged into main, registered as a production UAOS domain, deployed to the owner's Windows PC, or authorized to write to other repositories. No paid or finite-credit model API was used. P28 improves the original SQLite ledger/worker execution path, rather than adding a passive observer or independent authority.
+The existing `cognition-agent-os` candidate branch is an **experimental** Draft PR #12, not merged into main, registered as a production child service, deployed to the owner's Windows PC, or authorized to write to other repositories. No paid or finite-credit model API was used. P28 improves the original SQLite ledger/worker execution path, rather than adding a passive observer or independent authority.
 
 ### Reproduced ownership/provenance race
 

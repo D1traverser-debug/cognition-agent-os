@@ -6,7 +6,7 @@
 
 Given the owner's complete goal, constraints and lawful authorization, the parent should preserve intent across interruption, decompose and challenge assumptions, research unfamiliar professional methods and tools, compare materially different solutions, execute only allowed effects, independently verify the full owner/child-business result, change method after failure, retain evidence-backed learning and transfer to unfamiliar domains while reducing owner correction burden and unnecessary system complexity.
 
-Current ChatGPT/Codex cognition and the repository Host/SQLite are technical surfaces of the same intended parent, but they are **not automatically connected**. Child systems retain their own task IDs, state, business data, permissions and result oracles. No unrelated historical project is part of the current product scope.
+Current ChatGPT/Codex cognition and the repository Host/SQLite are technical surfaces of the same intended parent, but they are **not automatically connected**. Child systems retain their own task IDs, state, business data, permissions and result oracles.
 
 ## Default context surface
 
