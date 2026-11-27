@@ -434,7 +434,7 @@ class CognitiveSessions(unittest.TestCase):
         self.assertEqual(result["trials"][0]["status"], "STALE")
         self.assertFalse(result["cross_domain_generalization_verified"])
 
-    def test_referenced_method_result_is_a_live_execution_dependency(self):
+    def test_unrelated_success_cannot_establish_method_reuse(self):
         self.decision()
         self.node("method-v1", "method")
         trial = register_native_goal(self.db, "Independently check the delivered count")
@@ -442,16 +442,54 @@ class CognitiveSessions(unittest.TestCase):
         self.contract(effects=[], root=trial, outcomes=[{
             "space": "workspace", "path": "count.txt", "test": "text_contains", "value": "count=4"}])
         (self.workspace / "count.txt").write_text("count=4")
-        record_trial(self.db, self.sources, self.workspace, self.root, "method-v1", trial, "trial-live")
+        record_trial(self.db, self.sources, self.workspace, self.root, "method-v1", trial, "trial-unlinked")
+        evidence = inspect_trials(self.db, self.sources, self.workspace, self.root, "method-v1")
+        self.assertEqual(evidence["trials"][0]["status"], "OBSERVED_PASS")
+        self.assertFalse(evidence["trials"][0]["method_use_verified"])
         self.node("reuse-method", "decision", deps=["compare", "inspect-first"],
-            action_spec=compile_intent(self.fixture.reconcile())["child_source_spec"],
+                  action_spec=compile_intent(self.fixture.reconcile())["child_source_spec"],
+                  method_refs=[{"root_task_id": self.root, "node_id": "method-v1", "use": "reuse"}])
+        self.contract()
+        with self.assertRaisesRegex(ValueError, "REUSE_REQUIRES_TRIAL"):
+            self.admit()
+
+    def test_referenced_method_result_is_a_live_execution_dependency(self):
+        self.decision()
+        self.node("method-v1", "method")
+        trial = register_native_goal(self.db, "Compare original supplier records for an independent inventory report")
+        enable_managed_session(self.db, trial)
+        f = self.fixture
+        spec = compile_intent(f.reconcile())["child_source_spec"]
+        self.node("trial-option-a", "option", root=trial)
+        self.node("trial-option-b", "option", root=trial)
+        self.node("trial-decision", "decision", root=trial,
+                  deps=["trial-option-a", "trial-option-b"], action_spec=spec,
+                  method_refs=[{"root_task_id": self.root, "node_id": "method-v1", "use": "experiment"}])
+        self.contract(root=trial)
+        state = inspect_native_goal(self.db, self.workspace, self.sources, trial)
+        admitted = admit_native_decision(
+            self.db, self.workspace, self.sources, trial, f.candidate(state, f.reconcile(), None))
+        trial_child = admitted["child_task_id"]
+        run = run_once(self.db, self.workspace, self.sources, only_task_id=trial_child)
+        self.assertEqual(run["status"], "NEEDS_REVIEW", run)
+        artifact = self.workspace / "artifacts" / (trial_child + ".json")
+        original = artifact.read_bytes()
+        self.contract(root=trial, outcomes=[{
+            "space": "workspace", "path": "artifacts/" + artifact.name,
+            "test": "sha256", "value": hashlib.sha256(original).hexdigest()}])
+        record_trial(self.db, self.sources, self.workspace, self.root, "method-v1", trial, "trial-live")
+        observed = inspect_trials(self.db, self.sources, self.workspace, self.root, "method-v1")
+        self.assertTrue(observed["trials"][0]["method_use_verified"], observed)
+        self.assertFalse(observed["cross_domain_generalization_verified"])
+        self.node("reuse-method", "decision", deps=["compare", "inspect-first"],
+            action_spec=spec,
             method_refs=[{"root_task_id": self.root, "node_id": "method-v1", "use": "reuse"}])
         self.contract()
         child = self.admit()["child_task_id"]
         with closing(connect(self.db)) as db:
             task = dict(db.execute("SELECT * FROM tasks WHERE task_id=?", (child,)).fetchone())
             self.assertTrue(current_guard(db, task, needs_write=True)[0])
-        (self.workspace / "count.txt").write_text("count=3")
+        artifact.write_bytes(original + b"tampered")
         with closing(connect(self.db)) as db:
             self.assertFalse(current_guard(db, task, needs_write=True)[0])
         run_once(self.db, self.workspace, self.sources, only_task_id=child)

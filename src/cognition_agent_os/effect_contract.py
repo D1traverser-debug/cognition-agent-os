@@ -210,7 +210,8 @@ def enforce_admission(db, sources: Path, workspace: Path, root_id: str, spec: di
                                     ref["root_task_id"], ref["node_id"])
             if trials["status"] != "SCOPED_TRIALS_ONLY" or trials.get("truncated"):
                 raise ValueError("COGNITIVE_METHOD_EVIDENCE_INVALIDATED")
-            if ref["use"] == "reuse" and not trials["trials"]:
+            if ref["use"] == "reuse" and not any(
+                    trial.get("method_use_verified") for trial in trials["trials"]):
                 raise ValueError("COGNITIVE_METHOD_REUSE_REQUIRES_TRIAL")
             method_evidence.append({"reference": ref, "snapshot_sha256": digest(trials)})
     return {"policy_sha256": policy["sha256"], "goal_sha256": view["goal_sha256"],
