@@ -155,7 +155,6 @@ VERIFIED/FAILED --new independent task--> [new TaskRecord, not overwrite old his
     {
       "node_id": "work-01",
       "capability_ref": {"id": "registered-capability", "version": "x.y"},
-      "depends_on": [],
       "input_refs": [],
       "expected_outputs": [],
       "precondition_refs": [],
@@ -164,11 +163,18 @@ VERIFIED/FAILED --new independent task--> [new TaskRecord, not overwrite old his
       "budget_ref": "approved-budget",
       "failure_policy": "REPLAN_OR_HOLD"
     }
+  ],
+  "edges": [
+    {"from": "work-01", "to": "work-02", "kind": "requires"},
+    {"from": "work-01", "to": "work-03", "kind": "on_condition",
+     "condition_ref": "independently-evaluated-condition"}
   ]
 }
 ```
 
 这是结构形状，不是已冻结 schema。节点不预设“研究/设计/执行/验收”等固定阶段；其能力、依赖、输出与验证条件由当前目标决定。纯认知结论可以留在认知图中，不必伪装成执行任务。工作计划中的 `action_id`、业务幂等键、许可和 provider effect reference 应由可信运行时绑定，不能由模型自报。
+
+Conditional edges must use a typed condition whose observation and evaluator are independently auditable; free-form model text cannot silently release a branch. Multiple `requires` edges into one node express fan-in. The dependency subgraph is acyclic within a plan revision; evidence/condition feedback that changes the next action creates a new revision rather than an unbounded graph cycle.
 
 ### 7.3 提案准入与运行规则
 
