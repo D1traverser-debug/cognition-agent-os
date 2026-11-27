@@ -1,6 +1,6 @@
 # cognition-agent-os — dated continuation pointer (2026-10-31)
 
-**BOOTSTRAP INDEX ONLY — not a complete work log; use progressive disclosure.** This is not the original owner contract, actual ChatGPT execution hook, completed cognitive method, or runtime source of truth. The selected product is **cognition-agent-os itself**, not legacy UAOS migration. Retrieve the PRIVATE original owner requirements and latest correction; don't make the owner repeat accessible requirements.
+**BOOTSTRAP INDEX ONLY — not a complete work log; use progressive disclosure.** This is not the original owner contract, actual ChatGPT execution hook, completed cognitive method, or runtime source of truth. The selected product is **cognition-agent-os itself**. Retrieve the PRIVATE original owner requirements and latest correction; don't make the owner repeat accessible requirements.
 
 ## Owner-activated continuity — 2026-10-29, revised 2026-10-31
 
@@ -9,8 +9,6 @@ A selected ordinary ChatGPT conversation must resume unfinished cognition work. 
 **Original outcome:** independently investigate unfamiliar failures; recursively challenge the proposed root cause and the diagnosis itself; deeply read actual professional implementations and negative cases; compare reuse/adapt/replace/remove/build; RECHALLENGE the selected approach before execution; take lawfully permitted action; independently verify the COMPLETE owner result; revise earlier judgments on failure; learn and transfer proven methods across different tasks. Reduce owner corrections and complexity. This is NOT a sequential checklist.
 
 **Current product gap:** the actual ChatGPT/Codex cognitive loop has not proven reliable cross-task method promotion, applicability, independent transfer validation, and invalidation. Existing `memory_candidates.py` stores *unverified per-root* semantic/procedural candidates; `signed_feedback.py` only constrains a narrow rejected code-repair operator; `knowledge_routing.py` selects seeded registered methods; `native_local_planner.py` is an optional bounded local planner. None independently proves general autonomous RSI. A same-goal CSV/JSON precedent prompt injection was tested and **reverted**: deterministic owner-exact handling already existed, with no measured owner benefit. Do not repeat this tempting local patch.
-
-**Separate historical topic:** former `universal-agent-os` child parent-binding migration is not the active cognition/learning objective. If a real child's work is explicitly requested, preserve its native state and permissions, but do not substitute UAOS code cleanup for cognition-agent-os success. The user did not select migration in this task.
 
 ## Recovery order and responsibility map
 

@@ -37,16 +37,6 @@ applicable cross-domain methods, routes advice/work through the child's
 admitted interface, coordinates dependencies and reads independent
 business outcomes without overwriting child state.
 
-**Separate legacy child-control migration (not the default cognition task):**
-Four child manifests may still describe historical UAOS binding. That is
-migration evidence, not an instruction to switch the current owner-selected
-goal from cognition/evolution to child wiring. Only investigate or change these
-bindings when a child-control or child-business task actually requires it.
-For a selected migration, independently verify child-native identity, grants,
-business state, acceptance and negative neighbors before any cutover; do not
-silently rewrite child production or merge/release/deploy. Redesign remains
-conditional on measured owner outcomes rather than legacy-code cloning.
-
 **One cognition parent, two presently distinct technical surfaces.**
 This ChatGPT/tool session participates as the actual parent's interactive
 cognition and orchestration surface; the repository is the SAME parent's
@@ -73,8 +63,7 @@ selected project/task context. Unrelated everyday ChatGPT conversations must
 not be forced through cognition-agent-os, run a mandatory controller, or incur
 its research/verification overhead. A reliable keyword/context trigger is
 acceptable; **universal automatic invocation in every ChatGPT conversation
-is NOT a product requirement or current acceptance gate**. The obsolete
-`uaos-controller-runtime` is not a prerequisite and must not be restored.
+is NOT a product requirement or current acceptance gate**. Neither unrelated historical control layers nor a universal runtime interceptor are prerequisites.
 
 **Owner clarification (2026-10-29, supersedes any implied always-on prerequisite):**
 "持续" means the owner can explicitly wake ChatGPT by messaging in the current
