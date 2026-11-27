@@ -12,7 +12,7 @@ import stat
 import tempfile
 from zipfile import ZipFile, ZIP_DEFLATED
 
-from .ledger import readonly_snapshot, connect_existing, event, require_initialized_ledger
+from .ledger import readonly_snapshot, connect_existing, event, require_initialized_ledger, managed_ledger_active
 from .source import safe_fixture
 
 MAX_BYTES = 64 * 1024 * 1024
@@ -29,7 +29,7 @@ def export_session(state: Path, destination: Path):
     with tempfile.TemporaryDirectory(prefix="caos-snapshot-") as temp:
         backup = Path(temp) / "ledger.sqlite"
         with readonly_snapshot(state / "ledger.sqlite") as source:
-            if source.execute("SELECT 1 FROM events WHERE kind='COGNITION_MANAGED_LEDGER'").fetchone() is None:
+            if not managed_ledger_active(source):
                 raise ValueError("SNAPSHOT_REQUIRES_MANAGED_LEDGER")
             with closing(sqlite3.connect(backup)) as target:
                 source.backup(target)
@@ -111,7 +111,7 @@ def restore_session(archive_path: Path, state: Path):
                 raise ValueError("RESTORE_EXECUTABLE_SCHEMA_REJECTED")
             if db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 raise ValueError("RESTORE_SQLITE_CORRUPT")
-            if db.execute("SELECT 1 FROM events WHERE kind='COGNITION_MANAGED_LEDGER'").fetchone() is None:
+            if not managed_ledger_active(db):
                 raise ValueError("RESTORE_REQUIRES_MANAGED_LEDGER")
             event(db, "operator", "COGNITION_RESTORE_FENCE", {
                 "archive_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),

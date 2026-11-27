@@ -13,14 +13,16 @@ import json
 from pathlib import Path
 
 from .cognitive_session import _identity, _project, digest
-from .ledger import connect_existing, readonly_snapshot, event
+from .ledger import connect_existing, readonly_snapshot, event, managed_ledger_active
 from .source import safe_fixture, SourceUnavailable
 
 
 def managed(db, root_id):
-    return db.execute("SELECT 1 FROM events WHERE task_id=? "
-                      "AND kind='COGNITION_MANAGED' OR kind='COGNITION_MANAGED_LEDGER' LIMIT 1",
-                      (root_id,)).fetchone() is not None
+    """One root-local opt-in or the canonical operator-managed whole ledger."""
+    return (managed_ledger_active(db) or db.execute(
+        "SELECT 1 FROM events WHERE task_id=? "
+        "AND kind='COGNITION_MANAGED' LIMIT 1",
+        (root_id,)).fetchone() is not None)
 
 
 def enable_managed_session(db_path: Path, root_id: str):

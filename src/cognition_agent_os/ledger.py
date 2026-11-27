@@ -24,6 +24,18 @@ class LedgerNotConfigured(RuntimeError):
     """Execution cannot mint an authority or modify an uninitialized ledger."""
 
 
+def managed_ledger_active(db: sqlite3.Connection) -> bool:
+    """Only the operator's explicit event activates ledger-wide native admission.
+
+    Root-local COGNITION_MANAGED is distinct. A matching event kind under
+    another root is not a ledger-wide authorization or an export/serve grant.
+    """
+    return db.execute(
+        "SELECT 1 FROM events WHERE task_id='operator' "
+        "AND kind='COGNITION_MANAGED_LEDGER' LIMIT 1"
+    ).fetchone() is not None
+
+
 def open_readonly_snapshot(path: Path, *, timeout: float = 5) -> sqlite3.Connection:
     """Caller-owned read-only SQLite connection with an explicit pinned view.
 
@@ -188,8 +200,7 @@ def create_task(db: sqlite3.Connection, spec: dict, *, interval_seconds: int = 0
         row = db.execute("SELECT * FROM authority WHERE singleton=1").fetchone()
         if row is None or row["write_allowed"] != 1:
             raise PermissionError("TASK_ADMISSION_GRANT_REVOKED")
-        managed_only = db.execute("SELECT 1 FROM events WHERE "
-            "kind='COGNITION_MANAGED_LEDGER' LIMIT 1").fetchone() is not None
+        managed_only = managed_ledger_active(db)
         if managed_only and spec.get("kind") != "native_goal":
             if admission_token is not _NATIVE_ADMISSION or parent is None:
                 raise PermissionError("MANAGED_LEDGER_REQUIRES_NATIVE_ADMISSION")

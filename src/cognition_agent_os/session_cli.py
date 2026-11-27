@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 from zipfile import BadZipFile
 
-from .ledger import connect, initialize, event, readonly_snapshot
+from .ledger import connect, initialize, event, readonly_snapshot, managed_ledger_active
 from .native_decision import register_native_goal, list_native_goals
 from .cognitive_session import (
     inspect_session, record_node, amend_goal, reopen_node, record_input, inspect_inputs)
@@ -130,7 +130,7 @@ def main(argv=None):
         elif args.command == "doctor":
             with readonly_snapshot(db) as conn:
                 authority = dict(conn.execute("SELECT * FROM authority WHERE singleton=1").fetchone())
-                strict = conn.execute("SELECT 1 FROM events WHERE kind='COGNITION_MANAGED_LEDGER'").fetchone() is not None
+                strict = managed_ledger_active(conn)
             try:
                 from importlib.metadata import version
                 sdk = version("mcp")
@@ -146,7 +146,7 @@ def main(argv=None):
         else:
             from .native_mcp_bridge import build_mcp_server
             with readonly_snapshot(db) as conn:
-                if conn.execute("SELECT 1 FROM events WHERE kind='COGNITION_MANAGED_LEDGER'").fetchone() is None:
+                if not managed_ledger_active(conn):
                     raise ValueError("SERVE_REQUIRES_MANAGED_LEDGER")
             server = build_mcp_server(db, workspace, sources, allow_goal_writes=True,
                                       allow_host_tick=True, allow_source_read=True)
