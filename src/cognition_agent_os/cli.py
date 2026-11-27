@@ -7,7 +7,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from .ledger import alter_authority, connect, create_task, initialize
+from .ledger import alter_authority, connect, connect_existing, create_task, initialize
 from .continuity import register_goal, resume_goal, checkpoint_goal
 from .outcome_feedback import register_evidence_goal
 from .host import HostNotConfigured, _admit_existing_ledger, run_tick
@@ -572,7 +572,7 @@ def main(argv=None) -> int:
         print(json.dumps({"status":"HOST_NOT_CONFIGURED",
             "reason":str(exc)[:160]},sort_keys=True))
         return 4
-    db = connect(args.db)
+    db = connect_existing(args.db)
     try:
         if args.command in ("seed-fixture", "seed-github"):
             spec = {"kind": "fixture", "old": args.old, "new": args.new} if args.command == "seed-fixture" else {

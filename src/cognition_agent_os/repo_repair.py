@@ -21,7 +21,7 @@ from .container_lab import (
     ContainerUnavailable)
 from .runner import store_once,ArtifactConflict,read_audited_artifact
 from .source import SourceUnavailable, safe_fixture
-from .ledger import connect,finalize_observed,event,current_guard
+from .ledger import connect_existing as connect,finalize_observed,event,current_guard
 
 
 def sha(value):return hashlib.sha256(value).hexdigest()

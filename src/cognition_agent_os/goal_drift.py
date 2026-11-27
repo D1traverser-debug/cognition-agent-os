@@ -14,7 +14,7 @@ import sqlite3
 from pathlib import Path
 
 from .goal_fidelity import check_goal_fidelity
-from .ledger import connect, current_guard, event, require_initialized_ledger
+from .ledger import connect_existing as connect, current_guard, event, require_initialized_ledger
 
 MAX_ROOTS_PER_TICK = 16
 MAX_DESCENDANTS_PER_ROOT = 64

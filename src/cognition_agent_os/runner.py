@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import time
 
-from .ledger import claim_one, connect, current_guard, event, finalize_observed, require_initialized_ledger, lineage_guard
+from .ledger import claim_one, connect_existing as connect, current_guard, event, finalize_observed, require_initialized_ledger, lineage_guard
 from .planner import propose
 from .local_model import LocalModelUnavailable, propose_local
 from .source import SourceUnavailable, get_pair, safe_fixture

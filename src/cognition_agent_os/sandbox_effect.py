@@ -13,7 +13,7 @@ from pathlib import Path
 import sqlite3
 import time
 
-from .ledger import connect, create_task, event, current_guard, _next_recurring_due
+from .ledger import connect_existing as connect, create_task, event, current_guard, _next_recurring_due
 from .goal_audit import audit_goal, _constraints
 from .diagnostics import record_audit_failure, reject_review_if_untrusted
 from .goal_loop import validate_goal

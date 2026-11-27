@@ -14,7 +14,7 @@ import re
 import sqlite3
 import uuid
 
-from .ledger import connect, require_initialized_ledger, readonly_snapshot
+from .ledger import connect_existing as connect, require_initialized_ledger, readonly_snapshot
 from .source import SourceUnavailable, safe_fixture
 
 _ID = re.compile(r"[0-9a-f]{32}\Z")

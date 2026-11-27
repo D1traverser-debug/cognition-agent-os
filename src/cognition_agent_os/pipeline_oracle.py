@@ -21,7 +21,7 @@ from .repair_search import RepairError,parse_function
 from .repair_oracle import _execute_independent,_operator_change
 from .pipeline_repair import validate_pipeline,_pipeline_cases
 from .source import safe_fixture
-from .ledger import connect,event,current_guard
+from .ledger import connect_existing as connect,event,current_guard
 
 
 def digest(v):return hashlib.sha256(v).hexdigest()

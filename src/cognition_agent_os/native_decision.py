@@ -20,7 +20,7 @@ import sqlite3
 from .intent_planner import (
     compile_intent, IntentError, NATIVE_CAPABILITIES, CAPABILITIES_BY_KIND,
 )
-from .ledger import connect, create_task, event, require_initialized_ledger, readonly_snapshot
+from .ledger import connect_existing as connect, create_task, event, require_initialized_ledger, readonly_snapshot
 from .source import (safe_fixture, SourceUnavailable, github_public_snapshot)
 
 _ID = re.compile(r"[a-f0-9]{32}\Z")

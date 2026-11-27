@@ -14,7 +14,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from .ledger import connect, create_task, event, current_guard
+from .ledger import connect_existing as connect, create_task, event, current_guard
 from .source import SourceUnavailable, safe_fixture
 from .goal_loop import validate_goal
 from .reconciliation import validate_reconciliation, propose_reconciliation

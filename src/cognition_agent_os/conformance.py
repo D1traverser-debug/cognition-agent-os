@@ -20,7 +20,7 @@ from .goal_audit import audit_goal, _constraints
 from .reconciliation_oracle import audit_stored_report
 from .intent_runtime import audit_intent_plan
 from .runner import verify_artifact
-from .ledger import event, connect, readonly_snapshot, open_readonly_snapshot
+from .ledger import event, connect_existing as connect, readonly_snapshot, open_readonly_snapshot
 
 TASK_ID=re.compile(r"[0-9a-f]{32}\Z")
 EVIDENCED_STATES=("NEEDS_REVIEW","DECOMPOSED","RESEARCH_NEEDED","SANDBOX_VERIFIED","VERIFIED","REPAIR_LAB_VERIFIED","CONTROL_CANDIDATE_MATCHED","CONTROL_ACTIVE",

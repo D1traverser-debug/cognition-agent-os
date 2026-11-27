@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import tempfile
 
-from .ledger import connect,event
+from .ledger import connect_existing as connect,event
 from .outcome_attestation import (
     verify_signed_outcome,_strict_json,_read,MAX_STATEMENT,MAX_SIGNATURE,
     MAX_SIGNERS,SHA,PRINCIPAL,NAMESPACE

@@ -18,7 +18,7 @@ from . import local_model
 from .native_decision import (
     inspect_native_goal, capability_catalog, admit_native_decision, _sources,
     _DECISION_LAYERS)
-from .ledger import connect, event
+from .ledger import connect_existing as connect, event
 from .source import safe_fixture, SourceUnavailable
 
 _MAX_VIEW_FILES = 24

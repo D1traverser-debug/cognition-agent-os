@@ -16,7 +16,7 @@ import time
 from contextlib import closing
 from pathlib import Path
 
-from .ledger import connect, readonly_snapshot
+from .ledger import connect_existing as connect, readonly_snapshot
 from .source import github_public_branch_head, github_public_branch_head_nested
 
 _ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")

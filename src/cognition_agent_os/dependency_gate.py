@@ -12,7 +12,7 @@ from pathlib import Path
 import sqlite3
 import time
 
-from .ledger import connect, event, require_initialized_ledger
+from .ledger import connect_existing as connect, event, require_initialized_ledger
 
 _TABLE = """
 CREATE TABLE IF NOT EXISTS task_dependencies(

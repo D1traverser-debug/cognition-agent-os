@@ -6,7 +6,7 @@ from contextlib import closing
 import time
 from pathlib import Path
 
-from .ledger import connect, LedgerNotConfigured, require_initialized_ledger, readonly_snapshot
+from .ledger import connect_existing as connect, LedgerNotConfigured, require_initialized_ledger, readonly_snapshot
 from .runner import run_once
 from .watch import poll_due_watches
 from .sandbox_effect import advance_due_reviews
