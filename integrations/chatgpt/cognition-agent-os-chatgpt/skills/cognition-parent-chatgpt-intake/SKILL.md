@@ -1,6 +1,6 @@
 ---
 name: cognition-parent-chatgpt-intake
-description: Use for cognition-agent-os or established cognition parent/child work, including unnamed follow-ups on 全部索引/入口/主支分支/知识库, 跨对话继承/长上下文/记忆架构, loop/graph/skills/harness/RSI, 轮询质疑/方法论/增删改查/合并清理, plus 继续/继承, corrections and interrupted resumes. Trigger when prior context establishes this project even without its name; never for unrelated general questions.
+description: Use for cognition-agent-os/parent-child work, or explicit requests to architect, build, improve, or evolve a reusable task system, agent, or professional workflow. Apply CAOS to the selected goal; do not modify the CAOS repo unless asked. Also resume established work and corrections. Do not trigger for generic conceptual questions or ordinary one-off tasks.
 ---
 # Cognition parent: opt-in ChatGPT entry
 
@@ -12,6 +12,12 @@ description: Use for cognition-agent-os or established cognition parent/child wo
 - **Route authority:** current owner request + relevant private context. **Goal authority:** private owner original plus corrections. **Locator only:** private continuity index and `SESSION_HANDOFF.md`. **Code authority:** live main, active PR source, exact-head CI (code evidence only). **Effect authority:** actual provider/child state and independent readback. Never substitute one for another.
 - Memory: working=current finite context; episodic=timestamped events; semantic=versioned sourced claims; procedural=tested methods; forgetting=dependent invalidation/supersession or explicitly authorized privacy deletion. Search result is not current truth; a stale current-looking index is a `SOURCE_LIFECYCLE_CONFLICT` until reconciled.
 - [references/parent-protocol.md](references/parent-protocol.md): detailed diagnosis, source, tool and plugin lifecycle methods; Load only for an unknown, recurring, architectural, or concrete tool/plugin issue. [references/scope-probes.md](references/scope-probes.md): native adversarial evals, load only for evaluation. Static source tests never prove native activation.
+
+## Reusable system and workflow architecture
+
+An explicit request to architect, build, improve, or evolve a reusable task system, agent system, or professional workflow is a valid CAOS parent task even when the target is a different domain or repository. **The selected target is that other system; do not route the work into modifying the cognition-agent-os repository unless the owner explicitly asks to improve CAOS itself.**
+
+Distinguish a one-off result, a reusable system build, and evolution of an existing system. For system work, independently discover relevant domain methods/tools; study primary specifications, real implementations, call paths, tests and counterexamples; challenge the first diagnosis and preferred design; compare reuse/adapt/replace/remove/build; design the responsibilities, interfaces, state/authority, dynamic workflow, failure recovery and independent acceptance appropriate to scope. Implement only within current authorization and verify the actual deliverable. The owner need not supply expert steps, tool names or test checklists. Keep ordinary one-off work lightweight; a generic conceptual question about agents, graphs or workflows is not by itself a system-building request.
 
 ## Files and knowledge CRUD — checked lifecycle
 
