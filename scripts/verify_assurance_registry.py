@@ -7,7 +7,8 @@ import re
 import sys
 
 REQ_IDS = {f'R{i:02d}' for i in range(1, 25)}
-OT_IDS = {f'OT{i:02d}' for i in range(1, 15)}
+LEGACY_OT_IDS = {f'OT{i:02d}' for i in range(1, 15)}
+CURRENT_OT_IDS = LEGACY_OT_IDS | {'OT15'}
 GATE_IDS = {f'G{i}' for i in range(1, 7)}
 VALID_METHODS = {'ANALYSIS', 'INSPECTION', 'TEST', 'DEMONSTRATION'}
 VALID_LIMITATIONS = {'AUTOMATED_PARTIAL', 'EXTERNAL_ORACLE_REQUIRED',
@@ -68,8 +69,8 @@ def check(registry, conops_text, readiness_text):
         require(item.get('verification_evidence') == []
                 and item.get('validation_evidence') == [],
                 f'{rid}: evidence must be adjudicated outside draft inventory')
-    unique_ids(registry.get('legacy_scenarios'), 'historical OT', OT_IDS)
-    unique_ids(registry.get('current_scenarios'), 'current OT', OT_IDS)
+    unique_ids(registry.get('legacy_scenarios'), 'historical OT', LEGACY_OT_IDS)
+    unique_ids(registry.get('current_scenarios'), 'current OT', CURRENT_OT_IDS)
     current = {}
     for line in conops_text.splitlines():
         if re.match(r'^\| OT\d\d \|', line):
@@ -77,7 +78,7 @@ def check(registry, conops_text, readiness_text):
             require(len(cells) >= 2 and cells[0] not in current,
                     'duplicate/malformed current OT')
             current[cells[0]] = cells[1]
-    require(set(current) == OT_IDS, 'current OT labels no longer match inventory')
+    require(set(current) == CURRENT_OT_IDS, 'current OT labels no longer match inventory')
     for row in registry['current_scenarios']:
         require(row['description'] == current[row['id']],
                 f"{row['id']}: current OT text drift")
@@ -89,7 +90,7 @@ def check(registry, conops_text, readiness_text):
                 f'{key}: semantic migration classification missing')
         refs = row.get('current_refs')
         require(isinstance(refs, list) and len(refs) == len(set(refs))
-                and set(refs) <= OT_IDS, f'{key}: malformed references')
+                and set(refs) <= CURRENT_OT_IDS, f'{key}: malformed references')
         require(row.get('semantic_review_status') == 'UNREVIEWED',
                 f'{key}: cannot self-certify semantic migration')
         if row['relation'] == 'MISSING_EXPLICIT_SCENARIO':
@@ -109,7 +110,8 @@ def check(registry, conops_text, readiness_text):
     require('**Current disposition: NOT_READY' in readiness_text,
             'cannot promote product by silently editing prose')
     return {'status': 'STATIC_INVENTORY_VALID',
-            'historical_candidates': 24, 'legacy_scenarios': 14,
+            'historical_candidates': 24, 'legacy_scenarios': len(LEGACY_OT_IDS),
+            'current_scenarios': len(CURRENT_OT_IDS),
             'product_gates': 6, 'release_ready': False,
             'independent_verification': 'NOT_PERFORMED'}
 
