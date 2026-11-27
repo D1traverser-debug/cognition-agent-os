@@ -11,7 +11,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .ledger import readonly_snapshot
-from .ledger import connect, create_task, current_guard, event, finalize_observed, live_claim_owner
+from .ledger import create_task, current_guard, event, finalize_observed, live_claim_owner
 from .intent_planner import compile_intent, IntentError
 
 

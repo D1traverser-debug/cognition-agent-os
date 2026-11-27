@@ -15,7 +15,7 @@ import sqlite3
 
 from .ledger import open_readonly_snapshot
 from .intent_planner import compile_intent, IntentError
-from .ledger import connect, create_task, current_guard, event, finalize_observed, live_claim_owner
+from .ledger import create_task, current_guard, event, finalize_observed, live_claim_owner
 from .source import safe_fixture, SourceUnavailable
 
 _ID=re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
