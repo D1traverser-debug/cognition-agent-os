@@ -122,3 +122,70 @@ VERIFIED/FAILED --new independent task--> [new TaskRecord, not overwrite old his
 | IC10 | 来源 SHA 不同但相关论断没受影响 | 无需无关产物写入，保留负例证据 |
 
 这些是**待实现和运行的未来验收**，不是当前 PR 文档已通过的功能测试。
+
+## 7. 动态工作图与能力契约（候选接口；NOT_IMPLEMENTED）
+
+本节补充 `Planner.propose` 的表达能力，不改变第 1 节的六类事实权威，也不把计划提案升级为授权。**模型可动态决定工作依赖；可信代码只执行当前已登记、已授权且可独立验收的能力。** 这不是固定阶段清单，也不是允许任意工具调用。
+
+### 7.1 CapabilityDescriptor（可信能力目录中的描述）
+
+候选描述字段：
+
+- `capability_id`、`version`、`provider`、`description`、来源和实际可用状态；
+- 输入/输出 schema 及其版本；
+- effect class（只读/本地写/外部写等）、资源类型和可访问 scope；
+- 前置条件、可观察后置条件、独立 readback/oracle；
+- 幂等语义、重试限制、UNKNOWN 对账方式、补偿/回滚能力；
+- 预算、超时、速率限制和已知失败语义。
+
+能力描述是接口事实，不是权限。真实 grant 由其权威单独提供；工具 metadata、Skill 描述、README、模型输出和搜索结果都不能创建 grant。新能力可先进入研究/适配候选；安装、自动发现可执行插件、任意 import/eval/shell 和新增付费/生产权限均不由模型提案直接触发。
+
+### 7.2 WorkPlanProposal（不可信的动态计划）
+
+候选结构：
+
+```json
+{
+  "plan_id": "proposal-only",
+  "goal_id": "owner-goal",
+  "goal_revision": 3,
+  "cognition_revision": "sha256:...",
+  "source_snapshot": "sha256:...",
+  "nodes": [
+    {
+      "node_id": "work-01",
+      "capability_ref": {"id": "registered-capability", "version": "x.y"},
+      "depends_on": [],
+      "input_refs": [],
+      "expected_outputs": [],
+      "precondition_refs": [],
+      "postcondition_refs": [],
+      "verifier_ref": "independent-oracle:version",
+      "budget_ref": "approved-budget",
+      "failure_policy": "REPLAN_OR_HOLD"
+    }
+  ]
+}
+```
+
+这是结构形状，不是已冻结 schema。节点不预设“研究/设计/执行/验收”等固定阶段；其能力、依赖、输出与验证条件由当前目标决定。纯认知结论可以留在认知图中，不必伪装成执行任务。工作计划中的 `action_id`、业务幂等键、许可和 provider effect reference 应由可信运行时绑定，不能由模型自报。
+
+### 7.3 提案准入与运行规则
+
+1. 验证目标 ID/revision、认知快照、来源依赖、预算和当前授权；过期提案拒绝或要求重新规划。
+2. 每个需要工具的节点必须引用当前目录中的真实能力及版本；输入 schema、资源 scope、effect class、前置条件和 verifier 必须匹配。
+3. 依赖节点未独立满足后置条件前，不得释放后继；多前驱必须全部满足。不能把“上游工具返回成功”当作前驱结果成立。
+4. 只有 Admission 通过后，任务才进入现有台账；副作用仍经同一个 ExecutionGateway，在真正执行时重新核验 grant/goal/knowledge/budget。
+5. 新来源、工具或方法未被登记时，生成可追溯的 research/capability-gap 义务并继续可行的只读研究；不得猜测接口或假装已执行。
+6. 执行反馈、来源变化、撤权或失败使上游条件失效时，撤销相关未执行节点并生成新计划版本；已发生的远端事实不可通过改计划抹除。
+7. 每个计划版本的执行依赖图必须可检测环路；循环工作需显式预算、停止条件和结果读回。达到上限仍未满足目标则保留 OPEN/UNKNOWN。
+
+### 7.4 当前实现缺口与迁移门槛
+
+现有 `cognitive_session.depends_on` 是认知节点的多依赖关系，但该模块不运行模型或执行工具。现有 `task_dependencies` 以 `task_id` 为主键，每个任务只能登记一个前驱；`dependency_gate.py` 只允许少量固定本地任务类型。因此不能宣称现有 Host 已支持任意分支/合流工作 DAG。
+
+若同一批真实任务证明多前驱工作依赖是必要的，候选迁移是在**原 SQLite 任务权威内**将依赖边规范化为 `(task_id, predecessor_task)` 复合身份，保留 evidence kind、每条边的 release proof、goal/grant 版本和 cycle prevention；对所有前驱完成独立 readback 后才准入后继。迁移必须覆盖旧单前驱记录、重复/环路/撤权/来源失效/并发释放及合法旁路回归。当前不实施该 schema 变更，也不创建第二个 graph store；先用实际系统构建和多依赖任务对比原生工具方案与候选适配器的完整结果、纠错负担、复杂度和成本。
+
+```
+
+该候选接口只定义认知提案、能力事实和可信执行之间的责任，不代表运行时已实现或通过验收。
