@@ -381,18 +381,22 @@ def record_node(db_path: Path, sources: Path, root_id: str, node: dict, *,
                    "COGNITION_NODE", {"node": node})
 
 
-def record_decision_bundle(
-    db_path: Path, sources: Path, root_id: str, *,
-    selected_option: str, alternative_option: str, decision_reason: str,
-    action_spec: dict, source_refs: list[SourceReference],
-    request_id: str, expected_revision: str,
-) -> dict:
-    """Atomically record model-authored competing options and one bound decision.
+def _bundle_identity(root_id, request_id, namespace):
+    key = digest({"root": root_id, "request": request_id})[:24]
+    return ((f"{namespace}-{key}-selected", f"{namespace}-{key}-alternative",
+             f"{namespace}-{key}-decision"),
+            tuple(f"{namespace}-{key}-{i}" for i in range(3)))
 
-    This is a mechanical projection into the EXISTING cognitive graph, not
-    planning, evidence authentication, effect permission, or owner acceptance.
-    The caller still needs native_decision_admit and its managed effect gate.
-    """
+
+def _record_decision_bundle_in_transaction(
+    db, sources: Path, root_id: str, *, selected_option: str,
+    alternative_option: str, decision_reason: str, action_spec: dict,
+    source_refs: list[SourceReference], request_id: str, expected_revision: str,
+    namespace: str = "bundle",
+) -> dict:
+    """Shared application primitive; caller owns the transaction and admission."""
+    if not db.in_transaction:
+        raise RuntimeError("COGNITION_BUNDLE_REQUIRES_TRANSACTION")
     phrases = (selected_option, alternative_option, decision_reason)
     if (any(type(s) is not str or not 12 <= len(s.strip()) <= 2000
             for s in phrases)
@@ -404,59 +408,143 @@ def record_decision_bundle(
             or type(source_refs) is not list or len(source_refs) > 16):
         raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
     digest({"action_spec": action_spec, "sources": source_refs})
-    key = digest({"root": root_id, "request": request_id})[:24]
-    ids = (f"bundle-{key}-selected", f"bundle-{key}-alternative",
-           f"bundle-{key}-decision")
-    request_ids = tuple(f"bundle-{key}-{i}" for i in range(3))
+    ids, request_ids = _bundle_identity(root_id, request_id, namespace)
+    _identity(db, root_id, write=True)
+    view = _project(db, sources, root_id)
+    goal_rev = view["goal_revision"]
+    nodes = [
+        {"id": ids[0], "kind": "option", "text": selected_option,
+         "depends_on": [], "source_refs": source_refs,
+         "supersedes": None, "goal_revision": goal_rev},
+        {"id": ids[1], "kind": "option", "text": alternative_option,
+         "depends_on": [], "source_refs": source_refs,
+         "supersedes": None, "goal_revision": goal_rev},
+        {"id": ids[2], "kind": "decision", "text": decision_reason,
+         "depends_on": [ids[0], ids[1]], "source_refs": source_refs,
+         "supersedes": None, "goal_revision": goal_rev,
+         "action_spec": action_spec},
+    ]
+    prior = {n["id"]: n for n in view["nodes"]}
+    if any(node_id in prior for node_id in ids):
+        # A lost response may be retried; replay only the same complete
+        # CURRENT bundle, never append a duplicate or adopt stale data.
+        if all(node_id in prior and prior[node_id]["status"] == "CURRENT"
+               and all(prior[node_id].get(k) == v for k, v in node.items())
+               for node_id, node in zip(ids, nodes)):
+            return {"status": "REPLAYED", "decision_node_id": ids[2],
+                    "option_node_ids": list(ids[:2]),
+                    "owner_outcome_verified": False}
+        raise ValueError("COGNITION_REQUEST_ID_CONFLICT")
+    if expected_revision != view["revision_token"]:
+        raise ValueError("COGNITION_STALE_REVISION")
+    if len(_events(db, root_id)) + 3 > MAX_EVENTS:
+        raise ValueError("COGNITION_HISTORY_LIMIT_EXPORT_REQUIRED")
+    for node, item_request_id in zip(nodes, request_ids):
+        # Read back the projection INSIDE this same SQLite transaction.
+        # Later nodes can only depend on previously validated nodes.
+        view = _project(db, sources, root_id)
+        _validate_node(node, view, sources)
+        event(db, root_id, "COGNITION_NODE",
+              {"node": node, "request_id": item_request_id})
+    return {"status": "RECORDED", "decision_node_id": ids[2],
+            "option_node_ids": list(ids[:2]),
+            "owner_outcome_verified": False}
+
+
+def record_decision_bundle(
+    db_path: Path, sources: Path, root_id: str, *,
+    selected_option: str, alternative_option: str, decision_reason: str,
+    action_spec: dict, source_refs: list[SourceReference],
+    request_id: str, expected_revision: str,
+) -> dict:
+    """Record explicit graph choices without authorizing their effects."""
     with closing(connect_existing(db_path)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
-            _identity(db, root_id, write=True)
-            view = _project(db, sources, root_id)
-            goal_rev = view["goal_revision"]
-            nodes = [
-                {"id": ids[0], "kind": "option", "text": selected_option,
-                 "depends_on": [], "source_refs": source_refs,
-                 "supersedes": None, "goal_revision": goal_rev},
-                {"id": ids[1], "kind": "option", "text": alternative_option,
-                 "depends_on": [], "source_refs": source_refs,
-                 "supersedes": None, "goal_revision": goal_rev},
-                {"id": ids[2], "kind": "decision", "text": decision_reason,
-                 "depends_on": [ids[0], ids[1]], "source_refs": source_refs,
-                 "supersedes": None, "goal_revision": goal_rev,
-                 "action_spec": action_spec},
-            ]
-            prior = {n["id"]: n for n in view["nodes"]}
-            if any(node_id in prior for node_id in ids):
-                # A lost response may be retried; replay only the same complete
-                # CURRENT bundle, never append a duplicate or adopt stale data.
-                if all(node_id in prior and prior[node_id]["status"] == "CURRENT"
-                       and all(prior[node_id].get(k) == v for k, v in node.items())
-                       for node_id, node in zip(ids, nodes)):
-                    db.commit()
-                    return {"status": "REPLAYED", "decision_node_id": ids[2],
-                            "option_node_ids": list(ids[:2]),
-                            "owner_outcome_verified": False}
-                raise ValueError("COGNITION_REQUEST_ID_CONFLICT")
-            if expected_revision != view["revision_token"]:
-                raise ValueError("COGNITION_STALE_REVISION")
-            if len(_events(db, root_id)) + 3 > MAX_EVENTS:
-                raise ValueError("COGNITION_HISTORY_LIMIT_EXPORT_REQUIRED")
-            for node, item_request_id in zip(nodes, request_ids):
-                # Read back the projection INSIDE this same SQLite transaction.
-                # Later nodes can only depend on previously validated nodes.
-                view = _project(db, sources, root_id)
-                _validate_node(node, view, sources)
-                event(db, root_id, "COGNITION_NODE",
-                      {"node": node, "request_id": item_request_id})
+            result = _record_decision_bundle_in_transaction(
+                db, sources, root_id, selected_option=selected_option,
+                alternative_option=alternative_option, decision_reason=decision_reason,
+                action_spec=action_spec, source_refs=source_refs,
+                request_id=request_id, expected_revision=expected_revision)
             db.commit()
-            return {"status": "RECORDED", "decision_node_id": ids[2],
-                    "option_node_ids": list(ids[:2]),
-                    "owner_outcome_verified": False}
+            return result
         except BaseException:
             db.rollback()
             raise
 
+
+def _native_bundle_request(candidate: dict) -> str:
+    return "native-proposal-" + digest(candidate)[:48]
+
+
+def _native_projection_eligible(db, root_id: str, view: dict) -> bool:
+    """Compact proposals cannot silently replace richer human/client cognition."""
+    from .effect_contract import managed
+    if (not managed(db, root_id) or not view["grant_current"]
+            or view["input_count"] or view["goal_revision"] or view["reopen"]):
+        return False
+    expected = {}
+    for row in db.execute(
+            "SELECT details FROM events WHERE task_id=? "
+            "AND kind='NATIVE_DECISION_ADMITTED' ORDER BY event_id", (root_id,)):
+        proposal = json.loads(row[0])["proposal"]
+        ids, _ = _bundle_identity(root_id, _native_bundle_request(proposal), "native")
+        expected.update(zip(ids, ("option", "option", "decision")))
+    return (len(expected) == len(view["nodes"])
+            and all(expected.get(node["id"]) == node["kind"]
+                    and node["status"] == "CURRENT"
+                    and not node.get("method_refs") for node in view["nodes"]))
+
+
+def compact_native_revision(db_path: Path, sources: Path, root_id: str) -> str | None:
+    """Capture the graph CAS before inference; never invent a clean context."""
+    from .effect_contract import managed
+    with readonly_snapshot(db_path) as db:
+        if not managed(db, root_id):
+            return None
+        view = _project(db, sources, root_id)
+        return view["revision_token"] if _native_projection_eligible(
+            db, root_id, view) else None
+
+
+def project_native_proposal_in_transaction(
+    db, sources: Path, root_id: str, candidate: dict, parsed: dict,
+    expected_revision: str,
+) -> None:
+    """Project ONE already validated typed proposal, not a second model decision.
+
+    Only the compact native-policy scope is supported here. Explicit client
+    inputs, amendments, reopens or richer dependency graphs need the explicit
+    cognition path. Source excerpts attest bytes, not semantic entailment.
+    """
+    if not db.in_transaction:
+        raise RuntimeError("COGNITION_BUNDLE_REQUIRES_TRANSACTION")
+    view = _project(db, sources, root_id)
+    if expected_revision != view["revision_token"]:
+        raise ValueError("COGNITION_STALE_REVISION")
+    if not _native_projection_eligible(db, root_id, view):
+        raise ValueError("COGNITION_EXPLICIT_GRAPH_REQUIRED")
+    if parsed["alternative"] is None:
+        raise ValueError("COGNITION_COMPACT_ALTERNATIVE_REQUIRED")
+    basis = candidate["decision_basis"]
+    refs = []
+    for ref in basis["source_refs"]:
+        raw = safe_fixture(sources, ref["path"])
+        if hashlib.sha256(raw).hexdigest() != ref["sha256"]:
+            raise ValueError("COGNITION_SOURCE_CHANGED")
+        quote = raw.decode("utf-8")[:240]
+        if not quote:
+            raise ValueError("COGNITION_COMPACT_SOURCE_QUOTE_UNAVAILABLE")
+        refs.append({**ref, "quote": quote})
+    _record_decision_bundle_in_transaction(
+        db, sources, root_id,
+        selected_option=parsed["selected"]["objective"] + ": " + candidate["decision_reason"],
+        alternative_option=parsed["alternative"]["objective"] + ": " + candidate["alternative_reason"],
+        decision_reason=(candidate["decision_reason"] + "\nChallenge: " + basis["challenge"]
+                         + "\nFalsifier: " + basis["falsifier"]),
+        action_spec=parsed["selected"]["child_source_spec"], source_refs=refs,
+        request_id=_native_bundle_request(candidate), expected_revision=expected_revision,
+        namespace="native")
 
 def amend_goal(db_path: Path, sources: Path, root_id: str, text: str, *,
                request_id: str, expected_revision: str) -> dict:

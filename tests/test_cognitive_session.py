@@ -297,6 +297,81 @@ class CognitiveSessions(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "REQUEST_ID_CONFLICT"):
             amend_goal(self.db, self.sources, self.root, "Overwrite originals", **kwargs)
 
+    def compact_admit(self, *, revision=None, alternative=True):
+        from cognition_agent_os.cognitive_session import compact_native_revision
+        f = self.fixture
+        state = inspect_native_goal(self.db, self.workspace, self.sources, self.root)
+        if revision is None:
+            revision = compact_native_revision(self.db, self.sources, self.root)
+        self.assertIsNotNone(revision)
+        proposal = f.candidate(state, f.reconcile(), f.structure() if alternative else None)
+        return admit_native_decision(
+            self.db, self.workspace, self.sources, self.root, proposal,
+            cognition_revision=revision)
+
+    def test_compact_application_command_projects_and_executes_one_bound_action(self):
+        self.contract()
+        originals = {p.name: p.read_bytes() for p in self.sources.iterdir()}
+        admitted = self.compact_admit()
+        nodes = self.view()["nodes"]
+        self.assertEqual([n["kind"] for n in nodes], ["option", "option", "decision"])
+        self.assertEqual(nodes[-1]["action_spec"],
+                         compile_intent(self.fixture.reconcile())["child_source_spec"])
+        self.assertEqual(nodes[-1]["depends_on"], [n["id"] for n in nodes[:2]])
+        self.assertFalse(admitted["owner_outcome_verified"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM tasks WHERE parent_task=?",
+                                        (self.root,)).fetchone()[0], 1)
+        child = admitted["child_task_id"]
+        result = run_once(self.db, self.workspace, self.sources, only_task_id=child)
+        self.assertEqual(result["status"], "NEEDS_REVIEW", result)
+        self.assertTrue((self.workspace / "artifacts" / (child + ".json")).is_file())
+        self.assertEqual(originals, {p.name: p.read_bytes() for p in self.sources.iterdir()})
+
+    def test_compact_denied_effect_rolls_back_decision_and_child_together(self):
+        before = self.view()
+        with self.assertRaisesRegex(PermissionError, "CURRENT_OPERATOR_EFFECT_CONTRACT_REQUIRED"):
+            self.compact_admit()
+        self.assertEqual(before["revision_token"], self.view()["revision_token"])
+        self.assertEqual([], self.view()["nodes"])
+        with closing(connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM tasks WHERE parent_task=?",
+                                        (self.root,)).fetchone()[0], 0)
+
+    def test_compact_stale_graph_never_adopts_unreviewed_new_context(self):
+        self.contract()
+        revision = self.view()["revision_token"]
+        self.node("new-research")
+        before = self.view()
+        with self.assertRaisesRegex(ValueError, "COGNITION_STALE_REVISION"):
+            self.compact_admit(revision=revision)
+        with self.assertRaisesRegex(ValueError, "COGNITION_EXPLICIT_GRAPH_REQUIRED"):
+            self.compact_admit(revision=before["revision_token"])
+        self.assertEqual(before["revision_token"], self.view()["revision_token"])
+
+    def test_compact_does_not_fabricate_competing_method(self):
+        self.contract()
+        before = self.view()
+        with self.assertRaisesRegex(ValueError, "COGNITION_COMPACT_ALTERNATIVE_REQUIRED"):
+            self.compact_admit(alternative=False)
+        self.assertEqual(before["revision_token"], self.view()["revision_token"])
+
+    def test_native_planner_uses_same_command_without_second_model_submission(self):
+        from unittest.mock import patch
+        from cognition_agent_os.native_local_planner import advance_native_local_once
+        self.contract()
+        f = self.fixture
+        state = inspect_native_goal(self.db, self.workspace, self.sources, self.root)
+        proposal = f.candidate(state, f.reconcile(), f.structure())
+        with patch("cognition_agent_os.native_local_planner.propose_native_local",
+                   return_value=proposal) as propose:
+            result = advance_native_local_once(
+                self.db, self.workspace, self.sources, self.root, model="fixture")
+        self.assertEqual(result["status"], "NATIVE_METHOD_ENQUEUED", result)
+        self.assertEqual(propose.call_count, 1)
+        self.assertEqual(len(self.view()["nodes"]), 3)
+        self.assertFalse(result["model_proposal_verified_semantically"])
+
     def test_model_prose_and_source_hashes_cannot_authorize_effect(self):
         self.decision()
         with self.assertRaisesRegex(PermissionError, "CURRENT_OPERATOR_EFFECT_CONTRACT_REQUIRED"):

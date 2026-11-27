@@ -1473,7 +1473,8 @@ def inspect_native_goal(db_path: Path, workspace: Path, fixtures: Path,
 
 
 def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
-                          root_id: str, candidate: dict) -> dict:
+                          root_id: str, candidate: dict, *,
+                          cognition_revision: str | None = None) -> dict:
     """Append ONE model proposal if current evidence CAS still matches.
 
     The original Host/Worker executes the child on its next tick. This function
@@ -1651,6 +1652,12 @@ def admit_native_decision(db_path: Path, workspace: Path, fixtures: Path,
                 raise ValueError("SELECTED_NATIVE_SOURCE_UNAVAILABLE")
             from .effect_contract import enforce_admission, bind_action
             from .ledger import _NATIVE_ADMISSION
+            if cognition_revision is not None:
+                # Project the same compared proposal inside the existing write
+                # transaction. A denied effect rolls back its graph too.
+                from .cognitive_session import project_native_proposal_in_transaction
+                project_native_proposal_in_transaction(
+                    db, fixtures, root_id, candidate, parsed, cognition_revision)
             binding = enforce_admission(db, fixtures, workspace, root_id,
                                         parsed["selected"]["child_source_spec"])
             child = create_task(db, parsed["selected"]["child_source_spec"],

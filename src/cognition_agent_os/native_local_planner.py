@@ -1018,6 +1018,8 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                 "reason": "PREVIOUS_PROPOSAL_FAILED_WITH_SAME_EVIDENCE",
                 "owner_outcome_verified": False}
     try:
+        from .cognitive_session import compact_native_revision
+        cognition_revision = compact_native_revision(db_path, fixtures, root_id)
         proposed = propose_native_local(
             db_path, workspace, fixtures, root_id,
             model=model, timeout=timeout,
@@ -1027,8 +1029,14 @@ def advance_native_local_once(db_path: Path, workspace: Path, fixtures: Path,
                 db_path,workspace,fixtures,root_id,fingerprint,model,
                 "MODEL_ABSTAINED")
             return proposed
+        # A real competing typed alternative may be projected once by the
+        # shared application command. A null alternative is not a second
+        # option; richer graphs keep their existing explicit dependency path.
+        projection = ({"cognition_revision": cognition_revision}
+                      if cognition_revision is not None
+                      and proposed.get("alternative_intent") is not None else {})
         result = admit_native_decision(
-            db_path, workspace, fixtures, root_id, proposed)
+            db_path, workspace, fixtures, root_id, proposed, **projection)
         return {**result, "planner": "INSTALLED_LOCAL_MODEL_ONLY",
                 "model_proposal_verified_semantically": False}
     except local_model.LocalModelUnavailable as exc:
