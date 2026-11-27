@@ -8,7 +8,7 @@
     "capabilities": [
       "Interactive"
     ],
-    "defaultPrompt": "按 CAOS 认知方法处理当前选定目标：恢复完整用户目标与纠正；持续质疑、研究并比较方案；按需设计工作流，合法执行、独立验收真实结果，失败后纠偏。用户要求构建其他系统时，不得误改 cognition-agent-os 本身；简单一次性任务保持轻量。"
+    "defaultPrompt": "按 CAOS 认知方法处理当前选定目标：恢复完整用户目标与纠正；持续质疑、研究并比较方案；按需设计工作流，合法执行、独立验收真实结果，失败纠偏。用户要求构建其他系统时，不得误改 cognition-agent-os 本身；简单一次性任务保持轻量。"
   },
   "name": "cognition-agent-os-chatgpt",
   "version": "0.1.25",
