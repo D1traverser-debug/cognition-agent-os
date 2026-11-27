@@ -948,7 +948,7 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             raise ValueError("COGNITION_INVALID_DECISION_BUNDLE") from exc
         if type(intent) is not dict or intent.get("kind") != "goal_intent":
             raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
-        from .intent_planner import compile_intent
+        from .intent_planner import compile_intent, NATIVE_CAPABILITIES
         try:
             action = compile_intent(intent)["child_source_spec"]
         except (KeyError, TypeError, ValueError) as exc:
@@ -962,6 +962,18 @@ def build_mcp_server(db_path: Path, workspace: Path, fixtures: Path, *,
             raise ValueError("COGNITION_INVALID_DECISION_BUNDLE")
         observed_refs = source_read_evidence.get(root_task_id, {})
         paths = [r["path"] for r in resources]
+        # A corpus-wide local method declares zero explicit resource roles.
+        # Empty resources must not silently produce a source-free decision
+        # while its executor will read the corpus. Reuse the SAME capability
+        # contract as compilation/catalog instead of another source router.
+        # Cite the bounded sources actually read by this MCP client; the
+        # graph does not claim unobserved files were examined.
+        method = NATIVE_CAPABILITIES[intent["objective"]]
+        if method.corpus_wide:
+            eligible_reads = method.eligible_sources(observed_refs)
+            if len(eligible_reads) < method.minimum_sources:
+                raise ValueError("COGNITION_EVIDENCE_NOT_READ")
+            paths.extend(eligible_reads[:16])
         if any(name not in observed_refs for name in paths):
             raise ValueError("COGNITION_EVIDENCE_NOT_READ")
         refs = [observed_refs[name] for name in dict.fromkeys(paths)]
