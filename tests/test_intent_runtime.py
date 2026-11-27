@@ -288,6 +288,85 @@ class IntentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["status"], "BLOCKED", result)
         self.assertEqual(self.task(first)["error_code"], "UPSTREAM_TASK_INVALID")
 
+    def test_native_method_registration_preserves_v1_plan_identity(self):
+        """Old persisted plan/receipt identities survive the modular compiler."""
+        from cognition_agent_os.intent_planner import NATIVE_CAPABILITIES
+        from cognition_agent_os.capability_dispatch import registered_task_kinds
+        cases = [
+            (self.structured(), "json_structural_conformance_v1",
+             "JSON_REQUIRED_FIELDS_PRESERVED",
+             {"kind": "goal_case", "goal_type": "json_keys",
+              "input": "settings.json", "desired": {"owner": "ops", "retry": 3}}),
+            (self.comparison(), "csv_evidence_reconciliation_v1",
+             "SQLITE_RECOMPUTED_REPORT_OR_ABSTENTION",
+             {"kind": "record_reconciliation", "reference": "old.csv",
+              "observed": "new.csv", "objective": "identify_discrepancies"}),
+            ({"kind": "goal_intent", "objective": "investigate_evidence",
+              "resources": [], "question": "Which source contradicts the claim?"},
+             "source_quote_grounded_investigation_v1",
+             "SOURCE_GROUNDED_UNREVIEWED_OR_ABSTAINED",
+             {"kind": "investigate_goal", "question": "Which source contradicts the claim?",
+              "scope": "LOCAL_EVIDENCE_ONLY"}),
+            ({"kind": "goal_intent", "objective": "discover_public_tools",
+              "resources": [], "terms": ["python", "parser"]},
+             "public_github_tool_leads_v1",
+             "PUBLIC_CANDIDATES_REQUIRE_INDEPENDENT_REVIEW",
+             {"kind": "public_tool_discovery", "scope": "GITHUB_PUBLIC_METADATA_ONLY",
+              "terms": ["python", "parser"]}),
+        ]
+        self.assertEqual(set(NATIVE_CAPABILITIES), {x[0]["objective"] for x in cases})
+        for intent, family, acceptance, spec in cases:
+            with self.subTest(objective=intent["objective"]):
+                expected = {
+                    "schema_version": 1, "objective": intent["objective"],
+                    "capability": family,
+                    "allowed_effects": "SQLITE_STATE_AND_LOCAL_PROPOSAL_ONLY",
+                    "steps": [
+                        {"stage": "OBSERVE", "capability": "local_evidence_read",
+                         "resources": {r["role"]: r["path"] for r in intent["resources"]}},
+                        {"stage": "CHALLENGE", "capability": "bounded_hypotheses", "family": family},
+                        {"stage": "PLAN", "capability": "registered_family_planner", "family": family},
+                        {"stage": "CHECK", "capability": "separate_mechanical_oracle",
+                         "acceptance": acceptance},
+                        {"stage": "COMMIT", "capability": "existing_ledger_and_immutable_artifact",
+                         "source_mutation_allowed": False}],
+                    "child_source_spec": spec, "semantic_domain_approval": False}
+                expected["plan_sha256"] = hashlib.sha256(json.dumps(
+                    expected, ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":")).encode()).hexdigest()
+                self.assertEqual(compile_intent(intent), expected)
+                self.assertIn(spec["kind"], registered_task_kinds())
+
+    def test_native_catalog_and_admission_share_registered_source_contract(self):
+        from cognition_agent_os.native_decision import capability_catalog, _selected_sources_present
+        from cognition_agent_os.intent_planner import NATIVE_CAPABILITIES
+        for name in ("settings.json", "old.csv", "notes.md"):
+            (self.fixtures / name).write_text("source", encoding="utf-8")
+        def catalog(allow=False):
+            return {m["objective"]: m for m in capability_catalog(
+                self.fixtures, allow_public_discovery=allow)["methods"]}
+        before = catalog()
+        self.assertTrue(before["ensure_structure"]["currently_eligible"])
+        self.assertFalse(before["compare_records"]["currently_eligible"])
+        self.assertTrue(before["investigate_evidence"]["currently_eligible"])
+        self.assertFalse(before["discover_public_tools"]["currently_eligible"])
+        self.assertTrue(catalog(True)["discover_public_tools"]["currently_eligible"])
+        self.assertFalse(_selected_sources_present(
+            compile_intent(self.comparison()), {"old.csv": "hash"}))
+        (self.fixtures / "new.csv").write_text("source", encoding="utf-8")
+        after = catalog()
+        self.assertEqual(after["compare_records"]["eligible_sources"], ["new.csv", "old.csv"])
+        self.assertTrue(after["compare_records"]["currently_eligible"])
+        self.assertTrue(_selected_sources_present(
+            compile_intent(self.comparison()), {"old.csv": "a", "new.csv": "b"}))
+        self.assertFalse(any(m["external_effect_authorized"] for m in after.values()))
+        with self.assertRaises(TypeError):
+            NATIVE_CAPABILITIES["arbitrary"] = None
+        with patch("cognition_agent_os.capability_dispatch.registered_task_kinds",
+                   return_value=frozenset()):
+            with self.assertRaisesRegex(ValueError, "REGISTERED_NATIVE_CATALOG_CHANGED"):
+                catalog()
+
     def test_unknown_capability_cannot_fall_through_to_snapshot_executor(self):
         """Free-text or malformed task kinds never become executable plugins."""
         tid = self.seed({"kind": "run_arbitrary_tool", "old": "x", "new": "y",

@@ -17,7 +17,9 @@ from pathlib import Path
 import re
 import sqlite3
 
-from .intent_planner import compile_intent, IntentError
+from .intent_planner import (
+    compile_intent, IntentError, NATIVE_CAPABILITIES, CAPABILITIES_BY_KIND,
+)
 from .ledger import connect, create_task, event, require_initialized_ledger, readonly_snapshot
 from .source import (safe_fixture, SourceUnavailable, github_public_snapshot)
 
@@ -42,10 +44,7 @@ _MAX_SOURCE_COUNT = 64
 # Keep original words, including late prohibitions, in ONE canonical SQLite
 # contract. The model must refuse an over-budget prompt rather than truncate.
 _MAX_ORIGINAL_GOAL_CHARS = 8192
-_VALID_KINDS = frozenset({
-    "goal_case", "record_reconciliation", "investigate_goal",
-    "public_tool_discovery",
-})
+_VALID_KINDS = frozenset(CAPABILITIES_BY_KIND)
 
 
 def _digest(value: object) -> str:
@@ -93,9 +92,9 @@ def _sources_compatible(pinned: dict, current: dict,
     if (not isinstance(pinned, dict)
         or any(current.get(name) != digest for name, digest in pinned.items())):
         return False
-    if selected_kind == "investigate_goal" and not finished and any(
-            Path(name).suffix.lower() in (".md", ".txt")
-            for name in current.keys() - pinned.keys()):
+    method = CAPABILITIES_BY_KIND.get(selected_kind)
+    if (method is not None and method.corpus_wide and not finished
+            and method.eligible_sources(current.keys() - pinned.keys())):
         return False
     return True
 
@@ -124,40 +123,18 @@ def capability_catalog(fixtures: Path, *, allow_public_discovery: bool = False) 
     proposing two methods. Catalog membership is capability availability, NOT
     proof that either method satisfies the full owner goal.
     """
-    from .intent_planner import SUPPORTED_INTENTS, ALLOWED_ROLES
-    from .capability_dispatch import _HANDLERS
+    from .capability_dispatch import registered_task_kinds
     manifest = _sources(fixtures)
-    files = sorted(manifest)
-    suffixes = {x: Path(x).suffix.lower() for x in files}
-    kinds = {
-        "ensure_structure": "goal_case",
-        "compare_records": "record_reconciliation",
-        "investigate_evidence": "investigate_goal",
-        "discover_public_tools": "public_tool_discovery",
-    }
-    if set(kinds) != set(SUPPORTED_INTENTS) or not set(kinds.values()).issubset(_HANDLERS):
+    if not _VALID_KINDS.issubset(registered_task_kinds()):
         raise ValueError("REGISTERED_NATIVE_CATALOG_CHANGED")
     options = []
-    for objective in sorted(kinds):
-        compatible = (
-            [x for x in files if suffixes[x] == ".json"]
-            if objective == "ensure_structure"
-            else [x for x in files if suffixes[x] == ".csv"]
-            if objective == "compare_records"
-            else [x for x in files if suffixes[x] in (".md", ".txt")]
-            if objective == "investigate_evidence" else []
-        )
-        available = (
-            len(compatible) >= 2 if objective == "compare_records"
-            else bool(compatible) if objective in (
-                "ensure_structure", "investigate_evidence")
-            else allow_public_discovery
-        )
+    for objective, method in sorted(NATIVE_CAPABILITIES.items()):
         options.append({
-            "objective": objective, "task_kind": kinds[objective],
-            "required_resource_roles": list(ALLOWED_ROLES[objective]),
-            "eligible_sources": compatible,
-            "currently_eligible": bool(available),
+            "objective": objective, "task_kind": method.task_kind,
+            "required_resource_roles": list(method.roles),
+            "eligible_sources": method.eligible_sources(manifest),
+            "currently_eligible": method.eligible(
+                manifest, allow_public_discovery=allow_public_discovery),
             "outcome_scope": "MECHANICAL_LOCAL_EVIDENCE_ONLY",
             "business_outcome_verified": False,
             "external_effect_authorized": False,
@@ -170,16 +147,8 @@ def capability_catalog(fixtures: Path, *, allow_public_discovery: bool = False) 
 
 def _selected_sources_present(plan: dict, sources: dict[str, str]) -> bool:
     spec = plan["child_source_spec"]
-    kind = spec["kind"]
-    if kind == "goal_case":
-        return spec["input"] in sources
-    if kind == "record_reconciliation":
-        return spec["reference"] in sources and spec["observed"] in sources
-    if kind == "investigate_goal":
-        return any(Path(x).suffix.lower() in (".md", ".txt") for x in sources)
-    if kind == "public_tool_discovery":
-        return True
-    return False
+    method = CAPABILITIES_BY_KIND.get(spec["kind"])
+    return method is not None and method.sources_present(spec, sources)
 
 
 def _proposal(candidate: dict, contract: dict) -> dict:
@@ -270,18 +239,11 @@ def _proposal(candidate: dict, contract: dict) -> dict:
 def _method_paths(plan: dict, sources: dict[str, str]) -> set[str]:
     """Observable file obligations for one registered method, not model prose."""
     spec = plan["child_source_spec"]
-    kind = spec["kind"]
-    if kind == "record_reconciliation":
-        return {spec["reference"], spec["observed"]}
-    if kind == "goal_case":
-        return {spec["input"]}
-    if kind == "investigate_goal":
-        # The source investigator consumes a bounded local text corpus.
-        # Require at least one independently named source in its citation set.
-        return set()
-    if kind == "public_tool_discovery":
-        return set()
-    raise ValueError("UNREGISTERED_DECISION_METHOD")
+    method = CAPABILITIES_BY_KIND.get(spec["kind"])
+    if method is None:
+        raise ValueError("UNREGISTERED_DECISION_METHOD")
+    return method.bound_paths(spec)
+
 
 
 def _ground_decision(candidate: dict, parsed: dict,

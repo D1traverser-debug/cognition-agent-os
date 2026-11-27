@@ -190,6 +190,11 @@ _HANDLERS = {
     "github": _snapshot_diff,
 }
 
+def registered_task_kinds() -> frozenset[str]:
+    """Read-only executor identity port; no registration or permission grant."""
+    return frozenset(_HANDLERS)
+
+
 # Existing error codes are stable behavior, not an excuse to change an API.
 _DETERMINISTIC_ONLY = {
     "pipeline_code_repair": "PIPELINE_PLANNER_UNAVAILABLE",
