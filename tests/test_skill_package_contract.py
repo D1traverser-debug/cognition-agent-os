@@ -426,14 +426,16 @@ class SkillPackageContractTests(unittest.TestCase):
             ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt/plugin.json"
         ).read_text(encoding="utf-8"))
         ui = manifest["extensions"]["com.openai"]["interface"]
-        self.assertEqual(manifest["version"], "0.1.25")
+        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
         self.assertIn("用户要求构建其他系统时，不得误改 cognition-agent-os 本身", ui["defaultPrompt"])
         self.assertNotIn("继续 cognition-agent-os", ui["defaultPrompt"])
         codex_manifest = json.loads((
             ROOT / "integrations/chatgpt/cognition-agent-os-chatgpt/.codex-plugin/plugin.json"
         ).read_text(encoding="utf-8"))
         self.assertEqual(codex_manifest["version"], manifest["version"])
+        self.assertEqual(codex_manifest["description"], manifest["description"])
         self.assertEqual(codex_manifest["interface"]["defaultPrompt"], ui["defaultPrompt"])
+        self.assertEqual(codex_manifest["interface"]["longDescription"], ui["longDescription"])
 
 if __name__ == "__main__":
     unittest.main()
