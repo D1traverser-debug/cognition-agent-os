@@ -154,12 +154,34 @@ VERIFIED/FAILED --new independent task--> [new TaskRecord, not overwrite old his
   "nodes": [
     {
       "node_id": "work-01",
-      "capability_ref": {"id": "registered-capability", "version": "x.y"},
+      "capability_ref": {"id": "source-read", "version": "1"},
       "input_refs": [],
-      "expected_outputs": [],
+      "expected_outputs": ["source-snapshot"],
       "precondition_refs": [],
-      "postcondition_refs": [],
-      "verifier_ref": "independent-oracle:version",
+      "postcondition_refs": ["source-bytes-verified"],
+      "verifier_ref": "source-integrity-oracle:v1",
+      "budget_ref": "approved-budget",
+      "failure_policy": "REPLAN_OR_HOLD"
+    },
+    {
+      "node_id": "work-02",
+      "capability_ref": {"id": "analysis", "version": "1"},
+      "input_refs": ["source-snapshot"],
+      "expected_outputs": ["comparison"],
+      "precondition_refs": ["source-bytes-verified"],
+      "postcondition_refs": ["comparison-checked"],
+      "verifier_ref": "independent-review:v1",
+      "budget_ref": "approved-budget",
+      "failure_policy": "REPLAN_OR_HOLD"
+    },
+    {
+      "node_id": "work-03",
+      "capability_ref": {"id": "approved-build", "version": "1"},
+      "input_refs": ["source-snapshot"],
+      "expected_outputs": ["candidate-artifact"],
+      "precondition_refs": ["owner-approval"],
+      "postcondition_refs": ["artifact-readback"],
+      "verifier_ref": "artifact-oracle:v1",
       "budget_ref": "approved-budget",
       "failure_policy": "REPLAN_OR_HOLD"
     }
