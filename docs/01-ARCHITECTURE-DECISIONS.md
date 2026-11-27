@@ -245,6 +245,7 @@ Compared explicit registration, dependency injection, packaging entry-point disc
 | `native_decision.py` | 竞争假设、先前决策审查、开放研究提案、来源指纹和 CAS | 开放研究提案明确不创建执行器、不排队、不授权、不证明业务成功 |
 | `native_local_planner.py` | 模型读取完整目标、既有结果、来源与方法试验，允许追加新来源研究并提出备选 | 当前使用本地 Ollama；输出受当前可用方法目录、输入快照和本地来源范围约束 |
 | `intent_planner.py` | 单一可信方法契约及确定性编译 | 当前只有四种 `NativeCapability`；`MAX_STEPS=5`；源码明确声明不支持开放式自然语言理解或不受约束的工具发现 |
+| `ledger.py` / `dependency_gate.py` | 同一 SQLite 台账中的任务父子关系与证据释放 | `task_dependencies.task_id` 是主键，每个后继最多一个前驱；当前 gate 只允许少数本地任务类型，不是通用多前驱 DAG |
 | `capability_dispatch.py` | 显式静态执行映射，拒绝模型任意导入模块 | 这是正确的执行安全边界，不应被误当成通用认知的全部能力 |
 | `owner_postcondition.py` | 对受支持的本地任务产物进行独立、完整目标检查 | 目前不能证明任意外部业务或其他子系统的真实结果 |
 | `method_learning.py` / `procedure_evidence.py` | 重新核验跨任务方法使用和原始结果 | 明确不证明方法的因果改善或跨领域泛化；后者仍需独立试验 |
@@ -297,7 +298,7 @@ Compared explicit registration, dependency injection, packaging entry-point disc
 - 幂等/重试条件、失败语义和可行回滚/补偿；
 - 独立验收方法及验收方。
 
-工作图是**计划提案**，不是权限或业务事实。优先复用现有任务台账、依赖和事件语义；若现有结构无法表达真实任务的必要依赖，再扩展原有权威，不另建平行任务数据库。
+工作图是**计划提案**，不是权限或业务事实。优先复用现有任务台账、依赖和事件语义；若现有结构无法表达真实任务的必要依赖，再扩展原有权威，不另建平行任务数据库。 当前 `cognitive_session.depends_on` 能表达多个认知依赖，但不执行任务；当前 `task_dependencies` 每个后继只有一个前驱，且仅覆盖少数本地任务类型。因此，现有系统**尚无可直接执行的通用多前驱工作 DAG**。如真实任务证明 fan-in/多依赖必需，应在原任务台账内把边改为可多行的规范关系，并对每条前驱独立验证、释放和失效；不得把多依赖静默压成线性链。每个工作计划版本的执行依赖应保持 DAG；迭代通过有预算/停止条件的控制器反馈生成新计划版本，不能依赖无界循环边。认知/证据图中的支持、反驳和失效关系则可形成更丰富的网络。
 
 **D. 决策/研究循环（Decision & Research Loop）**
 
